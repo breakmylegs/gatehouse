@@ -3,7 +3,17 @@ import path from "node:path"
 import { z } from "zod"
 import { gatehouseDataDir } from "./paths.js"
 
-/** Settings the laptop-side processes read. The settings screen writes this file in a later phase. */
+const Checkpoints = z
+  .object({
+    /** Take a checkpoint before any call that is escalated to a person. */
+    beforeEscalation: z.boolean().default(true),
+    /** Take a checkpoint before the first edit after a quiet spell. */
+    editBursts: z.boolean().default(true),
+    burstWindowMs: z.number().int().min(1000).default(60_000),
+  })
+  .strict()
+
+/** Settings the laptop-side processes read. The settings screen writes this file. */
 export const GatehouseConfig = z
   .object({
     /** Client names, internal host names and the like, redacted everywhere (invariant 12). */
@@ -12,6 +22,11 @@ export const GatehouseConfig = z
     expectedOrg: z.string().optional(),
     /** Overrides the default rules file. */
     rulesPath: z.string().optional(),
+    /** How long a request stays deliverable to the phone. */
+    phoneExpiryMs: z.number().int().min(10_000).default(10 * 60_000),
+    /** After this long without an answer a request is denied as timed out. */
+    hardTimeoutMs: z.number().int().min(10_000).default(30 * 60_000),
+    checkpoints: Checkpoints.default({ beforeEscalation: true, editBursts: true, burstWindowMs: 60_000 }),
   })
   .strict()
 export type GatehouseConfig = z.infer<typeof GatehouseConfig>

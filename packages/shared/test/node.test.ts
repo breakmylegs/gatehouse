@@ -57,13 +57,13 @@ describe("data directory and config", () => {
 
   it("gives defaults when there is no config file and rejects an invalid one", () => {
     const env = { GATEHOUSE_DATA_DIR: path.join(root, "data") }
-    expect(loadConfig(env)).toEqual({ redactTerms: [] })
+    expect(loadConfig(env)).toMatchObject({ redactTerms: [], hardTimeoutMs: 1_800_000 })
     fs.mkdirSync(env.GATEHOUSE_DATA_DIR)
     fs.writeFileSync(
       configPath(env),
       JSON.stringify({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" }),
     )
-    expect(loadConfig(env)).toEqual({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" })
+    expect(loadConfig(env)).toMatchObject({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" })
     fs.writeFileSync(configPath(env), JSON.stringify({ redactTerms: "x" }))
     expect(() => loadConfig(env)).toThrow()
     fs.writeFileSync(configPath(env), JSON.stringify({ unknownKey: 1 }))
