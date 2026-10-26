@@ -62,6 +62,23 @@ export class ApproverClient {
     }
   }
 
+  /**
+   * Engages or re-arms the Approver's deny-all switch. Resolves true only when the Approver confirmed the
+   * new state. It never throws: when the Approver is down the Host's own flag still denies everything.
+   */
+  async setKillSwitch(engaged: boolean, by?: string, reason?: string): Promise<boolean> {
+    try {
+      const result = await this.#callTool("kill_switch", {
+        engaged,
+        ...(by !== undefined ? { by } : {}),
+        ...(reason !== undefined ? { reason } : {}),
+      })
+      return (result.structuredContent as { engaged?: boolean } | undefined)?.engaged === engaged
+    } catch {
+      return false
+    }
+  }
+
   /** The Approver's policy_status, or undefined when it cannot be reached. */
   async status(): Promise<Record<string, unknown> | undefined> {
     try {

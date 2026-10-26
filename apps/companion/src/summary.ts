@@ -1,5 +1,7 @@
 import path from "node:path"
-import { findProjectRoot, type Policy, type Rule } from "@gatehouse/policy"
+import { findProjectRoot, secretGlobs, type Policy, type Rule } from "@gatehouse/policy"
+
+export { secretGlobs }
 
 export const SUMMARY_MAX_CHARS = 1500
 
@@ -55,9 +57,3 @@ export function summarisePolicy(policy: Policy | undefined, cwd: string): string
   return text.length <= SUMMARY_MAX_CHARS ? text : text.slice(0, SUMMARY_MAX_CHARS - 3) + "..."
 }
 
-/** Globs of files a checkpoint must never copy: the floor rules that guard secrets (they cover Read). */
-export function secretGlobs(policy: Policy): string[] {
-  return policy.rules.floor
-    .filter((r) => r.pathGlobs && r.tools?.includes("Read"))
-    .flatMap((r) => r.pathGlobs ?? [])
-}

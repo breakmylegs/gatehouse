@@ -25,6 +25,16 @@ export async function evaluateFloor(
   return checkFloor(features, ctx, policy.rules.floor)
 }
 
+/**
+ * Globs of files a checkpoint must never copy: the floor rules that guard secrets (they cover Read).
+ * One source of truth, so the checkpoint and the floor cannot drift apart.
+ */
+export function secretGlobs(policy: Policy): string[] {
+  return policy.rules.floor
+    .filter((r) => r.pathGlobs && r.tools?.includes("Read"))
+    .flatMap((r) => r.pathGlobs ?? [])
+}
+
 export interface RememberCandidate {
   tool: string
   command?: string
