@@ -107,7 +107,7 @@ describe("scripts/verify-audit.ps1 agrees with the Node verifier", () => {
       ;[l[0], l[1]] = [l[1] as string, l[0] as string]
       fs.writeFileSync(f, l.join("\n"))
     }],
-    ["a record in the wrong month file", (d, f) => fs.renameSync(path.join(d, "audit-2026-06.jsonl"), path.join(d, "audit-2026-07.jsonl"))],
+    ["a record in the wrong month file", (d, _f) => fs.renameSync(path.join(d, "audit-2026-06.jsonl"), path.join(d, "audit-2026-07.jsonl"))],
   ]
   for (const [name, mutate] of tamper) {
     it(`flags ${name} exactly where the Node verifier does`, async () => {

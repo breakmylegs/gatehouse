@@ -50,17 +50,23 @@ Every phase must keep these true. Write an automated test for every invariant th
 | `npm ci` | Install from the lockfile. Never use `--omit=optional` (the SDK's bundled binary is an optional dependency). |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | `tsc` per workspace |
-| `npm test` | Vitest |
-| `npm audit` | Run and report at every checkpoint |
+| `npm test` | Vitest (all workspaces) |
+| `npm run test:coverage` | Vitest with coverage. `packages/policy` must stay at 95% of lines. |
+| `npm audit` | Run and report at the end of every phase |
 | `npm run host:cli` | Phase 0 spike CLI, later the full CLI harness |
+| `npm run approver` | Start the Approver on its own (the Host normally starts it with a per-launch token) |
+| `npm run policy:replay -- --rules <file> --audit <file>` | List decisions a candidate rules file would change |
+| `npm run audit:verify` | Check the audit hash chain. `pwsh scripts/verify-audit.ps1` does the same without Node. |
+
+Machine facts that shape the design (details in `docs/sdk-notes.md`): the managed policy on this laptop blocks stdio and http MCP servers in sessions but allows in-process SDK servers, so the Companion reaches sessions as an in-process server.
 
 ## Conventions
 
 - npm workspaces only. TypeScript strict. ESLint, Prettier, Vitest.
-- Pin exact dependency versions and commit the lockfile. Add no dependency without stating why in the checkpoint report.
-- Use only SDK APIs recorded in `docs/sdk-notes.md`. If the SDK conflicts with the spec, stop and tell the user.
-- Tests first, especially for the policy engine and each invariant.
-- Small conventional commits. One branch per phase, merged at the checkpoint.
+- Pin exact dependency versions and commit the lockfile. Add no dependency without stating why in `docs/BUILD_REPORT.md`.
+- Use only SDK APIs recorded in `docs/sdk-notes.md`. If the SDK or the machine conflicts with the spec, never break an invariant: record the deviation and the reason in `docs/BUILD_REPORT.md` and keep the invariant true.
+- Tests first, especially for the policy engine and each invariant. Prove important tests by breaking the code they guard and checking they fail.
+- Small conventional commits. One branch per phase, fast-forwarded into `main` when the phase is done. The owner asked for no phase gates, so work continues through the phases.
 - Cross-platform npm scripts. No shell-specific commands such as `rm -rf`.
 - Avoid native addons. Local data lives under `%LOCALAPPDATA%\Gatehouse\`. Write files atomically (temp file, then rename).
 - UI copy, docs and code comments use plain UK English with no em dashes.

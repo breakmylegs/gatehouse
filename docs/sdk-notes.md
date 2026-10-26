@@ -159,7 +159,44 @@ One streaming-input session, `permissionMode: "default"`, Claude Code preset pro
 
 Not exercised in the spike (still UNVERIFIED): AskUserQuestion answer round trip, ExitPlanMode input shape, `interrupt()` and `setPermissionMode()` mid-session, `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`.
 
+## Phase 2 findings (2026-10-26)
+
+### The managed policy blocks stdio and http MCP servers, but not in-process ones
+
+Probes: `apps/host/src/probes/mcp-policy-probe.ts` (SDK session) and the CLI (`claude -p --mcp-config ...`).
+
+| Server kind | Result on this laptop |
+|---|---|
+| stdio (`type: "stdio"`), any name | Not loaded. The CLI prints `MCP server blocked by enterprise policy: <name>`. In an SDK session `init.mcp_servers` is `[]`. |
+| http and sse to 127.0.0.1 | Not loaded, same message. |
+| In-process (`createSdkMcpServer`, `type: "sdk"`) | Loaded and `connected`, with `source: "sdk"`. |
+
+The policy is not visible in `resolveSettings`, so it probably comes from server-managed settings for the organisation. **Consequences**
+
+- The stdio Companion (spec section 2 and 10) cannot be loaded into a session here. The Host uses the same tools as an in-process server named `companion` (`apps/host/src/companion-server.ts`), so tool names stay `mcp__companion__*`. The stdio form is built and tested for machines without this restriction.
+- `claude -p --permission-prompt-tool` cannot load the Approver over http here either. The Approver's `approval_prompt` tool is built and tested over its own transport, and the request and response shapes below were verified through an in-process server.
+- The Approver itself is not an MCP server of any session. The Host calls it with plain HTTP, which the policy does not touch.
+
+### Provenance of an MCP tool
+
+`CanUseTool` options carry `mcpServer: { name, source }` and the PreToolUse hook input carries `mcp_server: { name, source }`. For the in-process Companion both report `source: "sdk"` (verified live with `probes/companion-live-probe.ts`). The SDK says to trust `source`, not the name, so the policy has an `mcpSource` condition and the seed rule `companion-tools` only matches `source: sdk`. A server from user or project configuration that names itself `companion` is not allowed automatically.
+
+Claude Code also calls a built-in `ToolSearch` tool to load deferred tool schemas. It reaches the PreToolUse hook but not `canUseTool`, because Claude Code approves it itself.
+
+### Permission prompt tool (`permissionPromptToolName`, CLI `--permission-prompt-tool`)
+
+Verified against Claude Code 2.1.310 with `probes/prompt-tool-probe.ts`:
+
+- Claude Code calls the tool with `{ tool_name: string, input: object, tool_use_id: string }`. For a Write, `input` is `{ file_path, content }` with an absolute path.
+- The tool must return one text content block whose text is JSON: `{"behavior":"allow","updatedInput":{...}}` or `{"behavior":"deny","message":"..."}`.
+- Allow: the tool ran and the file was written. Deny: the file was not written, and the model was told the message (it repeated it and did not try another route). A bare `{"behavior":"allow"}` also worked on this version, but Gatehouse always echoes `updatedInput`.
+- `permissionPromptToolName` cannot be combined with `canUseTool`. The Host uses `canUseTool`. Only headless runs use the prompt tool.
+
 ## MCP SDK (1.32.2)
+
+- Stateless HTTP: `new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })`, one `McpServer` and one transport per request, `transport.handleRequest(req, res, parsedBody)`. A `tools/call` request needs no earlier `initialize` in this mode, so the Host calls it with a single JSON-RPC `fetch`.
+- `registerTool` with an `outputSchema` (a zod shape) validates `structuredContent` and returns it with a text copy.
+- In-memory pair for tests: `InMemoryTransport.createLinkedPair()` from `@modelcontextprotocol/sdk/inMemory.js`.
 
 - Server: `McpServer` (`@modelcontextprotocol/sdk/server/mcp.js`) with `registerTool(name, { title?, description?, inputSchema?, outputSchema? }, handler)`. The older `tool()` is deprecated.
 - Transports: `StdioServerTransport` (`server/stdio.js`), `StreamableHTTPServerTransport` (`server/streamableHttp.js`). Stateless mode is `new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })` with `transport.handleRequest(req, res, body)`. Host, Origin and bearer checks are Gatehouse's own, in front of it.

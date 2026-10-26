@@ -42,6 +42,22 @@ const BUILTIN = {
   noPolicy: { ruleId: "policy-unavailable", reason: "No valid policy is loaded.", risk: 50 },
 } as const
 
+export interface BuiltInRule {
+  ruleId: string
+  reason: string
+  risk: number
+}
+
+/** Rule ids the engine produces without any rule in the file. Used to explain a verdict. */
+export const BUILTIN_RULES: readonly BuiltInRule[] = [
+  ...Object.values(BUILTIN),
+  {
+    ruleId: "shell-obfuscation",
+    reason: "The command uses an encoded, dynamic or piped-to-shell form.",
+    risk: 90,
+  },
+]
+
 interface Effective {
   deny: Rule[]
   escalate: Rule[]
