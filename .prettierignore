@@ -3,3 +3,5 @@ docs/
 *.md
 package-lock.json
 node_modules/
+packages/policy/test/golden/
+policy/

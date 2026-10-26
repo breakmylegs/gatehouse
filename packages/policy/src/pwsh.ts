@@ -34,6 +34,8 @@ export interface PwshWorkerOptions {
   timeoutMs?: number
 }
 
+const CACHE_SIZE = 256
+
 const here = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_SCRIPT = path.resolve(here, "../../../scripts/ps-ast.ps1")
 
@@ -44,6 +46,7 @@ export class PwshWorker {
   #starting: Promise<void> | undefined
   #pending = new Map<number, { resolve: (r: RawAnalysis) => void; reject: (e: Error) => void }>()
   #nextId = 1
+  #cache = new Map<string, RawAnalysis>()
   #buffer = ""
   #lastFailure = 0
   #ready: ((mode: string) => void) | undefined
@@ -98,8 +101,12 @@ export class PwshWorker {
       child.stdout.setEncoding("utf8")
       child.stderr.on("data", () => undefined)
       child.stdin.on("error", () => undefined)
-      child.on("error", (e) => fail(new PwshUnavailableError(`pwsh error: ${e.message}`)))
+      // A late event from an old process must not tear down its replacement.
+      child.on("error", (e) => {
+        if (this.#child === child) fail(new PwshUnavailableError(`pwsh error: ${e.message}`))
+      })
       child.on("exit", () => {
+        if (this.#child !== child) return
         fail(new PwshUnavailableError("pwsh worker exited"))
         this.#teardown(new PwshUnavailableError("pwsh worker exited"))
       })
@@ -164,7 +171,27 @@ export class PwshWorker {
     this.#pending.clear()
   }
 
+  /**
+   * Parses PowerShell text. Parsing is a pure function of the text, so results are cached
+   * (most commands repeat). Only successful answers are cached, never failures.
+   */
   async parse(text: string): Promise<RawAnalysis> {
+    const cached = this.#cache.get(text)
+    if (cached) {
+      this.#cache.delete(text)
+      this.#cache.set(text, cached)
+      return cached
+    }
+    const result = await this.#parseUncached(text)
+    this.#cache.set(text, result)
+    if (this.#cache.size > CACHE_SIZE) {
+      const oldest = this.#cache.keys().next().value
+      if (oldest !== undefined) this.#cache.delete(oldest)
+    }
+    return result
+  }
+
+  async #parseUncached(text: string): Promise<RawAnalysis> {
     await this.start()
     const child = this.#child
     if (!child) throw new PwshUnavailableError("pwsh worker is not running")

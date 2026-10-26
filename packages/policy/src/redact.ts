@@ -65,7 +65,7 @@ function walk(value: unknown, opts: RedactOptions, seen: WeakSet<object>): unkno
   const out: Record<string, unknown> = {}
   for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
     out[key] =
-      SECRET_KEY.test(key) && (typeof v === "string" || typeof v === "number")
+      SECRET_KEY.test(key) && typeof v === "string"
         ? "[REDACTED:secret-key]"
         : walk(v, opts, seen)
   }

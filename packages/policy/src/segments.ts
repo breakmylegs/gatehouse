@@ -118,21 +118,42 @@ export const WRAPPER_NAMES = new Set([
   "timeout",
 ])
 
+/** Flags that take a separate value, per wrapper, so the value is not mistaken for the command. */
+const WRAPPER_VALUE_FLAGS: Record<string, readonly string[]> = {
+  sudo: ["-u", "-g", "-h", "-p", "-C", "-D", "-R", "-T"],
+  doas: ["-u", "-C"],
+  env: ["-u", "-C", "-S"],
+  timeout: ["-s", "-k"],
+  nice: ["-n"],
+  stdbuf: ["-i", "-o", "-e"],
+}
+
+/** Positional arguments a wrapper takes before the command (timeout takes a duration). */
+const WRAPPER_POSITIONALS: Record<string, number> = { timeout: 1 }
+
 /** Text variants of a segment with leading wrappers removed, for deny and floor matching. */
 export function unwrapVariants(seg: Segment): string[] {
   const out: string[] = [seg.coreText]
   let name = seg.name
   let args = seg.args
   for (let hop = 0; hop < 4; hop++) {
-    if (!WRAPPER_NAMES.has(baseCommandName(name))) break
+    const wrapper = baseCommandName(name)
+    if (!WRAPPER_NAMES.has(wrapper)) break
+    const valueFlags = WRAPPER_VALUE_FLAGS[wrapper] ?? []
+    let positionals = WRAPPER_POSITIONALS[wrapper] ?? 0
     let i = 0
     while (i < args.length) {
       const a = args[i] ?? ""
-      if (a.startsWith("-") || /^[A-Za-z_][A-Za-z0-9_]*=/.test(a)) {
+      if (valueFlags.includes(a)) {
+        i += 2
+      } else if (a.startsWith("-") || /^[A-Za-z_][A-Za-z0-9_]*=/.test(a)) {
         i++
-        continue
+      } else if (positionals > 0) {
+        positionals--
+        i++
+      } else {
+        break
       }
-      break
     }
     if (i >= args.length) break
     name = args[i] ?? ""

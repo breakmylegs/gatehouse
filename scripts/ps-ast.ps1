@@ -4,87 +4,108 @@
 #   -Loop  warm worker: reads one JSON request per line ({ "id": n, "b64": "<utf8 base64>" })
 #          and writes one JSON line per request. Prints a ready line first.
 #   (none) reads all of stdin as the script text and writes one JSON document.
+#
+# One AstVisitor pass collects everything. (FindAll with script-block predicates calls PowerShell
+# code for every node and made each request about 17 ms.)
 param([switch]$Loop)
 
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
-$staticTypes = @('ConstantExpressionAst', 'StringConstantExpressionAst', 'TypeExpressionAst')
+class GatehouseCollector : System.Management.Automation.Language.AstVisitor {
+    [System.Collections.Generic.List[object]] $Commands
+    [System.Collections.Generic.List[object]] $Redirects
+    [System.Collections.Generic.List[object]] $Members
+    [System.Collections.Generic.List[string]] $Strings
 
-function Convert-Element($e) {
-    $t = $e.GetType().Name
-    $dyn = $false
-    $val = $e.Extent.Text
-    switch ($t) {
-        'StringConstantExpressionAst' { $val = $e.Value }
-        'ExpandableStringExpressionAst' {
-            if ($e.NestedExpressions.Count -gt 0) { $dyn = $true } else { $val = $e.Value }
-        }
-        'CommandParameterAst' {
-            $val = '-' + $e.ParameterName
-            if ($null -ne $e.Argument) {
-                $inner = Convert-Element $e.Argument
-                $val = $val + ':' + $inner.value
-                $dyn = $inner.dynamic
-            }
-        }
-        'VariableExpressionAst' {
-            $n = $e.VariablePath.UserPath.ToLowerInvariant()
-            if (($n -in @('true', 'false', 'null')) -and -not $e.Splatted) { $val = '$' + $n } else { $dyn = $true }
-        }
-        'ArrayLiteralAst' {
-            foreach ($x in $e.Elements) { if ((Convert-Element $x).dynamic) { $dyn = $true } }
-        }
-        default {
-            if ($staticTypes -notcontains $t) { $dyn = $true }
-        }
+    GatehouseCollector() {
+        $this.Commands = [System.Collections.Generic.List[object]]::new()
+        $this.Redirects = [System.Collections.Generic.List[object]]::new()
+        $this.Members = [System.Collections.Generic.List[object]]::new()
+        $this.Strings = [System.Collections.Generic.List[string]]::new()
     }
-    return @{ type = $t; value = [string]$val; dynamic = $dyn }
+
+    # Words that are known at parse time. Everything else is dynamic.
+    static [hashtable] Convert([System.Management.Automation.Language.Ast] $e) {
+        $t = $e.GetType().Name
+        $dyn = $false
+        $val = $e.Extent.Text
+        switch ($t) {
+            'StringConstantExpressionAst' { $val = $e.Value }
+            'ConstantExpressionAst' { }
+            'TypeExpressionAst' { }
+            'ExpandableStringExpressionAst' {
+                if ($e.NestedExpressions.Count -gt 0) { $dyn = $true } else { $val = $e.Value }
+            }
+            'CommandParameterAst' {
+                $val = '-' + $e.ParameterName
+                if ($null -ne $e.Argument) {
+                    $inner = [GatehouseCollector]::Convert($e.Argument)
+                    $val = $val + ':' + $inner.value
+                    $dyn = $inner.dynamic
+                }
+            }
+            'VariableExpressionAst' {
+                $n = $e.VariablePath.UserPath.ToLowerInvariant()
+                if (($n -eq 'true' -or $n -eq 'false' -or $n -eq 'null') -and -not $e.Splatted) { $val = '$' + $n } else { $dyn = $true }
+            }
+            'ArrayLiteralAst' {
+                foreach ($x in $e.Elements) { if ([GatehouseCollector]::Convert($x).dynamic) { $dyn = $true } }
+            }
+            default { $dyn = $true }
+        }
+        return @{ type = $t; value = [string]$val; dynamic = $dyn }
+    }
+
+    [System.Management.Automation.Language.AstVisitAction] VisitCommand([System.Management.Automation.Language.CommandAst] $ast) {
+        $els = [System.Collections.Generic.List[object]]::new()
+        foreach ($e in $ast.CommandElements) { $els.Add([GatehouseCollector]::Convert($e)) }
+        $this.Commands.Add(@{
+                name       = $ast.GetCommandName()
+                invocation = $ast.InvocationOperator.ToString()
+                elements   = $els
+            })
+        return [System.Management.Automation.Language.AstVisitAction]::Continue
+    }
+
+    [System.Management.Automation.Language.AstVisitAction] VisitFileRedirection([System.Management.Automation.Language.FileRedirectionAst] $ast) {
+        $loc = [GatehouseCollector]::Convert($ast.Location)
+        $this.Redirects.Add(@{ target = $loc.value; dynamic = $loc.dynamic; append = [bool]$ast.Append })
+        return [System.Management.Automation.Language.AstVisitAction]::Continue
+    }
+
+    [System.Management.Automation.Language.AstVisitAction] VisitInvokeMemberExpression([System.Management.Automation.Language.InvokeMemberExpressionAst] $ast) {
+        $this.Members.Add(@{ member = $ast.Member.Extent.Text; target = $ast.Expression.Extent.Text; static = [bool]$ast.Static })
+        return [System.Management.Automation.Language.AstVisitAction]::Continue
+    }
+
+    [System.Management.Automation.Language.AstVisitAction] VisitStringConstantExpression([System.Management.Automation.Language.StringConstantExpressionAst] $ast) {
+        $this.Strings.Add([string]$ast.Value)
+        return [System.Management.Automation.Language.AstVisitAction]::Continue
+    }
+
+    [System.Management.Automation.Language.AstVisitAction] VisitExpandableStringExpression([System.Management.Automation.Language.ExpandableStringExpressionAst] $ast) {
+        $this.Strings.Add([string]$ast.Value)
+        return [System.Management.Automation.Language.AstVisitAction]::Continue
+    }
 }
 
 function Get-Analysis([string]$Text) {
     $tokens = $null
     $errors = $null
     $ast = [System.Management.Automation.Language.Parser]::ParseInput($Text, [ref]$tokens, [ref]$errors)
-    $commands = New-Object System.Collections.ArrayList
-    $redirects = New-Object System.Collections.ArrayList
-    $members = New-Object System.Collections.ArrayList
-    $strings = New-Object System.Collections.ArrayList
-
-    $found = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
-    foreach ($c in $found) {
-        $els = New-Object System.Collections.ArrayList
-        foreach ($e in $c.CommandElements) { [void]$els.Add((Convert-Element $e)) }
-        [void]$commands.Add(@{
-                name       = $c.GetCommandName()
-                invocation = $c.InvocationOperator.ToString()
-                elements   = $els.ToArray()
-            })
-    }
-    $reds = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FileRedirectionAst] }, $true)
-    foreach ($r in $reds) {
-        $loc = Convert-Element $r.Location
-        [void]$redirects.Add(@{ target = $loc.value; dynamic = $loc.dynamic; append = [bool]$r.Append })
-    }
-    $calls = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.InvokeMemberExpressionAst] }, $true)
-    foreach ($m in $calls) {
-        [void]$members.Add(@{ member = $m.Member.Extent.Text; target = $m.Expression.Extent.Text; static = [bool]$m.Static })
-    }
-    $strs = $ast.FindAll({
-            param($n)
-            ($n -is [System.Management.Automation.Language.StringConstantExpressionAst]) -or
-            ($n -is [System.Management.Automation.Language.ExpandableStringExpressionAst])
-        }, $true)
-    foreach ($s in $strs) { [void]$strings.Add([string]$s.Value) }
-
+    $collector = [GatehouseCollector]::new()
+    $ast.Visit($collector)
+    $messages = [System.Collections.Generic.List[string]]::new()
+    foreach ($err in $errors) { $messages.Add([string]$err.Message) }
     return [ordered]@{
         ok        = ($errors.Count -eq 0)
-        errors    = @($errors | ForEach-Object { $_.Message })
-        commands  = $commands.ToArray()
-        redirects = $redirects.ToArray()
-        members   = $members.ToArray()
-        strings   = $strings.ToArray()
+        errors    = $messages
+        commands  = $collector.Commands
+        redirects = $collector.Redirects
+        members   = $collector.Members
+        strings   = $collector.Strings
     }
 }
 

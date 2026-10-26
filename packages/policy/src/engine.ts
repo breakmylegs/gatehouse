@@ -76,12 +76,15 @@ export class PolicyEngine {
   }
 
   async evaluate(call: ToolCall, ctx: EvalContext): Promise<Verdict> {
-    const policy = this.#getPolicy()
+    let policyHash = "none"
     try {
-      if (!policy) return this.#verdict("escalate", BUILTIN.noPolicy, "none", "rules")
+      const policy = this.#getPolicy()
+      if (!policy) return this.#verdict("escalate", BUILTIN.noPolicy, policyHash, "rules")
+      policyHash = policy.hash
       return await this.#evaluate(call, ctx, policy)
     } catch {
-      return this.#verdict("escalate", BUILTIN.engineError, policy?.hash ?? "none", "rules")
+      // Invariant 1: any failure escalates. It never allows and never throws.
+      return this.#verdict("escalate", BUILTIN.engineError, policyHash, "rules")
     }
   }
 

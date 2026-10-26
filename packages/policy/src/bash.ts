@@ -125,18 +125,6 @@ const TOKEN_TYPES = new Set([
 const OUTPUT_REDIRECT = /^\d*(>>|>\||&>>|&>|>&|>|<>)/
 const FD_DUP = /^\d*(>&|<&)/
 
-function leafCommandName(node: Node): string | undefined {
-  if (node.type === "command") {
-    const name = node.childForFieldName("name")
-    return name ? staticValue(name).value : undefined
-  }
-  if (node.type === "redirected_statement") {
-    const body = node.childForFieldName("body")
-    return body ? leafCommandName(body) : undefined
-  }
-  return undefined
-}
-
 function isNullDevice(value: string): boolean {
   const v = value.replace(/\\/g, "/").toLowerCase()
   return v === "/dev/null" || v === "nul" || v === "$null"
