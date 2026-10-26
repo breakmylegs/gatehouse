@@ -76,7 +76,13 @@ describe("the Approver listener (invariant 7)", () => {
       JSON.parse(reply.body)
         .result.tools.map((t: { name: string }) => t.name)
         .sort(),
-    ).toEqual(["approval_prompt", "evaluate_permission", "explain_verdict", "policy_status"])
+    ).toEqual([
+      "approval_prompt",
+      "evaluate_permission",
+      "explain_verdict",
+      "kill_switch",
+      "policy_status",
+    ])
   })
 
   it("listens on 127.0.0.1 only", () => {

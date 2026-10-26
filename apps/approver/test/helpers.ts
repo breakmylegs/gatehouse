@@ -37,6 +37,7 @@ export interface StartOptions {
   pwsh?: PwshWorker | undefined
   redactTerms?: string[]
   watchRules?: boolean
+  statePath?: string
   server?: Partial<ApproverServerOptions>
 }
 
@@ -55,6 +56,8 @@ export async function startApprover(opts: StartOptions = {}): Promise<Running> {
     promptCwd: fx.ws,
     pwsh: "pwsh" in opts ? opts.pwsh : new PwshWorker(),
     watchRules: opts.watchRules ?? false,
+    // Every test server gets its own state file, so no test engages another's kill switch.
+    env: { ...process.env, GATEHOUSE_STATE: opts.statePath ?? path.join(dir, "state.json") },
     ...opts.server,
   })
   const port = await server.start()

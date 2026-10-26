@@ -11,16 +11,21 @@ import {
 } from "@gatehouse/policy"
 import { Verdict } from "@gatehouse/shared"
 import { AuditWriter, type AuditChannel } from "@gatehouse/shared/audit"
+import type { KillSwitch } from "./killswitch.js"
 
 export interface ApproverDeps {
   engine: PolicyEngine
   store: PolicyStore
   audit: AuditWriter
   pwsh: PwshWorker | undefined
+  kill: KillSwitch
   /** Used for approval_prompt, where the CLI does not say which folder it runs in. */
   promptCwd: string
   log: (line: string) => void
 }
+
+export const KILL_SWITCH_REASON =
+  "The kill switch is engaged. Everything is denied until the user re-arms it on the desktop."
 
 /** Rule ids the Approver (not the policy engine) can put on a verdict. */
 const APPROVER_RULES = [
@@ -29,6 +34,7 @@ const APPROVER_RULES = [
     reason: "The audit record could not be written, so the call needs your approval.",
     risk: 50,
   },
+  { ruleId: "kill-switch", reason: KILL_SWITCH_REASON, risk: 100 },
 ]
 
 export const EvaluateContext = z.object({
@@ -60,11 +66,21 @@ export async function evaluateAndAudit(
   channel: AuditChannel = "approver",
 ): Promise<Verdict> {
   const t0 = performance.now()
-  let verdict = await deps.engine.evaluate(call, {
-    cwd: ctx.cwd,
-    ...(ctx.projectRoot !== undefined ? { projectRoot: ctx.projectRoot } : {}),
-    ...(ctx.mcpSource !== undefined ? { mcpSource: ctx.mcpSource } : {}),
-  })
+  // Deny-all comes first: while the kill switch is engaged nothing is evaluated, let alone allowed.
+  let verdict: Verdict = deps.kill.get().engaged
+    ? {
+        outcome: "deny",
+        ruleId: "kill-switch",
+        reason: KILL_SWITCH_REASON,
+        risk: 100,
+        decidedBy: "rules",
+        policyHash: deps.store.current?.hash ?? "none",
+      }
+    : await deps.engine.evaluate(call, {
+        cwd: ctx.cwd,
+        ...(ctx.projectRoot !== undefined ? { projectRoot: ctx.projectRoot } : {}),
+        ...(ctx.mcpSource !== undefined ? { mcpSource: ctx.mcpSource } : {}),
+      })
   const latencyMs = performance.now() - t0
   try {
     await deps.audit.append({
@@ -217,6 +233,13 @@ export function registerApproverTools(server: McpServer, deps: ApproverDeps): vo
         rememberCount: z.number(),
         workspaceRoots: z.array(z.string()),
         pwsh: z.object({ running: z.boolean(), languageMode: z.string().optional() }),
+        killSwitch: z.object({
+          engaged: z.boolean(),
+          since: z.string().optional(),
+          by: z.string().optional(),
+          reason: z.string().optional(),
+          damaged: z.boolean().optional(),
+        }),
         audit: z.object({
           dir: z.string(),
           seq: z.number().optional(),
@@ -247,11 +270,42 @@ export function registerApproverTools(server: McpServer, deps: ApproverDeps): vo
             ? { languageMode: deps.pwsh.languageMode }
             : {}),
         },
+        killSwitch: deps.kill.get(),
         audit: { dir: deps.audit.dir, ...(head ? { seq: head.seq, hash: head.hash } : {}) },
       }
       return {
         structuredContent: out,
         content: [{ type: "text" as const, text: JSON.stringify(out) }],
+      }
+    },
+  )
+
+  // Control plane only: the Approver is never loaded into an agent session, and every call needs the
+  // per-launch bearer token. Engaging is immediate and persisted. The Host re-arms only from the desktop.
+  server.registerTool(
+    "kill_switch",
+    {
+      title: "Engage or re-arm the kill switch",
+      description: "While engaged, every request is denied. Persisted, so it survives a restart.",
+      inputSchema: {
+        engaged: z.boolean(),
+        by: z.string().max(100).optional(),
+        reason: z.string().max(300).optional(),
+      },
+      outputSchema: {
+        engaged: z.boolean(),
+        since: z.string().optional(),
+        by: z.string().optional(),
+        reason: z.string().optional(),
+        damaged: z.boolean().optional(),
+      },
+    },
+    async ({ engaged, by, reason }) => {
+      const state = await deps.kill.set(engaged, by, reason)
+      deps.log(`kill switch ${state.engaged ? "ENGAGED" : "re-armed"}${by ? ` by ${by}` : ""}`)
+      return {
+        structuredContent: state,
+        content: [{ type: "text" as const, text: JSON.stringify(state) }],
       }
     },
   )

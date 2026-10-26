@@ -5,6 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { PolicyEngine, PolicyStore, PwshWorker, redact, type LoadOptions } from "@gatehouse/policy"
 import { AuditWriter } from "@gatehouse/shared/audit"
 import { assertUsableToken, checkRequest, MAX_BODY_BYTES } from "./guard.js"
+import { KillSwitch } from "./killswitch.js"
 import { registerApproverTools, type ApproverDeps } from "./tools.js"
 
 export interface ApproverServerOptions {
@@ -20,6 +21,8 @@ export interface ApproverServerOptions {
   pwsh?: PwshWorker | undefined
   watchRules?: boolean
   maxBodyBytes?: number
+  /** Where GATEHOUSE_STATE (the persisted kill switch) is found. Defaults to the process environment. */
+  env?: NodeJS.ProcessEnv
   log?: (line: string) => void
 }
 
@@ -39,6 +42,7 @@ export class ApproverServer {
   readonly audit: AuditWriter
   readonly engine: PolicyEngine
   readonly pwsh: PwshWorker | undefined
+  readonly kill: KillSwitch
   #port = 0
 
   constructor(opts: ApproverServerOptions) {
@@ -46,6 +50,7 @@ export class ApproverServer {
     this.#log = opts.log ?? (() => undefined)
     this.store = new PolicyStore(opts.rules)
     this.pwsh = opts.pwsh
+    this.kill = new KillSwitch(opts.env ?? process.env)
     this.engine = new PolicyEngine({ getPolicy: () => this.store.current, pwsh: this.pwsh })
     const terms = opts.redactTerms ?? []
     this.audit = new AuditWriter({ dir: opts.auditDir, redact: (v) => redact(v, { terms }) })
@@ -143,6 +148,7 @@ export class ApproverServer {
       store: this.store,
       audit: this.audit,
       pwsh: this.pwsh,
+      kill: this.kill,
       promptCwd: this.#opts.promptCwd ?? process.cwd(),
       log: this.#log,
     }
