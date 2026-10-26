@@ -1,0 +1,167 @@
+# SDK notes
+
+Verified on 2026-10-26 by reading the installed type definitions. Later phases use only APIs recorded here. Items marked UNVERIFIED are not yet confirmed by the spike.
+
+## Versions
+
+| Package | Version | Notes |
+|---|---|---|
+| `@anthropic-ai/claude-agent-sdk` | 0.3.310 | Types in `sdk.d.ts` and `sdk-tools.d.ts`. Bundled binary comes from `@anthropic-ai/claude-agent-sdk-win32-x64` (optional dependency, installed). |
+| `@modelcontextprotocol/sdk` | 1.32.2 | Subpath exports: `/client`, `/server`, plus deep imports such as `server/mcp.js`. |
+| `zod` | 4.6.7 | The Agent SDK imports `zod/v4`. |
+| Node | 24.15.0 | |
+| pwsh | 7.6.9 | |
+
+## Agent SDK
+
+### `query()`
+
+```ts
+query({ prompt: string | AsyncIterable<SDKUserMessage>, options?: Options }): Query
+```
+
+`Query` extends `AsyncGenerator<SDKMessage, void>`. Control methods work only with streaming input (an `AsyncIterable` prompt): `interrupt()`, `setPermissionMode(mode)`, `setModel(model?)`, `applyFlagSettings(...)`, `initializationResult()`, `close()`.
+
+### Streaming input message
+
+```ts
+type SDKUserMessage = {
+  type: "user"
+  message: MessageParam            // { role: "user", content: string | blocks }
+  parent_tool_use_id: string | null
+  isSynthetic?: boolean
+  priority?: "now" | "next" | "later"
+}
+```
+
+### Options Gatehouse uses
+
+| Option | Type | Gatehouse value |
+|---|---|---|
+| `cwd` | string | session folder |
+| `model` | string | from UI |
+| `permissionMode` | `'default' \| 'acceptEdits' \| 'bypassPermissions' \| 'plan' \| 'dontAsk' \| 'auto'` | only `default` or `plan` (invariant 3) |
+| `allowDangerouslySkipPermissions` | boolean | never set |
+| `systemPrompt` | string, string[], custom, or `{ type: 'preset', preset: 'claude_code', append?, excludeDynamicSections?, snapshot? }` | preset `claude_code`, `snapshot: true` recommended by the SDK |
+| `settingSources` | `('user' \| 'project' \| 'local')[]` | all three. Must include `project` to load CLAUDE.md. Omitted means all load, `[]` means none. |
+| `canUseTool` | `CanUseTool` | Gatehouse handler |
+| `hooks` | `Partial<Record<HookEvent, HookCallbackMatcher[]>>` | floor, audit, notification, stop, subagent |
+| `mcpServers` | `Record<string, McpServerConfig>` | Companion over stdio |
+| `strictMcpConfig` | boolean | UNVERIFIED whether to set. It ignores user MCP servers, which the spec wants loaded. |
+| `includePartialMessages` | boolean | true |
+| `env` | `{[k]: string \| undefined}` | REPLACES the subprocess environment. Spread `process.env` through `sanitiseEnv`. |
+| `allowedTools` | string[] | auto-allows these tools. Gatehouse must not use bare tool names (invariant 4). |
+| `resume`, `forkSession`, `sessionId`, `continue` | | resume and fork |
+| `persistSession` | boolean | default true, sessions saved under `~/.claude/projects/` |
+| `pathToClaudeCodeExecutable` | string | not set, use the bundled binary |
+| `stderr` | `(data: string) => void` | capture diagnostics |
+| `managedSettings` | `Settings` | restrictive policy tier only. Not needed. |
+| `permissionPromptToolName` | string | UNVERIFIED exact name, near line 2046 of `sdk.d.ts`. For headless runs (Phase 2). |
+
+### `canUseTool`
+
+```ts
+type CanUseTool = (
+  toolName: string,
+  input: Record<string, unknown>,
+  options: {
+    signal: AbortSignal
+    suggestions?: PermissionUpdate[]
+    blockedPath?: string
+    mcpServer?: { name: string; source: string }   // key trust on source
+    decisionReason?: string
+    title?: string
+    displayName?: string
+    description?: string
+    defaultToNo?: boolean
+    // more fields exist
+  },
+) => Promise<PermissionResult>
+```
+
+```ts
+type PermissionResult =
+  | { behavior: "allow"; updatedInput?: Record<string, unknown>; updatedPermissions?: PermissionUpdate[]; toolUseID?: string; decisionClassification?: ... }
+  | { behavior: "deny"; message: string; interrupt?: boolean; toolUseID?: string; decisionClassification?: ... }
+```
+
+- Returning `null` is allowed only after the consumer answered out-of-band. Gatehouse never returns `null`.
+- Gatehouse never sets `updatedPermissions` (invariant 5). It always echoes the input in `updatedInput` on allow.
+- `defaultToNo: true` means the prompt must not be approvable by one stray keystroke and must not offer "don't ask again". Honour it in the UI.
+
+### Hooks
+
+```ts
+type HookCallback = (input: HookInput, toolUseID: string | undefined, options: { signal: AbortSignal }) => Promise<HookJSONOutput>
+interface HookCallbackMatcher { matcher?: string; hooks: HookCallback[]; timeout?: number }  // timeout in seconds
+```
+
+Events: PreToolUse, PostToolUse, PostToolUseFailure, PostToolBatch, Notification, UserPromptSubmit, UserPromptExpansion, SessionStart, SessionEnd, Stop, StopFailure, SubagentStart, SubagentStop, PreCompact, PostCompact, PreModelSwitch, PostModelSwitch, PermissionRequest, PermissionDenied, Setup, TeammateIdle, TaskCreated, TaskCompleted, Elicitation, ElicitationResult, ConfigChange, WorktreeCreate, WorktreeRemove, InstructionsLoaded, CwdChanged, FileChanged, DirectoryAdded, MessageDisplay.
+
+`PreToolUseHookInput` carries `hook_event_name`, `tool_name`, `tool_input`, `tool_use_id`, `mcp_server?` (plus `BaseHookInput` fields).
+
+Floor hook output (deny only, invariant 2):
+
+```ts
+{ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: "..." } }
+```
+
+`HookPermissionDecision` also allows `allow`, `ask` and `defer`. The floor must never return `allow`. "No decision" is `{}` or `{ continue: true }`. `PreToolUseHookSpecificOutput` can also carry `updatedInput`, which the floor must not use.
+
+`SyncHookJSONOutput` top-level fields: `continue`, `suppressOutput`, `stopReason`, `decision` (`approve` or `block`), `systemMessage`, `reason`, `hookSpecificOutput`.
+
+`PermissionRequest` is also a hook event, with an allow/deny `decision` output that can carry `updatedPermissions`. Gatehouse does not register it.
+
+### AskUserQuestion and ExitPlanMode
+
+- `AskUserQuestion` arrives through `canUseTool` with input `{ questions: [{ question, header, options: [{ label, description, preview? }, 2 to 4], multiSelect? }, 1 to 4] }`.
+- Answer shape on allow: `updatedInput = { ...input, answers: { [questionText]: answerString } }`. Multi-select answers are comma-separated. `annotations` is optional, keyed by question text. (`answers` appears in the permission-component input type in `sdk-tools.d.ts`.) The spike confirms this at runtime.
+- `ExitPlanMode` arrives through `canUseTool`. Input shape UNVERIFIED, confirm in the spike.
+
+### Account and organisation
+
+`Query.initializationResult()` returns `SDKControlInitializeResponse` with `account: AccountInfo`:
+
+```ts
+type AccountInfo = { email?, organization?, subscriptionType?, tokenSource?, apiKeySource?, apiProvider?: "firstParty" | "bedrock" | ... | "gateway" }
+```
+
+`organization` is the value the org guard compares with `expectedOrg`. The org guard also requires `apiProvider === "firstParty"`. The response also lists `commands`, `agents`, `models`, `output_style`.
+
+`startup()` and `prewarm()` also exist to start a process early. Not used in Phase 0.
+
+### Managed policy detection
+
+`resolveSettings({ cwd, settingSources })` returns `{ effective, provenance, sources[] }` without spawning the CLI. A `sources` entry with `source: "managed"` (with `policyOrigin` and `path`) shows that managed policy is active. It is marked `@alpha`. Managed settings always apply to SDK sessions, so Gatehouse can only be stricter.
+
+### Sessions
+
+- `listSessions({ dir?, limit?, offset?, includeWorktrees? })` returns `SDKSessionInfo[]` (`sessionId`, `summary`, `lastModified`, `customTitle?`, `firstPrompt?`, `gitBranch?`).
+- `getSessionInfo(id, { dir? })`, `getSessionMessages(id, opts?)`, `forkSession(id, opts?)`, `renameSession`, `tagSession` exist.
+- Resume uses `options.resume = sessionId`, with `forkSession: true` to fork.
+
+### Tool-shadowing warning
+
+The string `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` does not appear in the installed package. UNVERIFIED. Gatehouse enforces invariant 4 itself: startup refuses any `allowedTools` entry that is a bare tool name, and any `permissionMode` outside `default` and `plan`. Revisit if the SDK emits a warning at runtime during the spike.
+
+## Spike results (2026-10-26, `npm run host:cli -- C:\dev\gatehouse-spike`)
+
+One streaming-input session, `permissionMode: "default"`, Claude Code preset prompt, all three setting sources, sanitised env. Cost about 0.06 USD.
+
+| Question | Result |
+|---|---|
+| Signed-in organisation | `initializationResult().account.organization` returned `"ACN - Premium"`, `subscriptionType` `"Claude Enterprise"`, `apiProvider` `"firstParty"`. `tokenSource` was absent. Use `"ACN - Premium"` as `expectedOrg`. |
+| Managed settings reported | `resolveSettings` returned only a `user` source. No `managed` source, so no managed policy tier was visible to the SDK on this laptop. Re-check on the managed build of the laptop. |
+| `canUseTool` fires on a Write | Yes. Input keys `file_path` and `content`. The Write inside the scratch folder still prompted, because the default mode asks for edits. |
+| PreToolUse hook fires on a Read | Yes, for `Read` and for `Write`. A Read inside the working directory never reached `canUseTool`, so the hook is the only place that sees it. |
+| CLAUDE.md loads | Yes. The model returned the codeword from the project CLAUDE.md. |
+| Deny message reaches the model | Yes. The model reported the deny message and did not try another route. |
+
+Not exercised in the spike (still UNVERIFIED): AskUserQuestion answer round trip, ExitPlanMode input shape, `interrupt()` and `setPermissionMode()` mid-session, `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`.
+
+## MCP SDK (1.32.2)
+
+- Server: `McpServer` (`@modelcontextprotocol/sdk/server/mcp.js`) with `registerTool(name, { title?, description?, inputSchema?, outputSchema? }, handler)`. The older `tool()` is deprecated.
+- Transports: `StdioServerTransport` (`server/stdio.js`), `StreamableHTTPServerTransport` (`server/streamableHttp.js`). Stateless mode is `new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })` with `transport.handleRequest(req, res, body)`. Host, Origin and bearer checks are Gatehouse's own, in front of it.
+- Client: `Client` (`client/index.js`) with `connect(transport)`, `listTools()`, `callTool({ name, arguments })`. Transports: `StreamableHTTPClientTransport`, `StdioClientTransport`.
+- Agent SDK also offers `createSdkMcpServer` and `tool(...)` for in-process servers. Gatehouse does not use them. The Approver is a separate process and the Companion is stdio.
