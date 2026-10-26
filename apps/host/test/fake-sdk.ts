@@ -70,6 +70,7 @@ export class FakeSdk {
     const out: SDKMessage[] = []
     let wake: (() => void) | undefined
     let ended = false
+    let turns = 0
     let currentAbort: AbortController | undefined
     const handle: FakeQueryHandle = {
       options: opts,
@@ -167,15 +168,25 @@ export class FakeSdk {
           } catch (e) {
             push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `turn error: ${(e as Error).message}` }] } })
           }
+          // Like the real SDK: `usage` is for this result, while the cost and modelUsage are cumulative.
+          turns++
           push({
             type: "result",
             subtype: "success",
             is_error: false,
             duration_ms: 5,
             num_turns: 1,
-            total_cost_usd: sdk.costPerTurn,
+            total_cost_usd: sdk.costPerTurn * turns,
             usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 5, cache_creation_input_tokens: 1 },
-            modelUsage: { "fake-model": { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 5, cacheCreationInputTokens: 1, costUSD: sdk.costPerTurn } },
+            modelUsage: {
+              "fake-model": {
+                inputTokens: 100 * turns,
+                outputTokens: 20 * turns,
+                cacheReadInputTokens: 5 * turns,
+                cacheCreationInputTokens: turns,
+                costUSD: sdk.costPerTurn * turns,
+              },
+            },
           })
           currentAbort = undefined
         }

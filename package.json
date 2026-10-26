@@ -19,7 +19,9 @@
     "policy:replay": "npm run replay -w @gatehouse/policy --",
     "audit:verify": "tsx packages/shared/src/audit/verify-cli.ts",
     "approver": "npm run start -w @gatehouse/approver",
-    "host:cli": "npm run spike -w @gatehouse/host --"
+    "host": "npm run start -w @gatehouse/host",
+    "host:cli": "npm run cli -w @gatehouse/host --",
+    "host:spike": "npm run spike -w @gatehouse/host --"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

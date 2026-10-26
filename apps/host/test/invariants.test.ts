@@ -472,6 +472,33 @@ describe("session lifecycle", () => {
     expect(JSON.parse(fs.readFileSync(path.join(s.dir, "usage.json"), "utf8")).total.results).toBe(after.total.results)
   })
 
+  it("adds only what each turn cost, because the SDK reports cost and per-model figures cumulatively", async () => {
+    const before = s.usage.snapshot()
+    s.sdk.turn = async () => undefined
+    const session = await s.manager.start({ cwd: s.repo })
+    const turn = () =>
+      new Promise<void>((resolve) => {
+        const h = (m: { type: string }) => {
+          if (m.type === "result") {
+            session.off("message", h as never)
+            resolve()
+          }
+        }
+        session.on("message", h as never)
+        session.prompt("again")
+      })
+    await turn()
+    await turn()
+    await turn()
+    const after = s.usage.snapshot()
+    // The fake reports cumulative cost 0.01, 0.02, 0.03. Summing those would give 0.06.
+    expect(after.total.costUsd - before.total.costUsd).toBeCloseTo(0.03, 6)
+    expect(after.bySession[session.id]?.costUsd).toBeCloseTo(0.03, 6)
+    expect(after.bySession[session.id]).toMatchObject({ inputTokens: 300, outputTokens: 60, results: 3 })
+    expect((after.byModel["fake-model"]?.inputTokens ?? 0) - (before.byModel["fake-model"]?.inputTokens ?? 0)).toBe(300)
+    expect((after.byModel["fake-model"]?.costUsd ?? 0) - (before.byModel["fake-model"]?.costUsd ?? 0)).toBeCloseTo(0.03, 6)
+  })
+
   it("refuses to start a session or send a prompt while the kill switch is engaged", async () => {
     await s.kill.engage("desktop", "lifecycle test")
     await expect(s.manager.start({ cwd: s.repo })).rejects.toBeInstanceOf(KillSwitchEngagedError)

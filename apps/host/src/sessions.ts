@@ -379,6 +379,11 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     return this.#sessions.get(id)
   }
 
+  /** A notify_user from the Companion: shown on the desktop as a session event. The phone path comes later. */
+  notify(sessionId: string, text: string): void {
+    this.emit("event", { sessionId, type: "notify_user", data: { text } })
+  }
+
   list(): SessionInfo[] {
     return [...this.#sessions.values()].map((s) => s.info())
   }
