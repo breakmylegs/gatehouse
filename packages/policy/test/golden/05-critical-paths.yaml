@@ -1,0 +1,20 @@
+# Critical system paths. The floor covers Edit, Write, MultiEdit, Bash and PowerShell only (spec rule critical-paths).
+- { t: Write, p: "C:/Windows/System32/x.dll", o: deny, r: critical-paths }
+- { t: Edit, p: 'C:\Windows\win.ini', o: deny, r: critical-paths }
+- { t: MultiEdit, p: "C:/Program Files/x/y.txt", o: deny, r: critical-paths }
+- { t: Write, p: "C:/Program Files (x86)/a/b.txt", o: deny, r: critical-paths }
+- { t: Write, p: "c:/WINDOWS/x", o: deny, r: critical-paths }
+- { t: Edit, p: "C:/Windows", o: deny, r: critical-paths }
+- { t: Write, p: "${WS}/../../../../../../../../../../../../Windows/System32/x", o: deny, r: critical-paths }
+- { t: Bash, cmd: "cat C:/Windows/win.ini", o: deny, r: critical-paths }
+- { t: Bash, cmd: "ls /c/Windows", o: deny, r: critical-paths }
+- { t: Bash, cmd: "cat 'C:\\Windows\\win.ini'", o: deny, r: critical-paths }
+- { t: Bash, cmd: "git status C:/Windows", o: deny, r: critical-paths }
+- { t: PowerShell, cmd: "Get-Content C:\\Windows\\win.ini", o: deny, r: critical-paths }
+- { t: PowerShell, cmd: "Get-ChildItem 'C:\\Program Files'", o: deny, r: critical-paths }
+- { t: PowerShell, cmd: "Get-ChildItem \"C:\\Program Files (x86)\"", o: deny, r: critical-paths }
+- { t: Read, p: "C:/Windows/win.ini", o: escalate, r: no-rule, note: "Read is not in the floor rule's tool list" }
+- { t: Write, p: "C:/Windows.old/x", o: deny, r: outside-workspace-write }
+- { t: Write, p: "C:/Windowsfoo/x", o: deny, r: outside-workspace-write }
+- { t: Write, p: "C:/Program Files Extra/x", o: deny, r: outside-workspace-write }
+- { t: Write, p: "C:/PROGRA~1/x/y.txt", o: deny, r: critical-paths, needs: progra }

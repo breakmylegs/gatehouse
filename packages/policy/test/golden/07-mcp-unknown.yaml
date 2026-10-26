@@ -1,0 +1,26 @@
+# MCP tools, web tools and tools the policy does not know. Tool names are case sensitive.
+- { t: mcp__github__create_issue, o: escalate, r: mcp-external }
+- { t: mcp__companion__notify_user, in: { text: "hi" }, o: allow, r: companion-tools }
+- { t: mcp__companion__create_checkpoint, in: { label: "x" }, o: allow, r: companion-tools }
+- { t: mcp__companion__get_policy_summary, in: {}, o: allow, r: companion-tools }
+- { t: mcp__companion__other_tool, in: {}, o: escalate, r: no-rule }
+- { t: mcp__fs__read_file, in: { path: "x" }, o: escalate, r: mcp-external }
+- { t: mcp__companionx__t, in: {}, o: escalate, r: mcp-external }
+- { t: mcp__COMPANION__notify_user, in: {}, o: escalate, r: mcp-external }
+- { t: mcp__x, in: {}, o: escalate, r: mcp-external }
+- { t: TodoWrite, in: { todos: [] }, o: escalate, r: unknown-tool }
+- { t: Task, in: { prompt: "x" }, o: escalate, r: unknown-tool }
+- { t: Agent, in: { prompt: "x" }, o: escalate, r: unknown-tool }
+- { t: Skill, in: { skill: "x" }, o: escalate, r: unknown-tool }
+- { t: BashOutput, in: { bash_id: "1" }, o: escalate, r: unknown-tool }
+- { t: KillShell, in: { shell_id: "1" }, o: escalate, r: unknown-tool }
+- { t: SlashCommand, in: { command: "/x" }, o: escalate, r: unknown-tool }
+- { t: ExitPlanMode, in: { plan: "x" }, o: escalate, r: unknown-tool }
+- { t: AskUserQuestion, in: { questions: [] }, o: escalate, r: unknown-tool }
+- { t: "", in: {}, o: escalate, r: unknown-tool }
+- { t: read, in: { file_path: "src/a.ts" }, o: escalate, r: unknown-tool, note: "lower case is a different tool name" }
+- { t: bash, in: { command: "git status" }, o: escalate, r: unknown-tool }
+- { t: WebFetch, url: "https://example.com", o: escalate, r: network }
+- { t: WebSearch, q: "claude agent sdk", o: escalate, r: network }
+- { t: WebFetch, url: "file:///C:/x", o: escalate, r: network }
+- { t: WebFetch, url: "https://example.com/.env", o: escalate, r: network }

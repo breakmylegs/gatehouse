@@ -1,0 +1,33 @@
+# Subshells, command substitution, process substitution, expansions and nested shells.
+- { t: Bash, cmd: "echo $(git status)", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "git log $(git rev-parse HEAD)", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "git log `git rev-parse HEAD`", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "diff <(git status) <(git diff)", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "echo $(rm -rf /)", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "(rm -rf /)", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "x=$(rm -rf ~)", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "echo \"$(cat .env)\"", o: deny, r: secrets-files }
+- { t: Bash, cmd: "echo `cat .env`", o: deny, r: secrets-files }
+- { t: Bash, cmd: "cat <(echo .env)", o: deny, r: secrets-files }
+- { t: Bash, cmd: "bash -c 'git status'", o: escalate, r: no-rule }
+- { t: Bash, cmd: "bash -c 'rm -rf /'", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "sh -c \"$CMD\"", o: deny, r: obfuscated-shell }
+- { t: Bash, cmd: "bash -c \"git $X\"", o: deny, r: obfuscated-shell }
+- { t: Bash, cmd: "eval \"$X\"", o: deny, r: obfuscated-shell }
+- { t: Bash, cmd: "eval ls", o: escalate, r: bash-eval }
+- { t: Bash, cmd: "eval $(cat x)", o: deny, r: obfuscated-shell }
+- { t: Bash, cmd: "sh -c 'sh -c \"rm -rf /\"'", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "$(echo rm) -rf /", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "echo $((1+2))", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "echo ${HOME}", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "echo $HOME", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "git status $(true)", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "echo {a,b}", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "git log -- $FILE", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "bash -c 'git status; git push'", o: escalate, r: git-remote }
+- { t: Bash, cmd: "zsh -c 'cat .env'", o: deny, r: secrets-files }
+- { t: Bash, cmd: "bash -lc 'git status'", o: escalate, r: no-rule }
+- { t: Bash, cmd: "eval \"git status\"", o: escalate, r: bash-eval }
+- { t: Bash, cmd: "sh -c", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git status && (git diff; rm -rf /)", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "f() { rm -rf /; }", o: deny, r: destructive-shell }

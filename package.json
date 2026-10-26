@@ -13,12 +13,16 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier --check .",
-    "typecheck": "tsc -p apps/host/tsconfig.json && tsc -p packages/shared/tsconfig.json",
+    "typecheck": "tsc -p apps/host/tsconfig.json && tsc -p packages/shared/tsconfig.json && tsc -p packages/policy/tsconfig.json",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "policy:replay": "npm run replay -w @gatehouse/policy --",
     "host:cli": "npm run spike -w @gatehouse/host --"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
+    "@types/picomatch": "4.0.3",
+    "@vitest/coverage-v8": "5.0.5",
     "eslint": "10.13.0",
     "prettier": "3.9.10",
     "tsx": "4.23.15",

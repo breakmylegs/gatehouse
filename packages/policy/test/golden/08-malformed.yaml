@@ -1,0 +1,13 @@
+# Tool input that lacks the field the policy needs. Never allowed, never a crash.
+- { t: Read, in: {}, o: escalate, r: malformed-input }
+- { t: Bash, in: { command: 5 }, o: escalate, r: malformed-input }
+- { t: Bash, in: {}, o: escalate, r: malformed-input }
+- { t: Edit, in: { file_path: "" }, o: escalate, r: malformed-input }
+- { t: PowerShell, in: { command: null }, o: escalate, r: malformed-input }
+- { t: NotebookEdit, in: { file_path: "x" }, o: escalate, r: malformed-input }
+- { t: WebSearch, in: {}, o: escalate, r: malformed-input }
+- { t: WebFetch, in: {}, o: escalate, r: malformed-input }
+- { t: Write, in: { path: "x" }, o: escalate, r: malformed-input }
+- { t: Bash, in: { command: "" }, o: escalate, r: malformed-input }
+- { t: MultiEdit, in: {}, o: escalate, r: malformed-input }
+- { t: Bash, in: { cmd: "git status" }, o: escalate, r: malformed-input }

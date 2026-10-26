@@ -1,0 +1,48 @@
+# Chaining, pipes, newlines, grouping and the rules that match whole commands.
+# o = expected outcome, r = expected rule id. Every shell segment must be allowed for the call to be allowed.
+- { t: Bash, cmd: "git status && git diff", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git status; git log", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git status || git diff", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git status | head", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git status && npm install", o: escalate, r: package-install }
+- { t: Bash, cmd: "git diff | grep foo", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git log --oneline | wc -l", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git status && git push", o: escalate, r: git-remote }
+- { t: Bash, cmd: "git status && git push --force", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git status\ngit diff", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git log --oneline -5", o: allow, r: safe-shell }
+- { t: Bash, cmd: "npm test", o: allow, r: safe-shell }
+- { t: Bash, cmd: "npm test -- --watch", o: allow, r: safe-shell }
+- { t: Bash, cmd: "npm run lint", o: allow, r: safe-shell }
+- { t: Bash, cmd: "npx tsc --noEmit", o: allow, r: safe-shell }
+- { t: Bash, cmd: "npm run build", o: escalate, r: no-rule }
+- { t: Bash, cmd: "echo hello", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git status && echo done", o: escalate, r: no-rule }
+- { t: Bash, cmd: "ls", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git diff HEAD~1 -- src/a.ts", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git status && (git diff)", o: allow, r: safe-shell }
+- { t: Bash, cmd: "{ git status; git diff; }", o: allow, r: safe-shell }
+- { t: Bash, cmd: "! git status", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git status|git diff", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git status && git push -f", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git reset --hard", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git reset --hard HEAD~1", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git reset --soft HEAD~1", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git clean -fdx", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git clean -n", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git status &", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git fetch && git status", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git remote -v", o: escalate, r: git-remote }
+- { t: Bash, cmd: "gh pr list", o: escalate, r: git-remote }
+- { t: Bash, cmd: "pip install requests", o: escalate, r: package-install }
+- { t: Bash, cmd: "winget install foo", o: escalate, r: package-install }
+- { t: Bash, cmd: "npm i lodash", o: escalate, r: package-install }
+- { t: Bash, cmd: "npm install", o: escalate, r: package-install }
+- { t: Bash, cmd: "choco install git", o: escalate, r: package-install }
+- { t: Bash, cmd: "curl https://example.com", o: escalate, r: network }
+- { t: Bash, cmd: "git status && curl https://example.com", o: escalate, r: network }
+- { t: Bash, cmd: "diskpart", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "format C:", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git status && rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "git log | git status", o: allow, r: safe-shell }

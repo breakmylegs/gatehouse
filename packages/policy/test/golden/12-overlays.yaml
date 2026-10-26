@@ -1,0 +1,26 @@
+# Project overlays (file named after the project, here "ws"). They can only tighten.
+# load: reject cases are overlay widening attempts and malformed overlays.
+- { kind: overlay, overlay: { version: 1, allow: [{ id: x, tools: [Bash] }] }, load: reject, err: "/allow is not allowed" }
+- { kind: overlay, overlay: { version: 1, floor: [{ id: x, tools: [Bash] }] }, load: reject, err: "/floor is not allowed" }
+- { kind: overlay, overlay: { version: 1, workspaceRoots: ["C:/"] }, load: reject, err: "/workspaceRoots is not allowed" }
+- { kind: overlay, overlay: { version: 1, defaults: { judge: { enabled: true } } }, load: reject, err: "/defaults is not allowed" }
+- { kind: overlay, overlay: { version: 1, quietHours: { start: "01:00", end: "02:00", tz: "UTC" } }, load: reject, err: "/quietHours is not allowed" }
+- { kind: overlay, overlay: { version: 1, judgeEligible: [network, git-remote] }, load: reject, err: "/judgeEligible is not allowed" }
+- { kind: overlay, overlay: { version: 1, removeAllow: [nope] }, load: reject, err: "unknown allow rule nope" }
+- { kind: overlay, overlay: { version: 1, deny: [{ id: d1 }] }, load: reject, err: "no selector" }
+- { kind: overlay, overlay: { version: 1, deny: [{ id: safe-shell, tools: [Bash] }] }, load: reject, err: "already used" }
+- { kind: overlay, overlay: { version: 1, project: other, deny: [{ id: d2, tools: [Bash] }] }, load: reject, err: "does not match the file name" }
+- { kind: overlay, overlay: { version: 2 }, load: reject, err: "version" }
+- { kind: overlay, overlay: { version: 1, foo: 1 }, load: reject, err: "additional properties" }
+- { kind: overlay, overlay: { version: 1, deny: [{ id: d3, tools: [Bash], pathInside: other }] }, load: reject, err: "equal to constant" }
+- { kind: overlay, overlay: { version: 1, escalate: [{ id: e1, tools: [Bash], risk: 101 }] }, load: reject, err: "risk" }
+- { kind: overlay, t: Bash, cmd: "npm test", overlay: { version: 1, deny: [{ id: no-npm-test, commands: ["npm test*"] }] }, o: deny, r: no-npm-test }
+- { kind: overlay, t: Bash, cmd: "git log", overlay: { version: 1, escalate: [{ id: log-review, commands: ["git log*"], risk: 90 }] }, o: escalate, r: log-review }
+- { kind: overlay, t: Bash, cmd: "git status", overlay: { version: 1, removeAllow: [safe-shell] }, o: escalate, r: no-rule }
+- { kind: overlay, t: Read, p: "src/a.ts", overlay: { version: 1, removeAllow: [read-workspace] }, o: escalate, r: no-rule }
+- { kind: overlay, t: Edit, p: "src/a.ts", overlay: { version: 1, removeAllow: [edit-workspace-source] }, o: escalate, r: no-rule }
+- { kind: overlay, overlayName: other, t: Bash, cmd: "git status", overlay: { version: 1, removeAllow: [safe-shell] }, o: allow, r: safe-shell, note: "an overlay for another project does not apply" }
+- { kind: overlay, t: Write, p: "src/new.ts", overlay: { version: 1, deny: [{ id: no-src-writes, tools: [Write], pathGlobs: ["src/**"] }] }, o: deny, r: no-src-writes }
+- { kind: overlay, t: Read, p: ".env", overlay: { version: 1, deny: [{ id: no-read, tools: [Read] }] }, o: deny, r: secrets-files, note: "the floor still decides first" }
+- { kind: overlay, t: mcp__companion__notify_user, in: { text: "x" }, overlay: { version: 1, escalate: [{ id: slow-down, tools: [mcp__companion__notify_user], risk: 40 }] }, o: escalate, r: slow-down }
+- { kind: overlay, t: PowerShell, cmd: "Get-ChildItem", overlay: { version: 1, deny: [{ id: no-gci, commands: ["Get-ChildItem*"] }] }, o: deny, r: no-gci }
