@@ -99,7 +99,7 @@ interface Entry {
 const MAX_MESSAGE = 500
 const MAX_ANSWER = 4000
 
-function describeResolution(r: Resolution): string {
+export function describeResolution(r: Resolution): string {
   const when = r.at.slice(11, 16)
   switch (r.outcome) {
     case "allow":
