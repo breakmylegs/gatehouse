@@ -1,0 +1,228 @@
+import type {
+  AccountInfo,
+  HookCallback,
+  Options,
+  PermissionResult,
+  Query,
+  SDKMessage,
+  SDKUserMessage,
+} from "@anthropic-ai/claude-agent-sdk"
+import type { QueryFn } from "../src/account.js"
+
+export interface ToolCallResult {
+  executed: boolean
+  /** Which stage stopped the call. */
+  blockedBy?: "hook" | "permission"
+  message?: string
+  /** The input the tool would have run with (the edited input if canUseTool changed it). */
+  input?: Record<string, unknown>
+  permission?: PermissionResult
+  canUseToolCalled: boolean
+}
+
+export interface TurnApi {
+  sessionId: string
+  signal: AbortSignal
+  /**
+   * Behaves like Claude Code: PreToolUse hooks first, then canUseTool (unless `selfApproved`, which models
+   * a call Claude Code approves by itself), then PostToolUse.
+   */
+  callTool(
+    toolName: string,
+    input: Record<string, unknown>,
+    opts?: { selfApproved?: boolean; toolUseId?: string; mcpSource?: string },
+  ): Promise<ToolCallResult>
+  say(text: string): void
+  /** Emits a raw system message, for example a warning. */
+  system(message: Record<string, unknown>): void
+}
+
+export type TurnScript = (api: TurnApi, userText: string) => Promise<void>
+
+export interface FakeQueryHandle {
+  options: Options
+  closed: boolean
+  interrupts: number
+  modes: string[]
+  models: (string | undefined)[]
+  prompts: string[]
+  permissionResults: PermissionResult[]
+  initializationResult(): Promise<{ account: AccountInfo }>
+}
+
+/** A stand-in for the SDK's query(). It exercises the Host's real hooks and canUseTool. */
+export class FakeSdk {
+  account: AccountInfo | undefined = {
+    email: "test@example.com",
+    organization: "ACN - Premium",
+    subscriptionType: "Claude Enterprise",
+    apiProvider: "firstParty",
+  }
+  turn: TurnScript = async () => undefined
+  readonly queries: FakeQueryHandle[] = []
+  /** Cost reported by each result message. */
+  costPerTurn = 0.01
+  #toolCounter = 0
+
+  readonly queryFn: QueryFn = ({ prompt, options }) => {
+    const sdk = this
+    const opts = options ?? ({} as Options)
+    const out: SDKMessage[] = []
+    let wake: (() => void) | undefined
+    let ended = false
+    let currentAbort: AbortController | undefined
+    const handle: FakeQueryHandle = {
+      options: opts,
+      closed: false,
+      interrupts: 0,
+      modes: [],
+      models: [],
+      prompts: [],
+      permissionResults: [],
+      initializationResult: async () => ({ account: sdk.account as AccountInfo }),
+    }
+    sdk.queries.push(handle)
+    const sessionId = `sdk-${sdk.queries.length}`
+
+    const push = (m: Record<string, unknown>) => {
+      out.push({ session_id: sessionId, ...m } as unknown as SDKMessage)
+      wake?.()
+    }
+    push({ type: "system", subtype: "init", model: "fake-model", cwd: opts.cwd, tools: [], mcp_servers: [] })
+
+    const hook = async (event: "PreToolUse" | "PostToolUse", toolName: string, input: Record<string, unknown>, id: string, signal: AbortSignal) => {
+      const callbacks = ((opts.hooks as Record<string, { hooks: HookCallback[] }[]> | undefined)?.[event] ?? []).flatMap((m) => m.hooks)
+      let last: unknown = {}
+      for (const cb of callbacks) {
+        last = await cb(
+          {
+            hook_event_name: event,
+            tool_name: toolName,
+            tool_input: input,
+            tool_use_id: id,
+            cwd: opts.cwd,
+            session_id: sessionId,
+            ...(event === "PostToolUse" ? { tool_response: {} } : {}),
+          } as never,
+          id,
+          { signal },
+        )
+        const decision = (last as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision
+        if (decision === "deny") return last
+      }
+      return last
+    }
+
+    const makeApi = (signal: AbortSignal): TurnApi => ({
+      sessionId,
+      signal,
+      say: (text) => push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } }),
+      system: (m) => push({ type: "system", ...m }),
+      callTool: async (toolName, input, o = {}) => {
+        const id = o.toolUseId ?? `toolu_${++sdk.#toolCounter}`
+        const pre = (await hook("PreToolUse", toolName, input, id, signal)) as {
+          hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string }
+        }
+        if (pre.hookSpecificOutput?.permissionDecision === "deny") {
+          return { executed: false, blockedBy: "hook", message: pre.hookSpecificOutput.permissionDecisionReason, canUseToolCalled: false }
+        }
+        let finalInput = input
+        let permission: PermissionResult | undefined
+        let called = false
+        if (!o.selfApproved) {
+          called = true
+          permission = (await opts.canUseTool!(toolName, input, {
+            signal,
+            toolUseID: id,
+            requestId: `req-${id}`,
+            ...(o.mcpSource ? { mcpServer: { name: toolName.split("__")[1] ?? "x", source: o.mcpSource } } : {}),
+          } as never)) ?? undefined
+          if (permission) handle.permissionResults.push(permission)
+          if (!permission || permission.behavior !== "allow") {
+            return {
+              executed: false,
+              blockedBy: "permission",
+              message: permission && permission.behavior === "deny" ? permission.message : undefined,
+              permission,
+              canUseToolCalled: true,
+            }
+          }
+          finalInput = permission.updatedInput ?? input
+        }
+        await hook("PostToolUse", toolName, finalInput, id, signal)
+        push({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] } })
+        return { executed: true, input: finalInput, permission, canUseToolCalled: called }
+      },
+    })
+
+    // Turn loop: one turn per user message.
+    void (async () => {
+      try {
+        for await (const msg of prompt as AsyncIterable<SDKUserMessage>) {
+          const text = typeof msg.message.content === "string" ? msg.message.content : JSON.stringify(msg.message.content)
+          handle.prompts.push(text)
+          currentAbort = new AbortController()
+          try {
+            await sdk.turn(makeApi(currentAbort.signal), text)
+          } catch (e) {
+            push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `turn error: ${(e as Error).message}` }] } })
+          }
+          push({
+            type: "result",
+            subtype: "success",
+            is_error: false,
+            duration_ms: 5,
+            num_turns: 1,
+            total_cost_usd: sdk.costPerTurn,
+            usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 5, cache_creation_input_tokens: 1 },
+            modelUsage: { "fake-model": { inputTokens: 100, outputTokens: 20, cacheReadInputTokens: 5, cacheCreationInputTokens: 1, costUSD: sdk.costPerTurn } },
+          })
+          currentAbort = undefined
+        }
+      } finally {
+        ended = true
+        wake?.()
+      }
+    })()
+
+    const q = {
+      async next(): Promise<IteratorResult<SDKMessage, void>> {
+        for (;;) {
+          const item = out.shift()
+          if (item) return { value: item, done: false }
+          if (ended || handle.closed) return { value: undefined, done: true }
+          await new Promise<void>((r) => (wake = r))
+        }
+      },
+      async return(): Promise<IteratorResult<SDKMessage, void>> {
+        handle.closed = true
+        return { value: undefined, done: true }
+      },
+      async throw(e: unknown): Promise<IteratorResult<SDKMessage, void>> {
+        throw e
+      },
+      [Symbol.asyncIterator]() {
+        return this
+      },
+      async interrupt() {
+        handle.interrupts++
+        currentAbort?.abort()
+        return undefined
+      },
+      async setPermissionMode(mode: string) {
+        handle.modes.push(mode)
+      },
+      async setModel(model?: string) {
+        handle.models.push(model)
+      },
+      async initializationResult() {
+        return handle.initializationResult()
+      },
+      close() {
+        handle.closed = true
+        wake?.()
+      },
+    }
+    return q as unknown as Query
+  }
+}

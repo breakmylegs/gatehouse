@@ -225,7 +225,10 @@ export class PolicyStore {
     if (this.#opts.localPath) dirs.add(path.dirname(this.#opts.localPath))
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) continue
-      const watcher = fs.watch(dir, { persistent: false }, () => {
+      const watcher = fs.watch(dir, { persistent: false }, (_event, filename) => {
+        // Only rules files matter. Unrelated activity in the folder (audit files, temp files) must not
+        // keep pushing the reload back.
+        if (filename && !/\.ya?ml$/i.test(String(filename))) return
         clearTimeout(this.#timer)
         this.#timer = setTimeout(() => {
           this.load()

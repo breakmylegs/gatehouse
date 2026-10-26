@@ -228,6 +228,35 @@ describe("PolicyStore", () => {
     expect(store.current?.hash).toBe(hash)
   })
 
+  it("is not held back by constant unrelated activity in the same folder", async () => {
+    const watched = fs.mkdtempSync(path.join(dir, "busy-"))
+    const file = path.join(watched, "rules.yaml")
+    fs.writeFileSync(file, stringifyYaml(seed()))
+    const store = new PolicyStore({ rulesPath: file })
+    store.load()
+    const before = store.current?.hash
+    const changed = new Promise<string | undefined>((resolve) => {
+      store.onChange = (s) => resolve(s.hash)
+    })
+    store.watch(150)
+    // Writes to other files every 30 ms, well inside the 150 ms debounce, for the whole time.
+    const noise = setInterval(() => fs.writeFileSync(path.join(watched, "noise.txt"), String(Date.now())), 30)
+    try {
+      const next = seed()
+      next.deny.push({ id: "busy-deny", commands: ["halt*"] })
+      fs.writeFileSync(file, stringifyYaml(next))
+      const hash = await Promise.race([
+        changed,
+        new Promise<string>((resolve) => setTimeout(() => resolve("never reloaded"), 4000)),
+      ])
+      expect(hash).not.toBe("never reloaded")
+      expect(hash).not.toBe(before)
+    } finally {
+      clearInterval(noise)
+      store.close()
+    }
+  })
+
   it("watches overlay and local folders too, and close is safe to repeat", () => {
     const file = write(seed(), "watch.yaml")
     const overlayDir = fs.mkdtempSync(path.join(dir, "wov-"))
