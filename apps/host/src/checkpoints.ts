@@ -54,7 +54,11 @@ export class CheckpointManager {
   }
 
   /** Before an escalated call (if the setting is on). */
-  async beforeEscalation(sessionId: string, cwd: string, what: string): Promise<Checkpoint | undefined> {
+  async beforeEscalation(
+    sessionId: string,
+    cwd: string,
+    what: string,
+  ): Promise<Checkpoint | undefined> {
     if (!this.#opts.config().checkpoints.beforeEscalation) return undefined
     return this.#take(sessionId, cwd, `before: ${what}`)
   }

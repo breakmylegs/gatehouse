@@ -9,10 +9,21 @@ import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
 import { createCanUseTool } from "./canuse.js"
 import type { CheckpointManager } from "./checkpoints.js"
-import { createEventHook, createFloorHook, createPostToolHook, type SessionHookDeps } from "./hooks.js"
+import {
+  createEventHook,
+  createFloorHook,
+  createPostToolHook,
+  type SessionHookDeps,
+} from "./hooks.js"
 import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
-import { assertSafeOptions, isAllowedMode, isShadowWarning, SafetyError, type SessionMode } from "./safety.js"
+import {
+  assertSafeOptions,
+  isAllowedMode,
+  isShadowWarning,
+  SafetyError,
+  type SessionMode,
+} from "./safety.js"
 import type { UsageStore } from "./usage.js"
 
 export class OrgGuardError extends Error {
@@ -47,7 +58,12 @@ export interface SessionInfo {
 export interface SessionEvents {
   message: [SDKMessage]
   state: [SessionInfo]
-  event: [{ type: "notification" | "stop" | "subagent_start" | "subagent_stop"; data: Record<string, unknown> }]
+  event: [
+    {
+      type: "notification" | "stop" | "subagent_start" | "subagent_stop"
+      data: Record<string, unknown>
+    },
+  ]
 }
 
 export interface SessionDeps {
@@ -85,7 +101,11 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
   #closed = false
 
   push(text: string): void {
-    const msg: SDKUserMessage = { type: "user", message: { role: "user", content: text }, parent_tool_use_id: null }
+    const msg: SDKUserMessage = {
+      type: "user",
+      message: { role: "user", content: text },
+      parent_tool_use_id: null,
+    }
     if (this.#waiting) {
       const w = this.#waiting
       this.#waiting = undefined
@@ -225,9 +245,12 @@ export class Session extends EventEmitter<SessionEvents> {
       },
       mcpServers: d.companion({ sessionId: this.id, cwd: this.cwd }) as Options["mcpServers"],
       stderr: (data) => {
-        if (isShadowWarning(data)) this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
+        if (isShadowWarning(data))
+          this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
       },
-      ...(this.#opts.resume !== undefined ? { resume: this.#opts.resume, forkSession: this.#opts.fork === true } : {}),
+      ...(this.#opts.resume !== undefined
+        ? { resume: this.#opts.resume, forkSession: this.#opts.fork === true }
+        : {}),
     }
     assertSafeOptions(options)
 
@@ -277,7 +300,8 @@ export class Session extends EventEmitter<SessionEvents> {
       this.emit("state", this.info())
     }
     if (msg.type === "system") {
-      if (isShadowWarning(JSON.stringify(m))) this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
+      if (isShadowWarning(JSON.stringify(m)))
+        this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
       if ((m.subtype as string) === "init" && typeof m.model === "string") this.#model = m.model
     }
     if (msg.type === "result") {
@@ -298,7 +322,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Sends the next user message. Messages sent while a turn runs are queued by the SDK. */
   prompt(text: string): void {
-    if (this.#state === "error" || this.#state === "ended") throw new Error(`The session has ${this.#state}`)
+    if (this.#state === "error" || this.#state === "ended")
+      throw new Error(`The session has ${this.#state}`)
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
     this.#running = true
     this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
@@ -316,7 +341,11 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Only default and plan are ever accepted (invariant 3). */
   async setMode(mode: SessionMode): Promise<void> {
-    if (!isAllowedMode(mode)) throw new SafetyError(3, `permission mode "${String(mode)}" is not allowed, only default and plan`)
+    if (!isAllowedMode(mode))
+      throw new SafetyError(
+        3,
+        `permission mode "${String(mode)}" is not allowed, only default and plan`,
+      )
     await this.#q?.setPermissionMode(mode)
     this.#mode = mode
     this.emit("state", this.info())
@@ -363,12 +392,20 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     const config = this.#deps.config()
     // Checked again inside Session.start with the live account. This early check gives a clear message
     // when there is nothing to compare against.
-    const early = checkOrg(this.#deps.account.last()?.organization ? { organization: this.#deps.account.last()?.organization } : undefined, config.expectedOrg)
-    if (!early.ok && early.code === "no-expected-org") throw new OrgGuardError(early.code, early.message)
+    const early = checkOrg(
+      this.#deps.account.last()?.organization
+        ? { organization: this.#deps.account.last()?.organization }
+        : undefined,
+      config.expectedOrg,
+    )
+    if (!early.ok && early.code === "no-expected-org")
+      throw new OrgGuardError(early.code, early.message)
     const session = new Session(this.#deps, opts)
     session.on("state", (info) => this.emit("session", info))
     session.on("message", (message) => this.emit("message", { sessionId: session.id, message }))
-    session.on("event", (e) => this.emit("event", { sessionId: session.id, type: e.type, data: e.data }))
+    session.on("event", (e) =>
+      this.emit("event", { sessionId: session.id, type: e.type, data: e.data }),
+    )
     await session.start()
     this.#sessions.set(session.id, session)
     this.emit("session", session.info())

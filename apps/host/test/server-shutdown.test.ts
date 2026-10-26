@@ -42,13 +42,25 @@ describe("shutting the Host down", () => {
     const port = await server.start()
 
     // A refused upgrade whose socket the client simply keeps open.
-    const lingering = http.request({ host: "127.0.0.1", port, headers: { host: `127.0.0.1:${port}`, connection: "Upgrade", upgrade: "websocket", "sec-websocket-version": "13", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==" } })
+    const lingering = http.request({
+      host: "127.0.0.1",
+      port,
+      headers: {
+        host: `127.0.0.1:${port}`,
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    })
     lingering.on("response", (res) => res.resume())
     lingering.on("error", () => undefined)
     lingering.end()
 
     // A real client that stops reading, so it never acknowledges the server's close frame.
-    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, [WS_SUBPROTOCOL, `token.${TOKEN}`], { headers: { origin: `http://127.0.0.1:${port}` } })
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`, [WS_SUBPROTOCOL, `token.${TOKEN}`], {
+      headers: { origin: `http://127.0.0.1:${port}` },
+    })
     await new Promise<void>((resolve, reject) => {
       ws.on("open", () => resolve())
       ws.on("error", reject)

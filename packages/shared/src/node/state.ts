@@ -28,7 +28,9 @@ export function statePath(env: NodeJS.ProcessEnv = process.env): string {
  * A missing file means "not engaged". A file that exists but cannot be read or understood means the kill
  * switch is treated as ENGAGED, so damage to the state file can never quietly re-arm the system.
  */
-export function readState(env: NodeJS.ProcessEnv = process.env): GatehouseState & { damaged?: boolean } {
+export function readState(
+  env: NodeJS.ProcessEnv = process.env,
+): GatehouseState & { damaged?: boolean } {
   const file = statePath(env)
   if (!fs.existsSync(file)) return GatehouseState.parse({})
   try {
@@ -38,7 +40,10 @@ export function readState(env: NodeJS.ProcessEnv = process.env): GatehouseState 
   }
 }
 
-export async function writeState(state: GatehouseState, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+export async function writeState(
+  state: GatehouseState,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
   const file = statePath(env)
   fs.mkdirSync(path.dirname(file), { recursive: true })
   await writeFileAtomic(file, JSON.stringify(GatehouseState.parse(state), null, 2) + "\n")

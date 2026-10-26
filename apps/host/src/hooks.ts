@@ -21,7 +21,9 @@ export function denyOutput(reason: string): HookJSONOutput {
 const NO_DECISION: HookJSONOutput = {}
 
 function asRecord(v: unknown): Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {}
 }
 
 export interface SessionHookDeps {
@@ -35,7 +37,10 @@ export interface SessionHookDeps {
   /** toolUseIDs that went through canUseTool, so PostToolUse can tell which calls Claude Code approved itself. */
   decided: Set<string>
   /** Session events for the UI: notification, stop, subagent start and stop. */
-  onEvent: (type: "notification" | "stop" | "subagent_start" | "subagent_stop", data: Record<string, unknown>) => void
+  onEvent: (
+    type: "notification" | "stop" | "subagent_start" | "subagent_stop",
+    data: Record<string, unknown>,
+  ) => void
   log: (line: string) => void
 }
 
@@ -51,9 +56,17 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
     try {
       const toolInput = asRecord(input.tool_input)
       const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
-      if (deps.kill()) return denyOutput("The Gatehouse kill switch is engaged. Everything is denied until the user re-arms it.")
+      if (deps.kill())
+        return denyOutput(
+          "The Gatehouse kill switch is engaged. Everything is denied until the user re-arms it.",
+        )
       const policy = deps.policy()
-      const hit = await evaluateFloor(policy, { toolName: input.tool_name, input: toolInput }, { cwd }, deps.pwsh)
+      const hit = await evaluateFloor(
+        policy,
+        { toolName: input.tool_name, input: toolInput },
+        { cwd },
+        deps.pwsh,
+      )
       if (hit) {
         const verdict: Verdict = {
           outcome: "deny",
@@ -98,7 +111,8 @@ const SELF_APPROVED: Omit<Verdict, "policyHash"> = {
 /** Audits calls that ran without ever reaching canUseTool (invariant 13), from PostToolUse. */
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
   return async (input) => {
-    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure") return NO_DECISION
+    if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
+      return NO_DECISION
     try {
       if (deps.decided.has(input.tool_use_id)) return NO_DECISION
       await deps.audit.record({
@@ -125,7 +139,11 @@ export function createEventHook(deps: SessionHookDeps): HookCallback {
     try {
       switch (input.hook_event_name) {
         case "Notification":
-          deps.onEvent("notification", { message: input.message, title: input.title, kind: input.notification_type })
+          deps.onEvent("notification", {
+            message: input.message,
+            title: input.title,
+            kind: input.notification_type,
+          })
           break
         case "Stop":
           deps.onEvent("stop", {})

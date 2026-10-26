@@ -14,19 +14,24 @@ export type OrgCheck =
  * named in Gatehouse settings. Every case that is not a clear yes is a no. Note that this never reads a
  * credential: the account comes from the SDK's own initialisation reply.
  */
-export function checkOrg(account: AccountInfo | undefined, expectedOrg: string | undefined): OrgCheck {
+export function checkOrg(
+  account: AccountInfo | undefined,
+  expectedOrg: string | undefined,
+): OrgCheck {
   if (!expectedOrg || expectedOrg.trim() === "") {
     return {
       ok: false,
       code: "no-expected-org",
-      message: "No expected organisation is set. Open settings and enter the organisation shown by /status in Claude Code.",
+      message:
+        "No expected organisation is set. Open settings and enter the organisation shown by /status in Claude Code.",
     }
   }
   if (!account || (!account.email && !account.organization)) {
     return {
       ok: false,
       code: "not-signed-in",
-      message: "You are not signed in. Run /login in the Claude Code terminal and choose your organisation's single sign-on.",
+      message:
+        "You are not signed in. Run /login in the Claude Code terminal and choose your organisation's single sign-on.",
     }
   }
   if (account.apiProvider !== undefined && account.apiProvider !== "firstParty") {
@@ -36,7 +41,10 @@ export function checkOrg(account: AccountInfo | undefined, expectedOrg: string |
       message: `Claude Code is using ${account.apiProvider}, not the Anthropic sign-in, so the organisation cannot be checked.`,
     }
   }
-  if (!account.organization || account.organization.trim().toLowerCase() !== expectedOrg.trim().toLowerCase()) {
+  if (
+    !account.organization ||
+    account.organization.trim().toLowerCase() !== expectedOrg.trim().toLowerCase()
+  ) {
     return {
       ok: false,
       code: "wrong-org",
@@ -46,7 +54,10 @@ export function checkOrg(account: AccountInfo | undefined, expectedOrg: string |
   return { ok: true }
 }
 
-export type QueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query
+export type QueryFn = (params: {
+  prompt: string | AsyncIterable<SDKUserMessage>
+  options?: Options
+}) => Query
 
 export interface AccountSnapshot {
   signedIn: boolean

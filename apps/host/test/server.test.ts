@@ -6,7 +6,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import WebSocket from "ws"
 import type { Health, ServerEvent } from "@gatehouse/shared"
 import { WS_SUBPROTOCOL } from "@gatehouse/shared"
-import { allowedHosts, allowedOrigins, checkHostRequest, extractToken, offersSubprotocol, secretsEqual } from "../src/server-guard.js"
+import {
+  allowedHosts,
+  allowedOrigins,
+  checkHostRequest,
+  extractToken,
+  offersSubprotocol,
+  secretsEqual,
+} from "../src/server-guard.js"
 import { HostServer, type HostApp } from "../src/server.js"
 import { buildStack, type Stack } from "./stack.js"
 
@@ -14,37 +21,93 @@ const TOKEN = "u".repeat(20) + "-ui-session-token-" + "z".repeat(10)
 
 describe("checkHostRequest (invariant 7)", () => {
   const opts = { token: TOKEN, port: 47820 }
-  const base = { method: "GET", url: "/", headers: { host: "127.0.0.1:47820" } as Record<string, string> }
+  const base = {
+    method: "GET",
+    url: "/",
+    headers: { host: "127.0.0.1:47820" } as Record<string, string>,
+  }
 
   it("serves public pages to the loopback address without a token", () => {
     expect(checkHostRequest(base, opts)).toEqual({ ok: true })
-    expect(checkHostRequest({ ...base, headers: { host: "LOCALHOST:47820" } }, opts)).toEqual({ ok: true })
+    expect(checkHostRequest({ ...base, headers: { host: "LOCALHOST:47820" } }, opts)).toEqual({
+      ok: true,
+    })
     expect(checkHostRequest({ ...base, url: "/assets/app.js?v=2" }, opts)).toEqual({ ok: true })
   })
 
   it("rejects any other Host header (DNS rebinding)", () => {
-    for (const host of ["evil.example", "evil.example:47820", "127.0.0.1", "127.0.0.1:1", "[::1]:47820", "0.0.0.0:47820", ""]) {
-      expect(checkHostRequest({ ...base, headers: { host } }, opts), host).toMatchObject({ ok: false, status: 403 })
+    for (const host of [
+      "evil.example",
+      "evil.example:47820",
+      "127.0.0.1",
+      "127.0.0.1:1",
+      "[::1]:47820",
+      "0.0.0.0:47820",
+      "",
+    ]) {
+      expect(checkHostRequest({ ...base, headers: { host } }, opts), host).toMatchObject({
+        ok: false,
+        status: 403,
+      })
     }
-    expect(checkHostRequest({ ...base, headers: {} }, opts)).toMatchObject({ ok: false, status: 403 })
+    expect(checkHostRequest({ ...base, headers: {} }, opts)).toMatchObject({
+      ok: false,
+      status: 403,
+    })
   })
 
   it("accepts only the Host's own origin, and no origin at all (a command line client)", () => {
     for (const origin of allowedOrigins(47820)) {
-      expect(checkHostRequest({ ...base, headers: { ...base.headers, origin } }, opts)).toEqual({ ok: true })
+      expect(checkHostRequest({ ...base, headers: { ...base.headers, origin } }, opts)).toEqual({
+        ok: true,
+      })
     }
-    for (const origin of ["https://evil.example", "http://127.0.0.1:47821", "http://localhost:3000", "null", "http://127.0.0.1:47820.evil.example", "https://127.0.0.1:47820"]) {
-      expect(checkHostRequest({ ...base, headers: { ...base.headers, origin } }, opts), origin).toMatchObject({ ok: false, status: 403 })
+    for (const origin of [
+      "https://evil.example",
+      "http://127.0.0.1:47821",
+      "http://localhost:3000",
+      "null",
+      "http://127.0.0.1:47820.evil.example",
+      "https://127.0.0.1:47820",
+    ]) {
+      expect(
+        checkHostRequest({ ...base, headers: { ...base.headers, origin } }, opts),
+        origin,
+      ).toMatchObject({ ok: false, status: 403 })
     }
   })
 
   it("needs the token for /api and /ws, from a bearer header or a websocket subprotocol", () => {
     for (const url of ["/api", "/api/state", "/api/anything/else", "/ws", "/ws?x=1"]) {
-      expect(checkHostRequest({ ...base, url }, opts), url).toMatchObject({ ok: false, status: 401 })
-      expect(checkHostRequest({ ...base, url, headers: { ...base.headers, authorization: "Bearer wrong" } }, opts)).toMatchObject({ status: 401 })
-      expect(checkHostRequest({ ...base, url, headers: { ...base.headers, authorization: `Bearer ${TOKEN}` } }, opts), url).toEqual({ ok: true })
+      expect(checkHostRequest({ ...base, url }, opts), url).toMatchObject({
+        ok: false,
+        status: 401,
+      })
       expect(
-        checkHostRequest({ ...base, url, headers: { ...base.headers, "sec-websocket-protocol": `${WS_SUBPROTOCOL}, token.${TOKEN}` } }, opts),
+        checkHostRequest(
+          { ...base, url, headers: { ...base.headers, authorization: "Bearer wrong" } },
+          opts,
+        ),
+      ).toMatchObject({ status: 401 })
+      expect(
+        checkHostRequest(
+          { ...base, url, headers: { ...base.headers, authorization: `Bearer ${TOKEN}` } },
+          opts,
+        ),
+        url,
+      ).toEqual({ ok: true })
+      expect(
+        checkHostRequest(
+          {
+            ...base,
+            url,
+            headers: {
+              ...base.headers,
+              "sec-websocket-protocol": `${WS_SUBPROTOCOL}, token.${TOKEN}`,
+            },
+          },
+          opts,
+        ),
       ).toEqual({ ok: true })
     }
     expect(checkHostRequest({ ...base, url: "/apiary" }, opts)).toEqual({ ok: true }) // a different path, not /api
@@ -52,7 +115,18 @@ describe("checkHostRequest (invariant 7)", () => {
 
   it("refuses a foreign origin even when the token is right (cross-site hijack)", () => {
     expect(
-      checkHostRequest({ ...base, url: "/ws", headers: { ...base.headers, origin: "https://evil.example", authorization: `Bearer ${TOKEN}` } }, opts),
+      checkHostRequest(
+        {
+          ...base,
+          url: "/ws",
+          headers: {
+            ...base.headers,
+            origin: "https://evil.example",
+            authorization: `Bearer ${TOKEN}`,
+          },
+        },
+        opts,
+      ),
     ).toMatchObject({ ok: false, status: 403 })
   })
 
@@ -88,7 +162,12 @@ function healthFor(stack: Stack): Health {
       managedPolicy: acct?.managedPolicy ?? "unknown",
       orgOk: acct?.org.ok ?? false,
     },
-    killSwitch: { engaged: ks.engaged, ...(ks.since ? { since: ks.since } : {}), ...(ks.by ? { by: ks.by } : {}), approverConfirmed: ks.approverConfirmed },
+    killSwitch: {
+      engaged: ks.engaged,
+      ...(ks.since ? { since: ks.since } : {}),
+      ...(ks.by ? { by: ks.by } : {}),
+      approverConfirmed: ks.approverConfirmed,
+    },
     pwsh: { running: false },
   }
 }
@@ -123,13 +202,25 @@ afterAll(async () => {
   fs.rmSync(staticDir, { recursive: true, force: true })
 })
 
-function httpGet(path: string, headers: Record<string, string> = {}): Promise<{ status: number; body: string }> {
+function httpGet(
+  path: string,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: "127.0.0.1", port, path, method: "GET", headers: { host: `127.0.0.1:${port}`, ...headers } }, (res) => {
-      let body = ""
-      res.on("data", (c) => (body += c))
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, body }))
-    })
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        path,
+        method: "GET",
+        headers: { host: `127.0.0.1:${port}`, ...headers },
+      },
+      (res) => {
+        let body = ""
+        res.on("data", (c) => (body += c))
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, body }))
+      },
+    )
     req.on("error", reject)
     req.end()
   })
@@ -138,11 +229,17 @@ function httpGet(path: string, headers: Record<string, string> = {}): Promise<{ 
 describe("the Host listener", () => {
   it("is bound to 127.0.0.1 only", async () => {
     expect(server.address).toBe("127.0.0.1")
-    const others = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === "IPv4" && !i.internal).map((i) => (i as os.NetworkInterfaceInfo).address)
+    const others = Object.values(os.networkInterfaces())
+      .flat()
+      .filter((i) => i && i.family === "IPv4" && !i.internal)
+      .map((i) => (i as os.NetworkInterfaceInfo).address)
     if (others[0]) {
       await new Promise<void>((resolve, reject) => {
         const sock = net.connect({ host: others[0], port, timeout: 2000 })
-        sock.on("connect", () => (sock.destroy(), reject(new Error("reachable on another address"))))
+        sock.on(
+          "connect",
+          () => (sock.destroy(), reject(new Error("reachable on another address"))),
+        )
         sock.on("error", () => resolve())
         sock.on("timeout", () => (sock.destroy(), resolve()))
       })
@@ -162,8 +259,22 @@ describe("the Host listener", () => {
 
   it("rejects a wrong Host header and a foreign Origin, even with the token", async () => {
     expect((await httpGet("/", { host: "evil.example" })).status).toBe(403)
-    expect((await httpGet("/api/state", { authorization: `Bearer ${TOKEN}`, origin: "https://evil.example" })).status).toBe(403)
-    expect((await httpGet("/api/state", { authorization: `Bearer ${TOKEN}`, origin: `http://127.0.0.1:${port}` })).status).toBe(200)
+    expect(
+      (
+        await httpGet("/api/state", {
+          authorization: `Bearer ${TOKEN}`,
+          origin: "https://evil.example",
+        })
+      ).status,
+    ).toBe(403)
+    expect(
+      (
+        await httpGet("/api/state", {
+          authorization: `Bearer ${TOKEN}`,
+          origin: `http://127.0.0.1:${port}`,
+        })
+      ).status,
+    ).toBe(200)
   })
 })
 
@@ -171,11 +282,17 @@ interface Client {
   ws: WebSocket
   events: ServerEvent[]
   send(command: Record<string, unknown>): Promise<Extract<ServerEvent, { type: "reply" }>>
-  waitFor<T extends ServerEvent["type"]>(type: T, pred?: (e: Extract<ServerEvent, { type: T }>) => boolean, ms?: number): Promise<Extract<ServerEvent, { type: T }>>
+  waitFor<T extends ServerEvent["type"]>(
+    type: T,
+    pred?: (e: Extract<ServerEvent, { type: T }>) => boolean,
+    ms?: number,
+  ): Promise<Extract<ServerEvent, { type: T }>>
   close(): void
 }
 
-function connect(opts: { token?: string | null; origin?: string | null; protocols?: string[] } = {}): Promise<Client> {
+function connect(
+  opts: { token?: string | null; origin?: string | null; protocols?: string[] } = {},
+): Promise<Client> {
   const token = opts.token === undefined ? TOKEN : opts.token
   const protocols = opts.protocols ?? [WS_SUBPROTOCOL, ...(token ? [`token.${token}`] : [])]
   const headers: Record<string, string> = {}
@@ -210,12 +327,16 @@ function connect(opts: { token?: string | null; origin?: string | null; protocol
           ws.send(JSON.stringify({ cmdId, command }))
           return client.waitFor("reply", (e) => e.cmdId === cmdId)
         },
-        waitFor(type, pred = () => true, ms = 10_000) {
+        waitFor(type, pred = () => true, ms = 40_000) {
           const found = events.find((e) => e.type === type && pred(e as never))
           if (found) return Promise.resolve(found as never)
           return new Promise((res, rej) => {
             const t = setTimeout(() => rej(new Error(`timed out waiting for ${type}`)), ms)
-            waiters.push({ type, pred: pred as never, resolve: ((e: never) => (clearTimeout(t), res(e))) as never })
+            waiters.push({
+              type,
+              pred: pred as never,
+              resolve: ((e: never) => (clearTimeout(t), res(e))) as never,
+            })
           })
         },
         close: () => ws.close(),
@@ -230,7 +351,11 @@ describe("the WebSocket handshake (invariant 7)", () => {
     const c = await connect()
     expect(c.ws.protocol).toBe(WS_SUBPROTOCOL) // the token entry is never echoed back
     const hello = await c.waitFor("hello")
-    expect(hello).toMatchObject({ sessions: expect.any(Array), pending: [], expectedOrg: "ACN - Premium" })
+    expect(hello).toMatchObject({
+      sessions: expect.any(Array),
+      pending: [],
+      expectedOrg: "ACN - Premium",
+    })
     expect(hello.health.killSwitch.engaged).toBe(false)
     c.close()
   })
@@ -245,7 +370,9 @@ describe("the WebSocket handshake (invariant 7)", () => {
     await expect(connect({ token: null })).rejects.toMatchObject({ status: 401 })
     await expect(connect({ token: "wrong" })).rejects.toMatchObject({ status: 401 })
     await expect(connect({ origin: "https://evil.example" })).rejects.toMatchObject({ status: 403 })
-    await expect(connect({ origin: "http://localhost:3000" })).rejects.toMatchObject({ status: 403 })
+    await expect(connect({ origin: "http://localhost:3000" })).rejects.toMatchObject({
+      status: 403,
+    })
   })
 })
 
@@ -263,8 +390,14 @@ describe("commands over the WebSocket", () => {
     expect(bad.ok).toBe(false)
     const unknown = await c.send({ type: "format_disk" })
     expect(unknown).toMatchObject({ ok: false, error: { code: "invalid-command" } })
-    expect(await c.send({ type: "prompt", sessionId: "x", text: "" })).toMatchObject({ ok: false, error: { code: "invalid-command" } })
-    expect(await c.send({ type: "prompt", sessionId: "x", text: "hi" })).toMatchObject({ ok: false, error: { code: "unknown-session" } })
+    expect(await c.send({ type: "prompt", sessionId: "x", text: "" })).toMatchObject({
+      ok: false,
+      error: { code: "invalid-command" },
+    })
+    expect(await c.send({ type: "prompt", sessionId: "x", text: "hi" })).toMatchObject({
+      ok: false,
+      error: { code: "unknown-session" },
+    })
   })
 
   it("never accepts a mode other than default or plan (invariant 3)", async () => {
@@ -276,9 +409,13 @@ describe("commands over the WebSocket", () => {
       const r = await c.send({ type: "set_mode", sessionId, mode })
       expect(r, mode).toMatchObject({ ok: false, error: { code: "invalid-command" } })
     }
-    expect(await c.send({ type: "create_session", cwd: s.repo, mode: "bypassPermissions" })).toMatchObject({ ok: false, error: { code: "invalid-command" } })
+    expect(
+      await c.send({ type: "create_session", cwd: s.repo, mode: "bypassPermissions" }),
+    ).toMatchObject({ ok: false, error: { code: "invalid-command" } })
     expect(await c.send({ type: "set_mode", sessionId, mode: "plan" })).toMatchObject({ ok: true })
-    expect(await c.send({ type: "set_mode", sessionId, mode: "default" })).toMatchObject({ ok: true })
+    expect(await c.send({ type: "set_mode", sessionId, mode: "default" })).toMatchObject({
+      ok: true,
+    })
     expect(await c.send({ type: "set_model", sessionId, model: "m1" })).toMatchObject({ ok: true })
     expect(await c.send({ type: "close_session", sessionId })).toMatchObject({ ok: true })
   })
@@ -296,15 +433,23 @@ describe("commands over the WebSocket", () => {
     const asked = await c.waitFor("approval_request", (e) => e.view.request.sessionId === sessionId)
     expect(asked.view.rawInput).toEqual({ command: "npm install via-ws" })
     expect(asked.view.request.verdict.ruleId).toBe("package-install")
-    const waiting = await c.waitFor("session", (e) => e.info.id === sessionId && e.info.state === "waiting")
+    const waiting = await c.waitFor(
+      "session",
+      (e) => e.info.id === sessionId && e.info.state === "waiting",
+    )
     expect(waiting.info.pendingApprovals).toBe(1)
 
     const reply = await c.send({ type: "approve", requestId: asked.view.request.id })
     expect(reply.ok).toBe(true)
-    expect((reply.data as { resolution: { summary: string } }).resolution.summary).toMatch(/^Approved on desktop at \d\d:\d\d$/)
+    expect((reply.data as { resolution: { summary: string } }).resolution.summary).toMatch(
+      /^Approved on desktop at \d\d:\d\d$/,
+    )
     const resolved = await c.waitFor("approval_resolved", (e) => e.id === asked.view.request.id)
     expect(resolved.resolution).toMatchObject({ outcome: "allow", channel: "desktop" })
-    await c.waitFor("sdk_message", (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId)
+    await c.waitFor(
+      "sdk_message",
+      (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId,
+    )
     expect(result).toMatchObject({ executed: true })
     expect(c.events.some((e) => e.type === "audit")).toBe(true)
     expect(c.events.some((e) => e.type === "usage")).toBe(true)
@@ -315,19 +460,42 @@ describe("commands over the WebSocket", () => {
     const results: Record<string, unknown> = {}
     s.sdk.turn = async (api) => {
       results.bash = await api.callTool("Bash", { command: "pip install via-ws-deny" })
-      results.q = await api.callTool("AskUserQuestion", { questions: [{ question: "Which?", header: "H", options: [{ label: "a" }, { label: "b" }] }] })
+      results.q = await api.callTool("AskUserQuestion", {
+        questions: [{ question: "Which?", header: "H", options: [{ label: "a" }, { label: "b" }] }],
+      })
     }
     const created = await c.send({ type: "create_session", cwd: s.repo })
     const sessionId = (created.data as { sessionId: string }).sessionId
     await c.send({ type: "prompt", sessionId, text: "go" })
-    const first = await c.waitFor("approval_request", (e) => e.view.request.toolName === "Bash" && e.view.request.sessionId === sessionId)
-    expect(await c.send({ type: "deny", requestId: first.view.request.id, message: "no thanks" })).toMatchObject({ ok: true })
-    expect(await c.send({ type: "approve", requestId: first.view.request.id })).toMatchObject({ ok: false, error: { code: "unknown-request" } })
-    const q = await c.waitFor("approval_request", (e) => e.view.request.kind === "question" && e.view.request.sessionId === sessionId)
-    expect(await c.send({ type: "answer", requestId: q.view.request.id, answers: { "Wrong?": "x" } })).toMatchObject({ ok: false, error: { code: "invalid-answer" } })
-    expect(await c.send({ type: "answer", requestId: q.view.request.id, answers: { "Which?": "a" } })).toMatchObject({ ok: true })
-    await c.waitFor("sdk_message", (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId)
-    expect(results.bash).toMatchObject({ executed: false, message: "Denied by the user: no thanks" })
+    const first = await c.waitFor(
+      "approval_request",
+      (e) => e.view.request.toolName === "Bash" && e.view.request.sessionId === sessionId,
+    )
+    expect(
+      await c.send({ type: "deny", requestId: first.view.request.id, message: "no thanks" }),
+    ).toMatchObject({ ok: true })
+    expect(await c.send({ type: "approve", requestId: first.view.request.id })).toMatchObject({
+      ok: false,
+      error: { code: "unknown-request" },
+    })
+    const q = await c.waitFor(
+      "approval_request",
+      (e) => e.view.request.kind === "question" && e.view.request.sessionId === sessionId,
+    )
+    expect(
+      await c.send({ type: "answer", requestId: q.view.request.id, answers: { "Wrong?": "x" } }),
+    ).toMatchObject({ ok: false, error: { code: "invalid-answer" } })
+    expect(
+      await c.send({ type: "answer", requestId: q.view.request.id, answers: { "Which?": "a" } }),
+    ).toMatchObject({ ok: true })
+    await c.waitFor(
+      "sdk_message",
+      (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId,
+    )
+    expect(results.bash).toMatchObject({
+      executed: false,
+      message: "Denied by the user: no thanks",
+    })
     expect(results.q).toMatchObject({ executed: true })
     await c.send({ type: "close_session", sessionId })
   })
@@ -341,13 +509,26 @@ describe("commands over the WebSocket", () => {
     const created = await c.send({ type: "create_session", cwd: s.repo })
     const sessionId = (created.data as { sessionId: string }).sessionId
     await c.send({ type: "prompt", sessionId, text: "go" })
-    const one = await c.waitFor("approval_request", (e) => e.view.rawInput.command === "npm install preview-me")
-    const two = await c.waitFor("approval_request", (e) => e.view.rawInput.command === "npm install a && npm install b")
+    const one = await c.waitFor(
+      "approval_request",
+      (e) => e.view.rawInput.command === "npm install preview-me",
+    )
+    const two = await c.waitFor(
+      "approval_request",
+      (e) => e.view.rawInput.command === "npm install a && npm install b",
+    )
     const ok = await c.send({ type: "remember_preview", requestId: one.view.request.id })
-    expect(ok.data).toMatchObject({ ok: true, candidate: { tool: "Bash", command: "npm install preview-me" }, preview: "Allow Bash to run exactly: npm install preview-me" })
+    expect(ok.data).toMatchObject({
+      ok: true,
+      candidate: { tool: "Bash", command: "npm install preview-me" },
+      preview: "Allow Bash to run exactly: npm install preview-me",
+    })
     const refused = await c.send({ type: "remember_preview", requestId: two.view.request.id })
     expect(refused.data).toMatchObject({ ok: false })
-    expect(await c.send({ type: "remember_preview", requestId: "nope" })).toMatchObject({ ok: false, error: { code: "unknown-request" } })
+    expect(await c.send({ type: "remember_preview", requestId: "nope" })).toMatchObject({
+      ok: false,
+      error: { code: "unknown-request" },
+    })
     s.broker.cancelAll()
     await c.send({ type: "close_session", sessionId })
   })
@@ -367,19 +548,52 @@ describe("commands over the WebSocket", () => {
     expect(preview.data).toMatchObject({ changes: [{ path: "src/a.ts", change: "modified" }] })
     expect((preview.data as { diff: string }).diff).toContain("+export const a = 99")
 
-    expect(await c.send({ type: "checkpoint_restore", cwd: s.repo, ref: cp?.ref, sessionId, confirm: false })).toMatchObject({ ok: false, error: { code: "not-confirmed" } })
-    expect(fs.readFileSync(`${s.repo}/src/a.ts`, "utf8").replace(/\r/g, "")).toBe("export const a = 5\n")
-    expect(await c.send({ type: "checkpoint_list", cwd: os.tmpdir() })).toMatchObject({ ok: false, error: { code: "unknown-folder" } })
-    expect(await c.send({ type: "checkpoint_preview", cwd: "C:/Windows", ref: cp?.ref })).toMatchObject({ ok: false, error: { code: "unknown-folder" } })
-    expect(await c.send({ type: "checkpoint_restore", cwd: s.repo, ref: "refs/heads/master", sessionId, confirm: true })).toMatchObject({ ok: false })
-    const done = await c.send({ type: "checkpoint_restore", cwd: s.repo, ref: cp?.ref, sessionId, confirm: true })
+    expect(
+      await c.send({
+        type: "checkpoint_restore",
+        cwd: s.repo,
+        ref: cp?.ref,
+        sessionId,
+        confirm: false,
+      }),
+    ).toMatchObject({ ok: false, error: { code: "not-confirmed" } })
+    expect(fs.readFileSync(`${s.repo}/src/a.ts`, "utf8").replace(/\r/g, "")).toBe(
+      "export const a = 5\n",
+    )
+    expect(await c.send({ type: "checkpoint_list", cwd: os.tmpdir() })).toMatchObject({
+      ok: false,
+      error: { code: "unknown-folder" },
+    })
+    expect(
+      await c.send({ type: "checkpoint_preview", cwd: "C:/Windows", ref: cp?.ref }),
+    ).toMatchObject({ ok: false, error: { code: "unknown-folder" } })
+    expect(
+      await c.send({
+        type: "checkpoint_restore",
+        cwd: s.repo,
+        ref: "refs/heads/master",
+        sessionId,
+        confirm: true,
+      }),
+    ).toMatchObject({ ok: false })
+    const done = await c.send({
+      type: "checkpoint_restore",
+      cwd: s.repo,
+      ref: cp?.ref,
+      sessionId,
+      confirm: true,
+    })
     expect(done.ok).toBe(true)
-    expect(fs.readFileSync(`${s.repo}/src/a.ts`, "utf8").replace(/\r/g, "")).toBe("export const a = 99\n")
+    expect(fs.readFileSync(`${s.repo}/src/a.ts`, "utf8").replace(/\r/g, "")).toBe(
+      "export const a = 99\n",
+    )
     await c.send({ type: "close_session", sessionId })
   })
 
   it("lists past sessions and refreshes the account", async () => {
-    expect((await c.send({ type: "list_history", dir: "C:/x" })).data).toEqual([{ sessionId: "old", dir: "C:/x" }])
+    expect((await c.send({ type: "list_history", dir: "C:/x" })).data).toEqual([
+      { sessionId: "old", dir: "C:/x" },
+    ])
     const acct = await c.send({ type: "refresh_account" })
     expect(acct.ok).toBe(true)
     expect(acct.data).toMatchObject({ signedIn: true, org: { ok: true } })
@@ -400,7 +614,10 @@ describe("commands over the WebSocket", () => {
     expect(engaged).toMatchObject({ ok: true, data: { engaged: true, by: "desktop" } })
     const health = await second.waitFor("health", (e) => e.health.killSwitch.engaged)
     expect(health.health.killSwitch.by).toBe("desktop")
-    expect(await c.send({ type: "create_session", cwd: s.repo })).toMatchObject({ ok: false, error: { code: "kill-switch" } })
+    expect(await c.send({ type: "create_session", cwd: s.repo })).toMatchObject({
+      ok: false,
+      error: { code: "kill-switch" },
+    })
     const rearmed = await c.send({ type: "rearm" })
     expect(rearmed).toMatchObject({ ok: true, data: { engaged: false } })
     await second.waitFor("health", (e) => !e.health.killSwitch.engaged)
@@ -419,7 +636,9 @@ describe("commands over the WebSocket", () => {
   it("stops promptly even when a client never answers the close handshake", async () => {
     const own = new HostServer({ app: hostApp, token: TOKEN, port: 0 })
     const ownPort = await own.start()
-    const ws = new WebSocket(`ws://127.0.0.1:${ownPort}/ws`, [WS_SUBPROTOCOL, `token.${TOKEN}`], { headers: { origin: `http://127.0.0.1:${ownPort}` } })
+    const ws = new WebSocket(`ws://127.0.0.1:${ownPort}/ws`, [WS_SUBPROTOCOL, `token.${TOKEN}`], {
+      headers: { origin: `http://127.0.0.1:${ownPort}` },
+    })
     await new Promise<void>((resolve, reject) => {
       ws.on("open", () => resolve())
       ws.on("error", reject)

@@ -14,7 +14,10 @@ beforeAll(async () => {
 afterAll(() => s.stop())
 
 /** Starts a session, runs one scripted turn and resolves when its result arrives. */
-async function run(turn: TurnScript, text = "go"): Promise<{ session: Session; done: Promise<void> }> {
+async function run(
+  turn: TurnScript,
+  text = "go",
+): Promise<{ session: Session; done: Promise<void> }> {
   s.sdk.turn = turn
   const session = await s.manager.start({ cwd: s.repo })
   const done = new Promise<void>((resolve) => {
@@ -26,19 +29,31 @@ async function run(turn: TurnScript, text = "go"): Promise<{ session: Session; d
   return { session, done }
 }
 
-const lastAudit = (event: string) => s.records().filter((r) => r.event === event).at(-1)
+const lastAudit = (event: string) =>
+  s
+    .records()
+    .filter((r) => r.event === event)
+    .at(-1)
 
 describe("calls the Approver decides by itself", () => {
   it("auto-allows a safe command and an edit of source, and runs them", async () => {
     const results: ToolCallResult[] = []
     const { done } = await run(async (api) => {
       results.push(await api.callTool("Bash", { command: "git status" }))
-      results.push(await api.callTool("Edit", { file_path: `${s.repo}\\src\\a.ts`, old_string: "1", new_string: "2" }))
+      results.push(
+        await api.callTool("Edit", {
+          file_path: `${s.repo}\\src\\a.ts`,
+          old_string: "1",
+          new_string: "2",
+        }),
+      )
     })
     await done
     expect(results.map((r) => r.executed)).toEqual([true, true])
     expect(results.every((r) => r.canUseToolCalled)).toBe(true)
-    const recs = s.records().filter((r) => r.event === "evaluate_permission" && r.verdict.outcome === "allow")
+    const recs = s
+      .records()
+      .filter((r) => r.event === "evaluate_permission" && r.verdict.outcome === "allow")
     expect(recs.length).toBeGreaterThanOrEqual(2)
     expect(s.broker.list()).toEqual([])
   })
@@ -63,20 +78,41 @@ describe("calls the Approver decides by itself", () => {
     await done
     expect(r).toMatchObject({ executed: false, blockedBy: "hook", canUseToolCalled: false })
     expect(r?.message).toContain("secrets-files")
-    const rec = s.records().slice(before).find((x) => x.event === "floor_deny")
-    expect(rec).toMatchObject({ tool: "Read", channel: "host", verdict: { outcome: "deny", ruleId: "secrets-files", decidedBy: "floor" } })
+    const rec = s
+      .records()
+      .slice(before)
+      .find((x) => x.event === "floor_deny")
+    expect(rec).toMatchObject({
+      tool: "Read",
+      channel: "host",
+      verdict: { outcome: "deny", ruleId: "secrets-files", decidedBy: "floor" },
+    })
   })
 
   it("audits a call Claude Code approved itself, through PostToolUse (invariant 13)", async () => {
     const before = s.records().length
     const { done } = await run(async (api) => {
-      await api.callTool("Read", { file_path: `${s.repo}\\src\\a.ts` }, { selfApproved: true, toolUseId: "toolu_self" })
+      await api.callTool(
+        "Read",
+        { file_path: `${s.repo}\\src\\a.ts` },
+        { selfApproved: true, toolUseId: "toolu_self" },
+      )
     })
     await done
-    const rec = s.records().slice(before).find((x) => x.event === "self_approved")
-    expect(rec).toMatchObject({ tool: "Read", toolUseId: "toolu_self", channel: "host", verdict: { outcome: "allow", ruleId: "claude-code-auto" } })
+    const rec = s
+      .records()
+      .slice(before)
+      .find((x) => x.event === "self_approved")
+    expect(rec).toMatchObject({
+      tool: "Read",
+      toolUseId: "toolu_self",
+      channel: "host",
+      verdict: { outcome: "allow", ruleId: "claude-code-auto" },
+    })
     // The same call is not audited twice when it did go through canUseTool.
-    const count = s.records().filter((x) => x.event === "self_approved" && x.toolUseId === "toolu_self").length
+    const count = s
+      .records()
+      .filter((x) => x.event === "self_approved" && x.toolUseId === "toolu_self").length
     expect(count).toBe(1)
   })
 })
@@ -95,10 +131,15 @@ describe("escalation to a person", () => {
     expect(view?.rawInput).toEqual({ command: "npm install lodash" })
     expect(view?.defaultToNo).toBe(true) // risk 70 or more never has "allow" as the default
 
-    expect(s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow" }, "desktop").ok).toBe(true)
+    expect(
+      s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow" }, "desktop").ok,
+    ).toBe(true)
     await done
     expect(r).toMatchObject({ executed: true })
-    expect(r?.permission).toMatchObject({ behavior: "allow", updatedInput: { command: "npm install lodash" } })
+    expect(r?.permission).toMatchObject({
+      behavior: "allow",
+      updatedInput: { command: "npm install lodash" },
+    })
     expect(r?.permission).not.toHaveProperty("updatedPermissions")
 
     const cps = await s.checkpoints.list(s.repo)
@@ -108,7 +149,11 @@ describe("escalation to a person", () => {
     expect(s.git("ls-tree", "-r", "--name-only", cp?.commit as string)).not.toContain(".env")
 
     const rec = lastAudit("human_decision")
-    expect(rec).toMatchObject({ tool: "Bash", channel: "desktop", verdict: { outcome: "allow", decidedBy: "human-desktop", ruleId: "package-install" } })
+    expect(rec).toMatchObject({
+      tool: "Bash",
+      channel: "desktop",
+      verdict: { outcome: "allow", decidedBy: "human-desktop", ruleId: "package-install" },
+    })
     expect(rec?.latencyMs).toBeGreaterThanOrEqual(0)
   })
 
@@ -118,11 +163,17 @@ describe("escalation to a person", () => {
       r = await api.callTool("Bash", { command: "pip install requests" })
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "deny", message: "use the vendored copy" }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "deny", message: "use the vendored copy" },
+      "desktop",
+    )
     await done
     expect(r).toMatchObject({ executed: false, blockedBy: "permission" })
     expect(r?.message).toBe("Denied by the user: use the vendored copy")
-    expect(lastAudit("human_decision")).toMatchObject({ verdict: { outcome: "deny", decidedBy: "human-desktop" } })
+    expect(lastAudit("human_decision")).toMatchObject({
+      verdict: { outcome: "deny", decidedBy: "human-desktop" },
+    })
   })
 
   it("accepts an answer from the phone, and refuses a phone answer that edits input", async () => {
@@ -131,12 +182,21 @@ describe("escalation to a person", () => {
       r = await api.callTool("Bash", { command: "winget install foo" })
     })
     await s.waitForPending()
-    const edit = s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow", updatedInput: { command: "winget install bar" } }, "phone")
+    const edit = s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "allow", updatedInput: { command: "winget install bar" } },
+      "phone",
+    )
     expect(edit).toMatchObject({ ok: false, reason: "not-allowed-on-channel" })
-    expect(s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow" }, "phone").ok).toBe(true)
+    expect(
+      s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow" }, "phone").ok,
+    ).toBe(true)
     await done
     expect(r?.executed).toBe(true)
-    expect(lastAudit("human_decision")).toMatchObject({ channel: "phone", verdict: { decidedBy: "human-phone" } })
+    expect(lastAudit("human_decision")).toMatchObject({
+      channel: "phone",
+      verdict: { decidedBy: "human-phone" },
+    })
   })
 
   it("times out after the hard timeout and denies with the spec's words", async () => {
@@ -148,7 +208,10 @@ describe("escalation to a person", () => {
     await done // nobody answers: the 1.5 second test timeout expires
     expect(r).toMatchObject({ executed: false, blockedBy: "permission" })
     expect(r?.message).toBe("Timed out waiting for approval")
-    expect(lastAudit("human_decision")).toMatchObject({ channel: "timeout", verdict: { outcome: "deny", decidedBy: "timeout" } })
+    expect(lastAudit("human_decision")).toMatchObject({
+      channel: "timeout",
+      verdict: { outcome: "deny", decidedBy: "timeout" },
+    })
     expect(s.broker.list()).toEqual([])
   }, 20000)
 
@@ -158,10 +221,21 @@ describe("escalation to a person", () => {
       r = await api.callTool("Bash", { command: "npm install left-pad" })
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow", updatedInput: { command: "npm install left-pad-fork" } }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      {
+        kind: "decision",
+        decision: "allow",
+        updatedInput: { command: "npm install left-pad-fork" },
+      },
+      "desktop",
+    )
     await done
     expect(r).toMatchObject({ executed: true, input: { command: "npm install left-pad-fork" } })
-    expect(r?.permission).toMatchObject({ behavior: "allow", updatedInput: { command: "npm install left-pad-fork" } })
+    expect(r?.permission).toMatchObject({
+      behavior: "allow",
+      updatedInput: { command: "npm install left-pad-fork" },
+    })
   })
 
   it("blocks an edit that turns the command into one a deny rule covers (invariant 10)", async () => {
@@ -170,12 +244,18 @@ describe("escalation to a person", () => {
       r = await api.callTool("Bash", { command: "npm install left-pad" })
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow", updatedInput: { command: "git push --force" } }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "allow", updatedInput: { command: "git push --force" } },
+      "desktop",
+    )
     await done
     expect(r).toMatchObject({ executed: false, blockedBy: "permission" })
     expect(r?.message).toContain("Your edit was blocked")
     expect(r?.message).toContain("destructive-shell")
-    expect(lastAudit("edited_input_blocked")).toMatchObject({ verdict: { outcome: "deny", ruleId: "destructive-shell" } })
+    expect(lastAudit("edited_input_blocked")).toMatchObject({
+      verdict: { outcome: "deny", ruleId: "destructive-shell" },
+    })
   })
 
   it("blocks an edit that reaches a secrets file, by the floor (invariant 10)", async () => {
@@ -184,11 +264,17 @@ describe("escalation to a person", () => {
       r = await api.callTool("Bash", { command: "npm install left-pad" })
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow", updatedInput: { command: "cat .env" } }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "allow", updatedInput: { command: "cat .env" } },
+      "desktop",
+    )
     await done
     expect(r).toMatchObject({ executed: false })
     expect(r?.message).toContain("secrets-files")
-    expect(lastAudit("edited_input_blocked")).toMatchObject({ verdict: { decidedBy: "floor", ruleId: "secrets-files" } })
+    expect(lastAudit("edited_input_blocked")).toMatchObject({
+      verdict: { decidedBy: "floor", ruleId: "secrets-files" },
+    })
   })
 
   it("remembers a command when the desktop asks, so the next identical call needs no one", async () => {
@@ -197,11 +283,17 @@ describe("escalation to a person", () => {
       first = await api.callTool("Bash", { command: "npm install remembered-pkg" })
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow", remember: true }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "allow", remember: true },
+      "desktop",
+    )
     await done
     expect(first?.executed).toBe(true)
     const rules = parseYaml(fs.readFileSync(s.localRules, "utf8"))
-    expect(rules.remember).toEqual([expect.objectContaining({ tool: "Bash", command: "npm install remembered-pkg" })])
+    expect(rules.remember).toEqual([
+      expect.objectContaining({ tool: "Bash", command: "npm install remembered-pkg" }),
+    ])
     expect(rules.remember[0]).not.toHaveProperty("updatedPermissions")
 
     // The Approver reloads its rules when the file changes, so wait until it has picked the rule up.
@@ -222,7 +314,14 @@ describe("escalation to a person", () => {
     expect(second).toMatchObject({ executed: true })
     expect(s.broker.list()).toEqual([]) // nobody was asked
     // Other commands are still escalated.
-    expect((await s.approver.evaluate({ toolName: "Bash", input: { command: "npm install something-else" } }, { cwd: s.repo, sessionId: "poll" })).outcome).toBe("escalate")
+    expect(
+      (
+        await s.approver.evaluate(
+          { toolName: "Bash", input: { command: "npm install something-else" } },
+          { cwd: s.repo, sessionId: "poll" },
+        )
+      ).outcome,
+    ).toBe("escalate")
   }, 60000)
 
   it("does not remember when the desktop did not ask, or when the phone asks", async () => {
@@ -240,7 +339,15 @@ describe("escalation to a person", () => {
 describe("questions and plans", () => {
   const question = {
     questions: [
-      { question: "Which database?", header: "Database", options: [{ label: "SQLite", description: "file" }, { label: "Postgres", description: "server" }], multiSelect: false },
+      {
+        question: "Which database?",
+        header: "Database",
+        options: [
+          { label: "SQLite", description: "file" },
+          { label: "Postgres", description: "server" },
+        ],
+        multiSelect: false,
+      },
     ],
   }
 
@@ -253,12 +360,24 @@ describe("questions and plans", () => {
     const view = s.broker.list()[0]
     expect(view?.request.kind).toBe("question")
     expect(view?.request.toolName).toBe("AskUserQuestion")
-    expect(s.broker.resolve(s.pendingId(), { kind: "answers", answers: { "Which database?": "SQLite" } }, "desktop").ok).toBe(true)
+    expect(
+      s.broker.resolve(
+        s.pendingId(),
+        { kind: "answers", answers: { "Which database?": "SQLite" } },
+        "desktop",
+      ).ok,
+    ).toBe(true)
     await done
     expect(r).toMatchObject({ executed: true })
-    expect(r?.permission).toMatchObject({ behavior: "allow", updatedInput: { ...question, answers: { "Which database?": "SQLite" } } })
+    expect(r?.permission).toMatchObject({
+      behavior: "allow",
+      updatedInput: { ...question, answers: { "Which database?": "SQLite" } },
+    })
     expect(r?.permission).not.toHaveProperty("updatedPermissions")
-    expect(lastAudit("question_answered")).toMatchObject({ tool: "AskUserQuestion", channel: "desktop" })
+    expect(lastAudit("question_answered")).toMatchObject({
+      tool: "AskUserQuestion",
+      channel: "desktop",
+    })
   })
 
   it("answers a question from the phone", async () => {
@@ -267,9 +386,15 @@ describe("questions and plans", () => {
       r = await api.callTool("AskUserQuestion", question)
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "answers", answers: { "Which database?": "Postgres" } }, "phone")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "answers", answers: { "Which database?": "Postgres" } },
+      "phone",
+    )
     await done
-    expect(r?.permission).toMatchObject({ updatedInput: { answers: { "Which database?": "Postgres" } } })
+    expect(r?.permission).toMatchObject({
+      updatedInput: { answers: { "Which database?": "Postgres" } },
+    })
     expect(lastAudit("question_answered")).toMatchObject({ channel: "phone" })
   })
 
@@ -279,7 +404,11 @@ describe("questions and plans", () => {
       r = await api.callTool("AskUserQuestion", question)
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "deny", message: "ask me later" }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "deny", message: "ask me later" },
+      "desktop",
+    )
     await done
     expect(r).toMatchObject({ executed: false })
     expect(r?.message).toBe("ask me later")
@@ -303,11 +432,18 @@ describe("questions and plans", () => {
       rejected = await api.callTool("ExitPlanMode", plan)
     })
     await s.waitForPending()
-    s.broker.resolve(s.pendingId(), { kind: "decision", decision: "deny", message: "write the tests first" }, "desktop")
+    s.broker.resolve(
+      s.pendingId(),
+      { kind: "decision", decision: "deny", message: "write the tests first" },
+      "desktop",
+    )
     await second.done
     expect(rejected).toMatchObject({ executed: false })
     expect(rejected?.message).toBe("write the tests first")
-    expect(lastAudit("plan_decision")).toMatchObject({ tool: "ExitPlanMode", verdict: { outcome: "deny" } })
+    expect(lastAudit("plan_decision")).toMatchObject({
+      tool: "ExitPlanMode",
+      verdict: { outcome: "deny" },
+    })
   })
 })
 
@@ -349,7 +485,14 @@ describe("interrupt and kill", () => {
     }
     expect(() => session.prompt("again")).toThrow(/kill switch/)
     await expect(s.manager.start({ cwd: s.repo })).rejects.toThrow(/kill switch/)
-    expect((await s.approver.evaluate({ toolName: "Bash", input: { command: "git status" } }, { cwd: s.repo, sessionId: "x" })).ruleId).toBe("kill-switch")
+    expect(
+      (
+        await s.approver.evaluate(
+          { toolName: "Bash", input: { command: "git status" } },
+          { cwd: s.repo, sessionId: "x" },
+        )
+      ).ruleId,
+    ).toBe("kill-switch")
     expect(after).toBeUndefined()
 
     expect(s.records().some((r) => r.event === "kill_switch_engaged")).toBe(true)

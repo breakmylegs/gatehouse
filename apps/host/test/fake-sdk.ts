@@ -65,7 +65,6 @@ export class FakeSdk {
   #toolCounter = 0
 
   readonly queryFn: QueryFn = ({ prompt, options }) => {
-    const sdk = this
     const opts = options ?? ({} as Options)
     const out: SDKMessage[] = []
     let wake: (() => void) | undefined
@@ -80,19 +79,34 @@ export class FakeSdk {
       models: [],
       prompts: [],
       permissionResults: [],
-      initializationResult: async () => ({ account: sdk.account as AccountInfo }),
+      initializationResult: async () => ({ account: this.account as AccountInfo }),
     }
-    sdk.queries.push(handle)
-    const sessionId = `sdk-${sdk.queries.length}`
+    this.queries.push(handle)
+    const sessionId = `sdk-${this.queries.length}`
 
     const push = (m: Record<string, unknown>) => {
       out.push({ session_id: sessionId, ...m } as unknown as SDKMessage)
       wake?.()
     }
-    push({ type: "system", subtype: "init", model: "fake-model", cwd: opts.cwd, tools: [], mcp_servers: [] })
+    push({
+      type: "system",
+      subtype: "init",
+      model: "fake-model",
+      cwd: opts.cwd,
+      tools: [],
+      mcp_servers: [],
+    })
 
-    const hook = async (event: "PreToolUse" | "PostToolUse", toolName: string, input: Record<string, unknown>, id: string, signal: AbortSignal) => {
-      const callbacks = ((opts.hooks as Record<string, { hooks: HookCallback[] }[]> | undefined)?.[event] ?? []).flatMap((m) => m.hooks)
+    const hook = async (
+      event: "PreToolUse" | "PostToolUse",
+      toolName: string,
+      input: Record<string, unknown>,
+      id: string,
+      signal: AbortSignal,
+    ) => {
+      const callbacks = (
+        (opts.hooks as Record<string, { hooks: HookCallback[] }[]> | undefined)?.[event] ?? []
+      ).flatMap((m) => m.hooks)
       let last: unknown = {}
       for (const cb of callbacks) {
         last = await cb(
@@ -108,7 +122,8 @@ export class FakeSdk {
           id,
           { signal },
         )
-        const decision = (last as { hookSpecificOutput?: { permissionDecision?: string } }).hookSpecificOutput?.permissionDecision
+        const decision = (last as { hookSpecificOutput?: { permissionDecision?: string } })
+          .hookSpecificOutput?.permissionDecision
         if (decision === "deny") return last
       }
       return last
@@ -117,33 +132,46 @@ export class FakeSdk {
     const makeApi = (signal: AbortSignal): TurnApi => ({
       sessionId,
       signal,
-      say: (text) => push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text }] } }),
+      say: (text) =>
+        push({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text }] },
+        }),
       system: (m) => push({ type: "system", ...m }),
       callTool: async (toolName, input, o = {}) => {
-        const id = o.toolUseId ?? `toolu_${++sdk.#toolCounter}`
+        const id = o.toolUseId ?? `toolu_${++this.#toolCounter}`
         const pre = (await hook("PreToolUse", toolName, input, id, signal)) as {
           hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string }
         }
         if (pre.hookSpecificOutput?.permissionDecision === "deny") {
-          return { executed: false, blockedBy: "hook", message: pre.hookSpecificOutput.permissionDecisionReason, canUseToolCalled: false }
+          return {
+            executed: false,
+            blockedBy: "hook",
+            message: pre.hookSpecificOutput.permissionDecisionReason,
+            canUseToolCalled: false,
+          }
         }
         let finalInput = input
         let permission: PermissionResult | undefined
         let called = false
         if (!o.selfApproved) {
           called = true
-          permission = (await opts.canUseTool!(toolName, input, {
-            signal,
-            toolUseID: id,
-            requestId: `req-${id}`,
-            ...(o.mcpSource ? { mcpServer: { name: toolName.split("__")[1] ?? "x", source: o.mcpSource } } : {}),
-          } as never)) ?? undefined
+          permission =
+            (await opts.canUseTool!(toolName, input, {
+              signal,
+              toolUseID: id,
+              requestId: `req-${id}`,
+              ...(o.mcpSource
+                ? { mcpServer: { name: toolName.split("__")[1] ?? "x", source: o.mcpSource } }
+                : {}),
+            } as never)) ?? undefined
           if (permission) handle.permissionResults.push(permission)
           if (!permission || permission.behavior !== "allow") {
             return {
               executed: false,
               blockedBy: "permission",
-              message: permission && permission.behavior === "deny" ? permission.message : undefined,
+              message:
+                permission && permission.behavior === "deny" ? permission.message : undefined,
               permission,
               canUseToolCalled: true,
             }
@@ -151,7 +179,13 @@ export class FakeSdk {
           finalInput = permission.updatedInput ?? input
         }
         await hook("PostToolUse", toolName, finalInput, id, signal)
-        push({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "ok" }] } })
+        push({
+          type: "user",
+          message: {
+            role: "user",
+            content: [{ type: "tool_result", tool_use_id: id, content: "ok" }],
+          },
+        })
         return { executed: true, input: finalInput, permission, canUseToolCalled: called }
       },
     })
@@ -160,13 +194,22 @@ export class FakeSdk {
     void (async () => {
       try {
         for await (const msg of prompt as AsyncIterable<SDKUserMessage>) {
-          const text = typeof msg.message.content === "string" ? msg.message.content : JSON.stringify(msg.message.content)
+          const text =
+            typeof msg.message.content === "string"
+              ? msg.message.content
+              : JSON.stringify(msg.message.content)
           handle.prompts.push(text)
           currentAbort = new AbortController()
           try {
-            await sdk.turn(makeApi(currentAbort.signal), text)
+            await this.turn(makeApi(currentAbort.signal), text)
           } catch (e) {
-            push({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: `turn error: ${(e as Error).message}` }] } })
+            push({
+              type: "assistant",
+              message: {
+                role: "assistant",
+                content: [{ type: "text", text: `turn error: ${(e as Error).message}` }],
+              },
+            })
           }
           // Like the real SDK: `usage` is for this result, while the cost and modelUsage are cumulative.
           turns++
@@ -176,15 +219,20 @@ export class FakeSdk {
             is_error: false,
             duration_ms: 5,
             num_turns: 1,
-            total_cost_usd: sdk.costPerTurn * turns,
-            usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 5, cache_creation_input_tokens: 1 },
+            total_cost_usd: this.costPerTurn * turns,
+            usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              cache_read_input_tokens: 5,
+              cache_creation_input_tokens: 1,
+            },
             modelUsage: {
               "fake-model": {
                 inputTokens: 100 * turns,
                 outputTokens: 20 * turns,
                 cacheReadInputTokens: 5 * turns,
                 cacheCreationInputTokens: turns,
-                costUSD: sdk.costPerTurn * turns,
+                costUSD: this.costPerTurn * turns,
               },
             },
           })

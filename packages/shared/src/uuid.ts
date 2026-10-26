@@ -1,7 +1,10 @@
 import { randomBytes } from "node:crypto"
 
 /** A UUIDv7 (RFC 9562): 48 bits of millisecond timestamp, then random bits, so ids sort by creation time. */
-export function uuidv7(now: number = Date.now(), random: () => Buffer = () => randomBytes(10)): string {
+export function uuidv7(
+  now: number = Date.now(),
+  random: () => Buffer = () => randomBytes(10),
+): string {
   const bytes = Buffer.alloc(16)
   let ts = BigInt(now)
   for (let i = 5; i >= 0; i--) {

@@ -51,7 +51,10 @@ function add(into: UsageTotals, delta: UsageTotals): void {
  * Verified against the real SDK (docs/sdk-notes.md): `total_cost_usd` and `modelUsage` are CUMULATIVE for the
  * session, while the top-level `usage` and `num_turns` are for that one result.
  */
-export function usageFromResult(msg: Record<string, unknown>): { total: UsageTotals; byModel: Record<string, UsageTotals> } {
+export function usageFromResult(msg: Record<string, unknown>): {
+  total: UsageTotals
+  byModel: Record<string, UsageTotals>
+} {
   const usage = (msg.usage ?? {}) as Record<string, unknown>
   const total: UsageTotals = {
     costUsd: num(msg.total_cost_usd),
@@ -64,7 +67,9 @@ export function usageFromResult(msg: Record<string, unknown>): { total: UsageTot
     results: 1,
   }
   const byModel: Record<string, UsageTotals> = {}
-  for (const [model, u] of Object.entries((msg.modelUsage ?? {}) as Record<string, Record<string, unknown>>)) {
+  for (const [model, u] of Object.entries(
+    (msg.modelUsage ?? {}) as Record<string, Record<string, unknown>>,
+  )) {
     byModel[model] = {
       costUsd: num(u.costUSD),
       inputTokens: num(u.inputTokens),
@@ -135,7 +140,8 @@ export class UsageStore {
     add(session, total)
     add((this.#snap.byProject[project] ??= zero()), total)
     add(this.#snap.total, total)
-    for (const [model, t] of Object.entries(modelDeltas)) add((this.#snap.byModel[model] ??= zero()), t)
+    for (const [model, t] of Object.entries(modelDeltas))
+      add((this.#snap.byModel[model] ??= zero()), t)
     this.#last.set(sessionId, { ...usageFromResult(result).total })
     this.#lastModels.set(sessionId, byModel)
     this.onChange?.(this.snapshot())

@@ -34,7 +34,11 @@ export class KillSwitch {
     return this.#cached
   }
 
-  async set(engaged: boolean, by: string | undefined, reason: string | undefined): Promise<KillSwitchState> {
+  async set(
+    engaged: boolean,
+    by: string | undefined,
+    reason: string | undefined,
+  ): Promise<KillSwitchState> {
     await writeState(
       {
         killSwitch: {

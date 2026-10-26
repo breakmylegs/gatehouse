@@ -36,20 +36,29 @@ export function assertSafeOptions(options: Options): void {
     throw new SafetyError(3, "the permission mode must be set explicitly on every session")
   }
   if (!isAllowedMode(options.permissionMode)) {
-    throw new SafetyError(3, `permission mode "${String(options.permissionMode)}" is not allowed, only default and plan`)
+    throw new SafetyError(
+      3,
+      `permission mode "${String(options.permissionMode)}" is not allowed, only default and plan`,
+    )
   }
   if (options.allowDangerouslySkipPermissions) {
     throw new SafetyError(3, "allowDangerouslySkipPermissions must never be set")
   }
   const bare = (options.allowedTools ?? []).filter(isBareToolName)
   if (bare.length > 0) {
-    throw new SafetyError(4, `allowedTools has bare tool names (${bare.join(", ")}), which skip canUseTool`)
+    throw new SafetyError(
+      4,
+      `allowedTools has bare tool names (${bare.join(", ")}), which skip canUseTool`,
+    )
   }
   if (options.settings !== undefined) {
     throw new SafetyError(5, "inline settings are not allowed, they could carry permission rules")
   }
   if (options.permissionPromptToolName !== undefined) {
-    throw new SafetyError(5, "permissionPromptToolName replaces canUseTool and must not be used by the Host")
+    throw new SafetyError(
+      5,
+      "permissionPromptToolName replaces canUseTool and must not be used by the Host",
+    )
   }
   if (options.extraArgs !== undefined && Object.keys(options.extraArgs).length > 0) {
     throw new SafetyError(5, "extra command line arguments are not allowed")
@@ -63,11 +72,15 @@ export function assertSafeOptions(options: Options): void {
     throw new SafetyError(6, "only the bundled, unmodified Claude Code binary may be used")
   }
   if (options.env === undefined) {
-    throw new SafetyError(6, "the environment must be passed explicitly so credentials in the parent are not inherited")
+    throw new SafetyError(
+      6,
+      "the environment must be passed explicitly so credentials in the parent are not inherited",
+    )
   }
   const banned = new Set<string>(STRIPPED_ENV_VARS.map((n) => n.toUpperCase()))
   for (const key of Object.keys(options.env)) {
-    if (banned.has(key.toUpperCase())) throw new SafetyError(6, `${key} must not be passed to a session`)
+    if (banned.has(key.toUpperCase()))
+      throw new SafetyError(6, `${key} must not be passed to a session`)
   }
   if (typeof options.canUseTool !== "function") {
     throw new SafetyError(1, "canUseTool must be set so every prompt reaches Gatehouse")
@@ -77,7 +90,8 @@ export function assertSafeOptions(options: Options): void {
   }
 }
 
-const SHADOWED = /CLAUDE_SDK_CAN_USE_TOOL_SHADOWED|canUseTool[^\n]{0,80}\b(shadow|never (be )?called|bypass)/i
+const SHADOWED =
+  /CLAUDE_SDK_CAN_USE_TOOL_SHADOWED|canUseTool[^\n]{0,80}\b(shadow|never (be )?called|bypass)/i
 
 /**
  * Invariant 4: a warning that canUseTool is being shadowed (some rule approves calls before it is asked)

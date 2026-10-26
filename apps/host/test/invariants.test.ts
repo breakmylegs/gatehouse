@@ -5,7 +5,13 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import type { HookCallback, Options } from "@anthropic-ai/claude-agent-sdk"
 import { checkOrg } from "../src/account.js"
 import { createFloorHook, denyOutput } from "../src/hooks.js"
-import { assertSafeOptions, isAllowedMode, isBareToolName, isShadowWarning, SafetyError } from "../src/safety.js"
+import {
+  assertSafeOptions,
+  isAllowedMode,
+  isBareToolName,
+  isShadowWarning,
+  SafetyError,
+} from "../src/safety.js"
 import { KillSwitchEngagedError, OrgGuardError } from "../src/sessions.js"
 import type { ToolCallResult } from "./fake-sdk.js"
 import { buildStack, type Stack } from "./stack.js"
@@ -32,27 +38,48 @@ describe("invariant 3: only default and plan, set explicitly", () => {
 
   it("refuses every other mode, a missing mode and the dangerous flag", () => {
     for (const mode of ["bypassPermissions", "acceptEdits", "dontAsk", "auto", "yolo", ""]) {
-      expect(() => assertSafeOptions(safe({ permissionMode: mode as never })), mode).toThrow(SafetyError)
+      expect(() => assertSafeOptions(safe({ permissionMode: mode as never })), mode).toThrow(
+        SafetyError,
+      )
     }
     expect(() => assertSafeOptions(safe({ permissionMode: undefined }))).toThrow(/set explicitly/)
-    expect(() => assertSafeOptions(safe({ allowDangerouslySkipPermissions: true }))).toThrow(/allowDangerouslySkipPermissions/)
-    expect(() => assertSafeOptions(safe({ agents: { a: { description: "x", prompt: "y", permissionMode: "bypassPermissions" } } }))).toThrow(SafetyError)
-    expect(() => assertSafeOptions(safe({ agents: { a: { description: "x", prompt: "y", permissionMode: "plan" } } }))).not.toThrow()
+    expect(() => assertSafeOptions(safe({ allowDangerouslySkipPermissions: true }))).toThrow(
+      /allowDangerouslySkipPermissions/,
+    )
+    expect(() =>
+      assertSafeOptions(
+        safe({
+          agents: { a: { description: "x", prompt: "y", permissionMode: "bypassPermissions" } },
+        }),
+      ),
+    ).toThrow(SafetyError)
+    expect(() =>
+      assertSafeOptions(
+        safe({ agents: { a: { description: "x", prompt: "y", permissionMode: "plan" } } }),
+      ),
+    ).not.toThrow()
   })
 
   it("knows which modes are allowed", () => {
     expect(isAllowedMode("default")).toBe(true)
     expect(isAllowedMode("plan")).toBe(true)
-    for (const m of ["auto", "acceptEdits", undefined, 5, null]) expect(isAllowedMode(m)).toBe(false)
+    for (const m of ["auto", "acceptEdits", undefined, 5, null])
+      expect(isAllowedMode(m)).toBe(false)
   })
 })
 
 describe("invariant 4: no bare tool names in allowedTools", () => {
   it("refuses bare names, including MCP tool names, and accepts argument patterns", () => {
     expect(() => assertSafeOptions(safe({ allowedTools: ["Bash"] }))).toThrow(/bare tool names/)
-    expect(() => assertSafeOptions(safe({ allowedTools: ["Read", "Bash(git status:*)"] }))).toThrow(/Read/)
-    expect(() => assertSafeOptions(safe({ allowedTools: ["mcp__companion__get_policy_summary"] }))).toThrow(SafetyError)
-    expect(() => assertSafeOptions(safe({ allowedTools: ["Bash(git status:*)", "Read(src/**)"] }))).not.toThrow()
+    expect(() => assertSafeOptions(safe({ allowedTools: ["Read", "Bash(git status:*)"] }))).toThrow(
+      /Read/,
+    )
+    expect(() =>
+      assertSafeOptions(safe({ allowedTools: ["mcp__companion__get_policy_summary"] })),
+    ).toThrow(SafetyError)
+    expect(() =>
+      assertSafeOptions(safe({ allowedTools: ["Bash(git status:*)", "Read(src/**)"] })),
+    ).not.toThrow()
     expect(() => assertSafeOptions(safe({ allowedTools: [] }))).not.toThrow()
     expect(isBareToolName("Bash")).toBe(true)
     expect(isBareToolName("Bash(ls)")).toBe(false)
@@ -60,7 +87,9 @@ describe("invariant 4: no bare tool names in allowedTools", () => {
 
   it("recognises a shadow warning, which is fatal", () => {
     expect(isShadowWarning("warning CLAUDE_SDK_CAN_USE_TOOL_SHADOWED: Bash")).toBe(true)
-    expect(isShadowWarning("canUseTool will never be called for Read because of an allow rule")).toBe(true)
+    expect(
+      isShadowWarning("canUseTool will never be called for Read because of an allow rule"),
+    ).toBe(true)
     expect(isShadowWarning("canUseTool is shadowed by allowedTools")).toBe(true)
     expect(isShadowWarning("session started")).toBe(false)
   })
@@ -68,18 +97,33 @@ describe("invariant 4: no bare tool names in allowedTools", () => {
 
 describe("invariant 5, 6 and the required hooks", () => {
   it("refuses settings, a prompt tool and extra arguments that could supply permissions", () => {
-    expect(() => assertSafeOptions(safe({ settings: { permissions: { defaultMode: "bypassPermissions" } } as never }))).toThrow(/settings/)
+    expect(() =>
+      assertSafeOptions(
+        safe({ settings: { permissions: { defaultMode: "bypassPermissions" } } as never }),
+      ),
+    ).toThrow(/settings/)
     expect(() => assertSafeOptions(safe({ settings: "C:/x.json" }))).toThrow(/settings/)
-    expect(() => assertSafeOptions(safe({ permissionPromptToolName: "mcp__x__y" }))).toThrow(/permissionPromptToolName/)
-    expect(() => assertSafeOptions(safe({ extraArgs: { "dangerously-skip-permissions": null } }))).toThrow(/extra command line/)
+    expect(() => assertSafeOptions(safe({ permissionPromptToolName: "mcp__x__y" }))).toThrow(
+      /permissionPromptToolName/,
+    )
+    expect(() =>
+      assertSafeOptions(safe({ extraArgs: { "dangerously-skip-permissions": null } })),
+    ).toThrow(/extra command line/)
   })
 
   it("needs an explicit environment with no credentials, in any letter case, and the bundled binary", () => {
     expect(() => assertSafeOptions(safe({ env: undefined }))).toThrow(/passed explicitly/)
-    for (const key of ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "anthropic_api_key"]) {
+    for (const key of [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "CLAUDE_CODE_OAUTH_TOKEN",
+      "anthropic_api_key",
+    ]) {
       expect(() => assertSafeOptions(safe({ env: { [key]: "secret" } })), key).toThrow(SafetyError)
     }
-    expect(() => assertSafeOptions(safe({ pathToClaudeCodeExecutable: "C:/other/claude.exe" }))).toThrow(/bundled/)
+    expect(() =>
+      assertSafeOptions(safe({ pathToClaudeCodeExecutable: "C:/other/claude.exe" })),
+    ).toThrow(/bundled/)
   })
 
   it("needs canUseTool and the PreToolUse floor hook", () => {
@@ -114,7 +158,9 @@ afterAll(async () => {
   await s.stop()
 })
 
-async function runTurn(turn: Parameters<typeof s.sdk.turn extends infer T ? (t: T) => void : never>[0]) {
+async function runTurn(
+  turn: Parameters<typeof s.sdk.turn extends infer T ? (t: T) => void : never>[0],
+) {
   s.sdk.turn = turn as never
   const session = await s.manager.start({ cwd: s.repo })
   const done = new Promise<void>((resolve) => {
@@ -137,7 +183,15 @@ describe("what a real session is started with", () => {
     expect(o.settingSources).toEqual(["user", "project", "local"])
     expect(o.includePartialMessages).toBe(true)
     expect(typeof o.canUseTool).toBe("function")
-    expect(Object.keys(o.hooks ?? {}).sort()).toEqual(["Notification", "PostToolUse", "PostToolUseFailure", "PreToolUse", "Stop", "SubagentStart", "SubagentStop"])
+    expect(Object.keys(o.hooks ?? {}).sort()).toEqual([
+      "Notification",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "PreToolUse",
+      "Stop",
+      "SubagentStart",
+      "SubagentStop",
+    ])
     expect(Object.keys(o.mcpServers ?? {})).toEqual(["companion"])
     expect((o.mcpServers as Record<string, { type: string }>).companion?.type).toBe("sdk")
     // Nothing that could approve a call before canUseTool sees it.
@@ -163,7 +217,11 @@ describe("what a real session is started with", () => {
   })
 
   it("never reads the credentials file or any token: no Host source mentions it (invariant 6)", () => {
-    const srcDirs = [path.resolve(here, "../src"), path.resolve(here, "../../approver/src"), path.resolve(here, "../../companion/src")]
+    const srcDirs = [
+      path.resolve(here, "../src"),
+      path.resolve(here, "../../approver/src"),
+      path.resolve(here, "../../companion/src"),
+    ]
     const offenders: string[] = []
     for (const dir of srcDirs) {
       for (const f of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
@@ -172,7 +230,8 @@ describe("what a real session is started with", () => {
         const text = fs.readFileSync(full, "utf8")
         // Reading means a file API near the name. The safety code only names the variables to remove.
         if (/\.credentials\.json/i.test(text)) offenders.push(`${full}: credentials file`)
-        if (/readFile(Sync)?\([^)]*(credential|token)/i.test(text)) offenders.push(`${full}: reads a token file`)
+        if (/readFile(Sync)?\([^)]*(credential|token)/i.test(text))
+          offenders.push(`${full}: reads a token file`)
       }
     }
     expect(offenders).toEqual([])
@@ -185,9 +244,15 @@ describe("what a real session is started with", () => {
       results.push(await api.callTool("Bash", { command: "git push --force" }))
       const t = api.callTool("Bash", { command: "pip install x" })
       await s.waitForPending()
-      s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow", remember: true }, "desktop")
+      s.broker.resolve(
+        s.pendingId(),
+        { kind: "decision", decision: "allow", remember: true },
+        "desktop",
+      )
       results.push(await t)
-      const q = api.callTool("AskUserQuestion", { questions: [{ question: "Q?", header: "H", options: [{ label: "a" }, { label: "b" }] }] })
+      const q = api.callTool("AskUserQuestion", {
+        questions: [{ question: "Q?", header: "H", options: [{ label: "a" }, { label: "b" }] }],
+      })
       await s.waitForPending()
       s.broker.resolve(s.pendingId(), { kind: "answers", answers: { "Q?": "a" } }, "desktop")
       results.push(await q)
@@ -197,7 +262,11 @@ describe("what a real session is started with", () => {
     expect(all.length).toBeGreaterThanOrEqual(4)
     for (const r of all) {
       expect(r).not.toHaveProperty("updatedPermissions")
-      expect(Object.keys(r).every((k) => ["behavior", "updatedInput", "message", "toolUseID", "interrupt"].includes(k))).toBe(true)
+      expect(
+        Object.keys(r).every((k) =>
+          ["behavior", "updatedInput", "message", "toolUseID", "interrupt"].includes(k),
+        ),
+      ).toBe(true)
     }
   })
 })
@@ -229,7 +298,17 @@ describe("invariant 2: the floor hook only denies", () => {
       { tool_name: "", tool_input: {} },
     ]
     for (const i of inputs) {
-      const out = (await hook({ hook_event_name: "PreToolUse", tool_use_id: "t", cwd: s.repo, session_id: "x", ...i } as never, "t", { signal: new AbortController().signal })) as {
+      const out = (await hook(
+        {
+          hook_event_name: "PreToolUse",
+          tool_use_id: "t",
+          cwd: s.repo,
+          session_id: "x",
+          ...i,
+        } as never,
+        "t",
+        { signal: new AbortController().signal },
+      )) as {
         hookSpecificOutput?: { permissionDecision?: string; updatedInput?: unknown }
         decision?: string
       }
@@ -254,7 +333,17 @@ describe("invariant 2: the floor hook only denies", () => {
       onEvent: () => undefined,
       log: () => undefined,
     })
-    const out = (await hook({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "git status" }, tool_use_id: "t", cwd: s.repo } as never, "t", { signal: new AbortController().signal })) as {
+    const out = (await hook(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "git status" },
+        tool_use_id: "t",
+        cwd: s.repo,
+      } as never,
+      "t",
+      { signal: new AbortController().signal },
+    )) as {
       hookSpecificOutput?: { permissionDecision?: string }
     }
     expect(out).toEqual(denyOutput("The Gatehouse floor check failed, so this call was blocked."))
@@ -262,9 +351,40 @@ describe("invariant 2: the floor hook only denies", () => {
 
   it("ignores other hook events, and denies everything while the kill switch is engaged", async () => {
     const mk = (kill: boolean) =>
-      createFloorHook({ sessionId: "s", cwd: s.repo, policy: () => s.store.current, pwsh: undefined, audit: s.audit, kill: () => kill, decided: new Set(), onEvent: () => undefined, log: () => undefined })
-    expect(await mk(false)({ hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: {}, tool_use_id: "t" } as never, "t", { signal: new AbortController().signal })).toEqual({})
-    const out = (await mk(true)({ hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { file_path: "src/a.ts" }, tool_use_id: "t", cwd: s.repo } as never, "t", { signal: new AbortController().signal })) as {
+      createFloorHook({
+        sessionId: "s",
+        cwd: s.repo,
+        policy: () => s.store.current,
+        pwsh: undefined,
+        audit: s.audit,
+        kill: () => kill,
+        decided: new Set(),
+        onEvent: () => undefined,
+        log: () => undefined,
+      })
+    expect(
+      await mk(false)(
+        {
+          hook_event_name: "PostToolUse",
+          tool_name: "Bash",
+          tool_input: {},
+          tool_use_id: "t",
+        } as never,
+        "t",
+        { signal: new AbortController().signal },
+      ),
+    ).toEqual({})
+    const out = (await mk(true)(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Read",
+        tool_input: { file_path: "src/a.ts" },
+        tool_use_id: "t",
+        cwd: s.repo,
+      } as never,
+      "t",
+      { signal: new AbortController().signal },
+    )) as {
       hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string }
     }
     expect(out.hookSpecificOutput?.permissionDecision).toBe("deny")
@@ -274,22 +394,41 @@ describe("invariant 2: the floor hook only denies", () => {
 
 describe("invariant 14: the organisation guard", () => {
   it("accepts only the expected organisation, ignoring case and spacing", () => {
-    const acct = { email: "a@b.c", organization: "ACN - Premium", apiProvider: "firstParty" as const }
+    const acct = {
+      email: "a@b.c",
+      organization: "ACN - Premium",
+      apiProvider: "firstParty" as const,
+    }
     expect(checkOrg(acct, "ACN - Premium")).toEqual({ ok: true })
     expect(checkOrg(acct, "  acn - premium ")).toEqual({ ok: true })
     expect(checkOrg({ ...acct, apiProvider: undefined }, "ACN - Premium")).toEqual({ ok: true })
   })
 
   it("refuses everything that is not a clear yes, with a message a person can act on", () => {
-    const acct = { email: "a@b.c", organization: "ACN - Premium", apiProvider: "firstParty" as const }
+    const acct = {
+      email: "a@b.c",
+      organization: "ACN - Premium",
+      apiProvider: "firstParty" as const,
+    }
     expect(checkOrg(acct, undefined)).toMatchObject({ ok: false, code: "no-expected-org" })
     expect(checkOrg(acct, "  ")).toMatchObject({ ok: false, code: "no-expected-org" })
     expect(checkOrg(undefined, "ACN - Premium")).toMatchObject({ ok: false, code: "not-signed-in" })
     expect(checkOrg({}, "ACN - Premium")).toMatchObject({ ok: false, code: "not-signed-in" })
-    expect(checkOrg({ ...acct, organization: "Someone Else" }, "ACN - Premium")).toMatchObject({ ok: false, code: "wrong-org" })
-    expect(checkOrg({ email: "a@b.c" }, "ACN - Premium")).toMatchObject({ ok: false, code: "wrong-org" })
-    expect(checkOrg({ ...acct, organization: "ACN - Premium Extra" }, "ACN - Premium")).toMatchObject({ ok: false })
-    expect(checkOrg({ ...acct, apiProvider: "bedrock" }, "ACN - Premium")).toMatchObject({ ok: false, code: "wrong-provider" })
+    expect(checkOrg({ ...acct, organization: "Someone Else" }, "ACN - Premium")).toMatchObject({
+      ok: false,
+      code: "wrong-org",
+    })
+    expect(checkOrg({ email: "a@b.c" }, "ACN - Premium")).toMatchObject({
+      ok: false,
+      code: "wrong-org",
+    })
+    expect(
+      checkOrg({ ...acct, organization: "ACN - Premium Extra" }, "ACN - Premium"),
+    ).toMatchObject({ ok: false })
+    expect(checkOrg({ ...acct, apiProvider: "bedrock" }, "ACN - Premium")).toMatchObject({
+      ok: false,
+      code: "wrong-provider",
+    })
     const wrong = checkOrg({ ...acct, organization: "Other" }, "ACN - Premium")
     expect(wrong.ok === false && wrong.message).toContain('"Other"')
   })
@@ -313,7 +452,9 @@ describe("invariant 14: the organisation guard", () => {
   it("refuses to start when no expected organisation is set", async () => {
     const bare = await buildStack({ expectedOrg: null })
     try {
-      await expect(bare.manager.start({ cwd: bare.repo })).rejects.toThrow(/No expected organisation/)
+      await expect(bare.manager.start({ cwd: bare.repo })).rejects.toThrow(
+        /No expected organisation/,
+      )
       expect(bare.sdk.queries).toHaveLength(0)
     } finally {
       await bare.stop()
@@ -323,7 +464,12 @@ describe("invariant 14: the organisation guard", () => {
   it("keeps the account and managed-policy state for the UI header", async () => {
     const { done } = await runTurn(async () => undefined)
     await done
-    expect(s.account.last()).toMatchObject({ signedIn: true, organization: "ACN - Premium", managedPolicy: "not-detected", org: { ok: true } })
+    expect(s.account.last()).toMatchObject({
+      signedIn: true,
+      organization: "ACN - Premium",
+      managedPolicy: "not-detected",
+      org: { ok: true },
+    })
   })
 
   it("can refresh the account with a probe that sends nothing", async () => {
@@ -345,10 +491,16 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
       }
       let r: ToolCallResult | undefined
       const session = await down.manager.start({ cwd: down.repo })
-      const done = new Promise<void>((resolve) => session.on("message", (m) => m.type === "result" && resolve()))
+      const done = new Promise<void>((resolve) =>
+        session.on("message", (m) => m.type === "result" && resolve()),
+      )
       session.prompt("go")
       await down.waitForPending()
-      expect(down.broker.list()[0]?.request.verdict).toMatchObject({ outcome: "escalate", ruleId: "evaluator-unavailable", decidedBy: "evaluator-unavailable" })
+      expect(down.broker.list()[0]?.request.verdict).toMatchObject({
+        outcome: "escalate",
+        ruleId: "evaluator-unavailable",
+        decidedBy: "evaluator-unavailable",
+      })
       await done // nobody answers: it times out and is denied
       expect(r).toMatchObject({ executed: false })
       expect(r?.message).toBe("Timed out waiting for approval")
@@ -364,7 +516,10 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
       await down.manager.start({ cwd: down.repo })
       await down.kill.engage("desktop", "test")
       const canUseTool = (down.sdk.queries.at(-1)?.options as Options).canUseTool
-      const result = await canUseTool!("Bash", { command: "git status" }, { signal: new AbortController().signal, toolUseID: "t1" } as never)
+      const result = await canUseTool!("Bash", { command: "git status" }, {
+        signal: new AbortController().signal,
+        toolUseID: "t1",
+      } as never)
       expect(result).toMatchObject({ behavior: "deny", toolUseID: "t1" })
       expect((result as { message: string }).message).toContain("kill switch")
       expect(down.broker.list()).toEqual([]) // it did not escalate to a person
@@ -388,7 +543,9 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
       s.approver.evaluate = original
     }
     expect(results[0]).toMatchObject({ executed: false, blockedBy: "permission" })
-    expect(results[0]?.message).toBe("Gatehouse could not decide this call safely, so it was denied.")
+    expect(results[0]?.message).toBe(
+      "Gatehouse could not decide this call safely, so it was denied.",
+    )
   })
 
   it("does not apply an allow it cannot record in the audit log (invariant 13)", async () => {
@@ -417,9 +574,13 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
 
   it("stops a session when the SDK warns that canUseTool is shadowed", async () => {
     const { session } = await runTurn(async (api) => {
-      api.system({ subtype: "warning", text: "CLAUDE_SDK_CAN_USE_TOOL_SHADOWED: Bash is allowed by a rule" })
+      api.system({
+        subtype: "warning",
+        text: "CLAUDE_SDK_CAN_USE_TOOL_SHADOWED: Bash is allowed by a rule",
+      })
     })
-    for (let i = 0; i < 100 && session.info().state !== "error"; i++) await new Promise((r) => setTimeout(r, 20))
+    for (let i = 0; i < 100 && session.info().state !== "error"; i++)
+      await new Promise((r) => setTimeout(r, 20))
     expect(session.info().state).toBe("error")
     expect(session.info().error).toContain("Invariant 4")
   })
@@ -481,11 +642,18 @@ describe("session lifecycle", () => {
     const after = s.usage.snapshot()
     expect(after.total.results).toBe(before.total.results + 1)
     expect(after.total.costUsd).toBeCloseTo(before.total.costUsd + 0.01, 5)
-    expect(after.bySession[session.id]).toMatchObject({ project: "proj", inputTokens: 100, outputTokens: 20, results: 1 })
+    expect(after.bySession[session.id]).toMatchObject({
+      project: "proj",
+      inputTokens: 100,
+      outputTokens: 20,
+      results: 1,
+    })
     expect(after.byProject.proj?.results).toBeGreaterThanOrEqual(1)
     expect(after.byModel["fake-model"]?.outputTokens).toBeGreaterThanOrEqual(20)
     await s.usage.flush()
-    expect(JSON.parse(fs.readFileSync(path.join(s.dir, "usage.json"), "utf8")).total.results).toBe(after.total.results)
+    expect(JSON.parse(fs.readFileSync(path.join(s.dir, "usage.json"), "utf8")).total.results).toBe(
+      after.total.results,
+    )
   })
 
   it("adds only what each turn cost, because the SDK reports cost and per-model figures cumulatively", async () => {
@@ -510,9 +678,18 @@ describe("session lifecycle", () => {
     // The fake reports cumulative cost 0.01, 0.02, 0.03. Summing those would give 0.06.
     expect(after.total.costUsd - before.total.costUsd).toBeCloseTo(0.03, 6)
     expect(after.bySession[session.id]?.costUsd).toBeCloseTo(0.03, 6)
-    expect(after.bySession[session.id]).toMatchObject({ inputTokens: 300, outputTokens: 60, results: 3 })
-    expect((after.byModel["fake-model"]?.inputTokens ?? 0) - (before.byModel["fake-model"]?.inputTokens ?? 0)).toBe(300)
-    expect((after.byModel["fake-model"]?.costUsd ?? 0) - (before.byModel["fake-model"]?.costUsd ?? 0)).toBeCloseTo(0.03, 6)
+    expect(after.bySession[session.id]).toMatchObject({
+      inputTokens: 300,
+      outputTokens: 60,
+      results: 3,
+    })
+    expect(
+      (after.byModel["fake-model"]?.inputTokens ?? 0) -
+        (before.byModel["fake-model"]?.inputTokens ?? 0),
+    ).toBe(300)
+    expect(
+      (after.byModel["fake-model"]?.costUsd ?? 0) - (before.byModel["fake-model"]?.costUsd ?? 0),
+    ).toBeCloseTo(0.03, 6)
   })
 
   it("refuses to start a session or send a prompt while the kill switch is engaged", async () => {

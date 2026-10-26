@@ -23,10 +23,22 @@ export const GatehouseConfig = z
     /** Overrides the default rules file. */
     rulesPath: z.string().optional(),
     /** How long a request stays deliverable to the phone. */
-    phoneExpiryMs: z.number().int().min(10_000).default(10 * 60_000),
+    phoneExpiryMs: z
+      .number()
+      .int()
+      .min(10_000)
+      .default(10 * 60_000),
     /** After this long without an answer a request is denied as timed out. */
-    hardTimeoutMs: z.number().int().min(10_000).default(30 * 60_000),
-    checkpoints: Checkpoints.default({ beforeEscalation: true, editBursts: true, burstWindowMs: 60_000 }),
+    hardTimeoutMs: z
+      .number()
+      .int()
+      .min(10_000)
+      .default(30 * 60_000),
+    checkpoints: Checkpoints.default({
+      beforeEscalation: true,
+      editBursts: true,
+      burstWindowMs: 60_000,
+    }),
   })
   .strict()
 export type GatehouseConfig = z.infer<typeof GatehouseConfig>

@@ -6,7 +6,12 @@ import { listSessions, query, resolveSettings } from "@anthropic-ai/claude-agent
 import { PolicyEngine, PolicyStore, PwshWorker, redact } from "@gatehouse/policy"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { AuditWriter } from "@gatehouse/shared/audit"
-import { auditDir, gatehouseDataDir, loadConfig, type GatehouseConfig } from "@gatehouse/shared/node"
+import {
+  auditDir,
+  gatehouseDataDir,
+  loadConfig,
+  type GatehouseConfig,
+} from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
 import { ApproverClient } from "./approver-client.js"
 import { ApproverProcess, freePort, generateToken } from "./approver-process.js"
@@ -58,7 +63,11 @@ export function createHost(opts: HostOptions = {}): Host {
   const env = opts.env ?? process.env
   const log = opts.log ?? ((line: string) => process.stderr.write(`[host] ${line}\n`))
   const config = opts.config ?? loadConfig(env)
-  const rulesPath = opts.rulesPath ?? env.GATEHOUSE_RULES_PATH ?? config.rulesPath ?? path.join(REPO_ROOT, "policy", "rules.yaml")
+  const rulesPath =
+    opts.rulesPath ??
+    env.GATEHOUSE_RULES_PATH ??
+    config.rulesPath ??
+    path.join(REPO_ROOT, "policy", "rules.yaml")
   const rulesDir = path.dirname(rulesPath)
   const localRules = env.GATEHOUSE_LOCAL_RULES ?? path.join(rulesDir, "rules.local.yaml")
   const loadOptions = {
@@ -71,7 +80,10 @@ export function createHost(opts: HostOptions = {}): Host {
   const pwsh = new PwshWorker()
   const engine = new PolicyEngine({ getPolicy: () => store.current, pwsh })
   const dir = auditDir(env)
-  const audit = new HostAudit(new AuditWriter({ dir, redact: (v) => redact(v, { terms: config.redactTerms }) }), log)
+  const audit = new HostAudit(
+    new AuditWriter({ dir, redact: (v) => redact(v, { terms: config.redactTerms }) }),
+    log,
+  )
   const broker = new Broker({
     phoneExpiryMs: config.phoneExpiryMs,
     hardTimeoutMs: config.hardTimeoutMs,
@@ -79,7 +91,11 @@ export function createHost(opts: HostOptions = {}): Host {
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
-  const checkpoints = new CheckpointManager({ config: () => config, policy: () => store.current, log })
+  const checkpoints = new CheckpointManager({
+    config: () => config,
+    policy: () => store.current,
+    log,
+  })
 
   // The Approver: spawned with a fresh token, or one that already exists (tests).
   let approverProcess: ApproverProcess | undefined
@@ -88,8 +104,13 @@ export function createHost(opts: HostOptions = {}): Host {
   const approverToken = spawnApprover ? generateToken() : (opts.approver as { token: string }).token
   const approverPortPromise = spawnApprover ? freePort() : Promise.resolve(0)
   let approverUrl = spawnApprover ? "" : (opts.approver as { url: string }).url
-  approverClient = new ApproverClient({ url: approverUrl || "http://127.0.0.1:9/mcp", token: approverToken })
+  approverClient = new ApproverClient({
+    url: approverUrl || "http://127.0.0.1:9/mcp",
+    token: approverToken,
+  })
 
+  // Assigned once, below, after the kill switch that needs it is built, so it cannot be a const here.
+  // eslint-disable-next-line prefer-const
   let manager!: SessionManager
   const kill = new HostKillSwitch({
     broker,
@@ -110,8 +131,15 @@ export function createHost(opts: HostOptions = {}): Host {
       env: sanitiseEnv(process.env),
       settingSources: [],
       // The probe sends no prompt, so nothing can run. If something somehow did, it would be denied.
-      canUseTool: async () => ({ behavior: "deny", message: "This is an account check, not a session." }),
-      hooks: { PreToolUse: [{ hooks: [async () => denyOutput("This is an account check, not a session.")] }] },
+      canUseTool: async () => ({
+        behavior: "deny",
+        message: "This is an account check, not a session.",
+      }),
+      hooks: {
+        PreToolUse: [
+          { hooks: [async () => denyOutput("This is an account check, not a session.")] },
+        ],
+      },
     }),
     managedDetected: async () => {
       const r = await resolveSettings({ cwd: process.cwd(), settingSources: [] })
@@ -158,7 +186,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const approverProxy = {
     evaluate: (...a: Parameters<ApproverClient["evaluate"]>) => approverClient.evaluate(...a),
     status: () => approverClient.status(),
-    setKillSwitch: (...a: Parameters<ApproverClient["setKillSwitch"]>) => approverClient.setKillSwitch(...a),
+    setKillSwitch: (...a: Parameters<ApproverClient["setKillSwitch"]>) =>
+      approverClient.setKillSwitch(...a),
   }
   deps.approver = approverProxy as unknown as ApproverClient
   manager = new SessionManager(deps)
@@ -188,7 +217,10 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(ks.by ? { by: ks.by } : {}),
         approverConfirmed: ks.approverConfirmed,
       },
-      pwsh: { running: pwsh.running, ...(pwsh.languageMode ? { languageMode: pwsh.languageMode } : {}) },
+      pwsh: {
+        running: pwsh.running,
+        ...(pwsh.languageMode ? { languageMode: pwsh.languageMode } : {}),
+      },
     }
   }
 
@@ -220,14 +252,25 @@ export function createHost(opts: HostOptions = {}): Host {
     async start() {
       fs.mkdirSync(gatehouseDataDir(env), { recursive: true })
       store.load()
-      if (store.status().errors.length > 0) log(`policy did not load: ${store.status().errors.join("; ")}`)
+      if (store.status().errors.length > 0)
+        log(`policy did not load: ${store.status().errors.join("; ")}`)
       store.watch()
-      await pwsh.start().catch((e) => log(`PowerShell parser did not start (${(e as Error).message}), PowerShell calls will escalate`))
+      await pwsh
+        .start()
+        .catch((e) =>
+          log(
+            `PowerShell parser did not start (${(e as Error).message}), PowerShell calls will escalate`,
+          ),
+        )
       if (spawnApprover) {
         const port = await approverPortPromise
         approverProcess = new ApproverProcess({
           command: process.execPath,
-          args: ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", "approver", "src", "main.ts")],
+          args: [
+            "--import",
+            tsxLoaderUrl(),
+            path.join(REPO_ROOT, "apps", "approver", "src", "main.ts"),
+          ],
           cwd: REPO_ROOT,
           env: {
             GATEHOUSE_RULES_PATH: rulesPath,

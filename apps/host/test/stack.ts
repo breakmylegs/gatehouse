@@ -5,7 +5,10 @@ import path from "node:path"
 import { ApproverServer } from "../../approver/src/server.js"
 import { PolicyEngine, PolicyStore, redact } from "@gatehouse/policy"
 import { AuditWriter, listAuditFiles, type AuditRecord } from "@gatehouse/shared/audit"
-import { GatehouseConfig as GatehouseConfigSchema, type GatehouseConfig } from "@gatehouse/shared/node"
+import {
+  GatehouseConfig as GatehouseConfigSchema,
+  type GatehouseConfig,
+} from "@gatehouse/shared/node"
 import { SEED_RULES } from "../../../packages/policy/test/helpers.js"
 import { AccountMonitor, neverYields } from "../src/account.js"
 import { ApproverClient } from "../src/approver-client.js"
@@ -57,7 +60,13 @@ const git = (cwd: string, ...args: string[]) =>
   execFileSync("git", args, {
     cwd,
     encoding: "utf8",
-    env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
+    },
   }).trim()
 
 export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
@@ -125,8 +134,14 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
   })
   const sdk = new FakeSdk()
   const usage = new UsageStore(path.join(dir, "usage.json"))
-  const checkpoints = new CheckpointManager({ config: () => config, policy: () => store.current, log })
+  const checkpoints = new CheckpointManager({
+    config: () => config,
+    policy: () => store.current,
+    log,
+  })
 
+  // Assigned once, below, after the kill switch that needs it is built, so it cannot be a const here.
+  // eslint-disable-next-line prefer-const
   let manager!: SessionManager
   const kill = new HostKillSwitch({
     broker,
@@ -204,7 +219,10 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     async waitForPending(n = 1, ms = 10_000) {
       const end = Date.now() + ms
       while (broker.list().length < n) {
-        if (Date.now() > end) throw new Error(`timed out waiting for ${n} pending request(s), have ${broker.list().length}`)
+        if (Date.now() > end)
+          throw new Error(
+            `timed out waiting for ${n} pending request(s), have ${broker.list().length}`,
+          )
         await new Promise((r) => setTimeout(r, 10))
       }
     },

@@ -38,7 +38,11 @@ export interface Resolution {
 
 export type ResolveResult =
   | { ok: true; resolution: Resolution }
-  | { ok: false; reason: "not-pending" | "invalid-answer" | "not-allowed-on-channel"; detail?: string }
+  | {
+      ok: false
+      reason: "not-pending" | "invalid-answer" | "not-allowed-on-channel"
+      detail?: string
+    }
 
 export interface BrokerRequestSpec {
   kind: RequestKind
@@ -179,11 +183,17 @@ export class Broker extends EventEmitter<BrokerEvents> {
       const signal = spec.signal
       if (signal) {
         if (signal.aborted) {
-          this.#finish(request.id, this.#resolution("cancelled", "host", { message: "The session was interrupted" }))
+          this.#finish(
+            request.id,
+            this.#resolution("cancelled", "host", { message: "The session was interrupted" }),
+          )
           return
         }
         const listener = () =>
-          this.#finish(request.id, this.#resolution("cancelled", "host", { message: "The session was interrupted" }))
+          this.#finish(
+            request.id,
+            this.#resolution("cancelled", "host", { message: "The session was interrupted" }),
+          )
         signal.addEventListener("abort", listener, { once: true })
         entry.abort = { signal, listener }
       }
@@ -245,7 +255,9 @@ export class Broker extends EventEmitter<BrokerEvents> {
     if (!entry) return
     if (entry.view.phone === "delivered" || entry.view.phone === "held") {
       this.#setPhone(entry, "expired")
-      void this.#opts.phone?.cancel(id, "Expired on the phone. Still waiting on the desktop.")?.catch(() => undefined)
+      void this.#opts.phone
+        ?.cancel(id, "Expired on the phone. Still waiting on the desktop.")
+        ?.catch(() => undefined)
     }
   }
 
@@ -275,12 +287,17 @@ export class Broker extends EventEmitter<BrokerEvents> {
   #validate(entry: Entry, answer: Answer, channel: Channel): ResolveResult | undefined {
     const kind = entry.view.request.kind
     if (answer.kind === "answers") {
-      if (kind !== "question") return { ok: false, reason: "invalid-answer", detail: "This request is not a question" }
+      if (kind !== "question")
+        return { ok: false, reason: "invalid-answer", detail: "This request is not a question" }
       const questions = (entry.spec.input.questions as { question?: unknown }[] | undefined) ?? []
       const wanted = questions.map((q) => String(q.question ?? ""))
       const keys = Object.keys(answer.answers)
       if (keys.length === 0 || keys.some((k) => !wanted.includes(k))) {
-        return { ok: false, reason: "invalid-answer", detail: "Answers must be keyed by the question text" }
+        return {
+          ok: false,
+          reason: "invalid-answer",
+          detail: "Answers must be keyed by the question text",
+        }
       }
       if (wanted.some((q) => !keys.includes(q))) {
         return { ok: false, reason: "invalid-answer", detail: "Every question needs an answer" }
@@ -294,23 +311,42 @@ export class Broker extends EventEmitter<BrokerEvents> {
     }
     if (kind === "question") {
       // A question can also be declined.
-      if (answer.decision !== "deny") return { ok: false, reason: "invalid-answer", detail: "A question needs answers" }
+      if (answer.decision !== "deny")
+        return { ok: false, reason: "invalid-answer", detail: "A question needs answers" }
     }
     if (answer.decision !== "allow" && answer.decision !== "deny") {
       return { ok: false, reason: "invalid-answer", detail: "Decision must be allow or deny" }
     }
-    if (answer.message !== undefined && (typeof answer.message !== "string" || answer.message.length > MAX_MESSAGE)) {
-      return { ok: false, reason: "invalid-answer", detail: `The message is limited to ${MAX_MESSAGE} characters` }
+    if (
+      answer.message !== undefined &&
+      (typeof answer.message !== "string" || answer.message.length > MAX_MESSAGE)
+    ) {
+      return {
+        ok: false,
+        reason: "invalid-answer",
+        detail: `The message is limited to ${MAX_MESSAGE} characters`,
+      }
     }
     // Invariant 11: the phone can allow, deny, answer and kill. It cannot edit input or create rules.
     if (channel === "phone" && (answer.updatedInput !== undefined || answer.remember)) {
-      return { ok: false, reason: "not-allowed-on-channel", detail: "The phone cannot edit input or remember rules" }
+      return {
+        ok: false,
+        reason: "not-allowed-on-channel",
+        detail: "The phone cannot edit input or remember rules",
+      }
     }
-    if (answer.updatedInput !== undefined && (typeof answer.updatedInput !== "object" || answer.updatedInput === null)) {
+    if (
+      answer.updatedInput !== undefined &&
+      (typeof answer.updatedInput !== "object" || answer.updatedInput === null)
+    ) {
       return { ok: false, reason: "invalid-answer", detail: "updatedInput must be an object" }
     }
     if (answer.decision === "deny" && (answer.updatedInput !== undefined || answer.remember)) {
-      return { ok: false, reason: "invalid-answer", detail: "A denial cannot carry edits or remember" }
+      return {
+        ok: false,
+        reason: "invalid-answer",
+        detail: "A denial cannot carry edits or remember",
+      }
     }
     return undefined
   }
@@ -323,7 +359,12 @@ export class Broker extends EventEmitter<BrokerEvents> {
     if (entry.abort) entry.abort.signal.removeEventListener("abort", entry.abort.listener)
     if (resolution.waitedMs === 0) resolution.waitedMs = this.#now().getTime() - entry.createdMs
     entry.resolve(resolution)
-    this.emit("resolved", { id, sessionId: entry.spec.sessionId, request: entry.view.request, resolution })
+    this.emit("resolved", {
+      id,
+      sessionId: entry.spec.sessionId,
+      request: entry.view.request,
+      resolution,
+    })
     // Tell the other channel the outcome. Best effort: the answer is already final.
     if (entry.view.phone === "delivered" || entry.view.phone === "held") {
       void this.#opts.phone?.cancel(id, describeResolution(resolution))?.catch(() => undefined)

@@ -56,4 +56,3 @@ export function summarisePolicy(policy: Policy | undefined, cwd: string): string
   const text = lines.join("\n")
   return text.length <= SUMMARY_MAX_CHARS ? text : text.slice(0, SUMMARY_MAX_CHARS - 3) + "..."
 }
-

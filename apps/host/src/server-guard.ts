@@ -10,7 +10,10 @@ export interface HostGuardOptions {
 export type HostGuardResult = { ok: true } | { ok: false; status: number; error: string }
 
 export function secretsEqual(a: string, b: string): boolean {
-  return timingSafeEqual(createHash("sha256").update(a).digest(), createHash("sha256").update(b).digest())
+  return timingSafeEqual(
+    createHash("sha256").update(a).digest(),
+    createHash("sha256").update(b).digest(),
+  )
 }
 
 export function allowedHosts(port: number): string[] {
@@ -33,7 +36,8 @@ export function extractToken(headers: IncomingHttpHeaders): string | undefined {
   if (typeof proto === "string") {
     for (const part of proto.split(",")) {
       const p = part.trim()
-      if (p.startsWith(WS_TOKEN_PREFIX) && p.length > WS_TOKEN_PREFIX.length) return p.slice(WS_TOKEN_PREFIX.length)
+      if (p.startsWith(WS_TOKEN_PREFIX) && p.length > WS_TOKEN_PREFIX.length)
+        return p.slice(WS_TOKEN_PREFIX.length)
     }
   }
   return undefined

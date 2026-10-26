@@ -44,12 +44,19 @@ describe("the kill switch (deny-all)", () => {
       ctx: ctx(),
     })
     expect(read.structured).toMatchObject({ outcome: "deny", ruleId: "kill-switch" })
-    const prompt = await r.call("approval_prompt", { tool_name: "Bash", input: { command: "git status" } })
+    const prompt = await r.call("approval_prompt", {
+      tool_name: "Bash",
+      input: { command: "git status" },
+    })
     expect(prompt.text.behavior).toBe("deny")
     expect(prompt.text.message).toContain("kill-switch")
 
-    expect(records().filter((x) => x.verdict.ruleId === "kill-switch").length).toBeGreaterThanOrEqual(6)
-    expect((await r.call("policy_status", {})).structured.killSwitch).toMatchObject({ engaged: true })
+    expect(
+      records().filter((x) => x.verdict.ruleId === "kill-switch").length,
+    ).toBeGreaterThanOrEqual(6)
+    expect((await r.call("policy_status", {})).structured.killSwitch).toMatchObject({
+      engaged: true,
+    })
     expect(verifyAudit(r.auditDir).ok).toBe(true)
   })
 
@@ -61,7 +68,10 @@ describe("the kill switch (deny-all)", () => {
   it("allows again only after it is re-armed", async () => {
     const state = await r.call("kill_switch", { engaged: false, by: "desktop" })
     expect(state.structured.engaged).toBe(false)
-    expect((await evaluate("git status")).structured).toMatchObject({ outcome: "allow", ruleId: "safe-shell" })
+    expect((await evaluate("git status")).structured).toMatchObject({
+      outcome: "allow",
+      ruleId: "safe-shell",
+    })
   })
 
   it("stays engaged across a restart of the Approver", async () => {
@@ -107,9 +117,16 @@ describe("the kill switch (deny-all)", () => {
     const s = await startApprover({ pwsh: undefined, statePath: state })
     try {
       const call = () =>
-        s.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: { cwd: s.cwd, sessionId: "x" } })
+        s.call("evaluate_permission", {
+          toolName: "Bash",
+          input: { command: "git status" },
+          ctx: { cwd: s.cwd, sessionId: "x" },
+        })
       expect((await call()).structured.outcome).toBe("allow")
-      fs.writeFileSync(state, JSON.stringify({ killSwitch: { engaged: true, by: "another process" } }))
+      fs.writeFileSync(
+        state,
+        JSON.stringify({ killSwitch: { engaged: true, by: "another process" } }),
+      )
       expect((await call()).structured.ruleId).toBe("kill-switch")
       fs.writeFileSync(state, JSON.stringify({ killSwitch: { engaged: false } }))
       expect((await call()).structured.outcome).toBe("allow")

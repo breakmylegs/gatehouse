@@ -16,7 +16,12 @@ import {
   type ServerEvent,
 } from "@gatehouse/shared"
 import type { AccountMonitor } from "./account.js"
-import { Broker, describeResolution, type PendingView as BrokerView, type Resolution } from "./broker.js"
+import {
+  Broker,
+  describeResolution,
+  type PendingView as BrokerView,
+  type Resolution,
+} from "./broker.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
@@ -101,7 +106,8 @@ export class HostServer {
 
   /** ready states (0 connecting, 1 open, 2 closing, 3 closed) of the sockets the plugin still tracks. */
   get socketStates(): number[] {
-    const wss = (this.#fastify as unknown as { websocketServer?: { clients?: Set<WebSocket> } }).websocketServer
+    const wss = (this.#fastify as unknown as { websocketServer?: { clients?: Set<WebSocket> } })
+      .websocketServer
     return [...(wss?.clients ?? [])].map((c) => c.readyState)
   }
 
@@ -115,13 +121,18 @@ export class HostServer {
     // The port is known only after listen, so the guard reads it from the live address.
     app.addHook("onRequest", async (req, reply) => {
       const result = checkHostRequest(req.raw, { token: this.#opts.token, port: this.#port })
-      if (!result.ok) return reply.code(result.status).header("cache-control", "no-store").send({ error: result.error })
+      if (!result.ok)
+        return reply
+          .code(result.status)
+          .header("cache-control", "no-store")
+          .send({ error: result.error })
       return undefined
     })
     await app.register(websocket, {
       options: {
         maxPayload: 1 << 20,
-        handleProtocols: (protocols: Set<string>) => (protocols.has(WS_SUBPROTOCOL) ? WS_SUBPROTOCOL : false),
+        handleProtocols: (protocols: Set<string>) =>
+          protocols.has(WS_SUBPROTOCOL) ? WS_SUBPROTOCOL : false,
       },
     })
     app.get("/ws", { websocket: true }, (socket) => this.#onSocket(socket))
@@ -133,7 +144,9 @@ export class HostServer {
       app.get("/", (_req, reply) => reply.sendFile("index.html"))
     } else {
       app.get("/", (_req, reply) =>
-        reply.type("text/plain; charset=utf-8").send("Gatehouse host is running. The interface is served here once it has been built."),
+        reply
+          .type("text/plain; charset=utf-8")
+          .send("Gatehouse host is running. The interface is served here once it has been built."),
       )
     }
     this.#wireEvents()
@@ -150,7 +163,8 @@ export class HostServer {
     // Ask politely, then insist: a client that never answers the close handshake must not hold the Host open.
     // The websocket plugin keeps its own list of sockets, including ones that are part-way through
     // closing, so that list (not ours) is the one to finish off.
-    const wss = (this.#fastify as unknown as { websocketServer?: { clients?: Set<WebSocket> } }).websocketServer
+    const wss = (this.#fastify as unknown as { websocketServer?: { clients?: Set<WebSocket> } })
+      .websocketServer
     const all = (): WebSocket[] => [...new Set([...this.#clients, ...(wss?.clients ?? [])])]
     for (const c of all()) c.close(1001, "host stopping")
     const force = setTimeout(() => {
@@ -197,9 +211,15 @@ export class HostServer {
   #wireEvents(): void {
     const a = this.#opts.app
     a.manager.on("session", (info) => this.#broadcast({ type: "session", info }))
-    a.manager.on("message", ({ sessionId, message }) => this.#broadcast({ type: "sdk_message", sessionId, message }))
-    a.manager.on("event", ({ sessionId, type, data }) => this.#broadcast({ type: "session_event", sessionId, event: type, data }))
-    a.broker.on("created", (view: BrokerView) => this.#broadcast({ type: "approval_request", view: view as unknown as PendingView }))
+    a.manager.on("message", ({ sessionId, message }) =>
+      this.#broadcast({ type: "sdk_message", sessionId, message }),
+    )
+    a.manager.on("event", ({ sessionId, type, data }) =>
+      this.#broadcast({ type: "session_event", sessionId, event: type, data }),
+    )
+    a.broker.on("created", (view: BrokerView) =>
+      this.#broadcast({ type: "approval_request", view: view as unknown as PendingView }),
+    )
     a.broker.on("resolved", ({ id, sessionId, resolution }) =>
       this.#broadcast({ type: "approval_resolved", id, sessionId, resolution: toWire(resolution) }),
     )
@@ -231,24 +251,39 @@ export class HostServer {
     try {
       json = JSON.parse(text)
     } catch {
-      this.#send(socket, { type: "reply", ok: false, error: { code: "invalid-json", message: "The message is not valid JSON" } })
+      this.#send(socket, {
+        type: "reply",
+        ok: false,
+        error: { code: "invalid-json", message: "The message is not valid JSON" },
+      })
       return
     }
     const parsed = ClientMessage.safeParse(json)
-    const cmdId = typeof (json as { cmdId?: unknown } | null)?.cmdId === "string" ? ((json as { cmdId: string }).cmdId) : undefined
+    const cmdId =
+      typeof (json as { cmdId?: unknown } | null)?.cmdId === "string"
+        ? (json as { cmdId: string }).cmdId
+        : undefined
     if (!parsed.success) {
       const issue = parsed.error.issues[0]
       this.#send(socket, {
         type: "reply",
         ...(cmdId ? { cmdId } : {}),
         ok: false,
-        error: { code: "invalid-command", message: `${issue?.path.join(".") || "command"}: ${issue?.message ?? "is not valid"}` },
+        error: {
+          code: "invalid-command",
+          message: `${issue?.path.join(".") || "command"}: ${issue?.message ?? "is not valid"}`,
+        },
       })
       return
     }
     try {
       const data = await this.#handle(parsed.data.command)
-      this.#send(socket, { type: "reply", ...(parsed.data.cmdId ? { cmdId: parsed.data.cmdId } : {}), ok: true, ...(data !== undefined ? { data } : {}) })
+      this.#send(socket, {
+        type: "reply",
+        ...(parsed.data.cmdId ? { cmdId: parsed.data.cmdId } : {}),
+        ok: true,
+        ...(data !== undefined ? { data } : {}),
+      })
     } catch (e) {
       const err = e instanceof CommandError ? e : classify(e)
       this.#opts.app.log(`command ${parsed.data.command.type} failed: ${err.code}`)
@@ -268,7 +303,9 @@ export class HostServer {
   }
 
   #knownCwd(cwd: string): void {
-    const known = this.#opts.app.manager.list().some((s) => path.resolve(s.cwd).toLowerCase() === path.resolve(cwd).toLowerCase())
+    const known = this.#opts.app.manager
+      .list()
+      .some((s) => path.resolve(s.cwd).toLowerCase() === path.resolve(cwd).toLowerCase())
     if (!known) throw new CommandError("unknown-folder", "That folder does not belong to a session")
   }
 
@@ -316,14 +353,30 @@ export class HostServer {
       }
       case "deny":
         return resolveResult(
-          a.broker.resolve(cmd.requestId, { kind: "decision", decision: "deny", ...(cmd.message !== undefined ? { message: cmd.message } : {}) }, "desktop"),
+          a.broker.resolve(
+            cmd.requestId,
+            {
+              kind: "decision",
+              decision: "deny",
+              ...(cmd.message !== undefined ? { message: cmd.message } : {}),
+            },
+            "desktop",
+          ),
         )
       case "answer":
-        return resolveResult(a.broker.resolve(cmd.requestId, { kind: "answers", answers: cmd.answers }, "desktop"))
+        return resolveResult(
+          a.broker.resolve(cmd.requestId, { kind: "answers", answers: cmd.answers }, "desktop"),
+        )
       case "remember_preview": {
         const view = a.broker.get(cmd.requestId)
         if (!view) throw new CommandError("unknown-request", "That request is not waiting any more")
-        return await checkRemember(a.engine, a.policy(), { toolName: view.request.toolName, input: view.rawInput }, { cwd: view.request.cwd }, a.pwsh)
+        return await checkRemember(
+          a.engine,
+          a.policy(),
+          { toolName: view.request.toolName, input: view.rawInput },
+          { cwd: view.request.cwd },
+          a.pwsh,
+        )
       }
       case "kill":
         return await a.kill.engage("desktop", "Kill switch from the desktop")
@@ -337,7 +390,8 @@ export class HostServer {
         return await a.checkpoints.preview(cmd.cwd, cmd.ref)
       case "checkpoint_restore":
         this.#knownCwd(cmd.cwd)
-        if (!cmd.confirm) throw new CommandError("not-confirmed", "Restoring needs confirmation after the preview")
+        if (!cmd.confirm)
+          throw new CommandError("not-confirmed", "Restoring needs confirmation after the preview")
         return await a.checkpoints.restore(cmd.cwd, cmd.ref, cmd.sessionId, true)
       case "list_history":
         return await a.listHistory(cmd.dir)
@@ -349,7 +403,10 @@ export class HostServer {
 
 function resolveResult(r: ReturnType<Broker["resolve"]>): unknown {
   if (r.ok) return { resolution: toWire(r.resolution) }
-  throw new CommandError(r.reason === "not-pending" ? "unknown-request" : r.reason, r.detail ?? "The answer was not accepted")
+  throw new CommandError(
+    r.reason === "not-pending" ? "unknown-request" : r.reason,
+    r.detail ?? "The answer was not accepted",
+  )
 }
 
 function classify(e: unknown): CommandError {

@@ -21,7 +21,12 @@ describe("phoneHeld", () => {
     expect(phoneHeld(at("2026-07-15T21:30:00Z"), london)).toBe(true)
     expect(phoneHeld(at("2026-07-16T06:30:00Z"), london)).toBe(false)
     expect(phoneHeld(at("2026-07-15T20:59:00Z"), london)).toBe(false)
-    const newYork: QuietHours = { start: "22:00", end: "07:00", tz: "America/New_York", phone: false }
+    const newYork: QuietHours = {
+      start: "22:00",
+      end: "07:00",
+      tz: "America/New_York",
+      phone: false,
+    }
     expect(phoneHeld(at("2026-01-16T03:30:00Z"), newYork)).toBe(true) // 22:30 local
     expect(phoneHeld(at("2026-01-16T13:00:00Z"), newYork)).toBe(false) // 08:00 local
   })
@@ -30,7 +35,9 @@ describe("phoneHeld", () => {
     const lunch: QuietHours = { start: "12:00", end: "13:00", tz: "UTC", phone: false }
     expect(phoneHeld(at("2026-01-15T12:30:00Z"), lunch)).toBe(true)
     expect(phoneHeld(at("2026-01-15T13:00:00Z"), lunch)).toBe(false)
-    expect(phoneHeld(at("2026-01-15T12:30:00Z"), { ...lunch, start: "12:00", end: "12:00" })).toBe(false)
+    expect(phoneHeld(at("2026-01-15T12:30:00Z"), { ...lunch, start: "12:00", end: "12:00" })).toBe(
+      false,
+    )
   })
 
   it("does not hold anything when phone is true or there are no quiet hours", () => {

@@ -55,3 +55,36 @@ Rules engine with floor, deny, remember, escalate, allow and default stages; bas
 | Audit `input` field | Stored as `inputJson`, a canonical JSON string. | Lets an independent verifier recompute hashes without float formatting rules. |
 | Audit and checkpoint code location | `packages/shared`, as subpaths `./audit` and `./node`, kept out of the barrel. | Both the Approver and the Host append to the audit log. The barrel must stay free of `node:fs` for the phone bundle. |
 | Checkpoint "for example `git stash create`" | Temporary index, `add -A`, `write-tree`, `commit-tree`. | Captures untracked files and never touches the real index or working tree. |
+
+## Phase 3: Host core (branch phase-3)
+
+Sessions, `canUseTool`, the PreToolUse floor hook, the broker (desktop channel, with the phone interface ready), the kill switch, the organisation guard, checkpoints with restore, usage, the WebSocket API and a command-line harness.
+
+- **Code:** `apps/host/src`: `broker.ts`, `canuse.ts`, `hooks.ts`, `sessions.ts`, `account.ts`, `safety.ts`, `kill.ts`, `checkpoints.ts`, `usage.ts`, `quiet-hours.ts`, `server.ts`, `server-guard.ts`, `bootstrap.ts`, `main.ts`, `cli.ts`. Shared: UUIDv7, escalation payload hash, WebSocket protocol, persisted state, checkpoint preview and restore. Policy package: `evaluateFloor`, `checkRemember`, `appendRemember`.
+- **Results:** 940 tests in 32 files, all passing. A mutation check of 35 deliberate bugs in the new code: all caught. One survived at first (the Host's own kill-switch check, hidden by the floor hook and the Approver also denying) and now has a test that runs with the Approver down. `npm audit`: 0 vulnerabilities. 305 packages scanned for licences: no AGPL or GPL.
+- **Acceptance, scripted run** (`apps/host/test/scripted-run.test.ts`, the real Approver, policy, broker, audit and checkpoints, with only the SDK faked): auto-allow, auto-deny, a floor deny in the hook before `canUseTool`, escalate then approve (checkpoint taken first, audit record, `updatedInput` echoed, no `updatedPermissions`), escalate then deny with a message, a phone answer and a refused phone edit, escalate then time out ("Timed out waiting for approval"), edited input re-checked and blocked by a deny rule and by the floor, remember writing `rules.local.yaml` and the Approver picking it up, `AskUserQuestion` answered from desktop and phone and declined, plan approval and rejection, interrupt while waiting, kill switch (interrupts, cancels, denies, refuses new sessions) and desktop-only re-arm. The audit log is one intact chain across the Approver and the Host.
+- **Invariant tests:** 1 to 7, 10, 13 and 14 each have named tests (`invariants.test.ts`, `server.test.ts`, the Approver tests).
+- **Live run** through `npm run host:cli` with the real SDK: the account and organisation were checked before any prompt, `git status` was approved by Claude Code itself, a `Write` in the workspace was allowed by the Approver, `npm install` was escalated and the denial reached Claude, and a read of `.env` was refused by the floor. The notes in `docs/sdk-notes.md` record what this showed.
+
+### Found and fixed during Phase 3
+
+- **Usage was counted wrongly:** the SDK reports cost and per-model usage cumulatively for the session. The first live run showed $0.52 where the real figure was about $0.14. The store now adds only the change, and the fake SDK reports cumulatively so the tests would catch a regression.
+- **Policy reload could be starved:** the rules watcher reset its debounce on every event in the folder, so steady activity (audit writes) could delay a reload indefinitely. It now reacts only to YAML files.
+- **A fatal session error could be hidden** by a later `result` message moving the session back to idle. An error is now final.
+- **Shutdown could hang:** sockets from refused WebSocket upgrades are not tracked by the HTTP server, so `closeAllConnections()` missed them. The server now tracks raw sockets and destroys them after a short grace period.
+- **A restore on Windows writes CRLF** when the user's git setting is `core.autocrlf=true`, because `git restore` follows that setting. The content is otherwise identical. Repositories with a `.gitattributes` `eol` rule are unaffected.
+
+### Deviations from the spec in Phase 3
+
+| Spec | What was done | Why |
+|---|---|---|
+| The Approver has four tools | A fifth, `kill_switch`, engages and re-arms deny-all | The spec says the kill switch puts the Approver in deny-all until re-armed. The state is persisted in `state.json` so a restarted Approver stays denying, and a damaged state file counts as engaged. The tool is control plane only and needs the bearer token. |
+| `defaultToNo` | Set when the SDK says so or when risk is 70 or more | Spec: allow is never the default focus at risk 70 or above. |
+| `PostToolUse` audit | Only for calls that never went through `canUseTool` (self-approved by Claude Code) | Calls that did reach `canUseTool` are already audited by the Approver and the Host, and a second record would double count. |
+| Shadow warning `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` | Not present in this SDK. `assertSafeOptions` enforces invariant 4 itself, and a stderr or system message matching the likely wording is fatal. | Cannot test for a warning that does not exist. |
+| Checkpoint restore | Always takes a safety checkpoint first, never touches secrets files or ignored files, and refuses without `confirm: true` | Makes a restore itself undoable, as the spec's "shows the diff first and asks for confirmation" implies. |
+| The Host may spawn the Approver with the standard `node --import tsx` | Same, with the loader given as an absolute URL | The child runs in the project's folder, where `tsx` cannot be found by name. Phase 8 packaging may compile instead. |
+
+### Owner to-do added in Phase 3
+
+- Set `expectedOrg` to `ACN - Premium` in `%LOCALAPPDATA%\Gatehouse\config.json`. Without it the Host refuses to start any session (invariant 14), and the first-run screen in Phase 5 will do this from the UI.

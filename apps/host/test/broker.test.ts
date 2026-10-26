@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { computePayloadHash, UUID_V7, type EscalationRequest, type Verdict } from "@gatehouse/shared"
+import {
+  computePayloadHash,
+  UUID_V7,
+  type EscalationRequest,
+  type Verdict,
+} from "@gatehouse/shared"
 import { redact } from "@gatehouse/policy"
 import { Broker, type BrokerOptions, type PhoneChannel, type Resolution } from "../src/broker.js"
 import type { QuietHours } from "../src/quiet-hours.js"
@@ -64,7 +69,13 @@ describe("creating a request", () => {
   it("builds a contract-shaped request: UUIDv7 id, nonce, redacted input, expiry, payload hash", async () => {
     const { broker } = make()
     const secret = "ghp_" + "Ab1Cd2Ef3G".repeat(4)
-    void broker.request(spec({ input: { command: `echo ${secret} AcmeCorp` }, cwd: "C:/clients/AcmeCorp", project: "AcmeCorp" }))
+    void broker.request(
+      spec({
+        input: { command: `echo ${secret} AcmeCorp` },
+        cwd: "C:/clients/AcmeCorp",
+        project: "AcmeCorp",
+      }),
+    )
     const view = broker.list()[0]
     expect(view).toBeDefined()
     const r = view?.request as EscalationRequest
@@ -109,7 +120,10 @@ describe("first valid answer wins", () => {
     const p = broker.request(spec())
     const id = firstId(broker)
     expect(broker.resolve(id, { kind: "decision", decision: "allow" }, "desktop").ok).toBe(true)
-    expect(broker.resolve(id, { kind: "decision", decision: "deny" }, "phone")).toEqual({ ok: false, reason: "not-pending" })
+    expect(broker.resolve(id, { kind: "decision", decision: "deny" }, "phone")).toEqual({
+      ok: false,
+      reason: "not-pending",
+    })
     expect((await p).outcome).toBe("allow")
     expect(phone.cancelled).toHaveLength(1)
     expect(phone.cancelled[0]?.summary).toMatch(/^Approved on desktop at \d\d:\d\d$/)
@@ -120,8 +134,16 @@ describe("first valid answer wins", () => {
     const resolved: Resolution[] = []
     broker.on("resolved", (e) => resolved.push(e.resolution))
     const p = broker.request(spec())
-    broker.resolve(firstId(broker), { kind: "decision", decision: "deny", message: "not now" }, "phone")
-    await expect(p).resolves.toMatchObject({ outcome: "deny", channel: "phone", message: "not now" })
+    broker.resolve(
+      firstId(broker),
+      { kind: "decision", decision: "deny", message: "not now" },
+      "phone",
+    )
+    await expect(p).resolves.toMatchObject({
+      outcome: "deny",
+      channel: "phone",
+      message: "not now",
+    })
     expect(resolved).toHaveLength(1)
   })
 
@@ -141,7 +163,10 @@ describe("first valid answer wins", () => {
 
   it("does not accept an answer for an unknown request", () => {
     const { broker } = make()
-    expect(broker.resolve("nope", { kind: "decision", decision: "allow" }, "desktop")).toEqual({ ok: false, reason: "not-pending" })
+    expect(broker.resolve("nope", { kind: "decision", decision: "allow" }, "desktop")).toEqual({
+      ok: false,
+      reason: "not-pending",
+    })
   })
 
   it("records how long the person took", async () => {
@@ -159,16 +184,24 @@ describe("answer validation (invariant 11: the phone cannot edit or create rules
     void broker.request(spec())
     const id = firstId(broker)
     const edited = { command: "git push origin feature" }
-    expect(broker.resolve(id, { kind: "decision", decision: "allow", updatedInput: edited }, "phone")).toMatchObject({
+    expect(
+      broker.resolve(id, { kind: "decision", decision: "allow", updatedInput: edited }, "phone"),
+    ).toMatchObject({
       ok: false,
       reason: "not-allowed-on-channel",
     })
-    expect(broker.resolve(id, { kind: "decision", decision: "allow", remember: true }, "phone")).toMatchObject({
+    expect(
+      broker.resolve(id, { kind: "decision", decision: "allow", remember: true }, "phone"),
+    ).toMatchObject({
       ok: false,
       reason: "not-allowed-on-channel",
     })
     expect(broker.list()).toHaveLength(1) // a refused answer leaves the request open
-    const r = broker.resolve(id, { kind: "decision", decision: "allow", updatedInput: edited, remember: true }, "desktop")
+    const r = broker.resolve(
+      id,
+      { kind: "decision", decision: "allow", updatedInput: edited, remember: true },
+      "desktop",
+    )
     expect(r).toMatchObject({ ok: true, resolution: { updatedInput: edited, remember: true } })
   })
 
@@ -176,24 +209,48 @@ describe("answer validation (invariant 11: the phone cannot edit or create rules
     const { broker } = make()
     void broker.request(spec())
     const id = firstId(broker)
-    expect(broker.resolve(id, { kind: "decision", decision: "deny", message: "x".repeat(501) }, "desktop")).toMatchObject({
+    expect(
+      broker.resolve(
+        id,
+        { kind: "decision", decision: "deny", message: "x".repeat(501) },
+        "desktop",
+      ),
+    ).toMatchObject({
       ok: false,
       reason: "invalid-answer",
     })
-    expect(broker.resolve(id, { kind: "decision", decision: "deny", updatedInput: {} }, "desktop")).toMatchObject({
+    expect(
+      broker.resolve(id, { kind: "decision", decision: "deny", updatedInput: {} }, "desktop"),
+    ).toMatchObject({
       ok: false,
       reason: "invalid-answer",
     })
-    expect(broker.resolve(id, { kind: "decision", decision: "deny", remember: true }, "desktop")).toMatchObject({
+    expect(
+      broker.resolve(id, { kind: "decision", decision: "deny", remember: true }, "desktop"),
+    ).toMatchObject({
       ok: false,
       reason: "invalid-answer",
     })
-    expect(broker.resolve(id, { kind: "decision", decision: "maybe" as never }, "desktop")).toMatchObject({ ok: false, reason: "invalid-answer" })
-    expect(broker.resolve(id, { kind: "decision", decision: "allow", updatedInput: "x" as never }, "desktop")).toMatchObject({
+    expect(
+      broker.resolve(id, { kind: "decision", decision: "maybe" as never }, "desktop"),
+    ).toMatchObject({ ok: false, reason: "invalid-answer" })
+    expect(
+      broker.resolve(
+        id,
+        { kind: "decision", decision: "allow", updatedInput: "x" as never },
+        "desktop",
+      ),
+    ).toMatchObject({
       ok: false,
       reason: "invalid-answer",
     })
-    expect(broker.resolve(id, { kind: "decision", decision: "deny", message: "x".repeat(500) }, "desktop").ok).toBe(true)
+    expect(
+      broker.resolve(
+        id,
+        { kind: "decision", decision: "deny", message: "x".repeat(500) },
+        "desktop",
+      ).ok,
+    ).toBe(true)
   })
 
   const questionInput = {
@@ -205,25 +262,61 @@ describe("answer validation (invariant 11: the phone cannot edit or create rules
 
   it("takes answers keyed by the question text, all of them, from either channel", async () => {
     const { broker } = make()
-    const p = broker.request(spec({ kind: "question", toolName: "AskUserQuestion", input: questionInput }))
+    const p = broker.request(
+      spec({ kind: "question", toolName: "AskUserQuestion", input: questionInput }),
+    )
     const id = firstId(broker)
-    expect(broker.resolve(id, { kind: "answers", answers: { "Which library?": "a" } }, "phone")).toMatchObject({ ok: false, detail: "Every question needs an answer" })
-    expect(broker.resolve(id, { kind: "answers", answers: { "Which library?": "a", "Which mode?": "x", "Extra?": "y" } }, "phone")).toMatchObject({ ok: false })
-    expect(broker.resolve(id, { kind: "answers", answers: { "Which library?": "a", "Which mode?": "" } }, "phone")).toMatchObject({ ok: false })
-    expect(broker.resolve(id, { kind: "answers", answers: {} }, "phone")).toMatchObject({ ok: false })
-    expect(broker.resolve(id, { kind: "decision", decision: "allow" }, "desktop")).toMatchObject({ ok: false })
-    const ok = broker.resolve(id, { kind: "answers", answers: { "Which library?": "a", "Which mode?": "x, y" } }, "phone")
+    expect(
+      broker.resolve(id, { kind: "answers", answers: { "Which library?": "a" } }, "phone"),
+    ).toMatchObject({ ok: false, detail: "Every question needs an answer" })
+    expect(
+      broker.resolve(
+        id,
+        { kind: "answers", answers: { "Which library?": "a", "Which mode?": "x", "Extra?": "y" } },
+        "phone",
+      ),
+    ).toMatchObject({ ok: false })
+    expect(
+      broker.resolve(
+        id,
+        { kind: "answers", answers: { "Which library?": "a", "Which mode?": "" } },
+        "phone",
+      ),
+    ).toMatchObject({ ok: false })
+    expect(broker.resolve(id, { kind: "answers", answers: {} }, "phone")).toMatchObject({
+      ok: false,
+    })
+    expect(broker.resolve(id, { kind: "decision", decision: "allow" }, "desktop")).toMatchObject({
+      ok: false,
+    })
+    const ok = broker.resolve(
+      id,
+      { kind: "answers", answers: { "Which library?": "a", "Which mode?": "x, y" } },
+      "phone",
+    )
     expect(ok.ok).toBe(true)
-    await expect(p).resolves.toMatchObject({ outcome: "allow", channel: "phone", answers: { "Which library?": "a", "Which mode?": "x, y" } })
+    await expect(p).resolves.toMatchObject({
+      outcome: "allow",
+      channel: "phone",
+      answers: { "Which library?": "a", "Which mode?": "x, y" },
+    })
   })
 
   it("lets a question be declined, and refuses answers for a permission request", async () => {
     const { broker } = make()
-    const q = broker.request(spec({ kind: "question", toolName: "AskUserQuestion", input: questionInput }))
-    broker.resolve(firstId(broker), { kind: "decision", decision: "deny", message: "skip" }, "desktop")
+    const q = broker.request(
+      spec({ kind: "question", toolName: "AskUserQuestion", input: questionInput }),
+    )
+    broker.resolve(
+      firstId(broker),
+      { kind: "decision", decision: "deny", message: "skip" },
+      "desktop",
+    )
     expect((await q).outcome).toBe("deny")
     void broker.request(spec())
-    expect(broker.resolve(firstId(broker), { kind: "answers", answers: { x: "y" } }, "desktop")).toMatchObject({
+    expect(
+      broker.resolve(firstId(broker), { kind: "answers", answers: { x: "y" } }, "desktop"),
+    ).toMatchObject({
       ok: false,
       detail: "This request is not a question",
     })
@@ -231,8 +324,14 @@ describe("answer validation (invariant 11: the phone cannot edit or create rules
 
   it("treats a plan like a permission request", async () => {
     const { broker } = make()
-    const p = broker.request(spec({ kind: "plan", toolName: "ExitPlanMode", input: { plan: "do things" } }))
-    broker.resolve(firstId(broker), { kind: "decision", decision: "deny", message: "add tests first" }, "desktop")
+    const p = broker.request(
+      spec({ kind: "plan", toolName: "ExitPlanMode", input: { plan: "do things" } }),
+    )
+    broker.resolve(
+      firstId(broker),
+      { kind: "decision", decision: "deny", message: "add tests first" },
+      "desktop",
+    )
     await expect(p).resolves.toMatchObject({ outcome: "deny", message: "add tests first" })
   })
 })
@@ -250,7 +349,9 @@ describe("timeouts", () => {
     expect(broker.list()[0]?.phone).toBe("expired")
     expect(phone.cancelled.at(-1)?.summary).toContain("Expired on the phone")
     expect(broker.list()).toHaveLength(1)
-    expect(broker.resolve(firstId(broker), { kind: "decision", decision: "allow" }, "desktop").ok).toBe(true)
+    expect(
+      broker.resolve(firstId(broker), { kind: "decision", decision: "allow" }, "desktop").ok,
+    ).toBe(true)
     expect((await p).outcome).toBe("allow")
     expect(phoneStates).toEqual(["delivered", "expired"])
   })
@@ -259,7 +360,11 @@ describe("timeouts", () => {
     const { broker } = make()
     const p = broker.request(spec())
     vi.advanceTimersByTime(30 * 60_000 + 1)
-    await expect(p).resolves.toMatchObject({ outcome: "timeout", channel: "timeout", message: "Timed out waiting for approval" })
+    await expect(p).resolves.toMatchObject({
+      outcome: "timeout",
+      channel: "timeout",
+      message: "Timed out waiting for approval",
+    })
     expect(broker.list()).toEqual([])
   })
 
@@ -276,7 +381,10 @@ describe("timeouts", () => {
     const id = firstId(broker)
     vi.advanceTimersByTime(30 * 60_000 + 1)
     await p
-    expect(broker.resolve(id, { kind: "decision", decision: "allow" }, "desktop")).toEqual({ ok: false, reason: "not-pending" })
+    expect(broker.resolve(id, { kind: "decision", decision: "allow" }, "desktop")).toEqual({
+      ok: false,
+      reason: "not-pending",
+    })
   })
 })
 
@@ -294,7 +402,9 @@ describe("cancellation", () => {
     const { broker } = make()
     const ac = new AbortController()
     ac.abort()
-    await expect(broker.request(spec({ signal: ac.signal }))).resolves.toMatchObject({ outcome: "cancelled" })
+    await expect(broker.request(spec({ signal: ac.signal }))).resolves.toMatchObject({
+      outcome: "cancelled",
+    })
     expect(broker.list()).toEqual([])
   })
 
@@ -311,10 +421,18 @@ describe("cancellation", () => {
 
   it("cancels everything for the kill switch", async () => {
     const { broker } = make()
-    const all = [broker.request(spec({ sessionId: "a" })), broker.request(spec({ sessionId: "b" })), broker.request(spec({ sessionId: "c" }))]
+    const all = [
+      broker.request(spec({ sessionId: "a" })),
+      broker.request(spec({ sessionId: "b" })),
+      broker.request(spec({ sessionId: "c" })),
+    ]
     expect(broker.cancelAll()).toBe(3)
     const results = await Promise.all(all)
-    expect(results.every((r) => r.outcome === "cancelled" && r.message === "The kill switch was engaged")).toBe(true)
+    expect(
+      results.every(
+        (r) => r.outcome === "cancelled" && r.message === "The kill switch was engaged",
+      ),
+    ).toBe(true)
     expect(broker.cancelAll()).toBe(0)
   })
 
@@ -334,11 +452,17 @@ describe("quiet hours and the phone", () => {
 
   it("holds phone delivery in quiet hours, still shows the request, and delivers when they end", async () => {
     vi.setSystemTime(new Date("2026-01-15T23:00:00Z"))
-    const { broker, phone } = make({ quietHours: () => quiet, phoneExpiryMs: 12 * 3600_000, hardTimeoutMs: 24 * 3600_000 })
+    const { broker, phone } = make({
+      quietHours: () => quiet,
+      phoneExpiryMs: 12 * 3600_000,
+      hardTimeoutMs: 24 * 3600_000,
+    })
     const p = broker.request(spec())
     expect(broker.list()[0]?.phone).toBe("held")
     expect(phone.delivered).toHaveLength(0)
-    expect(broker.resolve(firstId(broker), { kind: "decision", decision: "allow" }, "desktop").ok).toBe(true) // the desktop still works
+    expect(
+      broker.resolve(firstId(broker), { kind: "decision", decision: "allow" }, "desktop").ok,
+    ).toBe(true) // the desktop still works
     await p
 
     const again = broker.request(spec())
@@ -351,7 +475,11 @@ describe("quiet hours and the phone", () => {
 
   it("never delivers a held request whose phone expiry has passed", async () => {
     vi.setSystemTime(new Date("2026-01-15T23:00:00Z"))
-    const { broker, phone } = make({ quietHours: () => quiet, phoneExpiryMs: 60_000, hardTimeoutMs: 24 * 3600_000 })
+    const { broker, phone } = make({
+      quietHours: () => quiet,
+      phoneExpiryMs: 60_000,
+      hardTimeoutMs: 24 * 3600_000,
+    })
     const p = broker.request(spec())
     vi.advanceTimersByTime(9 * 3600_000)
     expect(phone.delivered).toHaveLength(0)

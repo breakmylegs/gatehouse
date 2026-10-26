@@ -133,10 +133,13 @@ export async function createCheckpoint(opts: CheckpointOptions): Promise<Checkpo
   const top = await repoTop(opts.cwd)
   const base = await headOf(top)
   const tree = await snapshotTree(top, base, opts.excludeGlobs)
-  const commit = await git(
-    top,
-    ["commit-tree", tree, ...(base ? ["-p", base] : []), "-m", `gatehouse checkpoint: ${label}`],
-  )
+  const commit = await git(top, [
+    "commit-tree",
+    tree,
+    ...(base ? ["-p", base] : []),
+    "-m",
+    `gatehouse checkpoint: ${label}`,
+  ])
   const prefix = `${REF_PREFIX}${safeSegment(opts.sessionId)}/${stamp(now)}`
   let ref = prefix
   for (let n = 2; n < 100; n++) {
@@ -202,14 +205,28 @@ async function changesToCheckpoint(
   const base = await headOf(top)
   const currentTree = await snapshotTree(top, base, excludeGlobs)
   // Direction: current -> checkpoint. "A" exists only in the checkpoint, "D" only in the working tree.
-  const out = await gitRaw(top, ["diff-tree", "-r", "--name-status", "-z", "--no-renames", currentTree, commit])
+  const out = await gitRaw(top, [
+    "diff-tree",
+    "-r",
+    "--name-status",
+    "-z",
+    "--no-renames",
+    currentTree,
+    commit,
+  ])
   const parts = out.split("\0").filter((p) => p !== "")
   const changes: RawChange[] = []
   for (let i = 0; i + 1 < parts.length; i += 2) {
     const status = parts[i]
     const file = parts[i + 1] as string
     const change: FileChange | undefined =
-      status === "A" ? "added" : status === "D" ? "deleted" : status === "M" || status === "T" ? "modified" : undefined
+      status === "A"
+        ? "added"
+        : status === "D"
+          ? "deleted"
+          : status === "M" || status === "T"
+            ? "modified"
+            : undefined
     if (change) changes.push({ path: file, change })
   }
   return { currentTree, changes }

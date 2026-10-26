@@ -24,7 +24,11 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
   z.object({ type: z.literal("interrupt"), sessionId: Id }),
   z.object({ type: z.literal("set_mode"), sessionId: Id, mode: Mode }),
-  z.object({ type: z.literal("set_model"), sessionId: Id, model: z.string().min(1).max(200).optional() }),
+  z.object({
+    type: z.literal("set_model"),
+    sessionId: Id,
+    model: z.string().min(1).max(200).optional(),
+  }),
   z.object({
     type: z.literal("approve"),
     requestId: Id,
@@ -33,12 +37,24 @@ export const ClientCommand = z.discriminatedUnion("type", [
     remember: z.boolean().optional(),
   }),
   z.object({ type: z.literal("deny"), requestId: Id, message: Message.optional() }),
-  z.object({ type: z.literal("answer"), requestId: Id, answers: z.record(z.string(), z.string().min(1).max(4000)) }),
+  z.object({
+    type: z.literal("answer"),
+    requestId: Id,
+    answers: z.record(z.string(), z.string().min(1).max(4000)),
+  }),
   z.object({ type: z.literal("remember_preview"), requestId: Id }),
   z.object({ type: z.literal("kill") }),
   z.object({ type: z.literal("rearm") }),
-  z.object({ type: z.literal("checkpoint_list"), cwd: z.string().min(1).max(4096), sessionId: Id.optional() }),
-  z.object({ type: z.literal("checkpoint_preview"), cwd: z.string().min(1).max(4096), ref: z.string().min(1).max(500) }),
+  z.object({
+    type: z.literal("checkpoint_list"),
+    cwd: z.string().min(1).max(4096),
+    sessionId: Id.optional(),
+  }),
+  z.object({
+    type: z.literal("checkpoint_preview"),
+    cwd: z.string().min(1).max(4096),
+    ref: z.string().min(1).max(500),
+  }),
   z.object({
     type: z.literal("checkpoint_restore"),
     cwd: z.string().min(1).max(4096),
@@ -91,8 +107,15 @@ export const Resolution = z.object({
 export type Resolution = z.infer<typeof Resolution>
 
 export const Health = z.object({
-  approver: z.object({ state: z.enum(["stopped", "starting", "up", "down"]), policyHash: z.string().optional(), errors: z.array(z.string()).default([]) }),
-  relay: z.object({ state: z.enum(["not-configured", "connected", "unreachable"]), devices: z.number().int().default(0) }),
+  approver: z.object({
+    state: z.enum(["stopped", "starting", "up", "down"]),
+    policyHash: z.string().optional(),
+    errors: z.array(z.string()).default([]),
+  }),
+  relay: z.object({
+    state: z.enum(["not-configured", "connected", "unreachable"]),
+    devices: z.number().int().default(0),
+  }),
   signin: z.object({
     signedIn: z.boolean(),
     email: z.string().optional(),
@@ -101,7 +124,12 @@ export const Health = z.object({
     orgOk: z.boolean(),
     orgMessage: z.string().optional(),
   }),
-  killSwitch: z.object({ engaged: z.boolean(), since: z.string().optional(), by: z.string().optional(), approverConfirmed: z.boolean() }),
+  killSwitch: z.object({
+    engaged: z.boolean(),
+    since: z.string().optional(),
+    by: z.string().optional(),
+    approverConfirmed: z.boolean(),
+  }),
   pwsh: z.object({ running: z.boolean(), languageMode: z.string().optional() }),
 })
 export type Health = z.infer<typeof Health>
@@ -117,10 +145,24 @@ export const ServerEvent = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("session"), info: SessionInfo }),
   z.object({ type: z.literal("sdk_message"), sessionId: z.string(), message: z.unknown() }),
-  z.object({ type: z.literal("session_event"), sessionId: z.string(), event: z.string(), data: z.record(z.string(), z.unknown()) }),
+  z.object({
+    type: z.literal("session_event"),
+    sessionId: z.string(),
+    event: z.string(),
+    data: z.record(z.string(), z.unknown()),
+  }),
   z.object({ type: z.literal("approval_request"), view: PendingView }),
-  z.object({ type: z.literal("approval_resolved"), id: z.string(), sessionId: z.string(), resolution: Resolution }),
-  z.object({ type: z.literal("phone_status"), id: z.string(), status: z.enum(["none", "held", "delivered", "expired"]) }),
+  z.object({
+    type: z.literal("approval_resolved"),
+    id: z.string(),
+    sessionId: z.string(),
+    resolution: Resolution,
+  }),
+  z.object({
+    type: z.literal("phone_status"),
+    id: z.string(),
+    status: z.enum(["none", "held", "delivered", "expired"]),
+  }),
   z.object({ type: z.literal("audit"), record: z.unknown() }),
   z.object({ type: z.literal("usage"), usage: z.unknown() }),
   z.object({ type: z.literal("health"), health: Health }),

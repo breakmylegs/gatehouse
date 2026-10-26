@@ -44,8 +44,18 @@ try {
   await host.start()
   const port = await server.start()
   // Refresh the sign-in state for the header in the background. A failure only leaves it unknown.
-  void host.app.account.refresh().then(() => server.announceHealth()).catch(() => undefined)
-  process.stdout.write(JSON.stringify({ event: "ready", port, url: `http://127.0.0.1:${port}/#token=${token}`, pid: process.pid }) + "\n")
+  void host.app.account
+    .refresh()
+    .then(() => server.announceHealth())
+    .catch(() => undefined)
+  process.stdout.write(
+    JSON.stringify({
+      event: "ready",
+      port,
+      url: `http://127.0.0.1:${port}/#token=${token}`,
+      pid: process.pid,
+    }) + "\n",
+  )
 } catch (e) {
   log(`failed to start: ${(e as Error).message}`)
   await stop(1)

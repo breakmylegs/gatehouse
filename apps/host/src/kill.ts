@@ -63,7 +63,11 @@ export class HostKillSwitch extends EventEmitter<{ changed: [KillStatus] }> {
   /** At start-up: if the switch was left engaged, make sure the Approver is denying too. */
   async syncApprover(): Promise<void> {
     if (!this.#status.engaged) return
-    this.#status.approverConfirmed = await this.#deps.approver.setKillSwitch(true, this.#status.by, this.#status.reason)
+    this.#status.approverConfirmed = await this.#deps.approver.setKillSwitch(
+      true,
+      this.#status.by,
+      this.#status.reason,
+    )
     this.emit("changed", this.status())
   }
 
@@ -73,10 +77,13 @@ export class HostKillSwitch extends EventEmitter<{ changed: [KillStatus] }> {
     this.emit("changed", this.status())
     // Everything below happens even if one step fails.
     const steps: Promise<unknown>[] = [
-      writeState({ killSwitch: { engaged: true, since, by, reason } }, this.#deps.env ?? process.env).catch((e) =>
-        this.#deps.log(`kill switch state not saved (${(e as Error).message})`),
-      ),
-      this.#deps.interruptAll().catch((e) => this.#deps.log(`interrupt failed (${(e as Error).message})`)),
+      writeState(
+        { killSwitch: { engaged: true, since, by, reason } },
+        this.#deps.env ?? process.env,
+      ).catch((e) => this.#deps.log(`kill switch state not saved (${(e as Error).message})`)),
+      this.#deps
+        .interruptAll()
+        .catch((e) => this.#deps.log(`interrupt failed (${(e as Error).message})`)),
       this.#deps.approver.setKillSwitch(true, by, reason).then((ok) => {
         this.#status.approverConfirmed = ok
       }),
@@ -108,7 +115,13 @@ export class HostKillSwitch extends EventEmitter<{ changed: [KillStatus] }> {
       channel: "desktop",
       tool: "kill_switch",
       input: { by },
-      verdict: { ...KILL_VERDICT, outcome: "allow", ruleId: "kill-switch-rearm", reason: "Kill switch re-armed on the desktop.", risk: 0 },
+      verdict: {
+        ...KILL_VERDICT,
+        outcome: "allow",
+        ruleId: "kill-switch-rearm",
+        reason: "Kill switch re-armed on the desktop.",
+        risk: 0,
+      },
       latencyMs: 0,
     })
     this.emit("changed", this.status())
