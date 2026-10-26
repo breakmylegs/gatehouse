@@ -22,7 +22,8 @@ let hostPort: number
 const posts: { auth: string | undefined; body: { sessionId: string; text: string } }[] = []
 let client: Client
 
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
 const callText = async (name: string, args: Record<string, unknown> = {}) => {
   const r = await client.callTool({ name, arguments: args })
   return { text: (r.content as { text: string }[])[0]?.text ?? "", isError: r.isError === true }
@@ -82,7 +83,11 @@ afterAll(async () => {
 describe("the Companion over stdio", () => {
   it("offers exactly the three agent-facing tools", async () => {
     const tools = await client.listTools()
-    expect(tools.tools.map((t) => t.name).sort()).toEqual(["create_checkpoint", "get_policy_summary", "notify_user"])
+    expect(tools.tools.map((t) => t.name).sort()).toEqual([
+      "create_checkpoint",
+      "get_policy_summary",
+      "notify_user",
+    ])
   })
 
   it("notify_user posts a redacted message to the Host with the bearer token", async () => {
@@ -94,9 +99,14 @@ describe("the Companion over stdio", () => {
   })
 
   it("notify_user refuses a second message inside a minute and an oversized one", async () => {
-    expect((await callText("notify_user", { text: "again" })).text).toContain("only one notification a minute")
+    expect((await callText("notify_user", { text: "again" })).text).toContain(
+      "only one notification a minute",
+    )
     expect(posts).toHaveLength(1)
-    const tooLong = await client.callTool({ name: "notify_user", arguments: { text: "y".repeat(600) } })
+    const tooLong = await client.callTool({
+      name: "notify_user",
+      arguments: { text: "y".repeat(600) },
+    })
     expect(tooLong.isError).toBe(true)
   })
 
@@ -124,7 +134,13 @@ describe("the Companion over stdio", () => {
         command: process.execPath,
         args: ["--import", TSX, MAIN],
         cwd: repo,
-        env: { ...(process.env as Record<string, string>), GATEHOUSE_SESSION_ID: "s2", GATEHOUSE_HOST_URL: "http://127.0.0.1:9", GATEHOUSE_DATA_DIR: path.join(root, "data"), GATEHOUSE_RULES_PATH: path.join(root, "rules.yaml") },
+        env: {
+          ...(process.env as Record<string, string>),
+          GATEHOUSE_SESSION_ID: "s2",
+          GATEHOUSE_HOST_URL: "http://127.0.0.1:9",
+          GATEHOUSE_DATA_DIR: path.join(root, "data"),
+          GATEHOUSE_RULES_PATH: path.join(root, "rules.yaml"),
+        },
       }),
     )
     const r = await lonely.callTool({ name: "notify_user", arguments: { text: "hello" } })

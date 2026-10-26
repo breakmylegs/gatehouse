@@ -39,7 +39,9 @@ export function safeSegment(text: string): string {
 }
 
 function cleanLabel(label: string): string {
-  const printable = [...label].map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c)).join("")
+  const printable = [...label]
+    .map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c))
+    .join("")
   return printable.replace(/\s+/g, " ").trim().slice(0, 200) || "checkpoint"
 }
 
@@ -54,7 +56,9 @@ async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): Pr
     return stdout.trim()
   } catch (e) {
     const err = e as { stderr?: string; message: string }
-    throw new CheckpointError(`git ${args[0]} failed: ${(err.stderr ?? err.message).trim().split("\n")[0]}`)
+    throw new CheckpointError(
+      `git ${args[0]} failed: ${(err.stderr ?? err.message).trim().split("\n")[0]}`,
+    )
   }
 }
 
@@ -78,7 +82,10 @@ export async function createCheckpoint(opts: CheckpointOptions): Promise<Checkpo
     base = undefined
   }
 
-  const indexFile = path.join(os.tmpdir(), `gh-index-${process.pid}-${Math.random().toString(36).slice(2)}`)
+  const indexFile = path.join(
+    os.tmpdir(),
+    `gh-index-${process.pid}-${Math.random().toString(36).slice(2)}`,
+  )
   const env = { GIT_INDEX_FILE: indexFile }
   try {
     if (base) await git(top, ["read-tree", base], env)
@@ -110,7 +117,9 @@ export async function createCheckpoint(opts: CheckpointOptions): Promise<Checkpo
 /** Checkpoints for a session, newest first. */
 export async function listCheckpoints(cwd: string, sessionId?: string): Promise<Checkpoint[]> {
   const top = await git(cwd, ["rev-parse", "--show-toplevel"])
-  const scope = sessionId ? `refs/gatehouse/checkpoints/${safeSegment(sessionId)}/` : "refs/gatehouse/checkpoints/"
+  const scope = sessionId
+    ? `refs/gatehouse/checkpoints/${safeSegment(sessionId)}/`
+    : "refs/gatehouse/checkpoints/"
   const out = await git(top, [
     "for-each-ref",
     "--sort=-creatordate",

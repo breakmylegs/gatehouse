@@ -3,8 +3,11 @@ import { defineConfig } from "vitest/config"
 export default defineConfig({
   test: {
     include: ["apps/*/test/**/*.test.ts", "packages/*/test/**/*.test.ts"],
-    testTimeout: 30000,
-    hookTimeout: 60000,
+    // Many tests spawn git, pwsh or node. On a machine with real-time scanning they are slow, and
+    // running every file at once makes them slower still, so cap the workers and allow generous time.
+    testTimeout: 60000,
+    hookTimeout: 120000,
+    maxWorkers: 4,
     coverage: {
       provider: "v8",
       include: ["packages/policy/src/**/*.ts"],

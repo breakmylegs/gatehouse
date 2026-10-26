@@ -26,11 +26,22 @@ afterAll(() => {
   return new Promise<void>((r) => server.close(() => r()))
 })
 
-const client = (timeoutMs = 500, token = "tok") => new ApproverClient({ url: `http://127.0.0.1:${port}/mcp`, token, timeoutMs })
+const client = (timeoutMs = 500, token = "tok") =>
+  new ApproverClient({ url: `http://127.0.0.1:${port}/mcp`, token, timeoutMs })
 const call = { toolName: "Bash", input: { command: "git status" } }
 const ctx = { cwd: "C:/dev", sessionId: "s1" }
-const reply = (res: http.ServerResponse, result: unknown) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ jsonrpc: "2.0", id: 1, result }))
-const good: Verdict = { outcome: "allow", ruleId: "safe-shell", reason: "ok", risk: 0, decidedBy: "rules", policyHash: "a".repeat(64) }
+const reply = (res: http.ServerResponse, result: unknown) =>
+  res
+    .writeHead(200, { "content-type": "application/json" })
+    .end(JSON.stringify({ jsonrpc: "2.0", id: 1, result }))
+const good: Verdict = {
+  outcome: "allow",
+  ruleId: "safe-shell",
+  reason: "ok",
+  risk: 0,
+  decidedBy: "rules",
+  policyHash: "a".repeat(64),
+}
 
 describe("ApproverClient fails closed (invariant 1)", () => {
   it("returns the Approver's verdict and sends the token and the request shape", async () => {
@@ -42,7 +53,14 @@ describe("ApproverClient fails closed (invariant 1)", () => {
     expect(last?.body).toMatchObject({
       jsonrpc: "2.0",
       method: "tools/call",
-      params: { name: "evaluate_permission", arguments: { toolName: "Bash", input: { command: "git status" }, ctx: { cwd: "C:/dev", sessionId: "s1", mcpSource: "sdk", toolUseId: "t1" } } },
+      params: {
+        name: "evaluate_permission",
+        arguments: {
+          toolName: "Bash",
+          input: { command: "git status" },
+          ctx: { cwd: "C:/dev", sessionId: "s1", mcpSource: "sdk", toolUseId: "t1" },
+        },
+      },
     })
   })
 
@@ -51,7 +69,11 @@ describe("ApproverClient fails closed (invariant 1)", () => {
     const t0 = Date.now()
     const v = await client(300).evaluate(call, ctx)
     expect(Date.now() - t0).toBeLessThan(2000)
-    expect(v).toMatchObject({ outcome: "escalate", ruleId: "evaluator-unavailable", decidedBy: "evaluator-unavailable" })
+    expect(v).toMatchObject({
+      outcome: "escalate",
+      ruleId: "evaluator-unavailable",
+      decidedBy: "evaluator-unavailable",
+    })
     expect(v.reason).toContain("timed out")
   })
 
@@ -59,12 +81,33 @@ describe("ApproverClient fails closed (invariant 1)", () => {
     ["an HTTP error", (_q, res) => res.writeHead(500).end("boom")],
     ["a refusal (wrong token)", (_q, res) => res.writeHead(401).end("{}")],
     ["garbage instead of JSON", (_q, res) => res.writeHead(200).end("<html>not json</html>")],
-    ["a JSON-RPC error", (_q, res) => res.writeHead(200).end(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32603, message: "x" } }))],
-    ["an empty result", (_q, res) => res.writeHead(200).end(JSON.stringify({ jsonrpc: "2.0", id: 1 }))],
-    ["a tool error", (_q, res) => reply(res, { isError: true, content: [{ type: "text", text: "bad" }] })],
-    ["a result with no structured content", (_q, res) => reply(res, { content: [{ type: "text", text: "{}" }] })],
-    ["an unknown outcome", (_q, res) => reply(res, { structuredContent: { ...good, outcome: "maybe" } })],
-    ["an allow with no policy hash", (_q, res) => reply(res, { structuredContent: { ...good, policyHash: undefined } })],
+    [
+      "a JSON-RPC error",
+      (_q, res) =>
+        res
+          .writeHead(200)
+          .end(JSON.stringify({ jsonrpc: "2.0", id: 1, error: { code: -32603, message: "x" } })),
+    ],
+    [
+      "an empty result",
+      (_q, res) => res.writeHead(200).end(JSON.stringify({ jsonrpc: "2.0", id: 1 })),
+    ],
+    [
+      "a tool error",
+      (_q, res) => reply(res, { isError: true, content: [{ type: "text", text: "bad" }] }),
+    ],
+    [
+      "a result with no structured content",
+      (_q, res) => reply(res, { content: [{ type: "text", text: "{}" }] }),
+    ],
+    [
+      "an unknown outcome",
+      (_q, res) => reply(res, { structuredContent: { ...good, outcome: "maybe" } }),
+    ],
+    [
+      "an allow with no policy hash",
+      (_q, res) => reply(res, { structuredContent: { ...good, policyHash: undefined } }),
+    ],
     ["a risk out of range", (_q, res) => reply(res, { structuredContent: { ...good, risk: 500 } })],
     ["a dropped connection", (q) => q.socket.destroy()],
   ]

@@ -24,11 +24,16 @@ interface PsResult {
 }
 
 function runPs(dir: string): { code: number; result: PsResult } {
-  const r = spawnSync("pwsh", ["-NoProfile", "-NonInteractive", "-File", SCRIPT, "-Dir", dir, "-Json"], { encoding: "utf8" })
+  const r = spawnSync(
+    "pwsh",
+    ["-NoProfile", "-NonInteractive", "-File", SCRIPT, "-Dir", dir, "-Json"],
+    { encoding: "utf8" },
+  )
   return { code: r.status ?? -1, result: JSON.parse(r.stdout) as PsResult }
 }
 
-const where = (problems: { file: string; line: number }[]) => problems.map((p) => `${p.file}:${p.line}`).sort()
+const where = (problems: { file: string; line: number }[]) =>
+  problems.map((p) => `${p.file}:${p.line}`).sort()
 
 function agree(dir: string): { ok: boolean; problems: string[] } {
   const node = verifyAudit(dir)
@@ -47,7 +52,7 @@ async function build(): Promise<{ dir: string; file: string }> {
   const w = new AuditWriter({ dir, redact: (v) => v, now: () => clock })
   const strings = [
     "git status",
-    'quote " backslash \\ slash / <tag> & \'single\'',
+    "quote \" backslash \\ slash / <tag> & 'single'",
     "caf\u00e9 \u65e5\u672c\u8a9e \ud83d\ude00 emoji",
     "control \u0001 \u001f tab\t newline\n return\r",
     "x".repeat(5000),
@@ -94,20 +99,45 @@ describe("scripts/verify-audit.ps1 agrees with the Node verifier", () => {
   })
 
   const tamper: [string, (dir: string, file: string) => void][] = [
-    ["an edited field", (_d, f) => fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace('"risk":50', '"risk":10'))],
-    ["a deleted record", (_d, f) => fs.writeFileSync(f, fs.readFileSync(f, "utf8").split("\n").filter((_l, i) => i !== 1).join("\n"))],
-    ["removal from the end", (d, f) => fs.writeFileSync(f, fs.readFileSync(f, "utf8").split("\n").slice(0, 2).join("\n") + "\n")],
+    [
+      "an edited field",
+      (_d, f) => fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace('"risk":50', '"risk":10')),
+    ],
+    [
+      "a deleted record",
+      (_d, f) =>
+        fs.writeFileSync(
+          f,
+          fs
+            .readFileSync(f, "utf8")
+            .split("\n")
+            .filter((_l, i) => i !== 1)
+            .join("\n"),
+        ),
+    ],
+    [
+      "removal from the end",
+      (d, f) =>
+        fs.writeFileSync(f, fs.readFileSync(f, "utf8").split("\n").slice(0, 2).join("\n") + "\n"),
+    ],
     ["a missing head.json", (d) => fs.rmSync(headPath(d))],
     ["bad json", (_d, f) => fs.appendFileSync(f, "{oops\n")],
     ["a blank line", (_d, f) => fs.appendFileSync(f, "\n\n")],
     ["a torn final line", (_d, f) => fs.appendFileSync(f, '{"v":1,"seq"')],
     ["an invalid record", (_d, f) => fs.appendFileSync(f, '{"v":1}\n')],
-    ["a swapped pair", (_d, f) => {
-      const l = fs.readFileSync(f, "utf8").split("\n")
-      ;[l[0], l[1]] = [l[1] as string, l[0] as string]
-      fs.writeFileSync(f, l.join("\n"))
-    }],
-    ["a record in the wrong month file", (d, _f) => fs.renameSync(path.join(d, "audit-2026-06.jsonl"), path.join(d, "audit-2026-07.jsonl"))],
+    [
+      "a swapped pair",
+      (_d, f) => {
+        const l = fs.readFileSync(f, "utf8").split("\n")
+        ;[l[0], l[1]] = [l[1] as string, l[0] as string]
+        fs.writeFileSync(f, l.join("\n"))
+      },
+    ],
+    [
+      "a record in the wrong month file",
+      (d, _f) =>
+        fs.renameSync(path.join(d, "audit-2026-06.jsonl"), path.join(d, "audit-2026-07.jsonl")),
+    ],
   ]
   for (const [name, mutate] of tamper) {
     it(`flags ${name} exactly where the Node verifier does`, async () => {

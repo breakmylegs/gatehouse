@@ -25,7 +25,8 @@ beforeAll(() => {
 })
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 
-const redactHunter = <T,>(value: T): T => JSON.parse(JSON.stringify(value).replaceAll("hunter2", "[REDACTED]")) as T
+const redactHunter = <T>(value: T): T =>
+  JSON.parse(JSON.stringify(value).replaceAll("hunter2", "[REDACTED]")) as T
 
 function newDir(): string {
   const dir = path.join(root, `d${n++}`)
@@ -40,25 +41,40 @@ function entry(over: Partial<AuditEntry> = {}): AuditEntry {
     channel: "approver",
     tool: "Bash",
     input: { command: "git status" },
-    verdict: { outcome: "allow", ruleId: "safe-shell", reason: "ok", risk: 0, decidedBy: "rules", policyHash: "a".repeat(64) },
+    verdict: {
+      outcome: "allow",
+      ruleId: "safe-shell",
+      reason: "ok",
+      risk: 0,
+      decidedBy: "rules",
+      policyHash: "a".repeat(64),
+    },
     latencyMs: 3,
     ...over,
   }
 }
 
-function writerFor(dir: string, now?: () => Date, extra: Partial<ConstructorParameters<typeof AuditWriter>[0]> = {}) {
+function writerFor(
+  dir: string,
+  now?: () => Date,
+  extra: Partial<ConstructorParameters<typeof AuditWriter>[0]> = {},
+) {
   return new AuditWriter({ dir, redact: redactHunter, now, ...extra })
 }
 
 async function fill(dir: string, count: number, now?: () => Date): Promise<AuditRecord[]> {
   const w = writerFor(dir, now)
   const out: AuditRecord[] = []
-  for (let i = 0; i < count; i++) out.push(await w.append(entry({ input: { command: `echo ${i}` } })))
+  for (let i = 0; i < count; i++)
+    out.push(await w.append(entry({ input: { command: `echo ${i}` } })))
   return out
 }
 
 function readLines(file: string): string[] {
-  return fs.readFileSync(file, "utf8").split("\n").filter((l) => l !== "")
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter((l) => l !== "")
 }
 
 describe("AuditWriter (invariant 13: audit everything, hash-chained)", () => {
@@ -71,7 +87,10 @@ describe("AuditWriter (invariant 13: audit everything, hash-chained)", () => {
     expect(recs[2]?.prevHash).toBe(recs[1]?.hash)
     const head = JSON.parse(fs.readFileSync(headPath(dir), "utf8"))
     expect(head).toMatchObject({ seq: 3, hash: recs[2]?.hash })
-    expect(new AuditWriter({ dir, redact: (v) => v }).head()).toMatchObject({ seq: 3, hash: recs[2]?.hash })
+    expect(new AuditWriter({ dir, redact: (v) => v }).head()).toMatchObject({
+      seq: 3,
+      hash: recs[2]?.hash,
+    })
     const result = verifyAudit(dir)
     expect(result).toMatchObject({ ok: true, records: 3, files: 1, problems: [] })
   })
@@ -79,10 +98,25 @@ describe("AuditWriter (invariant 13: audit everything, hash-chained)", () => {
   it("stores the input as canonical JSON and keeps every field the spec lists", async () => {
     const dir = newDir()
     const rec = await writerFor(dir).append(
-      entry({ input: { b: 1, a: [2, { d: 1, c: 2 }] }, toolUseId: "t1", cwd: "C:/p", project: "p", judgeRationale: "why" }),
+      entry({
+        input: { b: 1, a: [2, { d: 1, c: 2 }] },
+        toolUseId: "t1",
+        cwd: "C:/p",
+        project: "p",
+        judgeRationale: "why",
+      }),
     )
     expect(rec.inputJson).toBe('{"a":[2,{"c":2,"d":1}],"b":1}')
-    expect(rec).toMatchObject({ session: "s1", tool: "Bash", toolUseId: "t1", cwd: "C:/p", project: "p", judgeRationale: "why", channel: "approver", latencyMs: 3 })
+    expect(rec).toMatchObject({
+      session: "s1",
+      tool: "Bash",
+      toolUseId: "t1",
+      cwd: "C:/p",
+      project: "p",
+      judgeRationale: "why",
+      channel: "approver",
+      latencyMs: 3,
+    })
     expect(rec.verdict.ruleId).toBe("safe-shell")
     expect(rec.verdict.policyHash).toBe("a".repeat(64))
     expect(rec.ts).toMatch(/^\d{4}-\d{2}-\d{2}T/)
@@ -151,7 +185,9 @@ describe("AuditWriter (invariant 13: audit everything, hash-chained)", () => {
   it("serialises appends made at the same time in one process", async () => {
     const dir = newDir()
     const w = writerFor(dir)
-    const recs = await Promise.all(Array.from({ length: 30 }, (_, i) => w.append(entry({ input: { i } }))))
+    const recs = await Promise.all(
+      Array.from({ length: 30 }, (_, i) => w.append(entry({ input: { i } }))),
+    )
     expect(new Set(recs.map((r) => r.seq)).size).toBe(30)
     expect(verifyAudit(dir)).toMatchObject({ ok: true, records: 30 })
   })
@@ -160,21 +196,29 @@ describe("AuditWriter (invariant 13: audit everything, hash-chained)", () => {
     const dir = newDir()
     const runWorker = (id: string) =>
       new Promise<{ code: number; stderr: string }>((resolve, reject) => {
-        const child = spawn(process.execPath, ["--import", "tsx", path.join(here, "fixtures", "append-worker.ts"), dir, "20", id], {
-          cwd: path.resolve(here, ".."),
-          stdio: ["ignore", "ignore", "pipe"],
-        })
+        const child = spawn(
+          process.execPath,
+          ["--import", "tsx", path.join(here, "fixtures", "append-worker.ts"), dir, "20", id],
+          {
+            cwd: path.resolve(here, ".."),
+            stdio: ["ignore", "ignore", "pipe"],
+          },
+        )
         let stderr = ""
         child.stderr.on("data", (d) => (stderr += String(d)))
         child.on("error", reject)
         child.on("exit", (code) => resolve({ code: code ?? 1, stderr }))
       })
     const results = await Promise.all(["a", "b", "c"].map(runWorker))
-    expect(results.map((r) => r.stderr.split("\n").find((l) => l.includes("Error")) ?? "")).toEqual(["", "", ""])
+    expect(results.map((r) => r.stderr.split("\n").find((l) => l.includes("Error")) ?? "")).toEqual(
+      ["", "", ""],
+    )
     expect(results.map((r) => r.code)).toEqual([0, 0, 0])
     const result = verifyAudit(dir)
     expect(result).toMatchObject({ ok: true, records: 60, problems: [] })
-    const sessions = readLines(path.join(dir, listAuditFiles(dir)[0] as string)).map((l) => JSON.parse(l).session)
+    const sessions = readLines(path.join(dir, listAuditFiles(dir)[0] as string)).map(
+      (l) => JSON.parse(l).session,
+    )
     expect(new Set(sessions)).toEqual(new Set(["worker-a", "worker-b", "worker-c"]))
   }, 120000)
 
@@ -259,7 +303,11 @@ describe("verifyAudit finds tampering", () => {
   const reasons = (dir: string) => verifyAudit(dir).problems.map((p) => p.reason)
 
   it("reports a missing folder as an empty, valid log", () => {
-    expect(verifyAudit(path.join(root, "never-created"))).toMatchObject({ ok: true, records: 0, files: 0 })
+    expect(verifyAudit(path.join(root, "never-created"))).toMatchObject({
+      ok: true,
+      records: 0,
+      files: 0,
+    })
   })
 
   it("catches an edited field", async () => {
@@ -269,7 +317,11 @@ describe("verifyAudit finds tampering", () => {
     fs.writeFileSync(file, lines.join("\n") + "\n")
     const r = verifyAudit(dir)
     expect(r.ok).toBe(false)
-    expect(r.problems[0]).toMatchObject({ line: 3, seq: 3, reason: "hash does not match the record content" })
+    expect(r.problems[0]).toMatchObject({
+      line: 3,
+      seq: 3,
+      reason: "hash does not match the record content",
+    })
   })
 
   it("catches an edited field even when the record's own hash is recomputed", async () => {
@@ -333,7 +385,10 @@ describe("verifyAudit finds tampering", () => {
   it("catches bad JSON, blank lines, invalid records and a torn final line", async () => {
     const { dir, file } = await chain(3)
     const lines = readLines(file)
-    fs.writeFileSync(file, [lines[0], "{broken", "", '{"v":1}', lines[1], lines[2]].join("\n") + "\n" + "{torn")
+    fs.writeFileSync(
+      file,
+      [lines[0], "{broken", "", '{"v":1}', lines[1], lines[2]].join("\n") + "\n" + "{torn",
+    )
     const r = reasons(dir)
     expect(r).toContain("not valid JSON")
     expect(r).toContain("blank line")

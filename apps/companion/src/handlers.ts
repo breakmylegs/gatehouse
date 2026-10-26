@@ -24,7 +24,11 @@ export interface ToolText {
 }
 
 function oneLine(text: string): string {
-  return [...text].map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c)).join("").replace(/\s+/g, " ").trim()
+  return [...text]
+    .map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c))
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 /** The three agent-facing tools. Plain functions, so a stdio server and an in-process server share them. */
@@ -40,12 +44,17 @@ export class CompanionHandlers {
     const clean = oneLine(text)
     if (clean === "") return { text: "Not sent: the message is empty.", isError: true }
     if (clean.length > NOTIFY_MAX_CHARS) {
-      return { text: `Not sent: ${clean.length} characters is too long, the limit is ${NOTIFY_MAX_CHARS}.`, isError: true }
+      return {
+        text: `Not sent: ${clean.length} characters is too long, the limit is ${NOTIFY_MAX_CHARS}.`,
+        isError: true,
+      }
     }
     const now = (this.#deps.now ?? Date.now)()
     if (this.#lastNotify !== undefined && now - this.#lastNotify < NOTIFY_INTERVAL_MS) {
       const wait = Math.ceil((NOTIFY_INTERVAL_MS - (now - this.#lastNotify)) / 1000)
-      return { text: `Not sent: only one notification a minute is allowed. Try again in ${wait} seconds.` }
+      return {
+        text: `Not sent: only one notification a minute is allowed. Try again in ${wait} seconds.`,
+      }
     }
     // Claim the slot before waiting on the Host, so two calls at once cannot both send.
     const previous = this.#lastNotify
@@ -63,7 +72,11 @@ export class CompanionHandlers {
 
   async createCheckpoint(label: string): Promise<ToolText> {
     const policy = this.#deps.policy()
-    if (!policy) return { text: "No checkpoint: no policy is loaded, so secrets files cannot be excluded safely.", isError: true }
+    if (!policy)
+      return {
+        text: "No checkpoint: no policy is loaded, so secrets files cannot be excluded safely.",
+        isError: true,
+      }
     try {
       const make = this.#deps.checkpoint ?? defaultCheckpoint
       const cp = await make({
@@ -95,18 +108,25 @@ export const COMPANION_TOOLS: readonly CompanionToolDef[] = [
   {
     name: "notify_user",
     description: `Send the user a short phone and desktop notification (at most ${NOTIFY_MAX_CHARS} characters, one a minute). Use it when you finish something long or are stuck and need them.`,
-    shape: { text: z.string().min(1).max(NOTIFY_MAX_CHARS * 4) },
+    shape: {
+      text: z
+        .string()
+        .min(1)
+        .max(NOTIFY_MAX_CHARS * 4),
+    },
     run: (h, a) => h.notifyUser(String(a.text ?? "")),
   },
   {
     name: "create_checkpoint",
-    description: "Save a restorable snapshot of the working tree before a risky change. Does not touch your files or git index.",
+    description:
+      "Save a restorable snapshot of the working tree before a risky change. Does not touch your files or git index.",
     shape: { label: z.string().min(1).max(200) },
     run: (h, a) => h.createCheckpoint(String(a.label ?? "")),
   },
   {
     name: "get_policy_summary",
-    description: "Describe what runs without approval, so you can pick commands that will not wait for the user.",
+    description:
+      "Describe what runs without approval, so you can pick commands that will not wait for the user.",
     shape: {},
     run: (h) => h.getPolicySummary(),
   },

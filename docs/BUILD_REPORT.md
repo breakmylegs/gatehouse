@@ -38,6 +38,14 @@ Rules engine with floor, deny, remember, escalate, allow and default stages; bas
 - **Host pieces pulled forward from Phase 3** because the crash test needs them: `ApproverClient` (fails closed to `evaluator-unavailable`), `ApproverProcess` (spawn with a per-launch token, restart with back-off, clean stop through stdin), `createCompanionSdkServer`.
 - **Policy change:** `mcpSource` rule condition, so the allow rule for Companion tools only applies to the in-process server.
 
+### Phase 2 results
+
+- 778 tests across 23 files, all passing. `packages/policy` line coverage 98.8%. `npm audit`: 0 vulnerabilities.
+- Acceptance: an integration test for every tool (4 Approver tools over HTTP through the MCP client, 3 Companion tools over stdio and in-process); guard tests over raw HTTP (missing and wrong token, wrong Host, any Origin, oversized body declared and streamed, other methods, other paths, malformed JSON); a crash and restart test with a real Approver process (kill with SIGKILL, every request escalates as `evaluator-unavailable` while it is down, it comes back, the audit chain stays valid and continues).
+- Mutation check of the new code: 26 deliberate bugs, all caught. One survived the first time (the early Content-Length check, which the streaming check hides), so a test was added that declares 10 MB and then stalls, and the mutation is now caught.
+- Found and fixed while testing: Windows briefly refuses a rename onto `head.json` and creation of a just-deleted lock file (retries added); a late `exit` event from an old `pwsh` process tore down its replacement (Phase 1); killing the Approver with `TerminateProcess` left its PowerShell worker to find out later, so the supervisor now stops it by closing its stdin, and the Approver also exits if its Host dies.
+- Working note: two new, uncommitted source files were emptied during a formatting run while a mutation run had just finished. Both were rebuilt from the originals. Work is now committed before any bulk formatting, and the gate checks for empty files.
+
 ### Deviations from the spec in Phase 2
 
 | Spec | What was done | Why |

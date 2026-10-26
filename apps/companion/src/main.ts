@@ -20,7 +20,8 @@ if (!sessionId) {
   process.exit(1)
 }
 const config = loadConfig(env)
-const rulesPath = env.GATEHOUSE_RULES_PATH ?? config.rulesPath ?? path.resolve(here, "../../../policy/rules.yaml")
+const rulesPath =
+  env.GATEHOUSE_RULES_PATH ?? config.rulesPath ?? path.resolve(here, "../../../policy/rules.yaml")
 const rulesDir = path.dirname(rulesPath)
 const store = new PolicyStore({
   rulesPath,
@@ -31,7 +32,10 @@ const store = new PolicyStore({
 const handlers = new CompanionHandlers({
   sessionId,
   cwd: process.cwd(),
-  host: new HttpHostClient(env.GATEHOUSE_HOST_URL ?? "http://127.0.0.1:47820", env.GATEHOUSE_HOST_TOKEN ?? ""),
+  host: new HttpHostClient(
+    env.GATEHOUSE_HOST_URL ?? "http://127.0.0.1:47820",
+    env.GATEHOUSE_HOST_TOKEN ?? "",
+  ),
   policy: () => {
     store.load()
     return store.current

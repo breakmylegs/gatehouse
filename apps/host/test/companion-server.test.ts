@@ -13,7 +13,8 @@ let root: string
 let repo: string
 let client: Client
 const sent: { sessionId: string; text: string }[] = []
-const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
 
 beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-companion-sdk-"))
@@ -45,7 +46,11 @@ afterAll(async () => {
 
 describe("the Companion as an in-process SDK server", () => {
   it("has the same three tools, so the names stay mcp__companion__*", async () => {
-    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual(["create_checkpoint", "get_policy_summary", "notify_user"])
+    expect((await client.listTools()).tools.map((t) => t.name).sort()).toEqual([
+      "create_checkpoint",
+      "get_policy_summary",
+      "notify_user",
+    ])
   })
 
   it("runs the shared handlers", async () => {
@@ -53,12 +58,17 @@ describe("the Companion as an in-process SDK server", () => {
       const r = await client.callTool({ name, arguments: args })
       return { text: (r.content as { text: string }[])[0]?.text ?? "", isError: r.isError === true }
     }
-    expect(await text("notify_user", { text: "AcmeCorp done" })).toEqual({ text: "Sent.", isError: false })
+    expect(await text("notify_user", { text: "AcmeCorp done" })).toEqual({
+      text: "Sent.",
+      isError: false,
+    })
     expect(sent).toEqual([{ sessionId: "sdk-sess", text: "[REDACTED:term] done" }])
     const cp = await text("create_checkpoint", { label: "x" })
     expect(cp.isError).toBe(false)
     expect(cp.text).toContain("refs/gatehouse/checkpoints/sdk-sess/")
     expect((await text("get_policy_summary")).text).toContain("These run without asking")
-    expect((await text("notify_user", { text: "again" })).text).toContain("only one notification a minute")
+    expect((await text("notify_user", { text: "again" })).text).toContain(
+      "only one notification a minute",
+    )
   })
 })

@@ -58,7 +58,7 @@ describe("ApproverProcess back-off", () => {
     sup.on("restarting", (e) => delays.push(e.delayMs))
     await sup.start()
     expect(sup.state).toBe("up")
-    expect(await until(() => delays.length >= 4, 8000)).toBe(true)
+    expect(await until(() => delays.length >= 4, 30_000)).toBe(true)
     expect(delays.slice(0, 4)).toEqual([60, 120, 240, 400])
     await sup.stop()
     const launches = fs.readFileSync(flag, "utf8").length
@@ -68,18 +68,39 @@ describe("ApproverProcess back-off", () => {
   }, 30000)
 
   it("rejects start() when the process never becomes ready", async () => {
-    const quick = new ApproverProcess({ command: process.execPath, args: ["-e", "process.exit(2)"], token: generateToken(), port: 1 })
+    const quick = new ApproverProcess({
+      command: process.execPath,
+      args: ["-e", "process.exit(2)"],
+      token: generateToken(),
+      port: 1,
+    })
     await expect(quick.start()).rejects.toThrow(/exited before it was ready/)
     expect(quick.state).toBe("stopped")
-    const silent = new ApproverProcess({ command: process.execPath, args: ["-e", "setTimeout(()=>{}, 30000)"], token: generateToken(), port: 1, readyTimeoutMs: 300 })
+    const silent = new ApproverProcess({
+      command: process.execPath,
+      args: ["-e", "setTimeout(()=>{}, 30000)"],
+      token: generateToken(),
+      port: 1,
+      readyTimeoutMs: 300,
+    })
     await expect(silent.start()).rejects.toThrow(/did not become ready/)
-    const missing = new ApproverProcess({ command: "no-such-program-here", args: [], token: generateToken(), port: 1 })
+    const missing = new ApproverProcess({
+      command: "no-such-program-here",
+      args: [],
+      token: generateToken(),
+      port: 1,
+    })
     await expect(missing.start()).rejects.toThrow()
   }, 30000)
 
   it("will not start twice", async () => {
     const script = `console.log(JSON.stringify({event:'listening',port:1})); process.stdin.on('end', () => process.exit(0)); process.stdin.resume()`
-    const sup = new ApproverProcess({ command: process.execPath, args: ["-e", script], token: generateToken(), port: 1 })
+    const sup = new ApproverProcess({
+      command: process.execPath,
+      args: ["-e", script],
+      token: generateToken(),
+      port: 1,
+    })
     await sup.start()
     await expect(sup.start()).rejects.toThrow(/already started/)
     const t0 = Date.now()
@@ -89,7 +110,12 @@ describe("ApproverProcess back-off", () => {
 
   it("tells a well-behaved child to stop by closing its stdin, and an unresponsive one is killed", async () => {
     const stubborn = `console.log(JSON.stringify({event:'listening',port:1})); setInterval(()=>{}, 1000)`
-    const sup = new ApproverProcess({ command: process.execPath, args: ["-e", stubborn], token: generateToken(), port: 1 })
+    const sup = new ApproverProcess({
+      command: process.execPath,
+      args: ["-e", stubborn],
+      token: generateToken(),
+      port: 1,
+    })
     await sup.start()
     const t0 = Date.now()
     await sup.stop()
@@ -109,7 +135,11 @@ describe("the real Approver, killed and restarted", () => {
       command: process.execPath,
       args: ["--import", TSX, MAIN],
       cwd: tmp,
-      env: { GATEHOUSE_AUDIT_DIR: auditDir, GATEHOUSE_DATA_DIR: dataDir, GATEHOUSE_RULES_PATH: path.join(REPO, "policy", "rules.yaml") },
+      env: {
+        GATEHOUSE_AUDIT_DIR: auditDir,
+        GATEHOUSE_DATA_DIR: dataDir,
+        GATEHOUSE_RULES_PATH: path.join(REPO, "policy", "rules.yaml"),
+      },
       token: generateToken(),
       port,
       backoff: { initialMs: 300, maxMs: 2000, factor: 2, resetAfterMs: 60_000 },
@@ -136,7 +166,11 @@ describe("the real Approver, killed and restarted", () => {
       // While it is down, every question is escalated and nothing is allowed.
       for (let i = 0; i < 5; i++) {
         const v = await client.evaluate(call, ctx)
-        expect(v).toMatchObject({ outcome: "escalate", ruleId: "evaluator-unavailable", decidedBy: "evaluator-unavailable" })
+        expect(v).toMatchObject({
+          outcome: "escalate",
+          ruleId: "evaluator-unavailable",
+          decidedBy: "evaluator-unavailable",
+        })
         if (sup.state === "up") break
       }
 

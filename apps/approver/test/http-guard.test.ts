@@ -124,9 +124,9 @@ describe("the Approver listener (invariant 7)", () => {
       const reply = await raw({ headers: good({ host }), body: listTools })
       expect(reply.status, host).toBe(403)
     }
-    expect((await raw({ headers: good({ host: `localhost:${r.port}` }), body: listTools })).status).toBe(
-      200,
-    )
+    expect(
+      (await raw({ headers: good({ host: `localhost:${r.port}` }), body: listTools })).status,
+    ).toBe(200)
   })
 
   it("rejects any Origin header, even with the token and the right Host", async () => {
@@ -142,7 +142,8 @@ describe("the Approver listener (invariant 7)", () => {
     }
     expect((await raw({ path: "/admin", headers: good(), body: listTools })).status).toBe(404)
     expect(
-      (await raw({ path: "/admin", headers: { host: `127.0.0.1:${r.port}` }, body: listTools })).status,
+      (await raw({ path: "/admin", headers: { host: `127.0.0.1:${r.port}` }, body: listTools }))
+        .status,
     ).toBe(401)
   })
 

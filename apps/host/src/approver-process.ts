@@ -15,7 +15,12 @@ export interface Backoff {
   resetAfterMs: number
 }
 
-export const DEFAULT_BACKOFF: Backoff = { initialMs: 500, maxMs: 30_000, factor: 2, resetAfterMs: 30_000 }
+export const DEFAULT_BACKOFF: Backoff = {
+  initialMs: 500,
+  maxMs: 30_000,
+  factor: 2,
+  resetAfterMs: 30_000,
+}
 
 type Child = ChildProcessByStdio<Writable, Readable, Readable>
 
@@ -166,7 +171,11 @@ export class ApproverProcess extends EventEmitter<ApproverProcessEvents> {
               clearTimeout(timer)
               this.#state = "up"
               this.#upSince = Date.now()
-              this.emit("ready", { pid: child.pid ?? 0, port: msg.port ?? this.#opts.port, attempt })
+              this.emit("ready", {
+                pid: child.pid ?? 0,
+                port: msg.port ?? this.#opts.port,
+                attempt,
+              })
               resolve()
             }
           } catch {
@@ -176,7 +185,8 @@ export class ApproverProcess extends EventEmitter<ApproverProcessEvents> {
       })
       child.stderr.setEncoding("utf8")
       child.stderr.on("data", (chunk: string) => {
-        for (const line of chunk.split("\n")) if (line.trim() !== "") this.#opts.onLog?.(line.trim())
+        for (const line of chunk.split("\n"))
+          if (line.trim() !== "") this.#opts.onLog?.(line.trim())
       })
       child.on("error", (e) => {
         clearTimeout(timer)
@@ -196,7 +206,10 @@ export class ApproverProcess extends EventEmitter<ApproverProcessEvents> {
           return
         }
         if (Date.now() - this.#upSince > this.#backoff.resetAfterMs) this.#attempt = 0
-        const delay = Math.min(this.#backoff.maxMs, this.#backoff.initialMs * this.#backoff.factor ** Math.max(0, this.#attempt - 1))
+        const delay = Math.min(
+          this.#backoff.maxMs,
+          this.#backoff.initialMs * this.#backoff.factor ** Math.max(0, this.#attempt - 1),
+        )
         this.emit("exit", { code, signal, restartInMs: delay })
         this.#scheduleRestart(delay)
       })
@@ -212,7 +225,10 @@ export class ApproverProcess extends EventEmitter<ApproverProcessEvents> {
         this.#opts.onLog?.(`restart failed: ${(e as Error).message}`)
         if (this.#stopping) return
         this.#state = "down"
-        const delay = Math.min(this.#backoff.maxMs, this.#backoff.initialMs * this.#backoff.factor ** Math.max(0, this.#attempt - 1))
+        const delay = Math.min(
+          this.#backoff.maxMs,
+          this.#backoff.initialMs * this.#backoff.factor ** Math.max(0, this.#attempt - 1),
+        )
         this.#scheduleRestart(delay)
       })
     }, delayMs)

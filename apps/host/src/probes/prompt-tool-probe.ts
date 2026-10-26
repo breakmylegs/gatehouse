@@ -22,12 +22,20 @@ const server = createSdkMcpServer({
     tool(
       "approve",
       "Permission prompt",
-      { tool_name: z.string(), input: z.record(z.string(), z.unknown()), tool_use_id: z.string().optional() },
+      {
+        tool_name: z.string(),
+        input: z.record(z.string(), z.unknown()),
+        tool_use_id: z.string().optional(),
+      },
       async (args) => {
         seen.push(args)
         const allow = JSON.stringify({ behavior: "allow", updatedInput: args.input })
-        const deny = JSON.stringify({ behavior: "deny", message: "Probe says no: the policy refuses this." })
-        const text = mode === "deny" ? deny : mode === "bare" ? JSON.stringify({ behavior: "allow" }) : allow
+        const deny = JSON.stringify({
+          behavior: "deny",
+          message: "Probe says no: the policy refuses this.",
+        })
+        const text =
+          mode === "deny" ? deny : mode === "bare" ? JSON.stringify({ behavior: "allow" }) : allow
         return { content: [{ type: "text", text }] }
       },
     ),
@@ -35,7 +43,8 @@ const server = createSdkMcpServer({
 })
 
 const q = query({
-  prompt: "Create a file named out.txt in the current directory containing the word hi, then reply with the single word done.",
+  prompt:
+    "Create a file named out.txt in the current directory containing the word hi, then reply with the single word done.",
   options: {
     cwd,
     permissionMode: "default",
@@ -56,9 +65,16 @@ for await (const msg of q) {
     const c = (msg as { message?: { content?: unknown } }).message?.content
     if (Array.isArray(c)) {
       for (const b of c as { type?: string; content?: unknown; is_error?: boolean }[]) {
-        if (b.type === "tool_result" && b.is_error) console.log("tool_result error:", JSON.stringify(b.content).slice(0, 200))
+        if (b.type === "tool_result" && b.is_error)
+          console.log("tool_result error:", JSON.stringify(b.content).slice(0, 200))
       }
     }
   }
 }
-console.log(JSON.stringify({ mode, promptToolCalls: seen, fileWritten: fs.existsSync(out), final: final.slice(0, 120) }, null, 1))
+console.log(
+  JSON.stringify(
+    { mode, promptToolCalls: seen, fileWritten: fs.existsSync(out), final: final.slice(0, 120) },
+    null,
+    1,
+  ),
+)

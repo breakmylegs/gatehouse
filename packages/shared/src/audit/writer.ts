@@ -115,7 +115,8 @@ export class AuditWriter {
   #queue: Promise<unknown> = Promise.resolve()
 
   constructor(opts: AuditWriterOptions) {
-    if (typeof opts.redact !== "function") throw new TypeError("AuditWriter needs a redact function")
+    if (typeof opts.redact !== "function")
+      throw new TypeError("AuditWriter needs a redact function")
     this.#dir = opts.dir
     this.#redact = opts.redact
     this.#now = opts.now ?? (() => new Date())
@@ -162,7 +163,8 @@ export class AuditWriter {
         // delete-pending state for a moment, and creating it again fails until it goes.
         if (code !== "EEXIST" && !TRANSIENT.has(code)) throw e
         if (code !== "EEXIST") {
-          if (Date.now() > deadline) throw new AuditLockError(`Could not create the audit lock (${code})`)
+          if (Date.now() > deadline)
+            throw new AuditLockError(`Could not create the audit lock (${code})`)
           await sleep(5 + Math.floor(Math.random() * 20))
           continue
         }
@@ -258,7 +260,10 @@ export class AuditWriter {
       } finally {
         fs.closeSync(fd)
       }
-      await writeAtomic(headPath(this.#dir), JSON.stringify({ seq: record.seq, hash: record.hash, file }) + "\n")
+      await writeAtomic(
+        headPath(this.#dir),
+        JSON.stringify({ seq: record.seq, hash: record.hash, file }) + "\n",
+      )
       return record
     } finally {
       release()

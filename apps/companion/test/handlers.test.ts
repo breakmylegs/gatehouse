@@ -4,7 +4,13 @@ import os from "node:os"
 import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { loadPolicy, redact, type Policy } from "@gatehouse/policy"
-import { CompanionHandlers, NOTIFY_INTERVAL_MS, NOTIFY_MAX_CHARS, type HostClient, type NotifyMessage } from "../src/index.js"
+import {
+  CompanionHandlers,
+  NOTIFY_INTERVAL_MS,
+  NOTIFY_MAX_CHARS,
+  type HostClient,
+  type NotifyMessage,
+} from "../src/index.js"
 import { SUMMARY_MAX_CHARS, summarisePolicy } from "../src/summary.js"
 import { SEED_RULES } from "../../../packages/policy/test/helpers.js"
 
@@ -103,7 +109,8 @@ describe("notify_user", () => {
 })
 
 describe("create_checkpoint", () => {
-  const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", args, { cwd, encoding: "utf8" }).trim()
   function repo(): string {
     const dir = path.join(root, `repo${n++}`)
     fs.mkdirSync(dir)
@@ -153,7 +160,9 @@ describe("get_policy_summary", () => {
     expect(text).toContain("src/**")
     expect(text).toContain("notify_user")
     expect(text).toContain("secrets files")
-    expect(text).toContain("Variables, substitutions, heredocs and output redirection always need approval")
+    expect(text).toContain(
+      "Variables, substitutions, heredocs and output redirection always need approval",
+    )
     expect(text.length).toBeLessThanOrEqual(SUMMARY_MAX_CHARS)
   })
 
@@ -164,7 +173,10 @@ describe("get_policy_summary", () => {
 
   it("says so when no policy is loaded and notes a project overlay", () => {
     expect(summarisePolicy(undefined, "C:/dev")).toContain("No policy is loaded")
-    const withOverlay: Policy = { ...policy, overlays: { dev: { version: 1, removeAllow: ["safe-shell"] } } }
+    const withOverlay: Policy = {
+      ...policy,
+      overlays: { dev: { version: 1, removeAllow: ["safe-shell"] } },
+    }
     const text = summarisePolicy(withOverlay, "C:/dev")
     expect(text).not.toContain("git status*")
     expect(text).toContain("extra restrictions")

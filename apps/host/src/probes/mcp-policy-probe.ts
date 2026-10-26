@@ -12,11 +12,21 @@ if (!cwd) throw new Error("usage: mcp-policy-probe <scratch-dir>")
 const sdkServer = createSdkMcpServer({
   name: "inproc",
   version: "0.0.0",
-  tools: [tool("ping", "Returns pong", { who: z.string().optional() }, async () => ({ content: [{ type: "text", text: "pong" }] }))],
+  tools: [
+    tool("ping", "Returns pong", { who: z.string().optional() }, async () => ({
+      content: [{ type: "text", text: "pong" }],
+    })),
+  ],
 })
 
 const cases: Record<string, Record<string, unknown>> = {
-  "stdio server": { probe_stdio: { type: "stdio", command: "node", args: ["C:/dev/gatehouse-spike/prompt-tool.mjs"] } },
+  "stdio server": {
+    probe_stdio: {
+      type: "stdio",
+      command: "node",
+      args: ["C:/dev/gatehouse-spike/prompt-tool.mjs"],
+    },
+  },
   "http server": { probe_http: { type: "http", url: "http://127.0.0.1:47821/mcp" } },
   "in-process sdk server": { inproc: sdkServer },
 }

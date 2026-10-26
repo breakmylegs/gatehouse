@@ -18,15 +18,31 @@ const ctx = (extra: Record<string, unknown> = {}) => ({ cwd: r.cwd, sessionId: "
 
 function records(): AuditRecord[] {
   return listAuditFiles(r.auditDir).flatMap((f) =>
-    fs.readFileSync(path.join(r.auditDir, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as AuditRecord),
+    fs
+      .readFileSync(path.join(r.auditDir, f), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l) as AuditRecord),
   )
 }
 
 describe("evaluate_permission", () => {
   it("returns a valid Verdict for allow, deny and escalate", async () => {
-    const allow = await r.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx() })
-    const deny = await r.call("evaluate_permission", { toolName: "Bash", input: { command: "cat .env" }, ctx: ctx() })
-    const esc = await r.call("evaluate_permission", { toolName: "Bash", input: { command: "git push" }, ctx: ctx() })
+    const allow = await r.call("evaluate_permission", {
+      toolName: "Bash",
+      input: { command: "git status" },
+      ctx: ctx(),
+    })
+    const deny = await r.call("evaluate_permission", {
+      toolName: "Bash",
+      input: { command: "cat .env" },
+      ctx: ctx(),
+    })
+    const esc = await r.call("evaluate_permission", {
+      toolName: "Bash",
+      input: { command: "git push" },
+      ctx: ctx(),
+    })
     for (const [res, outcome, ruleId] of [
       [allow, "allow", "safe-shell"],
       [deny, "deny", "secrets-files"],
@@ -42,29 +58,65 @@ describe("evaluate_permission", () => {
 
   it("passes the MCP server source to the policy", async () => {
     const call = { toolName: "mcp__companion__notify_user", input: { text: "x" } }
-    expect((await r.call("evaluate_permission", { ...call, ctx: ctx({ mcpSource: "sdk" }) })).structured.ruleId).toBe("companion-tools")
-    expect((await r.call("evaluate_permission", { ...call, ctx: ctx({ mcpSource: "user" }) })).structured.ruleId).toBe("no-rule")
+    expect(
+      (await r.call("evaluate_permission", { ...call, ctx: ctx({ mcpSource: "sdk" }) })).structured
+        .ruleId,
+    ).toBe("companion-tools")
+    expect(
+      (await r.call("evaluate_permission", { ...call, ctx: ctx({ mcpSource: "user" }) })).structured
+        .ruleId,
+    ).toBe("no-rule")
   })
 
   it("uses the project root given, and a PowerShell command through the warm worker", async () => {
-    const ps = await r.call("evaluate_permission", { toolName: "PowerShell", input: { command: "gci -Recurse" }, ctx: ctx() })
+    const ps = await r.call("evaluate_permission", {
+      toolName: "PowerShell",
+      input: { command: "gci -Recurse" },
+      ctx: ctx(),
+    })
     expect(ps.structured).toMatchObject({ outcome: "allow", ruleId: "safe-shell" })
   })
 
   it("rejects malformed arguments without crashing, and the server stays usable", async () => {
     const c = await r.client()
-    const bad = await c.callTool({ name: "evaluate_permission", arguments: { toolName: "Bash", input: "not an object", ctx: ctx() } })
+    const bad = await c.callTool({
+      name: "evaluate_permission",
+      arguments: { toolName: "Bash", input: "not an object", ctx: ctx() },
+    })
     expect(bad.isError).toBe(true)
-    const noCtx = await c.callTool({ name: "evaluate_permission", arguments: { toolName: "Bash", input: {} } })
+    const noCtx = await c.callTool({
+      name: "evaluate_permission",
+      arguments: { toolName: "Bash", input: {} },
+    })
     expect(noCtx.isError).toBe(true)
-    expect((await r.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx() })).structured.outcome).toBe("allow")
+    expect(
+      (
+        await r.call("evaluate_permission", {
+          toolName: "Bash",
+          input: { command: "git status" },
+          ctx: ctx(),
+        })
+      ).structured.outcome,
+    ).toBe("allow")
   })
 
   it("writes one audit record for every verdict, allows included (invariant 13)", async () => {
     const before = records().length
-    await r.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx({ sessionId: "audit-a", toolUseId: "tu-1" }) })
-    await r.call("evaluate_permission", { toolName: "Bash", input: { command: "git push" }, ctx: ctx({ sessionId: "audit-a" }) })
-    await r.call("evaluate_permission", { toolName: "Read", input: { file_path: ".env" }, ctx: ctx({ sessionId: "audit-a" }) })
+    await r.call("evaluate_permission", {
+      toolName: "Bash",
+      input: { command: "git status" },
+      ctx: ctx({ sessionId: "audit-a", toolUseId: "tu-1" }),
+    })
+    await r.call("evaluate_permission", {
+      toolName: "Bash",
+      input: { command: "git push" },
+      ctx: ctx({ sessionId: "audit-a" }),
+    })
+    await r.call("evaluate_permission", {
+      toolName: "Read",
+      input: { file_path: ".env" },
+      ctx: ctx({ sessionId: "audit-a" }),
+    })
     const fresh = records().slice(before)
     expect(fresh.map((x) => x.verdict.outcome)).toEqual(["allow", "escalate", "deny"])
     expect(fresh[0]).toMatchObject({
@@ -88,7 +140,11 @@ describe("evaluate_permission", () => {
       ctx: ctx({ sessionId: "redact-1" }),
     })
     expect(res.structured).toMatchObject({ outcome: "escalate", ruleId: "network" })
-    const all = fs.readdirSync(r.auditDir).filter((f) => f.endsWith(".jsonl")).map((f) => fs.readFileSync(path.join(r.auditDir, f), "utf8")).join("\n")
+    const all = fs
+      .readdirSync(r.auditDir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .map((f) => fs.readFileSync(path.join(r.auditDir, f), "utf8"))
+      .join("\n")
     expect(all).not.toContain(secret)
     expect(all.toLowerCase()).not.toContain("acmecorp")
     expect(all).toContain("[REDACTED:")
@@ -113,7 +169,11 @@ describe("explain_verdict", () => {
 
   it("says plainly when a rule id is unknown", async () => {
     const res = await r.call("explain_verdict", { ruleId: "no-such-rule" })
-    expect(res.structured).toEqual({ found: false, ruleId: "no-such-rule", rationale: "No rule with this id is loaded." })
+    expect(res.structured).toEqual({
+      found: false,
+      ruleId: "no-such-rule",
+      rationale: "No rule with this id is loaded.",
+    })
   })
 
   it("explains the risk of an escalate rule", async () => {
@@ -123,14 +183,25 @@ describe("explain_verdict", () => {
 
   it("rejects an empty or oversized rule id", async () => {
     const c = await r.client()
-    expect((await c.callTool({ name: "explain_verdict", arguments: { ruleId: "" } })).isError).toBe(true)
-    expect((await c.callTool({ name: "explain_verdict", arguments: { ruleId: "x".repeat(101) } })).isError).toBe(true)
+    expect((await c.callTool({ name: "explain_verdict", arguments: { ruleId: "" } })).isError).toBe(
+      true,
+    )
+    expect(
+      (await c.callTool({ name: "explain_verdict", arguments: { ruleId: "x".repeat(101) } }))
+        .isError,
+    ).toBe(true)
   })
 })
 
 describe("policy_status", () => {
   it("reports the loaded policy, the parser and the audit head", async () => {
-    const verdict = (await r.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx() })).structured
+    const verdict = (
+      await r.call("evaluate_permission", {
+        toolName: "Bash",
+        input: { command: "git status" },
+        ctx: ctx(),
+      })
+    ).structured
     const s = (await r.call("policy_status", {})).structured
     expect(s).toMatchObject({ loaded: true, errors: [], overlays: [], rememberCount: 0 })
     expect(s.hash).toBe(verdict.policyHash)
@@ -146,7 +217,11 @@ describe("policy_status", () => {
 describe("approval_prompt (headless runs)", () => {
   it("allows with the input echoed back", async () => {
     const input = { command: "git status" }
-    const res = await r.call("approval_prompt", { tool_name: "Bash", input, tool_use_id: "toolu_1" })
+    const res = await r.call("approval_prompt", {
+      tool_name: "Bash",
+      input,
+      tool_use_id: "toolu_1",
+    })
     expect(res.text).toEqual({ behavior: "allow", updatedInput: input })
     expect(res.structured).toBeUndefined()
   })
@@ -158,7 +233,10 @@ describe("approval_prompt (headless runs)", () => {
   })
 
   it("turns an escalation into a deny that explains there is nobody to ask", async () => {
-    const res = await r.call("approval_prompt", { tool_name: "Bash", input: { command: "git push" } })
+    const res = await r.call("approval_prompt", {
+      tool_name: "Bash",
+      input: { command: "git push" },
+    })
     expect(res.text.behavior).toBe("deny")
     expect(res.text.message).toContain("no approval channel")
     expect(res.text.message).toContain("git-remote")
@@ -166,10 +244,18 @@ describe("approval_prompt (headless runs)", () => {
 
   it("audits the headless decision and resolves relative paths against the configured folder", async () => {
     const before = records().length
-    const res = await r.call("approval_prompt", { tool_name: "Read", input: { file_path: "src/a.ts" }, tool_use_id: "toolu_9" })
+    const res = await r.call("approval_prompt", {
+      tool_name: "Read",
+      input: { file_path: "src/a.ts" },
+      tool_use_id: "toolu_9",
+    })
     expect(res.text.behavior).toBe("allow")
     const rec = records().slice(before)[0]
-    expect(rec).toMatchObject({ event: "approval_prompt", session: "headless", toolUseId: "toolu_9" })
+    expect(rec).toMatchObject({
+      event: "approval_prompt",
+      session: "headless",
+      toolUseId: "toolu_9",
+    })
   })
 })
 
@@ -179,12 +265,23 @@ describe("the audit log must not let an allow through unrecorded (invariants 1 a
     fs.writeFileSync(blocker, "x")
     const broken = await startApprover({ auditDir: path.join(blocker, "audit"), pwsh: undefined })
     try {
-      const allow = await broken.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx({ cwd: broken.cwd }) })
+      const allow = await broken.call("evaluate_permission", {
+        toolName: "Bash",
+        input: { command: "git status" },
+        ctx: ctx({ cwd: broken.cwd }),
+      })
       expect(allow.structured).toMatchObject({ outcome: "escalate", ruleId: "audit-failure" })
       expect(allow.structured.segments).toBeUndefined()
-      const deny = await broken.call("evaluate_permission", { toolName: "Bash", input: { command: "cat .env" }, ctx: ctx({ cwd: broken.cwd }) })
+      const deny = await broken.call("evaluate_permission", {
+        toolName: "Bash",
+        input: { command: "cat .env" },
+        ctx: ctx({ cwd: broken.cwd }),
+      })
       expect(deny.structured).toMatchObject({ outcome: "deny", ruleId: "secrets-files" })
-      const prompt = await broken.call("approval_prompt", { tool_name: "Bash", input: { command: "git status" } })
+      const prompt = await broken.call("approval_prompt", {
+        tool_name: "Bash",
+        input: { command: "git status" },
+      })
       expect(prompt.text.behavior).toBe("deny")
       expect(prompt.text.message).toContain("audit-failure")
     } finally {
@@ -195,9 +292,16 @@ describe("the audit log must not let an allow through unrecorded (invariants 1 a
 
 describe("policy loading", () => {
   it("escalates everything when no valid policy is loaded, and says why", async () => {
-    const bad = await startApprover({ rulesText: "version: 1\nworkspaceRoots: []\n", pwsh: undefined })
+    const bad = await startApprover({
+      rulesText: "version: 1\nworkspaceRoots: []\n",
+      pwsh: undefined,
+    })
     try {
-      const v = await bad.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx({ cwd: bad.cwd }) })
+      const v = await bad.call("evaluate_permission", {
+        toolName: "Bash",
+        input: { command: "git status" },
+        ctx: ctx({ cwd: bad.cwd }),
+      })
       expect(v.structured).toMatchObject({ outcome: "escalate", ruleId: "policy-unavailable" })
       const s = (await bad.call("policy_status", {})).structured
       expect(s.loaded).toBe(false)
@@ -210,14 +314,26 @@ describe("policy loading", () => {
   it("picks up an edited rules file without a restart (hot reload)", async () => {
     const live = await startApprover({ watchRules: true, pwsh: undefined })
     try {
-      const first = (await live.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx({ cwd: live.cwd }) })).structured
+      const first = (
+        await live.call("evaluate_permission", {
+          toolName: "Bash",
+          input: { command: "git status" },
+          ctx: ctx({ cwd: live.cwd }),
+        })
+      ).structured
       expect(first.outcome).toBe("allow")
       const doc = parseYaml(fs.readFileSync(SEED_RULES, "utf8")) as { deny: unknown[] }
       doc.deny.push({ id: "no-status", commands: ["git status*"] })
       fs.writeFileSync(live.rulesPath, stringifyYaml(doc))
       let second: any
       for (let i = 0; i < 40; i++) {
-        second = (await live.call("evaluate_permission", { toolName: "Bash", input: { command: "git status" }, ctx: ctx({ cwd: live.cwd }) })).structured
+        second = (
+          await live.call("evaluate_permission", {
+            toolName: "Bash",
+            input: { command: "git status" },
+            ctx: ctx({ cwd: live.cwd }),
+          })
+        ).structured
         if (second.outcome === "deny") break
         await new Promise((res) => setTimeout(res, 100))
       }
@@ -231,7 +347,11 @@ describe("policy loading", () => {
   it("runs without a PowerShell worker and escalates PowerShell calls", async () => {
     const noPs = await startApprover({ pwsh: undefined })
     try {
-      const v = await noPs.call("evaluate_permission", { toolName: "PowerShell", input: { command: "Get-ChildItem" }, ctx: ctx({ cwd: noPs.cwd }) })
+      const v = await noPs.call("evaluate_permission", {
+        toolName: "PowerShell",
+        input: { command: "Get-ChildItem" },
+        ctx: ctx({ cwd: noPs.cwd }),
+      })
       expect(v.structured).toMatchObject({ outcome: "escalate", ruleId: "pwsh-unavailable" })
       expect((await noPs.call("policy_status", {})).structured.pwsh.running).toBe(false)
     } finally {

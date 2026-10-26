@@ -36,7 +36,11 @@ export function verifyAudit(dir: string): AuditVerifyResult {
     const lines = text.split("\n")
     const endsWithNewline = text.endsWith("\n")
     if (!endsWithNewline && text.length > 0) {
-      problems.push({ file, line: lines.length, reason: "the file does not end with a newline (a torn final line)" })
+      problems.push({
+        file,
+        line: lines.length,
+        reason: "the file does not end with a newline (a torn final line)",
+      })
     }
     lines.forEach((raw, idx) => {
       const lineNo = idx + 1
@@ -54,23 +58,47 @@ export function verifyAudit(dir: string): AuditVerifyResult {
       }
       const parsed = AuditRecord.safeParse(json)
       if (!parsed.success) {
-        problems.push({ file, line: lineNo, reason: `not a valid audit record (${parsed.error.issues[0]?.path.join(".") ?? "shape"})` })
+        problems.push({
+          file,
+          line: lineNo,
+          reason: `not a valid audit record (${parsed.error.issues[0]?.path.join(".") ?? "shape"})`,
+        })
         return
       }
       const rec = parsed.data
       records++
       if (rec.seq !== prev.seq + 1) {
-        problems.push({ file, line: lineNo, seq: rec.seq, reason: `seq ${rec.seq} does not follow ${prev.seq}` })
+        problems.push({
+          file,
+          line: lineNo,
+          seq: rec.seq,
+          reason: `seq ${rec.seq} does not follow ${prev.seq}`,
+        })
       }
       if (rec.prevHash !== prev.hash) {
-        problems.push({ file, line: lineNo, seq: rec.seq, reason: "prevHash does not match the record before it" })
+        problems.push({
+          file,
+          line: lineNo,
+          seq: rec.seq,
+          reason: "prevHash does not match the record before it",
+        })
       }
       const { hash: _hash, ...body } = rec
       if (hashRecord(body) !== rec.hash) {
-        problems.push({ file, line: lineNo, seq: rec.seq, reason: "hash does not match the record content" })
+        problems.push({
+          file,
+          line: lineNo,
+          seq: rec.seq,
+          reason: "hash does not match the record content",
+        })
       }
       if (`audit-${rec.ts.slice(0, 7)}.jsonl` !== file) {
-        problems.push({ file, line: lineNo, seq: rec.seq, reason: `timestamp ${rec.ts} belongs in a different month file` })
+        problems.push({
+          file,
+          line: lineNo,
+          seq: rec.seq,
+          reason: `timestamp ${rec.ts} belongs in a different month file`,
+        })
       }
       prev = { seq: rec.seq, hash: rec.hash }
     })
@@ -89,11 +117,23 @@ export function verifyAudit(dir: string): AuditVerifyResult {
   }
   if (head) {
     if (head.seq > prev.seq) {
-      problems.push({ file: "head.json", line: 0, reason: `the log ends at seq ${prev.seq} but head.json says ${head.seq}: records were removed from the end` })
+      problems.push({
+        file: "head.json",
+        line: 0,
+        reason: `the log ends at seq ${prev.seq} but head.json says ${head.seq}: records were removed from the end`,
+      })
     } else if (head.seq < prev.seq) {
-      problems.push({ file: "head.json", line: 0, reason: `head.json is behind the log (${head.seq} against ${prev.seq})` })
+      problems.push({
+        file: "head.json",
+        line: 0,
+        reason: `head.json is behind the log (${head.seq} against ${prev.seq})`,
+      })
     } else if (head.hash !== prev.hash) {
-      problems.push({ file: "head.json", line: 0, reason: "head.json hash does not match the last record" })
+      problems.push({
+        file: "head.json",
+        line: 0,
+        reason: "head.json hash does not match the last record",
+      })
     }
   }
 

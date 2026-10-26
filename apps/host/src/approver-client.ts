@@ -49,7 +49,11 @@ export class ApproverClient {
 
   async evaluate(call: EvaluateCall, ctx: EvaluateCtx): Promise<Verdict> {
     try {
-      const result = await this.#callTool("evaluate_permission", { toolName: call.toolName, input: call.input, ctx })
+      const result = await this.#callTool("evaluate_permission", {
+        toolName: call.toolName,
+        input: call.input,
+        ctx,
+      })
       const parsed = Verdict.safeParse(result.structuredContent)
       if (!parsed.success) return unavailableVerdict("malformed answer")
       return parsed.data
@@ -68,7 +72,10 @@ export class ApproverClient {
     }
   }
 
-  async #callTool(name: string, args: Record<string, unknown>): Promise<{ structuredContent?: unknown; isError?: boolean }> {
+  async #callTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<{ structuredContent?: unknown; isError?: boolean }> {
     const res = await fetch(this.#opts.url, {
       method: "POST",
       headers: {
@@ -76,11 +83,19 @@ export class ApproverClient {
         accept: "application/json, text/event-stream",
         authorization: `Bearer ${this.#opts.token}`,
       },
-      body: JSON.stringify({ jsonrpc: "2.0", id: ++this.#id, method: "tools/call", params: { name, arguments: args } }),
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: ++this.#id,
+        method: "tools/call",
+        params: { name, arguments: args },
+      }),
       signal: AbortSignal.timeout(this.#opts.timeoutMs),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const body = (await res.json()) as { result?: { structuredContent?: unknown; isError?: boolean }; error?: unknown }
+    const body = (await res.json()) as {
+      result?: { structuredContent?: unknown; isError?: boolean }
+      error?: unknown
+    }
     if (body.error !== undefined || body.result === undefined) throw new Error("error reply")
     if (body.result.isError) throw new Error("tool error")
     return body.result

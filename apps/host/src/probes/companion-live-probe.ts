@@ -18,7 +18,8 @@ store.load()
 
 const seen: unknown[] = []
 const q = query({
-  prompt: "Call the get_policy_summary tool from the companion MCP server, then reply with the first line of what it returned.",
+  prompt:
+    "Call the get_policy_summary tool from the companion MCP server, then reply with the first line of what it returned.",
   options: {
     cwd,
     permissionMode: "default",
@@ -44,7 +45,12 @@ const q = query({
         {
           hooks: [
             async (input) => {
-              if (input.hook_event_name === "PreToolUse") seen.push({ via: "PreToolUse", tool: input.tool_name, mcp_server: input.mcp_server })
+              if (input.hook_event_name === "PreToolUse")
+                seen.push({
+                  via: "PreToolUse",
+                  tool: input.tool_name,
+                  mcp_server: input.mcp_server,
+                })
               return {}
             },
           ],
@@ -55,6 +61,7 @@ const q = query({
 })
 let final = ""
 for await (const msg of q) {
-  if (msg.type === "assistant") for (const b of msg.message.content) if (b.type === "text") final = b.text
+  if (msg.type === "assistant")
+    for (const b of msg.message.content) if (b.type === "text") final = b.text
 }
 console.log(JSON.stringify({ seen, final: final.slice(0, 200) }, null, 1))

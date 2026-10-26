@@ -3,7 +3,15 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { auditDir, configPath, createCheckpoint, gatehouseDataDir, listCheckpoints, loadConfig, safeSegment } from "../src/node/index.js"
+import {
+  auditDir,
+  configPath,
+  createCheckpoint,
+  gatehouseDataDir,
+  listCheckpoints,
+  loadConfig,
+  safeSegment,
+} from "../src/node/index.js"
 
 let root: string
 let n = 0
@@ -13,7 +21,17 @@ beforeAll(() => {
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 
 const git = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, { cwd, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } }).trim()
+  execFileSync("git", args, {
+    cwd,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      GIT_AUTHOR_NAME: "t",
+      GIT_AUTHOR_EMAIL: "t@t",
+      GIT_COMMITTER_NAME: "t",
+      GIT_COMMITTER_EMAIL: "t@t",
+    },
+  }).trim()
 
 function repo(withCommit = true): string {
   const dir = path.join(root, `r${n++}`)
@@ -41,7 +59,10 @@ describe("data directory and config", () => {
     const env = { GATEHOUSE_DATA_DIR: path.join(root, "data") }
     expect(loadConfig(env)).toEqual({ redactTerms: [] })
     fs.mkdirSync(env.GATEHOUSE_DATA_DIR)
-    fs.writeFileSync(configPath(env), JSON.stringify({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" }))
+    fs.writeFileSync(
+      configPath(env),
+      JSON.stringify({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" }),
+    )
     expect(loadConfig(env)).toEqual({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" })
     fs.writeFileSync(configPath(env), JSON.stringify({ redactTerms: "x" }))
     expect(() => loadConfig(env)).toThrow()
@@ -59,7 +80,11 @@ describe("createCheckpoint", () => {
     fs.writeFileSync(path.join(dir, "ignored.txt"), "ignored\n")
     const headBefore = git(dir, "rev-parse", "HEAD")
     const statusBefore = git(dir, "status", "--porcelain")
-    const cp = await createCheckpoint({ cwd: dir, sessionId: "sess 1", label: "before the risky bit" })
+    const cp = await createCheckpoint({
+      cwd: dir,
+      sessionId: "sess 1",
+      label: "before the risky bit",
+    })
     expect(cp.ref).toMatch(/^refs\/gatehouse\/checkpoints\/sess-1\/\d{8}T\d{9}Z$/)
     expect(cp.base).toBe(headBefore)
     expect(git(dir, "rev-parse", "HEAD")).toBe(headBefore)
@@ -67,7 +92,9 @@ describe("createCheckpoint", () => {
     expect(git(dir, "show", `${cp.commit}:a.txt`)).toBe("two")
     expect(git(dir, "show", `${cp.commit}:new.txt`)).toBe("untracked")
     expect(() => git(dir, "show", `${cp.commit}:ignored.txt`)).toThrow()
-    expect(git(dir, "log", "-1", "--format=%s", cp.commit)).toBe("gatehouse checkpoint: before the risky bit")
+    expect(git(dir, "log", "-1", "--format=%s", cp.commit)).toBe(
+      "gatehouse checkpoint: before the risky bit",
+    )
     expect(git(dir, "rev-parse", cp.ref)).toBe(cp.commit)
   })
 
@@ -77,7 +104,12 @@ describe("createCheckpoint", () => {
     fs.mkdirSync(path.join(dir, "sub"))
     fs.writeFileSync(path.join(dir, "sub", "Server.PEM"), "key\n")
     fs.writeFileSync(path.join(dir, "ok.txt"), "fine\n")
-    const cp = await createCheckpoint({ cwd: dir, sessionId: "s", label: "x", excludeGlobs: ["**/.env", "**/*.pem"] })
+    const cp = await createCheckpoint({
+      cwd: dir,
+      sessionId: "s",
+      label: "x",
+      excludeGlobs: ["**/.env", "**/*.pem"],
+    })
     const files = git(dir, "ls-tree", "-r", "--name-only", cp.commit).split("\n")
     expect(files).toContain("ok.txt")
     expect(files).not.toContain(".env")
@@ -87,7 +119,11 @@ describe("createCheckpoint", () => {
   it("works in a repository with no commits and from a sub-folder", async () => {
     const dir = repo(false)
     fs.mkdirSync(path.join(dir, "deep"))
-    const cp = await createCheckpoint({ cwd: path.join(dir, "deep"), sessionId: "s", label: "first" })
+    const cp = await createCheckpoint({
+      cwd: path.join(dir, "deep"),
+      sessionId: "s",
+      label: "first",
+    })
     expect(cp.base).toBeUndefined()
     expect(git(dir, "ls-tree", "-r", "--name-only", cp.commit)).toContain("a.txt")
   })
@@ -106,12 +142,18 @@ describe("createCheckpoint", () => {
 
   it("cleans odd labels and session ids, and fails clearly outside a repository", async () => {
     const dir = repo()
-    const cp = await createCheckpoint({ cwd: dir, sessionId: "../../evil", label: "line1\nline2\u0007  x" })
+    const cp = await createCheckpoint({
+      cwd: dir,
+      sessionId: "../../evil",
+      label: "line1\nline2\u0007  x",
+    })
     expect(cp.ref.startsWith("refs/gatehouse/checkpoints/evil/")).toBe(true)
     expect(cp.label).toBe("line1 line2 x")
     expect(safeSegment("")).toBe("session")
     expect(safeSegment("a/b c")).toBe("a-b-c")
     const plain = fs.mkdtempSync(path.join(root, "plain-"))
-    await expect(createCheckpoint({ cwd: plain, sessionId: "s", label: "x" })).rejects.toThrow(/git rev-parse failed/)
+    await expect(createCheckpoint({ cwd: plain, sessionId: "s", label: "x" })).rejects.toThrow(
+      /git rev-parse failed/,
+    )
   })
 })
