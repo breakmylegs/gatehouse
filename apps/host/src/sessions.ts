@@ -159,6 +159,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   #setState(state: SessionState): void {
     if (this.#state === state) return
+    // An error is final. A result or an end-of-stream that arrives afterwards must not hide it.
+    if (this.#state === "error") return
     this.#state = state
     this.emit("state", this.info())
   }

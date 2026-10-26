@@ -329,7 +329,7 @@ describe("invariant 14: the organisation guard", () => {
   it("can refresh the account with a probe that sends nothing", async () => {
     const before = s.sdk.queries.length
     const snap = await s.account.refresh()
-    expect(snap).toMatchObject({ signedIn: true, email: "test@example.com" })
+    expect(snap).toMatchObject({ signedIn: true, email: "a@b.c" })
     expect(s.sdk.queries.length).toBe(before + 1)
     expect(s.sdk.queries.at(-1)?.prompts).toEqual([])
     expect(s.sdk.queries.at(-1)?.closed).toBe(true)

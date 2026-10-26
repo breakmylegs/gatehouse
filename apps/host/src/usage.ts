@@ -36,7 +36,8 @@ function num(v: unknown): number {
 }
 
 function add(into: UsageTotals, delta: UsageTotals): void {
-  for (const k of Object.keys(into) as (keyof UsageTotals)[]) into[k] += delta[k]
+  // Walk the delta's keys, not the target's: a session entry also holds its project name.
+  for (const k of Object.keys(delta) as (keyof UsageTotals)[]) into[k] += delta[k]
 }
 
 /** What an SDK `result` message adds. Reads the fields defensively: a missing one counts as zero. */
