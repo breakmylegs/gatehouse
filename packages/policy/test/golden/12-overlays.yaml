@@ -22,5 +22,5 @@
 - { kind: overlay, overlayName: other, t: Bash, cmd: "git status", overlay: { version: 1, removeAllow: [safe-shell] }, o: allow, r: safe-shell, note: "an overlay for another project does not apply" }
 - { kind: overlay, t: Write, p: "src/new.ts", overlay: { version: 1, deny: [{ id: no-src-writes, tools: [Write], pathGlobs: ["src/**"] }] }, o: deny, r: no-src-writes }
 - { kind: overlay, t: Read, p: ".env", overlay: { version: 1, deny: [{ id: no-read, tools: [Read] }] }, o: deny, r: secrets-files, note: "the floor still decides first" }
-- { kind: overlay, t: mcp__companion__notify_user, in: { text: "x" }, overlay: { version: 1, escalate: [{ id: slow-down, tools: [mcp__companion__notify_user], risk: 40 }] }, o: escalate, r: slow-down }
+- { kind: overlay, t: mcp__companion__notify_user, in: { text: "x" }, src: sdk, overlay: { version: 1, escalate: [{ id: slow-down, tools: [mcp__companion__notify_user], risk: 40 }] }, o: escalate, r: slow-down }
 - { kind: overlay, t: PowerShell, cmd: "Get-ChildItem", overlay: { version: 1, deny: [{ id: no-gci, commands: ["Get-ChildItem*"] }] }, o: deny, r: no-gci }

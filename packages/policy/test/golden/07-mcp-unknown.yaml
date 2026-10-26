@@ -1,8 +1,13 @@
 # MCP tools, web tools and tools the policy does not know. Tool names are case sensitive.
 - { t: mcp__github__create_issue, o: escalate, r: mcp-external }
-- { t: mcp__companion__notify_user, in: { text: "hi" }, o: allow, r: companion-tools }
-- { t: mcp__companion__create_checkpoint, in: { label: "x" }, o: allow, r: companion-tools }
-- { t: mcp__companion__get_policy_summary, in: {}, o: allow, r: companion-tools }
+- { t: mcp__companion__notify_user, in: { text: "hi" }, src: sdk, o: allow, r: companion-tools }
+- { t: mcp__companion__create_checkpoint, in: { label: "x" }, src: sdk, o: allow, r: companion-tools }
+- { t: mcp__companion__get_policy_summary, in: {}, src: sdk, o: allow, r: companion-tools }
+- { t: mcp__companion__notify_user, in: { text: "hi" }, src: user, o: escalate, r: no-rule, note: "a user-configured server that names itself companion is not the Companion" }
+- { t: mcp__companion__notify_user, in: { text: "hi" }, src: project, o: escalate, r: no-rule }
+- { t: mcp__companion__notify_user, in: { text: "hi" }, o: escalate, r: no-rule, note: "no known source, so the allow rule does not apply" }
+- { t: mcp__companion__get_policy_summary, in: {}, src: plugin, o: escalate, r: no-rule }
+- { t: mcp__github__create_issue, src: sdk, o: escalate, r: mcp-external }
 - { t: mcp__companion__other_tool, in: {}, o: escalate, r: no-rule }
 - { t: mcp__fs__read_file, in: { path: "x" }, o: escalate, r: mcp-external }
 - { t: mcp__companionx__t, in: {}, o: escalate, r: mcp-external }

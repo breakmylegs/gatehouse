@@ -16,6 +16,7 @@ export const ruleSchema = {
     pathInside: { const: "workspaceRoots" },
     pathOutside: { const: "workspaceRoots" },
     pathUnc: { type: "boolean" },
+    mcpSource: stringList,
     everySegmentMustMatch: { const: true },
     risk: { type: "integer", minimum: 0, maximum: 100 },
     message: { type: "string" },

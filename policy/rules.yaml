@@ -42,6 +42,6 @@ allow:
       commands: ["git status*", "git diff*", "git log*", "npm test*", "npm run lint*", "npx tsc --noEmit*",
                  "Get-ChildItem*", "Get-Content*"] }
   - { id: companion-tools, tools: ["mcp__companion__notify_user", "mcp__companion__create_checkpoint",
-                                   "mcp__companion__get_policy_summary"] }
+                                   "mcp__companion__get_policy_summary"], mcpSource: [sdk] }
 
 judgeEligible: [network]

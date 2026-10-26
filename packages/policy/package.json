@@ -5,7 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "replay": "tsx src/replay-cli.ts"
+    "replay": "tsx src/replay-cli.ts",
+    "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@gatehouse/shared": "0.0.0",

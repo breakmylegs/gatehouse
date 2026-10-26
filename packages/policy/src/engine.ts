@@ -131,7 +131,7 @@ export class PolicyEngine {
     if (floor) return this.#verdict("deny", { ...floor, risk: 100 }, hash, "floor")
     if (f.malformed) return this.#verdict("escalate", BUILTIN.malformed, hash, "rules")
 
-    const env = { f, policy, rootKey }
+    const env: MatchEnv = { f, policy, rootKey, mcpSource: ctx.mcpSource }
 
     // Deny rules, per call and per segment. Deny wins.
     const segDeny = new Map<number, Candidate>()
@@ -292,6 +292,7 @@ interface MatchEnv {
   f: Features
   policy: Policy
   rootKey: string
+  mcpSource: string | undefined
 }
 
 function segmentMatches(rule: Rule, seg: Segment, withWrappers: boolean): boolean {
@@ -327,6 +328,12 @@ function hasPathConstraint(rule: Rule): boolean {
 function matchRule(rule: Rule, env: MatchEnv, mode: Mode, withWrappers: boolean): RuleMatch | null {
   const { f } = env
   if (rule.exceptTools && matchAnyWildcard(rule.exceptTools, f.tool, false)) return null
+  if (rule.mcpSource) {
+    const known = env.mcpSource !== undefined
+    const inList = known && rule.mcpSource.includes(env.mcpSource as string)
+    // Allow rules need a listed source. Other rules apply unless the source is known and different.
+    if (mode === "every" ? !inList : known && !inList) return null
+  }
   let call = false
   const segs = new Set<number>()
   if (!rule.tools && !rule.commands) {

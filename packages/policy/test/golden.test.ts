@@ -23,6 +23,8 @@ interface Case {
   q?: string
   in?: Record<string, unknown>
   cwd?: string
+  /** The SDK-reported source of an MCP server (`sdk`, `user`, ...). */
+  src?: string
   o?: "allow" | "deny" | "escalate"
   r?: string
   needs?: Needs
@@ -132,7 +134,7 @@ function withTempDir<T>(fn: (dir: string) => T): T {
 }
 
 async function runCase(c: Case): Promise<{ outcome?: string; ruleId?: string; loadError?: string }> {
-  const ctx = { cwd: c.cwd ? subst(c.cwd) : fwd(fx.ws) }
+  const ctx = { cwd: c.cwd ? subst(c.cwd) : fwd(fx.ws), ...(c.src !== undefined ? { mcpSource: c.src } : {}) }
   const call = { toolName: c.t ?? "", input: inputFor(c) }
   if (c.kind === "overlay" || c.kind === "remember") {
     return withTempDir(async (dir) => {

@@ -23,6 +23,12 @@ export interface Rule {
   pathInside?: "workspaceRoots"
   pathOutside?: "workspaceRoots"
   pathUnc?: boolean
+  /**
+   * Where an MCP server came from, as reported by the SDK (`sdk` is an in-process server this host
+   * registered). Allow rules need the call's source to be in the list. Deny and escalate rules skip a
+   * call only when its source is known and not in the list, so an unknown source is never favoured.
+   */
+  mcpSource?: string[]
   everySegmentMustMatch?: boolean
   risk?: number
   message?: string
@@ -89,6 +95,8 @@ export interface ToolCall {
 
 export interface EvalContext {
   cwd: string
+  /** For `mcp__*` tools: the SDK's report of where the server came from (`options.mcpServer.source`). */
+  mcpSource?: string
   /** Defaults to the git root of cwd. */
   projectRoot?: string
 }

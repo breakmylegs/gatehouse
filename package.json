@@ -13,10 +13,12 @@
   "scripts": {
     "lint": "eslint .",
     "format": "prettier --check .",
-    "typecheck": "tsc -p apps/host/tsconfig.json && tsc -p packages/shared/tsconfig.json && tsc -p packages/policy/tsconfig.json",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "policy:replay": "npm run replay -w @gatehouse/policy --",
+    "audit:verify": "tsx packages/shared/src/audit/verify-cli.ts",
+    "approver": "npm run start -w @gatehouse/approver",
     "host:cli": "npm run spike -w @gatehouse/host --"
   },
   "devDependencies": {

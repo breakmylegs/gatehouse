@@ -238,6 +238,26 @@ describe("rule semantics", () => {
     expect((await e.evaluate(bash("cat"), ctx())).outcome).toBe("escalate")
   })
 
+  it("applies mcpSource to a deny rule only when the source is known and listed, so an unknown source is never favoured", async () => {
+    const doc = rulesDoc()
+    doc.deny.push({ id: "no-sdk-fs", tools: ["mcp__fs__*"], mcpSource: ["sdk"] })
+    const e = engineFor(doc)
+    const call = { toolName: "mcp__fs__read_file", input: {} }
+    expect((await e.evaluate(call, { ...ctx(), mcpSource: "sdk" })).ruleId).toBe("no-sdk-fs")
+    expect((await e.evaluate(call, ctx())).ruleId).toBe("no-sdk-fs")
+    expect((await e.evaluate(call, { ...ctx(), mcpSource: "user" })).ruleId).toBe("mcp-external")
+  })
+
+  it("needs a listed source for an allow rule that names one", async () => {
+    const e = engineFor(rulesDoc())
+    const call = { toolName: "mcp__companion__notify_user", input: {} }
+    expect((await e.evaluate(call, { ...ctx(), mcpSource: "sdk" })).ruleId).toBe("companion-tools")
+    for (const src of [undefined, "user", "project", "dynamic", ""]) {
+      const v = await e.evaluate(call, src === undefined ? ctx() : { ...ctx(), mcpSource: src })
+      expect(v).toMatchObject({ outcome: "escalate", ruleId: "no-rule" })
+    }
+  })
+
   it("uses several workspace roots", async () => {
     const other = fs.mkdtempSync(path.join(dir, "root2-"))
     fs.writeFileSync(path.join(other, "a.md"), "x")
