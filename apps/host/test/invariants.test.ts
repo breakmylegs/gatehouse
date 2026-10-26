@@ -357,6 +357,22 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
     }
   })
 
+  it("denies at once, without asking anyone, when the kill switch is engaged and the Approver is down", async () => {
+    const down = await buildStack({ approverDown: true, hardTimeoutMs: 1500 })
+    try {
+      down.sdk.turn = async () => undefined
+      await down.manager.start({ cwd: down.repo })
+      await down.kill.engage("desktop", "test")
+      const canUseTool = (down.sdk.queries.at(-1)?.options as Options).canUseTool
+      const result = await canUseTool!("Bash", { command: "git status" }, { signal: new AbortController().signal, toolUseID: "t1" } as never)
+      expect(result).toMatchObject({ behavior: "deny", toolUseID: "t1" })
+      expect((result as { message: string }).message).toContain("kill switch")
+      expect(down.broker.list()).toEqual([]) // it did not escalate to a person
+    } finally {
+      await down.stop()
+    }
+  })
+
   it("denies when canUseTool itself fails, never allows", async () => {
     const results: ToolCallResult[] = []
     const original = s.approver.evaluate.bind(s.approver)

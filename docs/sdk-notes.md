@@ -192,6 +192,17 @@ Verified against Claude Code 2.1.310 with `probes/prompt-tool-probe.ts`:
 - Allow: the tool ran and the file was written. Deny: the file was not written, and the model was told the message (it repeated it and did not try another route). A bare `{"behavior":"allow"}` also worked on this version, but Gatehouse always echoes `updatedInput`.
 - `permissionPromptToolName` cannot be combined with `canUseTool`. The Host uses `canUseTool`. Only headless runs use the prompt tool.
 
+## Phase 3 findings (2026-10-26, live run through `npm run host:cli`)
+
+A real session on the real SDK, started by the Host's own `createHost()` against a scratch repository, confirmed:
+
+- `Query.initializationResult()` can be awaited **before any prompt has been sent**. The Host uses this for the organisation guard (invariant 14): the account is checked, and if it is wrong the query is closed and nothing is ever sent.
+- `git status` was approved by Claude Code itself (read-only command), a `Write` inside the workspace went through `canUseTool` and the Approver, `npm install` was escalated, and a `Read` of `.env` was refused by the PreToolUse floor before `canUseTool`. A hook denial reaches Claude as "your permission settings deny access", and a `canUseTool` denial reaches it as the message the Host gives.
+- **Cost and usage semantics.** In a `result` message, `total_cost_usd` and every figure in `modelUsage` are **cumulative for the session**. The top-level `usage` object and `num_turns` are for that one result. Two turns of "reply with one word" reported cost 0.0385 then 0.0671, and `modelUsage.inputTokens` 2 then 6 while `usage.input_tokens` was 2 then 4. Gatehouse's usage store therefore adds only the change in cost and in `modelUsage` since the last result for that session, and takes tokens from `usage`.
+- The `canUseTool` options also carry `toolUseID`, `agentID`, `defaultToNo`, `suppressAlwaysAllowRule` and `requestId`. The Host echoes `toolUseID` in every result and treats `defaultToNo` as "never default to allow".
+- A `Stop` hook fires at the end of every turn, before the `result` message.
+- Starting a session adds about 0.04 USD of cache setup to the first turn on this account, so a one-word turn costs a few cents.
+
 ## MCP SDK (1.32.2)
 
 - Stateless HTTP: `new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })`, one `McpServer` and one transport per request, `transport.handleRequest(req, res, parsedBody)`. A `tools/call` request needs no earlier `initialize` in this mode, so the Host calls it with a single JSON-RPC `fetch`.
