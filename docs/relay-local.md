@@ -25,8 +25,8 @@ This is the simplest way and needs only Node, which Gatehouse already uses.
    npm run relay -- --public-url https://<laptop-name>.<tailnet>.ts.net
    ```
 
-   It remembers the address, so after that `npm run relay` is enough. It keeps its data in `%LOCALAPPDATA%Gatehouseelay` and listens on `127.0.0.1:8087` only. It refuses a different address later, because that would break every paired phone.
-3. Read the one-time enrolment token from `%LOCALAPPDATA%Gatehouseelayenrol-token.txt`.
+   It remembers the address, so after that `npm run relay` is enough. It keeps its data in `%LOCALAPPDATA%\Gatehouse\relay` and listens on `127.0.0.1:8087` only. It refuses a different address later, because that would break every paired phone.
+3. Read the one-time enrolment token from `%LOCALAPPDATA%\Gatehouse\relay\enrol-token.txt`.
 4. In Gatehouse, open **Devices**, enter the address and the token, and choose Connect. The token works once. The Relay writes a new one for the next device.
 
 Stop it with Ctrl+C. Restart it after rebuilding the phone app.
