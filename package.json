@@ -25,7 +25,8 @@
     "relay": "npm run start -w @gatehouse/relay",
     "relay:build-phone": "npm run build -w @gatehouse/phone",
     "package": "node scripts/package.mjs",
-    "package:check": "node scripts/package.mjs --check"
+    "package:check": "node scripts/package.mjs --check",
+    "installer": "node scripts/installer.mjs"
   },
   "devDependencies": {
     "@types/node": "24.19.2",
