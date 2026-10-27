@@ -7,3 +7,4 @@ packages/policy/test/golden/
 policy/
 **/dist-demo/
 **/dist/
+**/dist-app/

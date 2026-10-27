@@ -17,8 +17,9 @@
     "@gatehouse/policy": "0.0.0",
     "@gatehouse/shared": "0.0.0",
     "@modelcontextprotocol/sdk": "1.32.2",
+    "@simplewebauthn/server": "14.0.3",
     "fastify": "5.12.7",
-    "zod": "4.6.7",
-    "@simplewebauthn/server": "14.0.3"
+    "tsx": "4.23.15",
+    "zod": "4.6.7"
   }
 }

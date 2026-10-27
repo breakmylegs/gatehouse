@@ -23,7 +23,9 @@
     "host:cli": "npm run cli -w @gatehouse/host --",
     "host:spike": "npm run spike -w @gatehouse/host --",
     "relay": "npm run start -w @gatehouse/relay",
-    "relay:build-phone": "npm run build -w @gatehouse/phone"
+    "relay:build-phone": "npm run build -w @gatehouse/phone",
+    "package": "node scripts/package.mjs",
+    "package:check": "node scripts/package.mjs --check"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

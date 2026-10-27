@@ -279,3 +279,11 @@ Note on the test run: this laptop is heavily loaded (the Claude desktop app and 
 8. **If the machine stays this slow**, free the other sessions' processes before running the full suite.
 
 **Known limits** are listed at the end of `docs/threat-model.md`.
+
+## Phase 9. Running as an exe (added after the spec, at the owner's request)
+
+- `npm run package` builds `dist-app\Gatehouse\Gatehouse.exe` with `runtime\node.exe` and the `app` folder next to it, so it finds its files in the expected directory structure around it and the folder can be moved or zipped. The launcher (`packaging/Launcher.cs`, compiled with the C# compiler that ships with Windows) starts the Host, waits for it, prints the one-time address, opens Edge, stops everything on Ctrl+C or when the window closes, and a Windows job object ends the children if the launcher itself is killed. Options: `--no-browser`, `--check`, `--relay`, `--help`.
+- Verified: `npm run package:check` built the folder (about 465 MB), ran the packaged `Gatehouse.exe --check`, and it passed: the Host started from the packaged runtime and app, answered with its token, refused without it, and stopped cleanly.
+- An installer is a template only (`packaging/installer.iss`, Inno Setup, not compiled or tested: it is not installed here). The upgrade keeps the user's `app\policy` folder. A single file was judged not worth it (see `docs/packaging.md`).
+- Limits: not code signed (SmartScreen may warn), policy lives inside the app folder, so copy your rules across when replacing the folder.
+- Not covered by an automated test (it takes minutes and the network); use `npm run package:check`.

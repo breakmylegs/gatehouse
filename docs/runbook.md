@@ -17,6 +17,10 @@ How to run Gatehouse day to day. Commands are for PowerShell in the repository f
 3. The first run page checks that you are signed in, that your organisation matches, whether a managed policy is in force, and that the Approver is running. If the organisation is not set, enter the name shown in `/status` in Claude Code (for example `ACN - Premium`), save, and start Gatehouse again. Sessions refuse to start until it matches.
 4. Open **Sessions**, enter a folder, and start a session.
 
+### Or run it as an exe
+
+`npm run package` makes `dist-app\Gatehouse\Gatehouse.exe` with its runtime and application next to it. Double-click it instead of using the script. See `docs/packaging.md`.
+
 ### Start at logon (optional, not enabled)
 
 Gatehouse does not start at logon on its own. If you want that, run this once yourself. It opens no browser, so use the address from a terminal start or add `-NoBrowser` and open the printed address when you need it:
