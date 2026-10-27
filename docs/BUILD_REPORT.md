@@ -88,3 +88,22 @@ Sessions, `canUseTool`, the PreToolUse floor hook, the broker (desktop channel, 
 ### Owner to-do added in Phase 3
 
 - Set `expectedOrg` to `ACN - Premium` in `%LOCALAPPDATA%\Gatehouse\config.json`. Without it the Host refuses to start any session (invariant 14), and the first-run screen in Phase 5 will do this from the UI.
+
+## Phase 4. Design foundation
+
+- **Done:** `PRODUCT.md` (from the spec's product context), `docs/design/surface-briefs.md` (visual world and the nine surface briefs), and three approval card variants in one file, `docs/design/prototype/approval-card.html` (open it in a browser; keys 1, 2, 3 switch variant, a button switches light and dark).
+- **Variants:** A stacked (one column, actions in a row at the bottom), B decision rail (command and reasons in the main column, risk and all actions in a fixed right rail), C command first (facts in a strip, the command large, actions in a footer).
+- **Choice made without the owner:** B. The actions stay in one place whatever the command length, so a 10,000 character command scrolls while the rail stays put (the rail will be sticky in Phase 5). Deny sits first and Allow last with its chord shown. It matches the phone layout, where the same decision controls sit in a fixed bottom area. A and C push the actions below the command, so a long command pushes them off screen. The owner can still pick another variant; the cost of changing is one component.
+
+### Deviations in Phase 4
+
+| Spec | What was done | Why |
+|---|---|---|
+| `/impeccable init` interview, then the owner chooses a variant at a checkpoint | No interview and no checkpoint; PRODUCT.md is from the spec's own answers, and I chose the variant | The owner is away and asked for no questions. Init's rule to probe once with a real question was not followed for the same reason. |
+| Emil's `prototype` skill | A hand-written static HTML page with the same purpose (three variants behind a switcher, realistic data) | A single file needs no build and survives into Phase 5 as a reference. |
+| Per-surface `/impeccable shape` | One briefs file covering all nine surfaces | Same content, one place to read. |
+
+### Owner to-do added in Phase 4
+
+- Open `docs/design/prototype/approval-card.html`, and say if you prefer variant A or C over B.
+- The prototype's contrast and keyboard behaviour were not machine-checked. Phase 5 does that on the real components.
