@@ -1,6 +1,6 @@
-# Running the Relay on your own computer with Podman
+# Running the Relay on your own computer
 
-The Relay is a small service that passes sealed messages between Gatehouse on your computer and your iPhone. It runs on the same computer as Gatehouse, in a Podman container. It only ever holds ciphertext, so it needs no trust.
+The Relay is a small service that passes sealed messages between Gatehouse on your computer and your iPhone. It runs on the same computer as Gatehouse, either directly with Node or in a Podman container. It only ever holds ciphertext, so it needs no trust.
 
 Because it runs on your own computer, the phone can only reach it while that computer is on and connected. That is deliberate: the decision point is your computer.
 
