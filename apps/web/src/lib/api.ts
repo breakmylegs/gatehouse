@@ -8,7 +8,7 @@ export interface ApiResult<T> {
 }
 
 export async function api<T = unknown>(
-  method: "GET" | "POST" | "PUT",
+  method: "GET" | "POST" | "PUT" | "DELETE",
   url: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {
