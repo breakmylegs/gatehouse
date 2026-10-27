@@ -148,3 +148,38 @@ Vite and React app in `apps/web`, served by the Host from `apps/web/dist`. Every
 - Full suite: 39 files, 999 tests, all passing (the web app adds 44 and the admin API 12). `npm run lint`, `npm run format`, `npm run typecheck` clean. `npm audit` 0 vulnerabilities. 577 packages scanned for licences, no AGPL, GPL or LGPL.
 - Mutation check of the admin API: 6 deliberate bugs, 5 caught, 1 survived (`restartRequired` always true) and now has a test. Approval card: 4 deliberate bugs in the safety rules (plain Enter allows, Allow takes focus, Esc always denies, edit unchanged), all caught.
 - On a loaded laptop the Host's escalation tests time out at the old 10 second wait (git and PowerShell are slow while other tools hold dozens of `git.exe` processes in `C:\dev`). The wait is now 60 seconds; both files pass.
+
+## Phase 6. Relay, phone app and pairing
+
+The Relay (`apps/relay`), the phone app (`apps/phone`), the Host's phone channel (`apps/host/src/relay`), the Devices page, and the shared protocol (`packages/shared`: `e2e.ts`, `relay-protocol.ts`, `phone-protocol.ts`).
+
+**How it works.** The Host seals each escalation to the phone's ECDH key (ephemeral ECDH P-256, HKDF-SHA-256, AES-256-GCM, request id as additional data) and posts it to the Relay. The phone opens it, shows it, and answers with an envelope signed by its passkey (a WebAuthn assertion whose challenge is the hash of the envelope), sealed to the Host's key. The Host opens it and accepts it only through `verifyPhoneDecision` (invariant 8): passkey assertion against the pinned credential, unused nonce, unexpired envelope, payload hash matching the request it sent, and the right device. The Relay never sees text or the answer, and a push says only "Approval needed" unless the user turned lock-screen detail on (the phone's service worker then opens a small sealed summary).
+
+- **Relay:** Fastify and Node's built-in `node:sqlite` (no native addons), enrolment by a one-time token, pairing with an 8 character code valid 5 minutes, passkey login for phone sessions (15 minutes), long-poll for decisions, Web Push with VAPID keys made on first run, purge every minute, rate limits on endpoints with no login, strict CSP on pages, `trustProxy` by address function.
+- **Pairing:** the Host verifies the phone's attestation itself, both sides show the same six digits derived from both keys and the passkey id, and the passkey and key are pinned only after the user confirms on the desktop. Revoking removes the pinned key first, so that phone is refused at once even if the Relay is down.
+- **Phone app:** installable PWA (manifest, icons, a classic-script service worker), guided Add to Home Screen, pairing, Face ID unlock, list, request detail with the command shown in full, Deny in one tap, Allow behind a second step, a message to Claude, questions, kill switch behind a second step, lock-screen detail off by default.
+- **Host:** `PhoneService` (pairing, delivery, decision loop, notifications for finished sessions and notes from Claude), a persisted store with the device token and the Host's private key protected by Windows DPAPI (`scripts/dpapi.ps1`), admin endpoints and the Devices page (set up, pair with the six digits, rename, revoke). Every refused phone decision is audited as `phone_decision_rejected`.
+- **Oversize:** a request too big for a push-safe body (4,800 bytes) is shown to the phone in outline and the phone may only deny it. (This also keeps bodies under the 8 KB limit that some edges apply.)
+
+**Results.** Relay 27 tests (real WebAuthn verification with a software passkey). Invariant 8 gate 12 tests. Host and Relay end to end 16 tests (real Relay, real broker, real audit): pairing and fingerprint, allow, deny with a message, question, an envelope that tries to edit input or remember a rule (refused: the passkey signed different bytes), replay, a request the Relay made up, a sealed decision altered or sealed to the wrong key, oversize, kill from the phone (once, never re-armed), revocation, and the Devices endpoints. Phone app 16 tests, Devices page 5. Mutation checks: Relay 8 deliberate bugs (6 applied, all caught), decision gate 11 (10 caught; the 11th, an explicit credential id check, is redundant because the library also rejects a different passkey, so it stays as defence in depth). Detector on the phone app at 390 by 844, every screen: no overflow, one finding (type scale), fixed.
+
+### Found and fixed during Phase 6
+
+- The first draft of the tamper test raced the Host's own poll; it now feeds the altered envelope straight to the handler.
+- `eslint` and `prettier` were reading the demo build output (862 false errors); both now ignore `dist-demo`.
+
+### Deviations in Phase 6
+
+| Spec | What was done | Why |
+|---|---|---|
+| Relay deployed on the owner's server behind Caddy and Authentik | Runs locally, started with `npm run relay` or in a Podman container, reached by the phone through an https tunnel | The owner asked for a local, container-optional run. Authentik and Caddy are optional. The Authentik-in-Home-Screen question no longer applies. |
+| Docker image built and tested | Dockerfile and compose written, not built | No container tool is installed on this machine. |
+| Relay settings in `.env` | The public address is given once on the command line and remembered; everything else has a default | Nothing may have to be in the environment. The container still takes `RELAY_PUBLIC_URL`. |
+| Notification lock-screen detail | Sealed summary sent with each request push | The service worker can only decrypt what the push carries. |
+| `@simplewebauthn/browser` on the phone | Used | As specified. |
+| Real iPhone checks | Not done | See the owner to-do list and `docs/relay-local.md`. |
+
+### Owner to-do added in Phase 6
+
+- Run the Relay (`docs/relay-local.md`), set up an https address (Tailscale is the simplest), pair the iPhone, and walk through the "things to check on a real iPhone" list. WebAuthn, Home Screen install and push cannot be tested without the device.
+- If you want the container, build it once with Podman and tell me if it fails.
