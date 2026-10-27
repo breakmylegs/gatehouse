@@ -21,6 +21,9 @@ import { createCompanionSdkServer } from "./companion-server.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
 import { HostKillSwitch } from "./kill.js"
+import { DpapiProtector, PlainProtector, type Protector } from "./relay/protector.js"
+import { PhoneService } from "./relay/service.js"
+import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
 import { SessionManager, type SessionDeps } from "./sessions.js"
 import { UsageStore } from "./usage.js"
@@ -37,6 +40,8 @@ export interface HostOptions {
   config?: GatehouseConfig
   rulesPath?: string
   log?: (line: string) => void
+  /** How the device token and the Host's phone key are kept on disk. Defaults to DPAPI on Windows. */
+  phoneProtector?: Protector
 }
 
 export interface Host {
@@ -85,7 +90,16 @@ export function createHost(opts: HostOptions = {}): Host {
     new AuditWriter({ dir, redact: (v) => redact(v, { terms: config.redactTerms }) }),
     log,
   )
+  const phoneHolder: { svc?: PhoneService } = {}
   const broker = new Broker({
+    phone: {
+      deliver: (r) =>
+        phoneHolder.svc
+          ? phoneHolder.svc.deliver(r)
+          : Promise.reject(new Error("No phone is paired")),
+      cancel: (id, summary) =>
+        phoneHolder.svc ? phoneHolder.svc.cancel(id, summary) : Promise.resolve(),
+    },
     phoneExpiryMs: config.phoneExpiryMs,
     hardTimeoutMs: config.hardTimeoutMs,
     quietHours: () => config.quietHours ?? store.current?.rules.quietHours,
@@ -193,6 +207,27 @@ export function createHost(opts: HostOptions = {}): Host {
   deps.approver = approverProxy as unknown as ApproverClient
   manager = new SessionManager(deps)
 
+  const phoneStore = new PhoneStore(
+    path.join(gatehouseDataDir(env), "phone.json"),
+    opts.phoneProtector ??
+      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+  )
+  const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
+  phoneHolder.svc = phone
+  // A finished session or a note from Claude reaches the phone as a sealed message, never as plain text (invariant 9).
+  manager.on("event", ({ sessionId, type, data }) => {
+    const info = manager.get(sessionId)?.info()
+    const project = info?.project ?? "a session"
+    if (type === "notify_user" && typeof data.text === "string")
+      void phone
+        .notify("notify", { title: "Claude", body: String(data.text), project })
+        .catch(() => undefined)
+    else if (type === "stop")
+      void phone
+        .notify("stop", { title: "Session finished", body: "", project })
+        .catch(() => undefined)
+  })
+
   const health = (): Health => {
     const acct = account.last()
     const ks = kill.status()
@@ -203,7 +238,7 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(policy.hash ? { policyHash: policy.hash } : {}),
         errors: policy.errors,
       },
-      relay: { state: "not-configured", devices: 0 },
+      relay: phone.health(),
       signin: {
         signedIn: acct?.signedIn ?? false,
         ...(acct?.email ? { email: acct.email } : {}),
@@ -248,7 +283,9 @@ export function createHost(opts: HostOptions = {}): Host {
       env,
       config: () => config,
       log,
+      phone,
     },
+    phone,
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),
     log,
   }
@@ -264,6 +301,12 @@ export function createHost(opts: HostOptions = {}): Host {
     async start() {
       fs.mkdirSync(gatehouseDataDir(env), { recursive: true })
       store.load()
+      try {
+        phoneStore.load()
+        phone.start()
+      } catch (e) {
+        log(`phone settings did not load (${(e as Error).message}), the phone channel is off`)
+      }
       if (store.status().errors.length > 0)
         log(`policy did not load: ${store.status().errors.join("; ")}`)
       store.watch()
@@ -301,6 +344,7 @@ export function createHost(opts: HostOptions = {}): Host {
       await kill.syncApprover()
     },
     async stop() {
+      phone.stop()
       await manager.closeAll()
       await usage.flush()
       await approverProcess?.stop()

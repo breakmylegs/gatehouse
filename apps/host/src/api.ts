@@ -18,6 +18,7 @@ import {
 import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
 import { configPath, GatehouseConfig, writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
+import type { PhoneService } from "./relay/service.js"
 
 /**
  * What the Host's admin endpoints need. They serve the desktop UI only: the same guard as the WebSocket
@@ -34,6 +35,8 @@ export interface AdminContext {
   /** The config the Host started with. Saved changes need a restart to take effect. */
   config: () => GatehouseConfig
   log: (line: string) => void
+  /** The phone channel, for the Devices page. */
+  phone?: PhoneService
 }
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex")
@@ -312,6 +315,8 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return { ok: true, hash }
   })
 
+  registerRelayRoutes(app, ctx)
+
   app.get("/api/settings", async () => {
     const file = configPath(ctx.env)
     const saved = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as unknown) : {}
@@ -356,4 +361,97 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     })
     return { ok: true, restartRequired: changed.length > 0, changed, audited: recorded }
   })
+}
+
+/** Pairing and device management for the Devices page. Desktop only: the phone has no way to reach these. */
+function registerRelayRoutes(app: FastifyInstance, ctx: AdminContext): void {
+  const phone = ctx.phone
+  if (!phone) return
+  const record = (event: string, input: unknown) =>
+    ctx.audit.record({
+      session: "desktop",
+      event,
+      channel: "desktop",
+      tool: "phone",
+      input,
+      verdict: {
+        outcome: "allow",
+        ruleId: event,
+        reason: "A phone setting was changed from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "none",
+      },
+      latencyMs: 0,
+    })
+  const guard = async (reply: FastifyReply, fn: () => Promise<unknown>) => {
+    try {
+      return await fn()
+    } catch (e) {
+      return bad(reply, 502, (e as Error).message)
+    }
+  }
+
+  app.get("/api/relay", async () => ({
+    health: phone.health(),
+    phones: phone.listPhones().map((p) => ({ id: p.id, name: p.name, pairedAt: p.pairedAt })),
+  }))
+
+  app.post("/api/relay/setup", (req, reply) =>
+    guard(reply, async () => {
+      const b = req.body
+      if (
+        !isObject(b) ||
+        typeof b.url !== "string" ||
+        typeof b.enrolToken !== "string" ||
+        typeof b.name !== "string"
+      )
+        return bad(reply, 400, "Give url, enrolToken and name.")
+      await phone.setup(b.url, b.enrolToken.trim(), b.name.trim().slice(0, 80) || "Laptop")
+      await record("relay_setup", { url: new URL(b.url).origin })
+      return { ok: true, health: phone.health() }
+    }),
+  )
+
+  app.post("/api/relay/pairing", (_req, reply) =>
+    guard(reply, async () => {
+      const v = await phone.startPairing()
+      await record("pairing_started", { id: v.id })
+      return v
+    }),
+  )
+  app.get("/api/relay/pairing/:id", (req, reply) =>
+    guard(reply, () => phone.pairingStatus((req.params as { id: string }).id)),
+  )
+  app.post("/api/relay/pairing/:id/confirm", (req, reply) =>
+    guard(reply, async () => {
+      const p = await phone.confirmPairing((req.params as { id: string }).id)
+      await record("phone_paired", { phoneId: p.id, name: p.name })
+      return { ok: true, phone: { id: p.id, name: p.name, pairedAt: p.pairedAt } }
+    }),
+  )
+  app.delete("/api/relay/pairing/:id", async (req) => {
+    phone.cancelPairing((req.params as { id: string }).id)
+    return { ok: true }
+  })
+
+  app.put("/api/relay/phones/:id", (req, reply) =>
+    guard(reply, async () => {
+      const name = (req.body as { name?: unknown } | null)?.name
+      if (typeof name !== "string" || name.trim().length < 1 || name.length > 80)
+        return bad(reply, 400, "Give a name of up to 80 characters.")
+      return (await phone.renamePhone((req.params as { id: string }).id, name.trim()))
+        ? { ok: true }
+        : bad(reply, 404, "No such phone.")
+    }),
+  )
+  app.delete("/api/relay/phones/:id", (req, reply) =>
+    guard(reply, async () => {
+      const id = (req.params as { id: string }).id
+      const r = await phone.revokePhone(id)
+      if (!r.removed) return bad(reply, 404, "No such phone.")
+      await record("phone_revoked", { phoneId: id, relayNotified: r.relayNotified })
+      return { ok: true, ...r }
+    }),
+  )
 }

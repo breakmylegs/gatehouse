@@ -17,6 +17,7 @@ import {
 } from "@gatehouse/shared"
 import type { AccountMonitor } from "./account.js"
 import { registerApi, type AdminContext } from "./api.js"
+import type { PhoneService } from "./relay/service.js"
 import {
   Broker,
   describeResolution,
@@ -46,6 +47,8 @@ export interface HostApp {
   expectedOrg: () => string | undefined
   /** Policy, audit and settings endpoints for the desktop UI. Absent in tests that do not need them. */
   admin?: AdminContext
+  /** The phone channel. Absent in tests that do not need it. */
+  phone?: PhoneService
   /** Past sessions from the SDK. */
   listHistory: (dir?: string) => Promise<unknown>
   log: (line: string) => void
@@ -232,6 +235,7 @@ export class HostServer {
     a.audit.onRecord = (record) => this.#broadcast({ type: "audit", record })
     a.usage.onChange = (usage) => this.#broadcast({ type: "usage", usage })
     a.kill.on("changed", () => this.#broadcast({ type: "health", health: a.health() }))
+    a.phone?.on("health", () => this.#broadcast({ type: "health", health: a.health() }))
   }
 
   /** Called when something outside the server changes health (the Approver restarting, a sign-in check). */

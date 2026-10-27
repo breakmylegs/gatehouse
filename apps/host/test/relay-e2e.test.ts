@@ -574,3 +574,73 @@ async function openFake() {
     sealed,
   }
 }
+
+describe("the Devices endpoints the desktop page uses", () => {
+  it("pairs, renames and revokes through the API, and audits each step", async () => {
+    const { default: Fastify } = await import("fastify")
+    const { registerApi } = await import("../src/api.js")
+    const app = Fastify()
+    registerApi(app, {
+      engine: stack.deps.engine,
+      store: stack.store,
+      pwsh: undefined,
+      audit: stack.audit,
+      auditDir: stack.auditDir,
+      loadOptions: { rulesPath: path.join(stack.dir, "rules.yaml") },
+      env: {},
+      config: () => ({}) as never,
+      log: () => undefined,
+      phone: service,
+    })
+    await app.ready()
+    const call = async (method: "GET" | "POST" | "PUT" | "DELETE", url: string, body?: unknown) => {
+      const r = await app.inject({
+        method,
+        url,
+        ...(body !== undefined ? { payload: body as object } : {}),
+      })
+      return { status: r.statusCode, json: r.json() as any }
+    }
+    expect((await call("GET", "/api/relay")).json).toMatchObject({
+      health: { state: "connected", devices: 0 },
+      phones: [],
+    })
+    expect((await call("POST", "/api/relay/setup", { url: "x" })).status).toBe(400)
+    expect(
+      (
+        await call("POST", "/api/relay/setup", {
+          url: "http://example.com",
+          enrolToken: "t",
+          name: "n",
+        })
+      ).status,
+    ).toBe(502)
+    const p2 = await FakePhone.create()
+    const started = await call("POST", "/api/relay/pairing")
+    expect(started.status).toBe(200)
+    expect((await p2.register(started.json.code)).status).toBe(200)
+    const status = await call("GET", `/api/relay/pairing/${started.json.id}`)
+    expect(status.json).toMatchObject({
+      status: "awaiting-confirmation",
+      fingerprint: await p2.fingerprint(),
+    })
+    const confirmed = await call("POST", `/api/relay/pairing/${started.json.id}/confirm`)
+    expect(confirmed.status).toBe(200)
+    const id = confirmed.json.phone.id as string
+    expect((await call("PUT", `/api/relay/phones/${id}`, { name: "Peter's iPhone" })).status).toBe(
+      200,
+    )
+    expect((await call("GET", "/api/relay")).json.phones[0].name).toBe("Peter's iPhone")
+    expect((await call("PUT", `/api/relay/phones/${id}`, { name: "" })).status).toBe(400)
+    expect((await call("DELETE", `/api/relay/phones/${id}`)).json).toMatchObject({
+      ok: true,
+      removed: true,
+    })
+    expect((await call("DELETE", `/api/relay/phones/${id}`)).status).toBe(404)
+    expect((await call("GET", "/api/relay/pairing/nope")).status).toBe(502)
+    const events = stack.records().map((r) => r.event)
+    for (const e of ["pairing_started", "phone_paired", "phone_revoked"])
+      expect(events).toContain(e)
+    await app.close()
+  })
+})
