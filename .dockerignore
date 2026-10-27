@@ -1,0 +1,10 @@
+node_modules
+**/node_modules
+**/dist
+**/dist-demo
+.git
+docs
+coverage
+.claude
+*.md
+!**/package.json

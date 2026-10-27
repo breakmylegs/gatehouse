@@ -1,37 +1,34 @@
 /**
- * Starts the Relay. Deployment settings come from the container environment (this is the server, not the
- * laptop app): RELAY_PUBLIC_URL is required because the passkey is bound to that address.
+ * Starts the Relay on this computer. It listens on 127.0.0.1 only: put an https tunnel (Tailscale, a
+ * Cloudflare tunnel) in front of it so the phone can reach it. See docs/relay-local.md.
  */
 import path from "node:path"
+import { resolveRelayConfig } from "./config.js"
 import { Store } from "./db.js"
 import { WebPushSender } from "./push.js"
 import { buildRelay } from "./server.js"
 
-const env = process.env
-const publicUrl = env.RELAY_PUBLIC_URL
-if (
-  !publicUrl ||
-  (!/^https:\/\//.test(publicUrl) && !/^http:\/\/localhost(:\d+)?$/.test(publicUrl))
-) {
-  process.stderr.write(
-    "RELAY_PUBLIC_URL must be the https address the phone uses, for example https://gatehouse.example.com\n",
-  )
+let cfg
+try {
+  cfg = resolveRelayConfig(process.argv.slice(2), process.env)
+} catch (e) {
+  process.stderr.write(`${(e as Error).message}\n`)
   process.exit(1)
 }
-const dataDir = env.RELAY_DATA_DIR ?? "/data"
-const store = new Store(dataDir)
-const enrolFile = path.join(dataDir, "enrol-token.txt")
+const store = new Store(cfg.dataDir)
+const enrolFile = path.join(cfg.dataDir, "enrol-token.txt")
 const relay = await buildRelay({
-  publicUrl,
+  publicUrl: cfg.publicUrl,
   store,
-  push: new WebPushSender(store, publicUrl),
-  ...(env.RELAY_PHONE_DIST ? { phoneDist: env.RELAY_PHONE_DIST } : {}),
+  push: new WebPushSender(store, cfg.publicUrl),
+  ...(cfg.phoneDist ? { phoneDist: cfg.phoneDist } : {}),
   enrolFile,
   log: (l) => process.stdout.write(`[relay] ${l}\n`),
 })
-const port = Number(env.RELAY_PORT ?? 8080)
-await relay.app.listen({ host: env.RELAY_HOST ?? "0.0.0.0", port })
-process.stdout.write(`[relay] listening on ${port}. One-time enrolment token is in ${enrolFile}\n`)
+await relay.app.listen({ host: cfg.host, port: cfg.port })
+process.stdout.write(
+  `[relay] listening on ${cfg.host}:${cfg.port} for ${cfg.publicUrl}\n[relay] one-time enrolment token: ${enrolFile}\n`,
+)
 const stop = () => void relay.close().finally(() => process.exit(0))
 process.on("SIGTERM", stop)
 process.on("SIGINT", stop)

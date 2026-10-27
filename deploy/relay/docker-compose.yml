@@ -1,0 +1,23 @@
+# Run locally with Podman: podman compose up -d --build. The Relay listens only on 127.0.0.1 of this computer,
+# so your phone reaches it through an https tunnel (see docs/relay-local.md), never directly.
+services:
+  gatehouse-relay:
+    build:
+      context: ../..
+      dockerfile: deploy/relay/Dockerfile
+    image: gatehouse-relay:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8087:8080"
+    volumes:
+      - gatehouse-relay-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  gatehouse-relay-data:

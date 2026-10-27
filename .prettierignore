@@ -5,3 +5,5 @@ package-lock.json
 node_modules/
 packages/policy/test/golden/
 policy/
+**/dist-demo/
+**/dist/

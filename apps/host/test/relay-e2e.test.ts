@@ -304,7 +304,9 @@ describe("a phone answers a request (invariants 8, 9, 11, 12)", () => {
     expect(opened.payload.toolName).toBe("Bash")
     expect(JSON.stringify(opened.payload.input)).toContain("super-secret-client-package")
     expect(JSON.stringify(pushes)).not.toContain("super-secret")
-    expect((pushes.find((p) => p.msg.t === "request")?.msg as { sealed?: unknown }).sealed).toBeTruthy()
+    expect(
+      (pushes.find((p) => p.msg.t === "request")?.msg as { sealed?: unknown }).sealed,
+    ).toBeTruthy()
     expect(JSON.stringify(relayStore.db.prepare("select * from requests").all())).not.toContain(
       "super-secret",
     )
