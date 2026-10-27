@@ -11,7 +11,8 @@
       "WebWorker"
     ],
     "types": [
-      "vite/client"
+      "vite/client",
+      "@testing-library/jest-dom"
     ]
   },
   "include": [

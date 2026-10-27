@@ -272,7 +272,11 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
       },
       now(),
     )
-    void pushTo(phone, { t: "request", id: b.data.id }, b.data.priority === "high")
+    void pushTo(
+      phone,
+      { t: "request", id: b.data.id, ...(b.data.pushSealed ? { sealed: b.data.pushSealed } : {}) },
+      b.data.priority === "high",
+    )
     return { ok: true }
   })
 

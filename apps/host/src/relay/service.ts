@@ -59,6 +59,27 @@ export interface PhoneServiceDeps {
   fetchImpl?: typeof fetch
 }
 
+/** What a lock-screen notification may say if the user allowed details. Short, from the redacted copy. */
+function pushSummary(r: EscalationRequest): { title: string; body: string } {
+  const input = (r.input ?? {}) as Record<string, unknown>
+  const main =
+    typeof input.command === "string"
+      ? input.command
+      : typeof input.file_path === "string"
+        ? input.file_path
+        : r.toolName
+  const flat = main.replace(/s+/g, " ").trim()
+  return {
+    title:
+      r.kind === "question"
+        ? "Question from " + r.project
+        : r.kind === "plan"
+          ? "Plan to approve in " + r.project
+          : "Approval needed in " + r.project,
+    body: flat.length > 90 ? flat.slice(0, 89) + "…" : flat,
+  }
+}
+
 export type RelayState = "not-configured" | "connected" | "unreachable"
 
 /**
@@ -344,6 +365,11 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
           sealed,
           expiresAt: request.expiresAt,
           priority: request.verdict.risk >= 70 ? "high" : "normal",
+          pushSealed: await sealJson(
+            pushSummary(request),
+            await importPublicKey(phone.ecdhPublicKey),
+            "push",
+          ),
         })
         relayIds.set(phone.id, relayId)
         sent++
@@ -391,7 +417,7 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
         await client.notify(
           phone.id,
           kind,
-          await sealJson(message, await importPublicKey(phone.ecdhPublicKey), "notify"),
+          await sealJson(message, await importPublicKey(phone.ecdhPublicKey), "push"),
         )
       } catch (e) {
         this.#d.log(`notification not sent: ${(e as Error).message}`)

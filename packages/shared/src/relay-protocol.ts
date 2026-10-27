@@ -82,6 +82,8 @@ export const DeviceRequest = z.object({
   sealed: SealedSchema,
   expiresAt: z.string(),
   priority: z.enum(["normal", "high"]).default("normal"),
+  /** A short summary sealed to the phone's key, for the push. Shown on the lock screen only if the user allows it. */
+  pushSealed: SealedSchema.optional(),
 })
 
 export const DeviceNotify = z.object({

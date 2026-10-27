@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+:root {
+  --c-bg: oklch(97% 0.005 250);
+  --c-s1: oklch(100% 0 0);
+  --c-s2: oklch(94.5% 0.007 250);
+  --c-line: oklch(86% 0.01 250);
+  --c-tx: oklch(24% 0.02 255);
+  --c-mut: oklch(45% 0.02 255);
+  --c-acc: oklch(45% 0.15 255);
+  --c-acc-tx: #fff;
+  --c-hi: oklch(93% 0.07 85);
+  --c-hi-line: oklch(55% 0.13 70);
+  --c-sev: oklch(42% 0.17 25);
+  --c-ok: oklch(40% 0.11 150);
+  --c-warn: oklch(42% 0.1 70);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: oklch(19% 0.01 255);
+    --c-s1: oklch(23% 0.012 255);
+    --c-s2: oklch(27% 0.014 255);
+    --c-line: oklch(36% 0.016 255);
+    --c-tx: oklch(93% 0.008 255);
+    --c-mut: oklch(72% 0.015 255);
+    --c-acc: oklch(72% 0.13 255);
+    --c-acc-tx: oklch(18% 0.02 255);
+    --c-hi: oklch(33% 0.07 80);
+    --c-hi-line: oklch(78% 0.12 85);
+    --c-sev: oklch(76% 0.13 25);
+    --c-ok: oklch(78% 0.12 150);
+    --c-warn: oklch(80% 0.1 85);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-s1: var(--c-s1);
+  --color-s2: var(--c-s2);
+  --color-line: var(--c-line);
+  --color-tx: var(--c-tx);
+  --color-mut: var(--c-mut);
+  --color-acc: var(--c-acc);
+  --color-acc-tx: var(--c-acc-tx);
+  --color-hi: var(--c-hi);
+  --color-hi-line: var(--c-hi-line);
+  --color-sev: var(--c-sev);
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --font-ui: system-ui, -apple-system, "SF Pro Text", sans-serif;
+  --font-code: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-tx);
+  font: 17px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+:focus-visible {
+  outline: 3px solid var(--c-acc);
+  outline-offset: 2px;
+}
+.mono {
+  font-family: var(--font-code);
+}
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 8px 18px;
+  border: 1.5px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-s1);
+  font-weight: 600;
+}
+.btn:active {
+  background: var(--c-s2);
+}
+.btn:disabled {
+  opacity: 0.55;
+}
+.btn-primary {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  border-color: var(--c-acc);
+}
+.btn-strong {
+  border-color: var(--c-acc);
+  color: var(--c-acc);
+}
+.btn-danger {
+  border-color: var(--c-sev);
+  color: var(--c-sev);
+}
+.field {
+  min-height: 52px;
+  width: 100%;
+  padding: 8px 14px;
+  border: 1.5px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-s1);
+  font-size: 17px;
+}
+::placeholder {
+  color: var(--c-mut);
+  opacity: 1;
+}
+.panel {
+  background: var(--c-s1);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+}
+.cmd {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--c-s2);
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 15px/1.55 var(--font-code);
+}
+mark.seg {
+  background: var(--c-hi);
+  color: inherit;
+  border-bottom: 2px solid var(--c-hi-line);
+}
+.safe-top {
+  padding-top: max(12px, env(safe-area-inset-top));
+}
+.safe-bottom {
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

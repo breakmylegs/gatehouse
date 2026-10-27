@@ -119,6 +119,7 @@ export class RelayClient {
     sealed: Sealed
     expiresAt: string
     priority: "normal" | "high"
+    pushSealed?: Sealed
   }) {
     return this.#call<{ ok: true }>("POST", "/api/device/requests", body)
   }
