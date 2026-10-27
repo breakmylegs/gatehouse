@@ -36,7 +36,7 @@ export function sessions(n: number): SessionInfo[] {
     const project = NAMES[i % NAMES.length] as string
     return {
       id: `s${i}`,
-      cwd: `C:\dev\${"deeply\nested\\".repeat(i % 4)}${project}`,
+      cwd: "C:/dev/" + "deeply/nested/".repeat(i % 4) + project,
       project,
       model: i % 3 === 0 ? undefined : "claude-sonnet-5-5",
       mode: i % 5 === 0 ? "plan" : "default",
@@ -78,7 +78,10 @@ export function pending(n: number, sessionCount: number): PendingView[] {
         toolUseId: `tu${i}`,
         toolName: i % 6 === 3 ? "Write" : "Bash",
         input: { command },
-        cwd: `C:\Users\peter.j.kelly\OneDrive - Accenture\Documents\${"Very Long Folder Name ".repeat(6)}${project}`,
+        cwd:
+          "C:/Users/peter.j.kelly/OneDrive - Accenture/Documents/" +
+          "Very Long Folder Name ".repeat(6) +
+          project,
         project,
         verdict: {
           outcome: "escalate",

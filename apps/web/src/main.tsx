@@ -1,6 +1,7 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { App } from "./App"
+import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./styles.css"
 import { startConnection, useStore } from "./store"
 
@@ -8,7 +9,9 @@ const root = createRoot(document.getElementById("root") as HTMLElement)
 if (startConnection()) {
   root.render(
     <StrictMode>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </StrictMode>,
   )
 } else {

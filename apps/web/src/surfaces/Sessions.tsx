@@ -128,6 +128,7 @@ export function Sessions() {
         </div>
         <p className="m-0 text-xs text-mut">
           Sessions only ever run in Default or Plan mode. Anything risky waits for your decision.
+          Starting one can take up to a minute while Claude signs in.
         </p>
         {error ? (
           <p role="alert" className="m-0 font-semibold text-sev">

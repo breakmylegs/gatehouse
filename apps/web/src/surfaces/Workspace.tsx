@@ -76,7 +76,7 @@ export function Workspace() {
           >
             {list.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.project}
+                {s.project} ({s.cwd.split(/[\\/]/).slice(-2).join("/")}, {s.state})
               </option>
             ))}
           </select>
