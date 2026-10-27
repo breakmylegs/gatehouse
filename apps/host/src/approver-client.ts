@@ -4,8 +4,11 @@ export interface ApproverClientOptions {
   /** For example http://127.0.0.1:47821/mcp */
   url: string
   token: string
-  /** The spec's limit for one evaluation is 5 seconds. */
-  timeoutMs?: number
+  /**
+   * The spec's limit for one evaluation is 5 seconds. It may be a function, because the optional judge makes
+   * a judge-eligible call slower (a model call) and the Host allows for that only while the policy has it on.
+   */
+  timeoutMs?: number | (() => number)
 }
 
 export interface EvaluateCall {
@@ -106,7 +109,9 @@ export class ApproverClient {
         method: "tools/call",
         params: { name, arguments: args },
       }),
-      signal: AbortSignal.timeout(this.#opts.timeoutMs),
+      signal: AbortSignal.timeout(
+        typeof this.#opts.timeoutMs === "function" ? this.#opts.timeoutMs() : this.#opts.timeoutMs,
+      ),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const body = (await res.json()) as {

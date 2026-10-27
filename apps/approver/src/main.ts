@@ -9,6 +9,7 @@ import { PwshWorker } from "@gatehouse/policy"
 import { auditDir, loadConfig } from "@gatehouse/shared/node"
 import { assertUsableToken } from "./guard.js"
 import { ApproverServer } from "./server.js"
+import { createSdkJudge } from "./sdk-judge.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const env = process.env
@@ -21,7 +22,7 @@ try {
   const rulesPath =
     env.GATEHOUSE_RULES_PATH ?? config.rulesPath ?? path.resolve(here, "../../../policy/rules.yaml")
   const rulesDir = path.dirname(rulesPath)
-  const server = new ApproverServer({
+  const server: ApproverServer = new ApproverServer({
     token,
     port: Number(env.GATEHOUSE_APPROVER_PORT ?? 47821),
     rules: {
@@ -34,6 +35,10 @@ try {
     redactTerms: config.redactTerms,
     promptCwd: env.GATEHOUSE_PROMPT_CWD ?? process.cwd(),
     pwsh: new PwshWorker(),
+    // The judge is always wired in but does nothing unless the policy turns it on (it is off by default).
+    judge: createSdkJudge({
+      model: (): string | undefined => server.store.current?.rules.defaults?.judge?.model,
+    }),
     watchRules: true,
     log,
   })

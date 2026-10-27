@@ -2,7 +2,14 @@ import http from "node:http"
 import type { AddressInfo } from "node:net"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js"
-import { PolicyEngine, PolicyStore, PwshWorker, redact, type LoadOptions } from "@gatehouse/policy"
+import {
+  PolicyEngine,
+  PolicyStore,
+  PwshWorker,
+  redact,
+  type JudgeFn,
+  type LoadOptions,
+} from "@gatehouse/policy"
 import { AuditWriter } from "@gatehouse/shared/audit"
 import { assertUsableToken, checkRequest, MAX_BODY_BYTES } from "./guard.js"
 import { KillSwitch } from "./killswitch.js"
@@ -23,6 +30,8 @@ export interface ApproverServerOptions {
   maxBodyBytes?: number
   /** Where GATEHOUSE_STATE (the persisted kill switch) is found. Defaults to the process environment. */
   env?: NodeJS.ProcessEnv
+  /** The optional LLM judge. */
+  judge?: JudgeFn
   log?: (line: string) => void
 }
 
@@ -149,6 +158,7 @@ export class ApproverServer {
       audit: this.audit,
       pwsh: this.pwsh,
       kill: this.kill,
+      ...(this.#opts.judge ? { judge: this.#opts.judge } : {}),
       promptCwd: this.#opts.promptCwd ?? process.cwd(),
       log: this.#log,
     }

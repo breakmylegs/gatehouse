@@ -2,8 +2,10 @@ import path from "node:path"
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import {
+  applyJudge,
   BUILTIN_RULES,
   findProjectRoot,
+  type JudgeFn,
   type PolicyEngine,
   type PolicyStore,
   type PwshWorker,
@@ -18,6 +20,8 @@ export interface ApproverDeps {
   store: PolicyStore
   audit: AuditWriter
   pwsh: PwshWorker | undefined
+  /** The optional LLM judge. Used only when the policy turns it on and the rule is judge-eligible. */
+  judge?: JudgeFn
   kill: KillSwitch
   /** Used for approval_prompt, where the CLI does not say which folder it runs in. */
   promptCwd: string
@@ -81,6 +85,18 @@ export async function evaluateAndAudit(
         ...(ctx.projectRoot !== undefined ? { projectRoot: ctx.projectRoot } : {}),
         ...(ctx.mcpSource !== undefined ? { mcpSource: ctx.mcpSource } : {}),
       })
+  let judgeRationale: string | undefined
+  if (verdict.outcome === "escalate") {
+    const j = await applyJudge({
+      verdict,
+      call,
+      policy: deps.store.current,
+      judge: deps.judge,
+      log: deps.log,
+    })
+    verdict = j.verdict
+    judgeRationale = j.rationale
+  }
   const latencyMs = performance.now() - t0
   try {
     await deps.audit.append({
@@ -94,6 +110,7 @@ export async function evaluateAndAudit(
       input: call.input,
       verdict,
       latencyMs,
+      ...(judgeRationale !== undefined ? { judgeRationale } : {}),
     })
   } catch (e) {
     deps.log(`audit append failed (${(e as NodeJS.ErrnoException).code ?? (e as Error).name})`)

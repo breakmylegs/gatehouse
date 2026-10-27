@@ -105,6 +105,9 @@ export function createHost(opts: HostOptions = {}): Host {
     quietHours: () => config.quietHours ?? store.current?.rules.quietHours,
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
+  // 5 seconds, or 35 while the policy has the judge on (its own limit is 25). Still bounded, still fail-closed.
+  const approverTimeout = (): number =>
+    store.current?.rules.defaults?.judge?.enabled === true ? 35_000 : 5_000
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
   const checkpoints = new CheckpointManager({
     config: () => config,
@@ -122,6 +125,7 @@ export function createHost(opts: HostOptions = {}): Host {
   approverClient = new ApproverClient({
     url: approverUrl || "http://127.0.0.1:9/mcp",
     token: approverToken,
+    timeoutMs: approverTimeout,
   })
 
   // Assigned once, below, after the kill switch that needs it is built, so it cannot be a const here.
@@ -339,7 +343,11 @@ export function createHost(opts: HostOptions = {}): Host {
         })
         await approverProcess.start()
         approverUrl = approverProcess.url
-        approverClient = new ApproverClient({ url: approverUrl, token: approverToken })
+        approverClient = new ApproverClient({
+          url: approverUrl,
+          token: approverToken,
+          timeoutMs: approverTimeout,
+        })
       }
       await kill.syncApprover()
     },
