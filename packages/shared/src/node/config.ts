@@ -20,6 +20,18 @@ export const GatehouseConfig = z
     redactTerms: z.array(z.string()).default([]),
     /** The organisation the signed-in account must belong to (invariant 14). */
     expectedOrg: z.string().optional(),
+    /** Replaces the workspace roots in the rules file. Absent means use the rules file. */
+    workspaceRoots: z.array(z.string().min(1)).optional(),
+    /** Replaces the quiet hours in the rules file. Absent means use the rules file. */
+    quietHours: z
+      .object({
+        start: z.string().regex(/^([01]d|2[0-3]):[0-5]d$/),
+        end: z.string().regex(/^([01]d|2[0-3]):[0-5]d$/),
+        tz: z.string().min(1),
+        phone: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     /** Overrides the default rules file. */
     rulesPath: z.string().optional(),
     /** How long a request stays deliverable to the phone. */

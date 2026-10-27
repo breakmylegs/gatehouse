@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import path from "node:path"
 import http from "node:http"
 import net from "node:net"
 import os from "node:os"
@@ -631,6 +632,27 @@ describe("commands over the WebSocket", () => {
     big.ws.send("x".repeat((1 << 20) + 10))
     // 1009 is "message too big". Some platforms report 1006 (dropped) because the socket is torn down at once.
     expect([1009, 1006]).toContain(await closed)
+  })
+
+  it("serves a built interface at / and assets without a token, while /api still needs one", async () => {
+    fs.mkdirSync(path.join(staticDir, "assets"), { recursive: true })
+    fs.writeFileSync(path.join(staticDir, "index.html"), "<!doctype html><title>Gatehouse</title>")
+    fs.writeFileSync(path.join(staticDir, "assets", "app.js"), "console.log(1)")
+    const own = new HostServer({ app: hostApp, token: TOKEN, port: 0, staticDir })
+    const ownPort = await own.start()
+    try {
+      const get = (p: string, headers: Record<string, string> = {}) =>
+        fetch(`http://127.0.0.1:${ownPort}${p}`, { headers })
+      const root = await get("/")
+      expect(root.status).toBe(200)
+      expect(await root.text()).toContain("<title>Gatehouse</title>")
+      expect((await get("/assets/app.js")).status).toBe(200)
+      expect((await get("/api/state")).status).toBe(401)
+      expect((await get("/api/audit")).status).toBe(401)
+      expect((await get("/api/state", { authorization: `Bearer ${TOKEN}` })).status).toBe(200)
+    } finally {
+      await own.close()
+    }
   })
 
   it("stops promptly even when a client never answers the close handshake", async () => {

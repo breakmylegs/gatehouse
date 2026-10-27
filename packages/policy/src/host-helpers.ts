@@ -156,3 +156,15 @@ export async function appendRemember(
   await writeFileAtomic(localPath, stringifyYaml(next))
   return { id: `remember-${id}`, added: true }
 }
+
+/** Removes one remember rule from rules.local.yaml (only the desktop does this). Accepts the id with or without the `remember-` prefix. */
+export async function removeRemember(localPath: string, id: string): Promise<{ removed: boolean }> {
+  if (!fs.existsSync(localPath)) return { removed: false }
+  const checked = checkRememberFile(parseYaml(fs.readFileSync(localPath, "utf8")))
+  if (!checked.ok) throw new Error(`rules.local.yaml is not valid: ${checked.errors.join("; ")}`)
+  const bare = id.replace(/^remember-/, "")
+  const kept = checked.value.remember.filter((e) => e.id !== bare)
+  if (kept.length === checked.value.remember.length) return { removed: false }
+  await writeFileAtomic(localPath, stringifyYaml({ version: 1 as const, remember: kept }))
+  return { removed: true }
+}

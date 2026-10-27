@@ -43,7 +43,15 @@ export function parseReplayLine(text: string, line: number): ReplayRecord | unde
   const rec = asRecord(raw)
   if (!rec) return undefined
   const toolName = typeof rec.tool === "string" ? rec.tool : typeof rec.toolName === "string" ? rec.toolName : undefined
-  const input = asRecord(rec.input)
+  // Audit records carry the redacted input as a JSON string (inputJson), other callers pass an object.
+  let input = asRecord(rec.input)
+  if (!input && typeof rec.inputJson === "string") {
+    try {
+      input = asRecord(JSON.parse(rec.inputJson))
+    } catch {
+      input = undefined
+    }
+  }
   const cwd = typeof rec.cwd === "string" ? rec.cwd : undefined
   const verdict = asRecord(rec.verdict) ?? rec
   const outcome = verdict.outcome

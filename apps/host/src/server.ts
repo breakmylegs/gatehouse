@@ -16,6 +16,7 @@ import {
   type ServerEvent,
 } from "@gatehouse/shared"
 import type { AccountMonitor } from "./account.js"
+import { registerApi, type AdminContext } from "./api.js"
 import {
   Broker,
   describeResolution,
@@ -43,6 +44,8 @@ export interface HostApp {
   pwsh: PwshWorker | undefined
   health: () => Health
   expectedOrg: () => string | undefined
+  /** Policy, audit and settings endpoints for the desktop UI. Absent in tests that do not need them. */
+  admin?: AdminContext
   /** Past sessions from the SDK. */
   listHistory: (dir?: string) => Promise<unknown>
   log: (line: string) => void
@@ -137,10 +140,12 @@ export class HostServer {
     })
     app.get("/ws", { websocket: true }, (socket) => this.#onSocket(socket))
     app.get("/api/state", async () => this.#snapshot())
+    if (this.#opts.app.admin) registerApi(app, this.#opts.app.admin)
 
     const dir = this.#opts.staticDir
     if (dir && fs.existsSync(path.join(dir, "index.html"))) {
-      await app.register(fastifyStatic, { root: dir, wildcard: false })
+      // index: false because "/" is declared below, and fastify-static would declare it a second time.
+      await app.register(fastifyStatic, { root: dir, wildcard: false, index: false })
       app.get("/", (_req, reply) => reply.sendFile("index.html"))
     } else {
       app.get("/", (_req, reply) =>

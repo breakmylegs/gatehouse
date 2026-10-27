@@ -28,6 +28,7 @@ try {
       rulesPath,
       overlayDir: env.GATEHOUSE_OVERLAY_DIR ?? path.join(rulesDir, "projects"),
       localPath: env.GATEHOUSE_LOCAL_RULES ?? path.join(rulesDir, "rules.local.yaml"),
+      ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
     },
     auditDir: auditDir(env),
     redactTerms: config.redactTerms,

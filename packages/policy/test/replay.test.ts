@@ -42,6 +42,20 @@ describe("parseReplayLine", () => {
     expect(flat).toMatchObject({ toolName: "Read", before: { outcome: "deny", ruleId: "r" } })
   })
 
+  it("reads the redacted input an audit record keeps as a JSON string", () => {
+    const audit = JSON.stringify({
+      tool: "Bash",
+      inputJson: JSON.stringify({ command: "git status" }),
+      cwd: "C:/p",
+      verdict: { outcome: "allow", ruleId: "safe-shell" },
+    })
+    expect(parseReplayLine(audit, 1)).toMatchObject({ toolName: "Bash", input: { command: "git status" } })
+    const broken = JSON.stringify({ tool: "Bash", inputJson: "{nope", cwd: "C:/p", verdict: { outcome: "allow", ruleId: "r" } })
+    expect(parseReplayLine(broken, 1)).toBeUndefined()
+    const notObject = JSON.stringify({ tool: "Bash", inputJson: "[1]", cwd: "C:/p", verdict: { outcome: "allow", ruleId: "r" } })
+    expect(parseReplayLine(notObject, 1)).toBeUndefined()
+  })
+
   it("rejects lines that cannot be replayed", () => {
     for (const line of [
       "not json",

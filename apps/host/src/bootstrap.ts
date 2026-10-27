@@ -74,6 +74,7 @@ export function createHost(opts: HostOptions = {}): Host {
     rulesPath,
     overlayDir: env.GATEHOUSE_OVERLAY_DIR ?? path.join(rulesDir, "projects"),
     localPath: localRules,
+    ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
   }
 
   const store = new PolicyStore(loadOptions)
@@ -87,7 +88,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const broker = new Broker({
     phoneExpiryMs: config.phoneExpiryMs,
     hardTimeoutMs: config.hardTimeoutMs,
-    quietHours: () => store.current?.rules.quietHours,
+    quietHours: () => config.quietHours ?? store.current?.rules.quietHours,
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
@@ -237,6 +238,7 @@ export function createHost(opts: HostOptions = {}): Host {
     pwsh,
     health,
     expectedOrg: () => config.expectedOrg,
+    admin: { engine, store, pwsh, audit, auditDir: dir, loadOptions, env, config: () => config, log },
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),
     log,
   }

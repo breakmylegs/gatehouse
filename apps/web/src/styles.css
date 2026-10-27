@@ -1,0 +1,164 @@
+@import "tailwindcss";
+
+:root {
+  --c-bg: oklch(97% 0.005 250);
+  --c-s1: oklch(100% 0 0);
+  --c-s2: oklch(94.5% 0.007 250);
+  --c-line: oklch(86% 0.01 250);
+  --c-tx: oklch(24% 0.02 255);
+  --c-mut: oklch(45% 0.02 255);
+  --c-acc: oklch(45% 0.15 255);
+  --c-acc-tx: #fff;
+  --c-hi: oklch(93% 0.07 85);
+  --c-hi-line: oklch(55% 0.13 70);
+  --c-sev: oklch(42% 0.17 25);
+  --c-ok: oklch(40% 0.11 150);
+  --c-warn: oklch(42% 0.1 70);
+}
+:root[data-theme="dark"] {
+  --c-bg: oklch(19% 0.01 255);
+  --c-s1: oklch(23% 0.012 255);
+  --c-s2: oklch(27% 0.014 255);
+  --c-line: oklch(36% 0.016 255);
+  --c-tx: oklch(93% 0.008 255);
+  --c-mut: oklch(72% 0.015 255);
+  --c-acc: oklch(72% 0.13 255);
+  --c-acc-tx: oklch(18% 0.02 255);
+  --c-hi: oklch(33% 0.07 80);
+  --c-hi-line: oklch(78% 0.12 85);
+  --c-sev: oklch(76% 0.13 25);
+  --c-ok: oklch(78% 0.12 150);
+  --c-warn: oklch(80% 0.1 85);
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-s1: var(--c-s1);
+  --color-s2: var(--c-s2);
+  --color-line: var(--c-line);
+  --color-tx: var(--c-tx);
+  --color-mut: var(--c-mut);
+  --color-acc: var(--c-acc);
+  --color-acc-tx: var(--c-acc-tx);
+  --color-hi: var(--c-hi);
+  --color-hi-line: var(--c-hi-line);
+  --color-sev: var(--c-sev);
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-code: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-tx);
+  font: 13px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+[hidden] {
+  display: none !important;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--c-acc);
+  outline-offset: 2px;
+}
+.mono {
+  font-family: var(--font-code);
+}
+kbd {
+  font: 11px var(--font-code);
+  border: 1px solid var(--c-line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 5px;
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+  cursor: pointer;
+}
+.btn:hover {
+  background: var(--c-s2);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  border-color: var(--c-acc);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: var(--c-acc);
+  filter: brightness(1.08);
+}
+.btn-deny {
+  border-color: var(--c-sev);
+  color: var(--c-sev);
+  font-weight: 600;
+}
+.field {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+.panel {
+  background: var(--c-s1);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+}
+.cmd {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--c-s2);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 14px/1.6 var(--font-code);
+}
+mark.seg {
+  background: var(--c-hi);
+  color: inherit;
+  border-bottom: 2px solid var(--c-hi-line);
+  padding: 0 1px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn {
+    transition: background-color 0.12s ease-out;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}
