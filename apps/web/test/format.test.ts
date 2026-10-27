@@ -4,7 +4,14 @@ import { age, clock, commandText, money, riskBand } from "../src/lib/format"
 describe("format", () => {
   it("bands risk at 40, 70 and 85", () => {
     expect([0, 39, 40, 69, 70, 84, 85, 100].map(riskBand)).toEqual([
-      "Low", "Low", "Moderate", "Moderate", "High", "High", "Severe", "Severe",
+      "Low",
+      "Low",
+      "Moderate",
+      "Moderate",
+      "High",
+      "High",
+      "Severe",
+      "Severe",
     ])
   })
   it("ages in words", () => {

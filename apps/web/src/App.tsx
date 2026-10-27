@@ -1,16 +1,17 @@
 import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
 import { Toaster } from "sonner"
 import { Approvals } from "./surfaces/Approvals"
-import { Audit } from "./surfaces/Audit"
 import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
-import { Policy } from "./surfaces/Policy"
 import { Sessions } from "./surfaces/Sessions"
-import { Settings } from "./surfaces/Settings"
-import { Workspace } from "./surfaces/Workspace"
 import { type Route, send, usePendingCount, useStore } from "./store"
+
+const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
+const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.Policy })))
+const Settings = lazy(() => import("./surfaces/Settings").then((m) => ({ default: m.Settings })))
+const Workspace = lazy(() => import("./surfaces/Workspace").then((m) => ({ default: m.Workspace })))
 
 const NAV: Array<{ route: Route; label: string }> = [
   { route: "approvals", label: "Approvals" },
@@ -65,7 +66,16 @@ export function App() {
         >
           Needs you <NumberFlow value={pendingCount} className="font-semibold" />
         </button>
-        <StatusPill ok={conn === "open"} label={conn === "open" ? "Host connected" : conn === "connecting" ? `Connecting${attempt ? ` (try ${attempt + 1})` : ""}` : "Host disconnected"} />
+        <StatusPill
+          ok={conn === "open"}
+          label={
+            conn === "open"
+              ? "Host connected"
+              : conn === "connecting"
+                ? `Connecting${attempt ? ` (try ${attempt + 1})` : ""}`
+                : "Host disconnected"
+          }
+        />
         {health ? (
           <>
             <StatusPill
@@ -97,7 +107,11 @@ export function App() {
           <button
             className="btn btn-deny"
             onClick={() => {
-              if (window.confirm("Stop everything now? This denies all pending requests and refuses new sessions until you re-arm."))
+              if (
+                window.confirm(
+                  "Stop everything now? This denies all pending requests and refuses new sessions until you re-arm.",
+                )
+              )
                 void send({ type: "kill" })
             }}
           >
@@ -113,7 +127,10 @@ export function App() {
         <div />
       )}
       <div className="grid min-h-0 grid-cols-[190px_1fr] max-[900px]:grid-cols-1">
-        <nav aria-label="Surfaces" className="overflow-auto border-r border-line bg-s1 p-2 max-[900px]:border-b max-[900px]:border-r-0">
+        <nav
+          aria-label="Surfaces"
+          className="overflow-auto border-r border-line bg-s1 p-2 max-[900px]:border-b max-[900px]:border-r-0"
+        >
           <ul className="m-0 grid list-none gap-0.5 p-0 max-[900px]:grid-flow-col">
             {NAV.map((n) => (
               <li key={n.route}>
@@ -127,7 +144,9 @@ export function App() {
                 >
                   {n.label}
                   {n.route === "approvals" && pendingCount > 0 ? (
-                    <span className="rounded-full bg-acc px-2 text-xs font-semibold text-acc-tx">{pendingCount}</span>
+                    <span className="rounded-full bg-acc px-2 text-xs font-semibold text-acc-tx">
+                      {pendingCount}
+                    </span>
                   ) : null}
                 </button>
               </li>
@@ -135,14 +154,16 @@ export function App() {
           </ul>
         </nav>
         <main id="main" tabIndex={-1} className="min-h-0 overflow-auto outline-none">
-          {route === "approvals" && <Approvals />}
-          {route === "sessions" && <Sessions />}
-          {route === "workspace" && <Workspace />}
-          {route === "policy" && <Policy />}
-          {route === "audit" && <Audit />}
-          {route === "devices" && <Devices />}
-          {route === "settings" && <Settings />}
-          {route === "first-run" && <FirstRun />}
+          <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
+            {route === "approvals" && <Approvals />}
+            {route === "sessions" && <Sessions />}
+            {route === "workspace" && <Workspace />}
+            {route === "policy" && <Policy />}
+            {route === "audit" && <Audit />}
+            {route === "devices" && <Devices />}
+            {route === "settings" && <Settings />}
+            {route === "first-run" && <FirstRun />}
+          </Suspense>
         </main>
       </div>
       <Toaster position="bottom-right" theme={theme} closeButton />

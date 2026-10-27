@@ -46,14 +46,30 @@ beforeAll(async () => {
     pwsh: undefined,
     audit,
     auditDir,
-    loadOptions: { rulesPath, localPath: path.join(root, "rules.local.yaml"), workspaceRootsOverride: [root] },
+    loadOptions: {
+      rulesPath,
+      localPath: path.join(root, "rules.local.yaml"),
+      workspaceRootsOverride: [root],
+    },
     env,
     config: () => GatehouseConfig.parse({}),
     log: () => undefined,
   }
   for (const [tool, input, v, channel, project] of [
-    ["Read", { file_path: path.join(root, "a.txt") }, verdict("allow", "read-workspace"), "approver", "alpha"],
-    ["Bash", { command: "npm install left-pad" }, verdict("escalate", "no-rule"), "desktop", "alpha"],
+    [
+      "Read",
+      { file_path: path.join(root, "a.txt") },
+      verdict("allow", "read-workspace"),
+      "approver",
+      "alpha",
+    ],
+    [
+      "Bash",
+      { command: "npm install left-pad" },
+      verdict("escalate", "no-rule"),
+      "desktop",
+      "alpha",
+    ],
     ["Bash", { command: "rm -rf /" }, verdict("deny", "destructive-shell"), "approver", "beta"],
   ] as const) {
     await audit.record({
@@ -105,7 +121,10 @@ describe("audit endpoints", () => {
   it("reports an intact chain, then a broken one", async () => {
     const ok = await get("/api/audit/verify")
     expect(ok).toMatchObject({ ok: true, records: 3, problems: [] })
-    const file = path.join(auditDir, fs.readdirSync(auditDir).find((f) => f.endsWith(".jsonl")) as string)
+    const file = path.join(
+      auditDir,
+      fs.readdirSync(auditDir).find((f) => f.endsWith(".jsonl")) as string,
+    )
     const text = fs.readFileSync(file, "utf8")
     fs.writeFileSync(file, text.replace("destructive-shell", "destructive-shelx"))
     const broken = await get("/api/audit/verify")
@@ -133,33 +152,53 @@ describe("policy endpoints", () => {
 
   it("tests a command without writing to the audit log", async () => {
     const before = (await get("/api/audit?limit=50")).records.length
-    const post = (body: unknown) => app.inject({ method: "POST", url: "/api/policy/test", payload: body as object })
+    const post = (body: unknown) =>
+      app.inject({ method: "POST", url: "/api/policy/test", payload: body as object })
     const r = await post({ toolName: "Bash", input: { command: "git status" }, cwd: root })
     expect(r.statusCode).toBe(200)
     expect(r.json().outcome).toBe("allow")
-    const d = await post({ toolName: "Bash", input: { command: "git push --force origin main" }, cwd: root })
+    const d = await post({
+      toolName: "Bash",
+      input: { command: "git push --force origin main" },
+      cwd: root,
+    })
     expect(d.json().outcome).not.toBe("allow")
     expect((await get("/api/audit?limit=50")).records.length).toBe(before)
-    for (const bad of [{}, { toolName: "Bash", input: "x", cwd: root }, { toolName: "", input: {}, cwd: root }]) {
+    for (const bad of [
+      {},
+      { toolName: "Bash", input: "x", cwd: root },
+      { toolName: "", input: {}, cwd: root },
+    ]) {
       expect((await post(bad)).statusCode).toBe(400)
     }
   })
 
   it("replays a candidate against the log and lists what would change", async () => {
     const yaml = fs.readFileSync(rulesPath, "utf8")
-    const same = await app.inject({ method: "POST", url: "/api/policy/replay", payload: { rulesYaml: yaml } })
+    const same = await app.inject({
+      method: "POST",
+      url: "/api/policy/replay",
+      payload: { rulesYaml: yaml },
+    })
     expect(same.statusCode).toBe(200)
     expect(same.json().total).toBe(3)
     expect(same.json().changes).toEqual([])
-    const bad = await app.inject({ method: "POST", url: "/api/policy/replay", payload: { rulesYaml: "version: 1\nnope: [" } })
+    const bad = await app.inject({
+      method: "POST",
+      url: "/api/policy/replay",
+      payload: { rulesYaml: "version: 1\nnope: [" },
+    })
     expect(bad.statusCode).toBe(422)
     expect(bad.json().errors.length).toBeGreaterThan(0)
-    expect((await app.inject({ method: "POST", url: "/api/policy/replay", payload: {} })).statusCode).toBe(400)
+    expect(
+      (await app.inject({ method: "POST", url: "/api/policy/replay", payload: {} })).statusCode,
+    ).toBe(400)
   })
 
   it("activates only a valid file, only on the hash it was based on, and audits it", async () => {
     const p = await get("/api/policy")
-    const put = (body: unknown) => app.inject({ method: "PUT", url: "/api/policy/rules", payload: body as object })
+    const put = (body: unknown) =>
+      app.inject({ method: "PUT", url: "/api/policy/rules", payload: body as object })
     expect((await put({ yaml: "x" })).statusCode).toBe(400)
     expect((await put({ yaml: p.rulesYaml, baseHash: "0".repeat(64) })).statusCode).toBe(409)
     const broken = await put({ yaml: "not: [valid", baseHash: p.rulesYamlHash })
@@ -182,23 +221,29 @@ describe("remember rules", () => {
     const { id } = await appendRemember(localPath, { tool: "Bash", command: "npm test" })
     ctx.store.load()
     expect((await get("/api/policy")).remember.map((r: { id: string }) => r.id)).toContain(id)
-    const post = (body: unknown) => app.inject({ method: "POST", url: "/api/policy/remember/remove", payload: body as object })
+    const post = (body: unknown) =>
+      app.inject({ method: "POST", url: "/api/policy/remember/remove", payload: body as object })
     expect((await post({})).statusCode).toBe(400)
     expect((await post({ id: "remember-nope" })).statusCode).toBe(404)
     const ok = await post({ id })
     expect(ok.statusCode).toBe(200)
     expect((await get("/api/policy")).remember.map((r: { id: string }) => r.id)).not.toContain(id)
-    expect((await get("/api/audit?limit=1")).records[0]).toMatchObject({ event: "remember_removed" })
+    expect((await get("/api/audit?limit=1")).records[0]).toMatchObject({
+      event: "remember_removed",
+    })
     expect((await post({ id })).statusCode).toBe(404)
   })
 })
 
 describe("settings endpoints", () => {
   it("rejects unknown keys and bad values", async () => {
-    const put = (body: unknown) => app.inject({ method: "PUT", url: "/api/settings", payload: body as object })
+    const put = (body: unknown) =>
+      app.inject({ method: "PUT", url: "/api/settings", payload: body as object })
     expect((await put({ surprise: 1 })).statusCode).toBe(422)
     expect((await put({ phoneExpiryMs: 5 })).statusCode).toBe(422)
-    expect((await put({ quietHours: { start: "25:00", end: "07:00", tz: "Europe/London" } })).statusCode).toBe(422)
+    expect(
+      (await put({ quietHours: { start: "25:00", end: "07:00", tz: "Europe/London" } })).statusCode,
+    ).toBe(422)
     expect(fs.existsSync(path.join(root, "config.json"))).toBe(false)
   })
 
@@ -206,11 +251,17 @@ describe("settings endpoints", () => {
     const r = await app.inject({
       method: "PUT",
       url: "/api/settings",
-      payload: { expectedOrg: "ACN - Premium", redactTerms: ["SecretClient"], workspaceRoots: ["C:/dev"] },
+      payload: {
+        expectedOrg: "ACN - Premium",
+        redactTerms: ["SecretClient"],
+        workspaceRoots: ["C:/dev"],
+      },
     })
     expect(r.statusCode).toBe(200)
     expect(r.json()).toMatchObject({ ok: true, restartRequired: true, audited: true })
-    expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).expectedOrg).toBe("ACN - Premium")
+    expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).expectedOrg).toBe(
+      "ACN - Premium",
+    )
     const s = await get("/api/settings")
     expect(s.saved.redactTerms).toEqual(["SecretClient"])
     const log = await app.inject({ method: "GET", url: "/api/audit/export" })

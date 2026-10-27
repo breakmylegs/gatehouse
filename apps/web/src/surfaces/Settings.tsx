@@ -120,14 +120,28 @@ export function Settings() {
 
       <fieldset className="m-0 grid gap-3 border-0 p-0">
         <legend className="mb-1 text-sm font-semibold">Organisation and workspaces</legend>
-        <Field label="Expected organisation" help="Sessions refuse to start unless the signed-in account belongs to this organisation.">
-          <input className="field" value={org} onChange={(e) => setOrg(e.target.value)} placeholder="ACN - Premium" />
+        <Field
+          label="Expected organisation"
+          help="Sessions refuse to start unless the signed-in account belongs to this organisation."
+        >
+          <input
+            className="field"
+            value={org}
+            onChange={(e) => setOrg(e.target.value)}
+            placeholder="ACN - Premium"
+          />
         </Field>
         <Field
           label="Workspace roots"
           help={`One folder per line. Leave empty to use the rules file${data.workspaceRootsInEffect.length ? ` (now: ${data.workspaceRootsInEffect.join(", ")})` : ""}.`}
         >
-          <textarea className="field mono" rows={3} value={roots} onChange={(e) => setRoots(e.target.value)} spellCheck={false} />
+          <textarea
+            className="field mono"
+            rows={3}
+            value={roots}
+            onChange={(e) => setRoots(e.target.value)}
+            spellCheck={false}
+          />
         </Field>
       </fieldset>
 
@@ -140,26 +154,64 @@ export function Settings() {
         {quiet ? (
           <div className="grid grid-cols-3 gap-3 max-[700px]:grid-cols-1">
             <Field label="From">
-              <input className="field" type="time" value={qStart} onChange={(e) => setQStart(e.target.value)} required />
+              <input
+                className="field"
+                type="time"
+                value={qStart}
+                onChange={(e) => setQStart(e.target.value)}
+                required
+              />
             </Field>
             <Field label="Until">
-              <input className="field" type="time" value={qEnd} onChange={(e) => setQEnd(e.target.value)} required />
+              <input
+                className="field"
+                type="time"
+                value={qEnd}
+                onChange={(e) => setQEnd(e.target.value)}
+                required
+              />
             </Field>
             <Field label="Time zone">
-              <input className="field" value={qTz} onChange={(e) => setQTz(e.target.value)} required />
+              <input
+                className="field"
+                value={qTz}
+                onChange={(e) => setQTz(e.target.value)}
+                required
+              />
             </Field>
             <label className="col-span-3 flex items-center gap-2 max-[700px]:col-span-1">
-              <input type="checkbox" checked={qPhone} onChange={(e) => setQPhone(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={qPhone}
+                onChange={(e) => setQPhone(e.target.checked)}
+              />
               Still tell the phone during quiet hours
             </label>
           </div>
         ) : null}
         <div className="grid grid-cols-2 gap-3 max-[700px]:grid-cols-1">
           <Field label="Phone request expires after (minutes)" help="At least 1 minute.">
-            <input className="field" type="number" min={1} step={1} value={phoneMin} onChange={(e) => setPhoneMin(Number(e.target.value))} />
+            <input
+              className="field"
+              type="number"
+              min={1}
+              step={1}
+              value={phoneMin}
+              onChange={(e) => setPhoneMin(Number(e.target.value))}
+            />
           </Field>
-          <Field label="Desktop request times out after (minutes)" help="An unanswered request is then denied.">
-            <input className="field" type="number" min={1} step={1} value={hardMin} onChange={(e) => setHardMin(Number(e.target.value))} />
+          <Field
+            label="Desktop request times out after (minutes)"
+            help="An unanswered request is then denied."
+          >
+            <input
+              className="field"
+              type="number"
+              min={1}
+              step={1}
+              value={hardMin}
+              onChange={(e) => setHardMin(Number(e.target.value))}
+            />
           </Field>
         </div>
       </fieldset>
@@ -170,7 +222,13 @@ export function Settings() {
           label="Words to hide"
           help="One per line. Client names and internal host names. They are replaced before anything is saved or sent, in the audit log and to the phone."
         >
-          <textarea className="field" rows={4} value={terms} onChange={(e) => setTerms(e.target.value)} spellCheck={false} />
+          <textarea
+            className="field"
+            rows={4}
+            value={terms}
+            onChange={(e) => setTerms(e.target.value)}
+            spellCheck={false}
+          />
         </Field>
       </fieldset>
 
@@ -193,7 +251,11 @@ export function Settings() {
             type="checkbox"
             checked={notify}
             onChange={async (e) => {
-              if (e.target.checked && typeof Notification !== "undefined" && Notification.permission !== "granted") {
+              if (
+                e.target.checked &&
+                typeof Notification !== "undefined" &&
+                Notification.permission !== "granted"
+              ) {
                 const p = await Notification.requestPermission()
                 if (p !== "granted") {
                   toast.error("The browser did not allow notifications.")
@@ -205,7 +267,10 @@ export function Settings() {
           />
           Show a browser notification when a decision is waiting
         </label>
-        <p className="m-0 text-xs text-mut">The notification never shows the command or file names. This choice applies to this browser only.</p>
+        <p className="m-0 text-xs text-mut">
+          The notification never shows the command or file names. This choice applies to this
+          browser only.
+        </p>
       </fieldset>
 
       {errors?.length ? (
@@ -227,7 +292,15 @@ export function Settings() {
   )
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  help,
+  children,
+}: {
+  label: string
+  help?: string
+  children: React.ReactNode
+}) {
   return (
     <label className="grid gap-1">
       <span>{label}</span>

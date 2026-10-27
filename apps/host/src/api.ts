@@ -16,11 +16,7 @@ import {
   type ReplayRecord,
 } from "@gatehouse/policy"
 import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
-import {
-  configPath,
-  GatehouseConfig,
-  writeFileAtomic,
-} from "@gatehouse/shared/node"
+import { configPath, GatehouseConfig, writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -44,7 +40,10 @@ const sha = (text: string) => createHash("sha256").update(text).digest("hex")
 const MAX_REPLAY = 5000
 
 function bad(reply: FastifyReply, status: number, error: string, extra: object = {}) {
-  return reply.code(status).header("cache-control", "no-store").send({ error, ...extra })
+  return reply
+    .code(status)
+    .header("cache-control", "no-store")
+    .send({ error, ...extra })
 }
 
 /** Newest first. Stops reading older files as soon as enough records matched. */
@@ -168,7 +167,11 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
 
   app.get("/api/audit/verify", async () => {
     const r = verifyAudit(ctx.auditDir)
-    return { ...r, problems: r.problems.slice(0, 50), moreProblems: Math.max(0, r.problems.length - 50) }
+    return {
+      ...r,
+      problems: r.problems.slice(0, 50),
+      moreProblems: Math.max(0, r.problems.length - 50),
+    }
   })
 
   app.get("/api/audit/export", async (_req, reply) => {
@@ -184,7 +187,8 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
 
   app.get("/api/policy", async () => {
     const policy = ctx.store.current
-    const read = (f: string | undefined) => (f && fs.existsSync(f) ? fs.readFileSync(f, "utf8") : "")
+    const read = (f: string | undefined) =>
+      f && fs.existsSync(f) ? fs.readFileSync(f, "utf8") : ""
     const yaml = read(ctx.loadOptions.rulesPath)
     return {
       status: ctx.store.status(),
@@ -221,9 +225,13 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (!isObject(b) || typeof b.rulesYaml !== "string")
       return bad(reply, 400, "Send the candidate rules as rulesYaml.")
     const cand = loadCandidate(ctx, b.rulesYaml)
-    if (!cand.policy) return bad(reply, 422, "The candidate rules do not load.", { errors: cand.errors })
+    if (!cand.policy)
+      return bad(reply, 422, "The candidate rules do not load.", { errors: cand.errors })
     const policy = cand.policy
-    const engine = new PolicyEngine({ getPolicy: () => policy, ...(ctx.pwsh ? { pwsh: ctx.pwsh } : {}) })
+    const engine = new PolicyEngine({
+      getPolicy: () => policy,
+      ...(ctx.pwsh ? { pwsh: ctx.pwsh } : {}),
+    })
     const result = await replay(engine, replayRecords(ctx.auditDir))
     return { ...result, capped: result.total >= MAX_REPLAY, candidateHash: policy.hash }
   })
@@ -235,9 +243,16 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const file = ctx.loadOptions.rulesPath
     const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : ""
     if (sha(current) !== b.baseHash)
-      return bad(reply, 409, "The rules file changed on disk since you opened it. Reload and try again.")
+      return bad(
+        reply,
+        409,
+        "The rules file changed on disk since you opened it. Reload and try again.",
+      )
     const cand = loadCandidate(ctx, b.yaml)
-    if (!cand.policy) return bad(reply, 422, "The rules do not load, so nothing was saved.", { errors: cand.errors })
+    if (!cand.policy)
+      return bad(reply, 422, "The rules do not load, so nothing was saved.", {
+        errors: cand.errors,
+      })
     await writeFileAtomic(file, b.yaml)
     ctx.store.load()
     const hash = ctx.store.current?.hash ?? cand.policy.hash
@@ -257,7 +272,9 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
-    ctx.log(`policy activated (${hash.slice(0, 12)}), audit ${recorded ? "recorded" : "NOT recorded"}`)
+    ctx.log(
+      `policy activated (${hash.slice(0, 12)}), audit ${recorded ? "recorded" : "NOT recorded"}`,
+    )
     return { ok: true, hash, audited: recorded, rulesYamlHash: sha(b.yaml) }
   })
 

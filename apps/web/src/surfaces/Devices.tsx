@@ -10,8 +10,8 @@ export function Devices() {
         <section className="panel grid gap-2 p-5" aria-label="Phone relay status">
           <h2 className="m-0 text-base font-semibold">No phone is paired</h2>
           <p className="m-0">
-            Decisions are made on this computer only. To decide from your iPhone as well, set up the relay on your server and pair the
-            phone. The steps are in the runbook.
+            Decisions are made on this computer only. To decide from your iPhone as well, set up the
+            relay on your server and pair the phone. The steps are in the runbook.
           </p>
           <p className="m-0 text-mut">Nothing is sent off this computer until you do.</p>
         </section>

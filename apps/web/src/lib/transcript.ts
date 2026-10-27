@@ -41,7 +41,9 @@ function resultText(content: unknown): string {
   if (typeof content === "string") return content
   if (Array.isArray(content))
     return content
-      .map((c) => (obj(c).type === "text" ? str(obj(c).text) : `[${str(obj(c).type) || "content"}]`))
+      .map((c) =>
+        obj(c).type === "text" ? str(obj(c).text) : `[${str(obj(c).type) || "content"}]`,
+      )
       .join("\n")
   return ""
 }
@@ -101,7 +103,9 @@ export function reduce(t: Transcript, message: unknown): Transcript {
     for (const c of content) {
       const b = obj(c)
       if (b.type !== "tool_result") continue
-      const idx = items.findLastIndex((x) => x.kind === "tool" && x.toolUseId === str(b.tool_use_id))
+      const idx = items.findLastIndex(
+        (x) => x.kind === "tool" && x.toolUseId === str(b.tool_use_id),
+      )
       if (idx < 0) continue
       const it = items[idx] as Extract<Item, { kind: "tool" }>
       if (items === t.items) items = [...items]

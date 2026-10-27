@@ -8,9 +8,9 @@ const join = (cmd: string, segs: string[]) =>
 
 describe("splitByHighlights", () => {
   it("marks the escalating segment and keeps every character", () => {
-    expect(join("git push --force origin main && npm publish", ["git push --force origin main"])).toBe(
-      "[git push --force origin main] && npm publish",
-    )
+    expect(
+      join("git push --force origin main && npm publish", ["git push --force origin main"]),
+    ).toBe("[git push --force origin main] && npm publish")
   })
   it("marks repeated segments in separate places", () => {
     expect(join("rm a; rm a", ["rm a", "rm a"])).toBe("[rm a]; [rm a]")

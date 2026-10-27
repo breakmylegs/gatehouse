@@ -19,7 +19,13 @@ interface PolicyData {
   rulesPath: string
   rulesYaml: string
   rulesYamlHash: string
-  rules?: { floor: RuleLike[]; deny: RuleLike[]; escalate: RuleLike[]; allow: RuleLike[]; workspaceRoots: string[] }
+  rules?: {
+    floor: RuleLike[]
+    deny: RuleLike[]
+    escalate: RuleLike[]
+    allow: RuleLike[]
+    workspaceRoots: string[]
+  }
   remember: RuleLike[]
   localYaml: string
 }
@@ -90,7 +96,9 @@ export function Policy() {
         {data ? (
           <span className="text-mut">
             Live policy <span className="mono">{data.status.hash?.slice(0, 12) ?? "none"}</span>
-            {data.status.errors.length ? <strong className="ml-2 text-sev">did not load</strong> : null}
+            {data.status.errors.length ? (
+              <strong className="ml-2 text-sev">did not load</strong>
+            ) : null}
           </span>
         ) : null}
       </header>
@@ -106,7 +114,11 @@ export function Policy() {
           ))}
         </ul>
       ) : null}
-      <div role="tablist" aria-label="Policy studio sections" className="flex gap-1 border-b border-line">
+      <div
+        role="tablist"
+        aria-label="Policy studio sections"
+        className="flex gap-1 border-b border-line"
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -158,8 +170,8 @@ function Rules({ data }: { data: PolicyData }) {
   return (
     <div className="grid gap-5">
       <p className="m-0 text-mut">
-        Workspace roots: <span className="mono">{rules.workspaceRoots.join(", ") || "none"}</span>. Rules file:{" "}
-        <span className="mono">{data.rulesPath}</span>
+        Workspace roots: <span className="mono">{rules.workspaceRoots.join(", ") || "none"}</span>.
+        Rules file: <span className="mono">{data.rulesPath}</span>
       </p>
       {SECTIONS.map(([key, title]) => (
         <section key={key} aria-label={title}>
@@ -168,11 +180,16 @@ function Rules({ data }: { data: PolicyData }) {
           </h2>
           <ul className="m-0 list-none divide-y divide-line border-y border-line p-0">
             {rules[key].map((r) => (
-              <li key={r.id} className="grid grid-cols-[210px_1fr] gap-3 py-1.5 max-[800px]:grid-cols-1">
+              <li
+                key={r.id}
+                className="grid grid-cols-[210px_1fr] gap-3 py-1.5 max-[800px]:grid-cols-1"
+              >
                 <span className="mono font-semibold">{r.id}</span>
                 <span>
                   {r.reason ? <span className="block">{r.reason}</span> : null}
-                  <span className="mono block text-xs text-mut [overflow-wrap:anywhere]">{select(r)}</span>
+                  <span className="mono block text-xs text-mut [overflow-wrap:anywhere]">
+                    {select(r)}
+                  </span>
                 </span>
               </li>
             ))}
@@ -215,7 +232,9 @@ function TestCommand() {
 
   return (
     <form onSubmit={run} className="grid gap-3" aria-label="Test a command">
-      <p className="m-0 text-mut">Runs the live policy on what you type. Nothing runs and nothing is written to the audit log.</p>
+      <p className="m-0 text-mut">
+        Runs the live policy on what you type. Nothing runs and nothing is written to the audit log.
+      </p>
       <div className="grid grid-cols-[160px_1fr] gap-3 max-[800px]:grid-cols-1">
         <label className="grid gap-1">
           <span>Tool</span>
@@ -224,7 +243,11 @@ function TestCommand() {
             value={tool}
             onChange={(e) => {
               setTool(e.target.value)
-              setText(e.target.value === "Bash" || e.target.value === "PowerShell" ? "" : '{ "file_path": "C:\\\\dev\\\\notes.txt" }')
+              setText(
+                e.target.value === "Bash" || e.target.value === "PowerShell"
+                  ? ""
+                  : '{ "file_path": "C:\\\\dev\\\\notes.txt" }',
+              )
             }}
           >
             {["Bash", "PowerShell", "Read", "Write", "Edit", "Glob", "Grep"].map((t) => (
@@ -234,12 +257,23 @@ function TestCommand() {
         </label>
         <label className="grid gap-1">
           <span>Working folder</span>
-          <input className="field mono" value={cwd} onChange={(e) => setCwd(e.target.value)} required />
+          <input
+            className="field mono"
+            value={cwd}
+            onChange={(e) => setCwd(e.target.value)}
+            required
+          />
         </label>
       </div>
       <label className="grid gap-1">
         <span>{shell ? "Command" : "Tool input (JSON)"}</span>
-        <textarea className="field mono" rows={4} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+        <textarea
+          className="field mono"
+          rows={4}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          spellCheck={false}
+        />
       </label>
       <div>
         <button className="btn btn-primary" disabled={busy || !text.trim()}>
@@ -254,7 +288,11 @@ function TestCommand() {
       {verdict ? (
         <section aria-label="Result" className="panel grid gap-2 p-4" role="status">
           <h2 className="m-0 text-base font-semibold">
-            {verdict.outcome === "allow" ? "Allowed" : verdict.outcome === "deny" ? "Denied" : "Would ask you"}
+            {verdict.outcome === "allow"
+              ? "Allowed"
+              : verdict.outcome === "deny"
+                ? "Denied"
+                : "Would ask you"}
             <span className="ml-3 text-sm font-normal text-mut">risk {verdict.risk}</span>
           </h2>
           <p className="m-0">
@@ -264,7 +302,9 @@ function TestCommand() {
             <ul className="m-0 list-none p-0">
               {verdict.segments.map((s, i) => (
                 <li key={i} className="grid grid-cols-[110px_1fr] gap-3">
-                  <span className="mono text-xs text-mut">{s.outcome}, {s.ruleId}</span>
+                  <span className="mono text-xs text-mut">
+                    {s.outcome}, {s.ruleId}
+                  </span>
                   <span className="mono [overflow-wrap:anywhere]">{s.text}</span>
                 </li>
               ))}
@@ -290,7 +330,10 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
   }, [data.rulesYamlHash, data.rulesYaml])
 
   const dirty = yaml !== data.rulesYaml
-  const parts = useMemo(() => (reviewing ? diffLines(data.rulesYaml, yaml) : []), [reviewing, data.rulesYaml, yaml])
+  const parts = useMemo(
+    () => (reviewing ? diffLines(data.rulesYaml, yaml) : []),
+    [reviewing, data.rulesYaml, yaml],
+  )
 
   async function runReplay() {
     setBusy(true)
@@ -304,7 +347,10 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
   async function activate() {
     setBusy(true)
     setErrors(undefined)
-    const r = await api<{ hash: string }>("PUT", "/api/policy/rules", { yaml, baseHash: data.rulesYamlHash })
+    const r = await api<{ hash: string }>("PUT", "/api/policy/rules", {
+      yaml,
+      baseHash: data.rulesYamlHash,
+    })
     setBusy(false)
     if (!r.ok) {
       setErrors(r.errors ?? [r.error ?? "The rules were not saved"])
@@ -318,8 +364,8 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
   return (
     <div className="grid gap-3">
       <p className="m-0 text-mut">
-        Edit the rules file, replay your change against past decisions, review the diff, then activate. A file that does not load is
-        never saved.
+        Edit the rules file, replay your change against past decisions, review the diff, then
+        activate. A file that does not load is never saved.
       </p>
       <label className="grid gap-1">
         <span>Rules (YAML)</span>
@@ -383,11 +429,20 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
                 .replace(/\n$/, "")
                 .split("\n")
                 .map((line, j) => (
-                  <div key={`${i}-${j}`} className={clsx("px-3", p.added && "bg-hi font-semibold", p.removed && "text-sev line-through")}>
+                  <div
+                    key={`${i}-${j}`}
+                    className={clsx(
+                      "px-3",
+                      p.added && "bg-hi font-semibold",
+                      p.removed && "text-sev line-through",
+                    )}
+                  >
                     <span aria-hidden="true" className="mr-2 inline-block w-3 select-none">
                       {p.added ? "+" : p.removed ? "-" : " "}
                     </span>
-                    <span className="sr-only">{p.added ? "Added: " : p.removed ? "Removed: " : "Unchanged: "}</span>
+                    <span className="sr-only">
+                      {p.added ? "Added: " : p.removed ? "Removed: " : "Unchanged: "}
+                    </span>
                     {line}
                   </div>
                 )),
@@ -421,8 +476,8 @@ function Remember({ data, onChanged }: { data: PolicyData; onChanged: () => Prom
   return (
     <div className="grid gap-3">
       <p className="m-0 text-mut">
-        Each rule here was created when you chose Remember on an approval. It allows exactly one command or one file, and nothing else.
-        Remove any you no longer want.
+        Each rule here was created when you chose Remember on an approval. It allows exactly one
+        command or one file, and nothing else. Remove any you no longer want.
       </p>
       {error ? (
         <p role="alert" className="m-0 font-semibold text-sev">
@@ -438,7 +493,8 @@ function Remember({ data, onChanged }: { data: PolicyData; onChanged: () => Prom
               <span>
                 <span className="mono block text-xs text-mut">{r.id}</span>
                 <span className="mono [overflow-wrap:anywhere]">
-                  {(r.tools ?? []).join(", ")}: {(r.commands ?? [])[0] ?? (r.paths as string[] | undefined)?.[0] ?? ""}
+                  {(r.tools ?? []).join(", ")}:{" "}
+                  {(r.commands ?? [])[0] ?? (r.paths as string[] | undefined)?.[0] ?? ""}
                 </span>
               </span>
               <button className="btn btn-deny" onClick={() => void remove(r.id)}>

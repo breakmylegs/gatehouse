@@ -12,7 +12,8 @@ export function Approvals() {
   const resolved = useStore((s) => s.resolved)
   const card = useRef<HTMLDivElement>(null)
 
-  const current = (selected ? pending.find((p) => p.request.id === selected) : undefined) ?? pending[0]
+  const current =
+    (selected ? pending.find((p) => p.request.id === selected) : undefined) ?? pending[0]
   const justResolved = selected && !current ? resolved[selected]?.view : undefined
   const view = current ?? justResolved
 
@@ -26,7 +27,8 @@ export function Approvals() {
       if (e.altKey && (e.key === "ArrowDown" || e.key === "ArrowUp") && pending.length) {
         e.preventDefault()
         const i = pending.findIndex((p) => p.request.id === current?.request.id)
-        const next = pending[(i + (e.key === "ArrowDown" ? 1 : -1) + pending.length) % pending.length]
+        const next =
+          pending[(i + (e.key === "ArrowDown" ? 1 : -1) + pending.length) % pending.length]
         if (next) select(next.request.id)
       }
     }
@@ -40,12 +42,17 @@ export function Approvals() {
 
   return (
     <div className="grid min-h-full grid-cols-[270px_1fr] max-[1000px]:grid-cols-1">
-      <section aria-label="Queue" className="border-r border-line bg-s1 p-2 max-[1000px]:border-b max-[1000px]:border-r-0">
+      <section
+        aria-label="Queue"
+        className="border-r border-line bg-s1 p-2 max-[1000px]:border-b max-[1000px]:border-r-0"
+      >
         <h2 className="mx-2 mb-1 mt-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
           Waiting on you ({pending.length})
         </h2>
         {pending.length === 0 ? (
-          <p className="mx-2 my-2 text-mut">Nothing is waiting. Automatic decisions are going through.</p>
+          <p className="mx-2 my-2 text-mut">
+            Nothing is waiting. Automatic decisions are going through.
+          </p>
         ) : (
           <ul className="m-0 list-none p-0">
             {pending.map((p) => (
@@ -75,7 +82,9 @@ export function Approvals() {
         )}
         {recent.length > 0 ? (
           <>
-            <h2 className="mx-2 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-mut">Just decided</h2>
+            <h2 className="mx-2 mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-mut">
+              Just decided
+            </h2>
             <ul className="m-0 list-none p-0">
               {recent.map((r) => (
                 <li key={r.id} className="px-2 py-1 text-xs text-mut">
@@ -91,14 +100,17 @@ export function Approvals() {
           <div className="mx-auto max-w-[980px]">
             <ApprovalCard view={view} />
             <p className="mt-3 text-xs text-mut">
-              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> moves focus to the card. <kbd>Alt</kbd>+<kbd>Up</kbd> and{" "}
-              <kbd>Alt</kbd>+<kbd>Down</kbd> change request.
+              <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> moves focus to the card. <kbd>Alt</kbd>+
+              <kbd>Up</kbd> and <kbd>Alt</kbd>+<kbd>Down</kbd> change request.
             </p>
           </div>
         ) : (
           <div className="mx-auto mt-16 max-w-md text-center">
             <h2 className="m-0 text-base font-semibold">All clear</h2>
-            <p className="text-mut">When a session needs a decision it appears here, and your phone is told at the same time.</p>
+            <p className="text-mut">
+              When a session needs a decision it appears here, and your phone is told at the same
+              time.
+            </p>
           </div>
         )}
       </section>

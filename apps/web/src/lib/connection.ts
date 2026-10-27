@@ -71,7 +71,10 @@ export class Connection {
       if (this.#ws !== ws) return
       for (const [id, p] of this.#pending) {
         clearTimeout(p.timer)
-        p.resolve({ ok: false, error: { code: "disconnected", message: "The connection to the Host was lost" } })
+        p.resolve({
+          ok: false,
+          error: { code: "disconnected", message: "The connection to the Host was lost" },
+        })
         this.#pending.delete(id)
       }
       this.onState("closed", this.#attempt)
@@ -92,7 +95,10 @@ export class Connection {
     return new Promise<Reply>((resolve) => {
       const timer = setTimeout(() => {
         this.#pending.delete(cmdId)
-        resolve({ ok: false, error: { code: "timeout", message: "The Host did not answer in time" } })
+        resolve({
+          ok: false,
+          error: { code: "timeout", message: "The Host did not answer in time" },
+        })
       }, timeoutMs)
       this.#pending.set(cmdId, { resolve, timer })
       ws.send(JSON.stringify({ cmdId, command }))

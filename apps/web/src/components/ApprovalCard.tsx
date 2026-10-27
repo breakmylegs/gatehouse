@@ -47,7 +47,10 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [error, setError] = useState<string>()
   const [expanded, setExpanded] = useState(false)
   const [remember, setRemember] = useState<RememberPreview>()
-  const command = useMemo(() => commandText(req.toolName, view.rawInput), [req.toolName, view.rawInput])
+  const command = useMemo(
+    () => commandText(req.toolName, view.rawInput),
+    [req.toolName, view.rawInput],
+  )
   const [edited, setEdited] = useState(command)
 
   useEffect(() => {
@@ -59,11 +62,14 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     setEdited(command)
   }, [req.id, command])
 
-  const segments = (req.verdict.segments ?? []).filter((s) => s.outcome !== "allow").map((s) => s.text)
+  const segments = (req.verdict.segments ?? [])
+    .filter((s) => s.outcome !== "allow")
+    .map((s) => s.text)
   const segKey = segments.join(SEP)
   const lines = command.split("\n").length
   const long = lines > COLLAPSE_LINES
-  const shown = long && !expanded ? command.split("\n").slice(0, COLLAPSE_LINES).join("\n") : command
+  const shown =
+    long && !expanded ? command.split("\n").slice(0, COLLAPSE_LINES).join("\n") : command
   const shownParts = useMemo(() => splitByHighlights(shown, segments), [shown, segKey])
 
   async function run(cmd: Parameters<typeof send>[0]): Promise<boolean> {
@@ -130,13 +136,19 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     }
   }
 
-  if (req.kind === "question") return <QuestionCard view={view} resolvedSummary={resolved?.summary} />
+  if (req.kind === "question")
+    return <QuestionCard view={view} resolvedSummary={resolved?.summary} />
 
   const hardDeadline = clock(view.hardDeadline)
   const phoneExpiry = req.expiresAt ? clock(req.expiresAt) : ""
   const title =
-    req.kind === "plan" ? "Plan ready for approval" : isShell(req.toolName) ? "Run shell command" : req.toolName
-  const planText = req.kind === "plan" && typeof view.rawInput.plan === "string" ? view.rawInput.plan : undefined
+    req.kind === "plan"
+      ? "Plan ready for approval"
+      : isShell(req.toolName)
+        ? "Run shell command"
+        : req.toolName
+  const planText =
+    req.kind === "plan" && typeof view.rawInput.plan === "string" ? view.rawInput.plan : undefined
 
   return (
     <article
@@ -175,7 +187,9 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               )}
             </pre>
             <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-mut">
-              {segments.length > 0 ? <span>Underlined: the part that caused the escalation.</span> : null}
+              {segments.length > 0 ? (
+                <span>Underlined: the part that caused the escalation.</span>
+              ) : null}
               {long ? (
                 <button
                   className="btn !min-h-6 !px-2 text-xs"
@@ -307,7 +321,11 @@ export function ApprovalCard({ view }: { view: PendingView }) {
           </p>
         ) : (
           <>
-            <button className="btn btn-deny w-full justify-between" disabled={busy} onClick={() => void deny()}>
+            <button
+              className="btn btn-deny w-full justify-between"
+              disabled={busy}
+              onClick={() => void deny()}
+            >
               Deny <kbd>Esc</kbd>
             </button>
             <button
@@ -346,12 +364,14 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               </span>
             </button>
             {view.defaultToNo ? (
-              <p className="m-0 text-xs text-mut">Risk is high, so nothing here is pre-selected for allowing.</p>
+              <p className="m-0 text-xs text-mut">
+                Risk is high, so nothing here is pre-selected for allowing.
+              </p>
             ) : null}
             <p className="m-0 text-xs text-mut">
               {PHONE_TEXT[view.phone]}
-              {phoneExpiry && view.phone !== "none" ? `, expires ${phoneExpiry}` : ""}. Desktop times out at{" "}
-              {hardDeadline}.
+              {phoneExpiry && view.phone !== "none" ? `, expires ${phoneExpiry}` : ""}. Desktop
+              times out at {hardDeadline}.
             </p>
           </>
         )}
@@ -376,7 +396,10 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
   const id = view.request.id
 
   const value = (q: Q) =>
-    [...(answers[q.question] ?? []), ...(other[q.question]?.trim() ? [other[q.question]!.trim()] : [])].join(", ")
+    [
+      ...(answers[q.question] ?? []),
+      ...(other[q.question]?.trim() ? [other[q.question]!.trim()] : []),
+    ].join(", ")
   const complete = qs.length > 0 && qs.every((q) => value(q) !== "")
 
   async function submit() {
@@ -389,7 +412,12 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
   }
 
   return (
-    <article className="panel grid gap-4 p-5" aria-labelledby={`t-${id}`} data-approval-card tabIndex={-1}>
+    <article
+      className="panel grid gap-4 p-5"
+      aria-labelledby={`t-${id}`}
+      data-approval-card
+      tabIndex={-1}
+    >
       <h2 id={`t-${id}`} className="m-0 text-base font-semibold">
         Claude is asking you
       </h2>
@@ -420,7 +448,9 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
                 />
                 <span>
                   {o.label}
-                  {o.description ? <span className="block text-xs text-mut">{o.description}</span> : null}
+                  {o.description ? (
+                    <span className="block text-xs text-mut">{o.description}</span>
+                  ) : null}
                 </span>
               </label>
             )
@@ -447,13 +477,19 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
         </p>
       ) : (
         <div className="flex gap-2">
-          <button className="btn btn-primary" disabled={!complete || busy} onClick={() => void submit()}>
+          <button
+            className="btn btn-primary"
+            disabled={!complete || busy}
+            onClick={() => void submit()}
+          >
             Send answer
           </button>
           <button
             className="btn"
             disabled={busy}
-            onClick={() => void send({ type: "deny", requestId: id, message: "The user declined to answer." })}
+            onClick={() =>
+              void send({ type: "deny", requestId: id, message: "The user declined to answer." })
+            }
           >
             Decline to answer
           </button>

@@ -26,7 +26,13 @@ export function RiskBadge({ risk, className }: { risk: number; className?: strin
       )}
     >
       <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-        <path d={SHAPES[band]} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+        <path
+          d={SHAPES[band]}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
         {band === "High" || band === "Severe" ? (
           <path d="M8 6v4M8 12v.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         ) : null}

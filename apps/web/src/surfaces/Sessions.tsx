@@ -113,7 +113,11 @@ export function Sessions() {
           </label>
           <label className="grid gap-1">
             <span>Mode</span>
-            <select className="field" value={mode} onChange={(e) => setMode(e.target.value as "default" | "plan")}>
+            <select
+              className="field"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "default" | "plan")}
+            >
               <option value="default">Default</option>
               <option value="plan">Plan</option>
             </select>
@@ -155,7 +159,9 @@ export function Sessions() {
                 </td>
                 <td className="py-1.5 pr-3">
                   <span className="block font-semibold">{s.project}</span>
-                  <span className="mono block text-xs text-mut [overflow-wrap:anywhere]">{s.cwd}</span>
+                  <span className="mono block text-xs text-mut [overflow-wrap:anywhere]">
+                    {s.cwd}
+                  </span>
                   {s.error ? <span className="block text-xs text-sev">{s.error}</span> : null}
                 </td>
                 <td className="py-1.5 pr-3">{s.model ?? "Default"}</td>

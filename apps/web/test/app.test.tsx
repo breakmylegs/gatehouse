@@ -7,7 +7,13 @@ import { useStore } from "../src/store"
 const health = {
   approver: { state: "up" as const, errors: [] },
   relay: { state: "not-configured" as const, devices: 0 },
-  signin: { signedIn: true, email: "a@b.c", organization: "Org", managedPolicy: "detected" as const, orgOk: true },
+  signin: {
+    signedIn: true,
+    email: "a@b.c",
+    organization: "Org",
+    managedPolicy: "detected" as const,
+    orgOk: true,
+  },
   killSwitch: { engaged: false, approverConfirmed: true },
   pwsh: { running: true },
 }
@@ -27,7 +33,10 @@ describe("first run", () => {
       type: "hello",
       sessions: [],
       pending: [],
-      health: { ...health, signin: { ...health.signin, orgOk: false, orgMessage: "Wrong organisation" } },
+      health: {
+        ...health,
+        signin: { ...health.signin, orgOk: false, orgMessage: "Wrong organisation" },
+      },
       usage: {},
     })
     render(<App />)

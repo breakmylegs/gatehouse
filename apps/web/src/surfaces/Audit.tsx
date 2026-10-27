@@ -16,7 +16,14 @@ interface Rec {
   cwd?: string
   project?: string
   inputJson: string
-  verdict: { outcome: "allow" | "deny" | "escalate"; ruleId: string; reason: string; risk: number; decidedBy: string; segments?: Array<{ text: string }> }
+  verdict: {
+    outcome: "allow" | "deny" | "escalate"
+    ruleId: string
+    reason: string
+    risk: number
+    decidedBy: string
+    segments?: Array<{ text: string }>
+  }
   latencyMs: number
 }
 
@@ -62,15 +69,12 @@ export function Audit() {
   const [f, setF] = useState({ decision: "", channel: "", rule: "", q: "" })
   const [applied, setApplied] = useState(f)
 
-  const query = useCallback(
-    (a: typeof f, before?: number) => {
-      const p = new URLSearchParams({ limit: "200" })
-      for (const [k, v] of Object.entries(a)) if (v.trim()) p.set(k, v.trim())
-      if (before !== undefined) p.set("before", String(before))
-      return `/api/audit?${p}`
-    },
-    [],
-  )
+  const query = useCallback((a: typeof f, before?: number) => {
+    const p = new URLSearchParams({ limit: "200" })
+    for (const [k, v] of Object.entries(a)) if (v.trim()) p.set(k, v.trim())
+    if (before !== undefined) p.set("before", String(before))
+    return `/api/audit?${p}`
+  }, [])
 
   const load = useCallback(
     async (a: typeof f, more?: number) => {
@@ -122,12 +126,16 @@ export function Audit() {
             <span className="text-mut">Checking the chain…</span>
           ) : verify.ok ? (
             <span className="font-semibold text-ok">
-              Chain intact: {verify.records.toLocaleString("en-GB")} records in {verify.files} file{verify.files === 1 ? "" : "s"}
+              Chain intact: {verify.records.toLocaleString("en-GB")} records in {verify.files} file
+              {verify.files === 1 ? "" : "s"}
             </span>
           ) : (
             <span className="font-semibold text-sev">
-              Chain broken. First problem: {verify.problems[0]?.file} line {verify.problems[0]?.line}, {verify.problems[0]?.reason}
-              {verify.problems.length + verify.moreProblems > 1 ? ` (and ${verify.problems.length + verify.moreProblems - 1} more)` : ""}
+              Chain broken. First problem: {verify.problems[0]?.file} line{" "}
+              {verify.problems[0]?.line}, {verify.problems[0]?.reason}
+              {verify.problems.length + verify.moreProblems > 1
+                ? ` (and ${verify.problems.length + verify.moreProblems - 1} more)`
+                : ""}
             </span>
           )}
         </p>
@@ -156,7 +164,11 @@ export function Audit() {
       >
         <label className="grid gap-1">
           <span className="text-xs text-mut">Decision</span>
-          <select className="field" value={f.decision} onChange={(e) => setF({ ...f, decision: e.target.value })}>
+          <select
+            className="field"
+            value={f.decision}
+            onChange={(e) => setF({ ...f, decision: e.target.value })}
+          >
             <option value="">All</option>
             <option value="allow">Allowed</option>
             <option value="deny">Denied</option>
@@ -165,7 +177,11 @@ export function Audit() {
         </label>
         <label className="grid gap-1">
           <span className="text-xs text-mut">Channel</span>
-          <select className="field" value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })}>
+          <select
+            className="field"
+            value={f.channel}
+            onChange={(e) => setF({ ...f, channel: e.target.value })}
+          >
             <option value="">All</option>
             {Object.entries(CHANNEL).map(([k, v]) => (
               <option key={k} value={k}>
@@ -176,11 +192,19 @@ export function Audit() {
         </label>
         <label className="grid gap-1">
           <span className="text-xs text-mut">Rule id contains</span>
-          <input className="field mono w-48" value={f.rule} onChange={(e) => setF({ ...f, rule: e.target.value })} />
+          <input
+            className="field mono w-48"
+            value={f.rule}
+            onChange={(e) => setF({ ...f, rule: e.target.value })}
+          />
         </label>
         <label className="grid gap-1">
           <span className="text-xs text-mut">Search command, path or reason</span>
-          <input className="field w-72" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} />
+          <input
+            className="field w-72"
+            value={f.q}
+            onChange={(e) => setF({ ...f, q: e.target.value })}
+          />
         </label>
         <button className="btn btn-primary">Apply</button>
         <button
@@ -224,7 +248,9 @@ export function Audit() {
               itemContent={(_, r) => (
                 <>
                   <td className="whitespace-nowrap px-3 py-1 align-top text-mut">{clock(r.ts)}</td>
-                  <td className="whitespace-nowrap px-3 py-1 align-top font-semibold">{OUTCOME[r.verdict.outcome]}</td>
+                  <td className="whitespace-nowrap px-3 py-1 align-top font-semibold">
+                    {OUTCOME[r.verdict.outcome]}
+                  </td>
                   <td className="px-3 py-1 align-top">{CHANNEL[r.channel] ?? r.channel}</td>
                   <td className="px-3 py-1 align-top">{r.tool}</td>
                   <td className="max-w-0 px-3 py-1 align-top">
@@ -244,8 +270,15 @@ export function Audit() {
             />
           )}
         </div>
-        <aside aria-label="Decision detail" className="overflow-auto border-l border-line bg-s1 p-4 max-[1100px]:border-l-0 max-[1100px]:border-t">
-          {selected ? <Detail r={selected} /> : <p className="m-0 text-mut">Pick a row to see why it was decided that way.</p>}
+        <aside
+          aria-label="Decision detail"
+          className="overflow-auto border-l border-line bg-s1 p-4 max-[1100px]:border-l-0 max-[1100px]:border-t"
+        >
+          {selected ? (
+            <Detail r={selected} />
+          ) : (
+            <p className="m-0 text-mut">Pick a row to see why it was decided that way.</p>
+          )}
         </aside>
       </div>
     </div>

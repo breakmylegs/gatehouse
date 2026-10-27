@@ -18,7 +18,8 @@ if (startConnection()) {
       <h1 className="text-lg font-semibold">Open Gatehouse from the address it printed</h1>
       <p>
         This page needs the one-time address that the Host prints when it starts. It ends in
-        <code className="mono"> #token=</code> followed by a long code. Start Gatehouse again and open that address.
+        <code className="mono"> #token=</code> followed by a long code. Start Gatehouse again and
+        open that address.
       </p>
     </main>,
   )

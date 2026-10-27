@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ApprovalCard } from "../src/components/ApprovalCard"
 
 const sent: unknown[] = []
-let reply: (cmd: { type: string }) => { ok: boolean; data?: unknown; error?: { code: string; message: string } } = () => ({
+let reply: (cmd: { type: string }) => {
+  ok: boolean
+  data?: unknown
+  error?: { code: string; message: string }
+} = () => ({
   ok: true,
 })
 
@@ -21,7 +25,10 @@ vi.mock("../src/store", async (orig) => {
   }
 })
 
-function view(over: Partial<PendingView["request"]> = {}, rest: Partial<PendingView> = {}): PendingView {
+function view(
+  over: Partial<PendingView["request"]> = {},
+  rest: Partial<PendingView> = {},
+): PendingView {
   return {
     request: {
       id: "req-1",
@@ -67,7 +74,9 @@ afterEach(cleanup)
 describe("ApprovalCard", () => {
   it("shows the whole command, the escalating segment marked, where, the rule and the risk as words", () => {
     render(<ApprovalCard view={view()} />)
-    expect(screen.getByLabelText("What will run").textContent).toBe("git push --force origin main && npm publish")
+    expect(screen.getByLabelText("What will run").textContent).toBe(
+      "git push --force origin main && npm publish",
+    )
     expect(document.querySelector("mark")?.textContent).toBe("git push --force origin main")
     expect(screen.getByText("C:\\dev\\atlas")).toBeInTheDocument()
     expect(screen.getByText("force-push")).toBeInTheDocument()
@@ -78,7 +87,10 @@ describe("ApprovalCard", () => {
   it("never starts with focus on Allow, and Deny is one click", async () => {
     render(<ApprovalCard view={view()} />)
     expect(screen.getByRole("button", { name: /Allow once/ })).not.toHaveFocus()
-    expect(document.activeElement === document.body || !(document.activeElement as HTMLElement).textContent?.includes("Allow")).toBe(true)
+    expect(
+      document.activeElement === document.body ||
+        !(document.activeElement as HTMLElement).textContent?.includes("Allow"),
+    ).toBe(true)
     await userEvent.click(screen.getByRole("button", { name: /^Deny\s*Esc/ }))
     expect(sent).toEqual([{ type: "deny", requestId: "req-1" }])
   })
@@ -124,7 +136,11 @@ describe("ApprovalCard", () => {
   })
 
   it("sends the edited command, keeping the other input fields, and only when it changed", async () => {
-    render(<ApprovalCard view={view({}, { rawInput: { command: "rm -rf build", description: "clean" } })} />)
+    render(
+      <ApprovalCard
+        view={view({}, { rawInput: { command: "rm -rf build", description: "clean" } })}
+      />,
+    )
     await userEvent.click(screen.getByRole("button", { name: /Edit then allow/ }))
     const box = screen.getByLabelText("Command to run instead")
     expect(screen.getByRole("button", { name: "Allow edited input" })).toBeDisabled()
@@ -132,7 +148,11 @@ describe("ApprovalCard", () => {
     await userEvent.type(box, "rm -rf build/tmp")
     await userEvent.click(screen.getByRole("button", { name: "Allow edited input" }))
     expect(sent).toEqual([
-      { type: "approve", requestId: "req-1", updatedInput: { command: "rm -rf build/tmp", description: "clean" } },
+      {
+        type: "approve",
+        requestId: "req-1",
+        updatedInput: { command: "rm -rf build/tmp", description: "clean" },
+      },
     ])
   })
 
@@ -172,7 +192,10 @@ describe("ApprovalCard", () => {
   })
 
   it("shows the Host's reason when a decision is refused, instead of pretending it worked", async () => {
-    reply = () => ({ ok: false, error: { code: "x", message: "The edited input is denied by rule secrets." } })
+    reply = () => ({
+      ok: false,
+      error: { code: "x", message: "The edited input is denied by rule secrets." },
+    })
     render(<ApprovalCard view={view()} />)
     await userEvent.click(screen.getByRole("button", { name: /Allow once/ }))
     expect((await screen.findByRole("alert")).textContent).toMatch(/denied by rule secrets/)
@@ -208,10 +231,17 @@ describe("ApprovalCard", () => {
     const send1 = screen.getByRole("button", { name: "Send answer" })
     expect(send1).toBeDisabled()
     await userEvent.click(screen.getByLabelText("SQLite"))
-    await userEvent.type(screen.getAllByLabelText("Or write your own answer")[1] as HTMLElement, "No")
+    await userEvent.type(
+      screen.getAllByLabelText("Or write your own answer")[1] as HTMLElement,
+      "No",
+    )
     await userEvent.click(send1)
     expect(sent).toEqual([
-      { type: "answer", requestId: "req-1", answers: { "Which database?": "SQLite", "Anything else?": "No" } },
+      {
+        type: "answer",
+        requestId: "req-1",
+        answers: { "Which database?": "SQLite", "Anything else?": "No" },
+      },
     ])
   })
 })

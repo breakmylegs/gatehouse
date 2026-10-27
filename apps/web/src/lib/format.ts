@@ -29,7 +29,8 @@ export function money(usd: number): string {
 /** The text of the thing being approved, exactly as the tool will receive it. */
 export function commandText(toolName: string, raw: Record<string, unknown>): string {
   const s = (k: string) => (typeof raw[k] === "string" ? (raw[k] as string) : undefined)
-  if (toolName === "Bash" || toolName === "PowerShell") return s("command") ?? JSON.stringify(raw, null, 2)
+  if (toolName === "Bash" || toolName === "PowerShell")
+    return s("command") ?? JSON.stringify(raw, null, 2)
   return JSON.stringify(raw, null, 2)
 }
 

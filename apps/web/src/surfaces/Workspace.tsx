@@ -24,11 +24,18 @@ export function Workspace() {
   const selectSession = useStore((s) => s.selectSession)
   const setRoute = useStore((s) => s.setRoute)
   const selectRequest = useStore((s) => s.selectRequest)
-  const transcript = useStore((s) => (selected ? s.transcripts[selected] : undefined)) ?? emptyTranscript()
+  const transcript =
+    useStore((s) => (selected ? s.transcripts[selected] : undefined)) ?? emptyTranscript()
   const allPending = usePending()
-  const pending = useMemo(() => allPending.filter((p) => p.request.sessionId === selected), [allPending, selected])
+  const pending = useMemo(
+    () => allPending.filter((p) => p.request.sessionId === selected),
+    [allPending, selected],
+  )
   const sessionList = useSessionList()
-  const list = useMemo(() => [...sessionList].sort((a, b) => a.createdAt.localeCompare(b.createdAt)), [sessionList])
+  const list = useMemo(
+    () => [...sessionList].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [sessionList],
+  )
   const session = selected ? sessions[selected] : undefined
 
   if (!session) {
@@ -36,7 +43,9 @@ export function Workspace() {
       <div className="mx-auto mt-16 max-w-md text-center">
         <h1 className="m-0 text-base font-semibold">No session selected</h1>
         <p className="text-mut">
-          {list.length === 0 ? "Start a session from the Sessions page." : "Pick one to see its transcript."}
+          {list.length === 0
+            ? "Start a session from the Sessions page."
+            : "Pick one to see its transcript."}
         </p>
         {list.map((s) => (
           <button key={s.id} className="btn mr-2" onClick={() => selectSession(s.id)}>
@@ -60,7 +69,11 @@ export function Workspace() {
       <header className="flex flex-wrap items-center gap-3 border-b border-line bg-s1 px-4 py-2">
         <label className="flex items-center gap-2">
           <span className="text-mut">Session</span>
-          <select className="field" value={session.id} onChange={(e) => selectSession(e.target.value)}>
+          <select
+            className="field"
+            value={session.id}
+            onChange={(e) => selectSession(e.target.value)}
+          >
             {list.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.project}
@@ -77,7 +90,11 @@ export function Workspace() {
             value={MODELS.some((m) => m.id === (session.model ?? "")) ? (session.model ?? "") : ""}
             disabled={ended}
             onChange={(e) =>
-              void send({ type: "set_model", sessionId: session.id, ...(e.target.value ? { model: e.target.value } : {}) })
+              void send({
+                type: "set_model",
+                sessionId: session.id,
+                ...(e.target.value ? { model: e.target.value } : {}),
+              })
             }
           >
             {MODELS.map((m) => (
@@ -91,7 +108,10 @@ export function Workspace() {
           {(["default", "plan"] as const).map((m) => (
             <button
               key={m}
-              className={clsx("btn !rounded-none first:!rounded-l-md last:!rounded-r-md", session.mode === m && "btn-primary")}
+              className={clsx(
+                "btn !rounded-none first:!rounded-l-md last:!rounded-r-md",
+                session.mode === m && "btn-primary",
+              )}
               aria-pressed={session.mode === m}
               disabled={ended}
               onClick={() => void send({ type: "set_mode", sessionId: session.id, mode: m })}
@@ -131,7 +151,10 @@ export function Workspace() {
             }}
           />
         </section>
-        <aside aria-label="Plan and progress" className="hidden overflow-auto border-l border-line bg-s1 p-4 min-[1100px]:block">
+        <aside
+          aria-label="Plan and progress"
+          className="hidden overflow-auto border-l border-line bg-s1 p-4 min-[1100px]:block"
+        >
           <TodoPanel todos={transcript.todos} />
           <SessionFacts sessionId={session.id} />
         </aside>
@@ -139,9 +162,13 @@ export function Workspace() {
 
       <footer className="border-t border-line bg-s1 p-3">
         {pending.length > 0 ? (
-          <div role="status" className="mb-2 flex items-center gap-3 rounded-md border border-line bg-s2 px-3 py-1.5">
+          <div
+            role="status"
+            className="mb-2 flex items-center gap-3 rounded-md border border-line bg-s2 px-3 py-1.5"
+          >
             <span className="font-semibold">
-              {pending.length} request{pending.length === 1 ? "" : "s"} from this session waiting on you
+              {pending.length} request{pending.length === 1 ? "" : "s"} from this session waiting on
+              you
             </span>
             <button
               className="btn ml-auto"
@@ -217,7 +244,10 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
           {matches.map((c, i) => (
             <li key={c.cmd} role="option" aria-selected={i === active}>
               <button
-                className={clsx("flex w-full gap-3 rounded border-0 bg-transparent px-2 py-1 text-left", i === active && "bg-s2")}
+                className={clsx(
+                  "flex w-full gap-3 rounded border-0 bg-transparent px-2 py-1 text-left",
+                  i === active && "bg-s2",
+                )}
                 onMouseDown={(e) => {
                   e.preventDefault()
                   setText(c.cmd + " ")
@@ -241,7 +271,11 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
         rows={2}
         maxLength={100_000}
         disabled={disabled}
-        placeholder={disabled ? "This session has ended" : "Write a prompt. Enter sends, Shift+Enter adds a line. / for commands."}
+        placeholder={
+          disabled
+            ? "This session has ended"
+            : "Write a prompt. Enter sends, Shift+Enter adds a line. / for commands."
+        }
         value={text}
         onChange={(e) => {
           setText(e.target.value)
@@ -250,7 +284,9 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
         onKeyDown={(e) => {
           if (matches.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
             e.preventDefault()
-            setActive((a) => (a + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length)
+            setActive(
+              (a) => (a + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length,
+            )
           } else if (matches.length > 0 && e.key === "Tab") {
             e.preventDefault()
             setText((matches[active]?.cmd ?? text) + " ")
@@ -267,7 +303,9 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
 function TodoPanel({ todos }: { todos: Todo[] }) {
   return (
     <section aria-label="Todo list">
-      <h2 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">Todo list</h2>
+      <h2 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
+        Todo list
+      </h2>
       {todos.length === 0 ? (
         <p className="m-0 text-mut">Claude has not made a list yet.</p>
       ) : (
@@ -345,16 +383,21 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
   const s = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined)
   const isShell = item.name === "Bash" || item.name === "PowerShell"
   const path = s("file_path") ?? s("path")
-  const edit = item.name === "Edit" && s("old_string") !== undefined && s("new_string") !== undefined
+  const edit =
+    item.name === "Edit" && s("old_string") !== undefined && s("new_string") !== undefined
   return (
     <details className={clsx("panel", item.subagent && "ml-5")} open={edit || undefined}>
       <summary className="flex cursor-pointer flex-wrap items-baseline gap-2 px-3 py-1.5">
         <strong>{item.name}</strong>
         <span className="mono min-w-0 flex-1 truncate text-xs text-mut">
-          {isShell ? s("command")?.split("\n")[0] : (path ?? s("pattern") ?? s("description") ?? "")}
+          {isShell
+            ? s("command")?.split("\n")[0]
+            : (path ?? s("pattern") ?? s("description") ?? "")}
         </span>
         {item.result ? (
-          <span className={clsx("text-xs", item.result.isError ? "font-semibold text-sev" : "text-mut")}>
+          <span
+            className={clsx("text-xs", item.result.isError ? "font-semibold text-sev" : "text-mut")}
+          >
             {item.result.isError ? "Failed" : "Done"}
           </span>
         ) : (
@@ -373,7 +416,8 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
         {item.result ? (
           <pre className={clsx("cmd max-h-72 overflow-auto", item.result.isError && "text-sev")}>
             {item.result.text.length > 20_000
-              ? item.result.text.slice(0, 20_000) + `\n[${item.result.text.length - 20_000} more characters not shown]`
+              ? item.result.text.slice(0, 20_000) +
+                `\n[${item.result.text.length - 20_000} more characters not shown]`
               : item.result.text || "(no output)"}
           </pre>
         ) : null}
@@ -403,7 +447,9 @@ function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
               <span aria-hidden="true" className="mr-2 inline-block w-3 select-none">
                 {p.added ? "+" : p.removed ? "-" : " "}
               </span>
-              <span className="sr-only">{p.added ? "Added: " : p.removed ? "Removed: " : "Unchanged: "}</span>
+              <span className="sr-only">
+                {p.added ? "Added: " : p.removed ? "Removed: " : "Unchanged: "}
+              </span>
               {line}
             </div>
           )),

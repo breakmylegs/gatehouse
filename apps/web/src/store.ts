@@ -12,14 +12,7 @@ import { Connection, type ConnState, type Reply, takeToken } from "./lib/connect
 import { addSystem, addUser, emptyTranscript, reduce, type Transcript } from "./lib/transcript"
 
 export type Route =
-  | "approvals"
-  | "sessions"
-  | "workspace"
-  | "policy"
-  | "audit"
-  | "devices"
-  | "settings"
-  | "first-run"
+  "approvals" | "sessions" | "workspace" | "policy" | "audit" | "devices" | "settings" | "first-run"
 
 export interface ResolvedView {
   id: string
@@ -75,7 +68,10 @@ let connection: Connection | undefined
 export const send = (command: ClientCommand, timeoutMs?: number): Promise<Reply> =>
   connection
     ? connection.send(command, timeoutMs)
-    : Promise.resolve({ ok: false, error: { code: "disconnected", message: "Not connected to the Host" } })
+    : Promise.resolve({
+        ok: false,
+        error: { code: "disconnected", message: "Not connected to the Host" },
+      })
 
 const MAX_AUDIT = 500
 const MAX_RESOLVED = 100
@@ -83,7 +79,9 @@ const MAX_RESOLVED = 100
 const storedTheme = (): "light" | "dark" => {
   const s = localStorage.getItem("gatehouse.theme")
   if (s === "light" || s === "dark") return s
-  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light"
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -132,7 +130,9 @@ export const useStore = create<State>((set, get) => ({
           usage: e.usage as Usage,
           ...(e.expectedOrg !== undefined ? { expectedOrg: e.expectedOrg } : {}),
           selectedRequest:
-            s.selectedRequest && pending[s.selectedRequest] ? s.selectedRequest : firstPending(pending),
+            s.selectedRequest && pending[s.selectedRequest]
+              ? s.selectedRequest
+              : firstPending(pending),
         }))
         return
       }
@@ -147,22 +147,22 @@ export const useStore = create<State>((set, get) => ({
           },
         }))
         return
-      case "session_event":
+      case "session_event": {
         if (e.event === "notify_user") {
           const text = typeof e.data.text === "string" ? e.data.text : ""
           const name = get().sessions[e.sessionId]?.project ?? "A session"
           toast(`${name}: ${text}`)
         }
+        const line = describeEvent(e.event, e.data)
+        if (!line) return
         set((s) => ({
           transcripts: {
             ...s.transcripts,
-            [e.sessionId]: addSystem(
-              s.transcripts[e.sessionId] ?? emptyTranscript(),
-              `${e.event.replace(/_/g, " ")}`,
-            ),
+            [e.sessionId]: addSystem(s.transcripts[e.sessionId] ?? emptyTranscript(), line),
           },
         }))
         return
+      }
       case "approval_request": {
         const v = e.view
         set((s) => ({
@@ -192,7 +192,8 @@ export const useStore = create<State>((set, get) => ({
           return {
             pending: rest,
             resolved,
-            selectedRequest: s.selectedRequest === e.id ? firstPending(rest) ?? e.id : s.selectedRequest,
+            selectedRequest:
+              s.selectedRequest === e.id ? (firstPending(rest) ?? e.id) : s.selectedRequest,
           }
         })
         return
@@ -220,14 +221,37 @@ export const useStore = create<State>((set, get) => ({
   },
 }))
 
+/** A plain line for the transcript, or nothing for events that are only noise. */
+export function describeEvent(event: string, data: Record<string, unknown>): string | undefined {
+  const str = (v: unknown) => (typeof v === "string" && v ? v : undefined)
+  switch (event) {
+    case "notification":
+      return str(data.message) ?? str(data.title)
+    case "notify_user":
+      return `Claude told you: ${str(data.text) ?? ""}`
+    case "subagent_start":
+      return `Subagent started${str(data.agent_type) ? `: ${str(data.agent_type)}` : ""}`
+    case "subagent_stop":
+      return "Subagent finished"
+    default:
+      return undefined
+  }
+}
+
 function firstPending(p: Record<string, PendingView>): string | undefined {
-  return Object.values(p).sort((a, b) => a.request.createdAt.localeCompare(b.request.createdAt))[0]?.request.id
+  return Object.values(p).sort((a, b) => a.request.createdAt.localeCompare(b.request.createdAt))[0]
+    ?.request.id
 }
 
 /** Tells the user without moving focus: a toast always, a browser notification only if they turned it on. */
 function announce(v: PendingView, s: State): void {
   const project = v.request.project
-  const what = v.request.kind === "question" ? "A question" : v.request.kind === "plan" ? "A plan" : "An action"
+  const what =
+    v.request.kind === "question"
+      ? "A question"
+      : v.request.kind === "plan"
+        ? "A plan"
+        : "An action"
   toast(`${what} in ${project} needs you`, {
     action: { label: "Open", onClick: () => useStore.getState().selectRequest(v.request.id) },
   })
