@@ -183,3 +183,26 @@ The Relay (`apps/relay`), the phone app (`apps/phone`), the Host's phone channel
 
 - Run the Relay (`docs/relay-local.md`), set up an https address (Tailscale is the simplest), pair the iPhone, and walk through the "things to check on a real iPhone" list. WebAuthn, Home Screen install and push cannot be tested without the device.
 - If you want the container, build it once with Podman and tell me if it fails.
+
+## Phase 7. Extras
+
+- **LLM judge, off by default** (`packages/policy/src/judge.ts`, `apps/approver/src/sdk-judge.ts`). A separate one-turn SDK query to a Haiku-class model with no tools, `dontAsk`, no setting sources, run in the temp folder, with a strict JSON schema. It sees only the tool name, the parsed segments and the matched rule. It can only turn an escalation into an allow, only for rules in `judgeEligible`, only at 0.85 confidence or more. It is not asked when the input is longer than `maxInputChars` or reads like an instruction to it, and its own reason gets the same suspicion. Any error, timeout or odd answer leaves the call escalated. Allows carry `judge:<rule>`, `decidedBy: judge` and the reasoning in the audit record, which the audit detail shows. Checked live once with the real SDK: a harmless documentation fetch was allowed at 0.95, an upload of an SSH key was escalated at 0.99. Latency was about 26 seconds for the first call, so while the policy has the judge on the Host waits up to 35 seconds for the Approver (5 otherwise). Still bounded and fail-closed.
+- **Policy analytics** (Policy, Insights; `apps/host/src/analytics.ts`): escalation rate, per rule asked, approved, denied, timed out, approval rate and median wait, time to decide (median, 90th percentile), per day, desktop against phone. A chart plus a table of the same figures for each.
+- **Suggestions:** calls you approved at least three times and never refused or let time out, as exact commands or files, each passed through the same narrow Remember check, accepted only on the desktop (re-checked on accept, audited as `remember_added`).
+- **Digest:** a plain paragraph about the last 24 hours, shown on the Sessions page and sent to the phone once a day after a chosen time (default 08:00, can be turned off, sent at the next check if the computer was asleep, never twice in a day).
+- **Usage views:** spend and tokens by day (new `byDay`, older files load without it), project and model, on the Sessions page.
+- **Quiet hours** were already built in Phase 3 (the phone is held, not told) and are now settable in Settings (Phase 5).
+
+**Results.** Judge: 9 policy tests, 8 Approver tests (including that the query is tool-less, one turn, with no credentials in its environment), mutation check of 8 deliberate bugs, all caught. Analytics 12, digest scheduler 5, usage by day 3, Host endpoints 3 more, web Insights and usage 8. Detector and layout checks of the new Insights screen are not done separately (it uses the same components and tokens).
+
+### Deviations in Phase 7
+
+| Spec | What was done | Why |
+|---|---|---|
+| Judge in `dontAsk` mode | As specified, for the judge query only | Sessions still only run in `default` or `plan` (invariant 3). The judge has no tools, so `dontAsk` can do nothing. |
+| Quiet hours and daily digest | Digest sent once a day to the phone at a chosen time rather than at the end of quiet hours | Simpler and predictable. Quiet hours still hold phone requests. |
+| Analytics "suggestions for narrow new allow rules" | Suggestions are remember-style exact rules | Anything wider would need a human to write it. |
+
+### Owner to-do added in Phase 7
+
+- To try the judge, set `defaults.judge.enabled: true` in the rules file (Policy, Edit and activate). It uses a little of your Claude allowance for each judge-eligible call.
