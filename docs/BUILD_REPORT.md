@@ -238,4 +238,44 @@ The command palette (Ctrl+K) only moves you: to a page, a session or a waiting r
 
 ## Final summary
 
-@@FINAL@@
+Gatehouse is built, phase by phase, to the spec, through Phase 8. Everything is committed on local branches `phase-0` to `phase-8` and fast-forwarded into `main`. Nothing is pushed anywhere (the repository has no remote).
+
+**What exists**
+
+- The policy engine (floor, deny, escalate, allow, remember, overlays, optional judge) with 489 golden cases, a Bash parser (tree-sitter, no native code) and a PowerShell AST worker.
+- The Approver and the Companion (MCP servers), the hash-chained audit log with two independent verifiers, the Host (sessions, the permission broker, kill switch, organisation guard, checkpoints, usage, WebSocket API, admin API, phone channel).
+- The desktop interface (`apps/web`), the phone Relay (`apps/relay`), the iPhone app (`apps/phone`), `scripts/start.ps1`, the runbook and the threat model.
+
+**Final checks (27 October, on this machine)**
+
+| Check | Result |
+|---|---|
+| `npm run lint`, `npm run format`, `npm run typecheck` | clean |
+| Tests | 1,156 tests in 58 files, each file passing at least once (see the note below) |
+| `packages/policy` coverage | 97.8% of lines (the gate is 95%), 684 tests |
+| `npm audit` | 0 vulnerabilities |
+| Licences | 614 packages scanned, no AGPL, GPL, SSPL, BUSL, unknown or LGPL |
+| Mutation checks | policy (29), Approver (26), Host (35), admin API (6), card (4), Relay (8), phone decision gate (11), judge (8): every one caught after the tests added along the way |
+| Threat model | 24 threats, 60+ test references checked by a test |
+
+Note on the test run: this laptop is heavily loaded (the Claude desktop app and other sessions run hundreds of search processes and git calls take seconds). A full parallel run therefore shows load failures in different heavy files each time: a worker that does not start within Vitest's fixed 90 seconds, or a git-heavy test that passes its 60 second limit. Each affected file passes on its own (`packages/shared/test/phase3.test.ts` needs about three minutes on this machine), and the last full runs without that load were 1,134 tests in 52 files (Phase 7) and 1,146 in 56 (just before the last few additions). If you see this, rerun the named file.
+
+**Deviations from the spec** are in the table at the end of each phase above. The ones that matter most:
+
+- The Companion reaches sessions as an in-process server (the managed policy blocks stdio and http MCP servers here).
+- No owner checkpoint after Phase 4 (you were away): I chose the decision-rail approval card.
+- The Relay runs on your computer, started with `npm run relay` or in a Podman container, reached by the phone through an https tunnel, instead of on a server behind Caddy and Authentik. The container files are written but were never built (no container tool here).
+- `motion`, `@base-ui/react`, `class-variance-authority` and `shiki` from the spec's library list were not needed and were removed.
+
+**Owner to-do list** (everything I could not do or test myself)
+
+1. **Try it.** `pwsh scripts/start.ps1`. Set the expected organisation on the first run page (`ACN - Premium` for this account) and restart, then start a session in a scratch folder.
+2. **Look at the approval card choice** (`docs/design/prototype/approval-card.html` shows the three variants) and tell me if you prefer A or C over the decision rail.
+3. **Re-check the managed policy findings on the managed laptop build** (`docs/sdk-notes.md`): that stdio and http MCP servers are blocked in sessions and in-process ones are allowed.
+4. **Phone, on a real iPhone** (nothing about the passkey, Home Screen app or push can be tested here): follow `docs/relay-local.md`. Set up an https address (Tailscale is the simplest), run the Relay, connect it on the Devices page, pair, compare the six digits, then go through the "things to check on a real iPhone" list: install and pair, a push on the lock screen saying only "Approval needed", Face ID to allow, deny, answer a question, and the kill switch.
+5. **Podman:** if you want the container, build it once (`podman compose -f deploy/relay/docker-compose.yml up -d --build`) and tell me if it fails.
+6. **Judge (optional, off):** turn it on by setting `defaults.judge.enabled: true` in the rules file. It uses a little of your Claude allowance and its first call takes about 25 seconds.
+7. **Remote:** the repository has no remote. Add one and push `main` when you want it backed up.
+8. **If the machine stays this slow**, free the other sessions' processes before running the full suite.
+
+**Known limits** are listed at the end of `docs/threat-model.md`.
