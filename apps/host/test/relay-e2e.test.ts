@@ -633,6 +633,8 @@ describe("the Devices endpoints the desktop page uses", () => {
     )
     expect((await call("GET", "/api/relay")).json.phones[0].name).toBe("Peter's iPhone")
     expect((await call("PUT", `/api/relay/phones/${id}`, { name: "" })).status).toBe(400)
+    // A refused request must have no side effect: the name is unchanged.
+    expect((await call("GET", "/api/relay")).json.phones[0].name).toBe("Peter's iPhone")
     expect((await call("DELETE", `/api/relay/phones/${id}`)).json).toMatchObject({
       ok: true,
       removed: true,

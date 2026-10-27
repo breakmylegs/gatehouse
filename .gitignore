@@ -7,3 +7,4 @@ coverage/
 !.env.example
 .claude/settings.local.json
 .claude/skills/impeccable/scripts/bin/
+dist-demo/

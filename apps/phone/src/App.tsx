@@ -26,13 +26,14 @@ const SHAPE: Record<string, string> = {
   Severe: "M5 1.5h6L14.5 5v6L11 14.5H5L1.5 11V5z",
 }
 
-function Risk({ risk }: { risk: number }) {
+function Risk({ risk, className }: { risk: number; className?: string }) {
   const band = bandOf(risk)
   const hot = band === "High" || band === "Severe"
   return (
     <span
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-full border border-current py-0.5 pl-2 pr-3 text-[15px] font-semibold",
+        className,
         band === "Low" ? "text-ok" : band === "Moderate" ? "text-warn" : "text-sev",
         band === "Severe" && "bg-sev !text-bg",
       )}
@@ -151,10 +152,7 @@ export function App() {
     return (
       <Frame title="Gatehouse">
         <div className="grid gap-4 p-5">
-          <p className="m-0">
-            Locked. Use Face ID to see what is waiting for you on <strong>{device.name}</strong>'s
-            desktop.
-          </p>
+          <p className="m-0">Locked. Use Face ID to see what is waiting for you.</p>
           {error ? (
             <p role="alert" className="m-0 font-semibold text-sev">
               {error}
@@ -236,7 +234,7 @@ export function App() {
         ) : null}
         {waiting.length === 0 ? (
           <div className="panel p-5">
-            <h2 className="m-0 text-[19px] font-semibold">All clear</h2>
+            <h2 className="m-0 text-[22px] font-semibold">All clear</h2>
             <p className="m-0 mt-1 text-mut">
               Nothing needs a decision. You will get a notification when something does.
             </p>
@@ -256,7 +254,7 @@ export function App() {
                     {i.opened?.payload.project ?? ""}
                   </span>
                   {i.opened ? (
-                    <Risk risk={i.opened.payload.verdict.risk} />
+                    <Risk risk={i.opened.payload.verdict.risk} className="justify-self-start" />
                   ) : (
                     <span className="text-sev">Cannot be opened</span>
                   )}
@@ -267,7 +265,7 @@ export function App() {
         )}
         {done.length > 0 ? (
           <section aria-label="Just decided">
-            <h2 className="m-0 mb-1 text-[15px] font-semibold text-mut">Just decided</h2>
+            <h2 className="m-0 mb-1 text-[17px] font-semibold text-mut">Just decided</h2>
             <ul className="m-0 list-none p-0 text-[15px] text-mut">
               {done.map((i) => (
                 <li key={i.relayId} className="py-0.5">
@@ -317,7 +315,7 @@ function Frame({
             Back
           </button>
         ) : null}
-        <h1 className="m-0 min-w-0 flex-1 truncate text-[20px] font-semibold">{title}</h1>
+        <h1 className="m-0 min-w-0 flex-1 truncate text-[26px] font-semibold">{title}</h1>
         {action}
       </header>
       <main className="min-h-0 overflow-auto">{children}</main>
@@ -518,7 +516,7 @@ function Detail({
     <div className="grid min-h-full grid-rows-[1fr_auto]">
       <div className="grid content-start gap-4 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="m-0 text-[19px] font-semibold">
+          <h2 className="m-0 text-[22px] font-semibold">
             {title(o.payload.kind, o.payload.toolName)}
           </h2>
           <Risk risk={o.payload.verdict.risk} />
@@ -707,7 +705,7 @@ function SettingsScreen({
   return (
     <div className="grid gap-5 p-4">
       <section className="grid gap-2" aria-label="Notifications">
-        <h2 className="m-0 text-[19px] font-semibold">Notifications</h2>
+        <h2 className="m-0 text-[22px] font-semibold">Notifications</h2>
         <button
           className="btn"
           disabled={busy}
@@ -733,7 +731,7 @@ function SettingsScreen({
       </section>
 
       <section className="grid gap-2" aria-label="Kill switch">
-        <h2 className="m-0 text-[19px] font-semibold">Kill switch</h2>
+        <h2 className="m-0 text-[22px] font-semibold">Kill switch</h2>
         <p className="m-0 text-mut">
           Stops every session and denies everything waiting. Only the computer can switch it off
           again.
@@ -764,7 +762,7 @@ function SettingsScreen({
       </section>
 
       <section className="grid gap-2" aria-label="This phone">
-        <h2 className="m-0 text-[19px] font-semibold">This phone</h2>
+        <h2 className="m-0 text-[22px] font-semibold">This phone</h2>
         <p className="m-0 text-mut">
           Paired as {device.name}. To stop it answering, revoke it in Gatehouse on your computer.
         </p>
