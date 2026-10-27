@@ -45,7 +45,7 @@ It runs the same Host as `pwsh scripts/start.ps1`, so everything in `docs/runboo
 
 Not built yet, by choice. Two routes when you want them:
 
-- **Installer.** `packaging/installer.iss` is an Inno Setup script that wraps this folder: it installs to `%LOCALAPPDATA%\Programs\Gatehouse` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start at sign-in" choice. It has not been compiled or tested, because Inno Setup is not installed here. Build it with `ISCC packaging\installer.iss` after `npm run package`.
+- **Installer.** `packaging/installer.iss` is an Inno Setup script that wraps this folder: it installs to `%LOCALAPPDATA%\Programs\Gatehouse` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start at sign-in" choice. It has not been compiled or tested, because Inno Setup is not installed here. Build it with `npm run installer`. It finds `ISCC.exe` in the usual Inno Setup folders or on the PATH (give a path with `--iscc <path>` or `GATEHOUSE_ISCC`), builds the package first if needed, and writes `dist-app\Gatehouse-Setup.exe`.
 - **One file.** Node can embed a script into its own exe, but Gatehouse also needs its WebAssembly files, the Agent SDK's binary, the PowerShell scripts and the built interface at run time, so a single file would still unpack them next to itself. The folder layout above avoids that.
 
 ## Known limits
