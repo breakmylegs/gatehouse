@@ -5,10 +5,10 @@ export function Devices() {
   const relay = useStore((s) => s.health?.relay)
   return (
     <div className="mx-auto grid max-w-[760px] gap-4 p-6">
-      <h1 className="m-0 text-lg font-semibold">Devices and pairing</h1>
+      <h1 className="m-0 text-[22px] font-semibold">Devices and pairing</h1>
       {!relay || relay.state === "not-configured" ? (
         <section className="panel grid gap-2 p-5" aria-label="Phone relay status">
-          <h2 className="m-0 text-base font-semibold">No phone is paired</h2>
+          <h2 className="m-0 text-[17px] font-semibold">No phone is paired</h2>
           <p className="m-0">
             Decisions are made on this computer only. To decide from your iPhone as well, set up the
             relay on your server and pair the phone. The steps are in the runbook.

@@ -81,7 +81,7 @@ export function Sessions() {
   return (
     <div className="mx-auto grid max-w-[1100px] gap-6 p-6">
       <header className="flex items-baseline gap-4">
-        <h1 className="m-0 text-lg font-semibold">Sessions</h1>
+        <h1 className="m-0 text-[22px] font-semibold">Sessions</h1>
         <span className="text-mut">
           Spend so far: <strong>{money(usage?.total?.costUsd ?? 0)}</strong>
         </span>

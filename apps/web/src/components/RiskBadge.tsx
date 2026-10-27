@@ -22,6 +22,7 @@ export function RiskBadge({ risk, className }: { risk: number; className?: strin
       className={clsx(
         "inline-flex items-center gap-1.5 rounded-full border border-current py-px pl-1.5 pr-2.5 font-semibold",
         COLOUR[band],
+        band === "Severe" && "bg-sev !text-bg",
         className,
       )}
     >

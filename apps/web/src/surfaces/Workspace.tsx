@@ -41,7 +41,7 @@ export function Workspace() {
   if (!session) {
     return (
       <div className="mx-auto mt-16 max-w-md text-center">
-        <h1 className="m-0 text-base font-semibold">No session selected</h1>
+        <h1 className="m-0 text-[17px] font-semibold">No session selected</h1>
         <p className="text-mut">
           {list.length === 0
             ? "Start a session from the Sessions page."
@@ -162,10 +162,7 @@ export function Workspace() {
 
       <footer className="border-t border-line bg-s1 p-3">
         {pending.length > 0 ? (
-          <div
-            role="status"
-            className="mb-2 flex items-center gap-3 rounded-md border border-line bg-s2 px-3 py-1.5"
-          >
+          <div role="status" className="mb-2 flex items-center gap-3 bg-s2 px-3 py-1.5">
             <span className="font-semibold">
               {pending.length} request{pending.length === 1 ? "" : "s"} from this session waiting on
               you

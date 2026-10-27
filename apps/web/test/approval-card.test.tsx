@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ApprovalCard } from "../src/components/ApprovalCard"
+import { useStore } from "../src/store"
 
 const sent: unknown[] = []
 let reply: (cmd: { type: string }) => {
@@ -66,6 +67,7 @@ function view(
 }
 
 beforeEach(() => {
+  useStore.setState({ conn: "open" })
   sent.length = 0
   reply = () => ({ ok: true })
 })
@@ -205,13 +207,15 @@ describe("ApprovalCard", () => {
     const long = Array.from({ length: 40 }, (_, i) => `echo line${i}`).join("\n")
     render(<ApprovalCard view={view({}, { rawInput: { command: long } })} />)
     expect(screen.getByLabelText("What will run").textContent).not.toContain("line39")
-    await userEvent.click(screen.getByRole("button", { name: /Show all 40 lines/ }))
+    await userEvent.click(screen.getByRole("button", { name: /Show all \(40 lines/ }))
     expect(screen.getByLabelText("What will run").textContent).toBe(long)
   })
 
   it("shows a ten thousand character command in full once expanded", async () => {
     const huge = "echo " + "a".repeat(10_000)
     render(<ApprovalCard view={view({}, { rawInput: { command: huge } })} />)
+    expect(screen.getByLabelText("What will run").textContent!.length).toBeLessThan(2000)
+    await userEvent.click(screen.getByRole("button", { name: /Show all/ }))
     expect(screen.getByLabelText("What will run").textContent).toBe(huge)
   })
 
@@ -243,5 +247,66 @@ describe("ApprovalCard", () => {
         answers: { "Which database?": "SQLite", "Anything else?": "No" },
       },
     ])
+  })
+
+  it("makes Deny the filled choice and Allow the outline one at high risk, and the reverse at low risk", () => {
+    const { unmount } = render(<ApprovalCard view={view({}, { defaultToNo: true })} />)
+    expect(screen.getByRole("button", { name: /^Deny.*Esc/ })).toHaveClass("btn-primary")
+    expect(screen.getByRole("button", { name: /Allow once/ })).not.toHaveClass("btn-primary")
+    unmount()
+    render(<ApprovalCard view={view({}, { defaultToNo: false })} />)
+    expect(screen.getByRole("button", { name: /Allow once/ })).toHaveClass("btn-primary")
+  })
+
+  it("asks before stopping the session, and Keep session backs out", async () => {
+    render(<ApprovalCard view={view()} />)
+    await userEvent.click(screen.getByRole("button", { name: "Stop session…" }))
+    expect(sent).toEqual([])
+    await userEvent.click(screen.getByRole("button", { name: "Keep session" }))
+    expect(screen.getByRole("button", { name: "Stop session…" })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Stop session…" }))
+    await userEvent.click(screen.getByRole("button", { name: "Stop session" }))
+    await waitFor(() =>
+      expect(sent).toEqual([
+        { type: "deny", requestId: "req-1", message: "The user stopped this session." },
+        { type: "close_session", sessionId: "s1" },
+      ]),
+    )
+  })
+
+  it("pauses every decision while the Host is not connected, including the keyboard", () => {
+    useStore.setState({ conn: "closed" })
+    render(<ApprovalCard view={view()} />)
+    expect(screen.getByText(/Not connected to the Host/)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: /Allow once/ })).toBeDisabled()
+    expect(screen.getByRole("button", { name: /^Deny.*Esc/ })).toBeDisabled()
+    fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
+    fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Escape" })
+    expect(sent).toEqual([])
+  })
+
+  it("says what the Host said, or that it was not connected, when a send fails", async () => {
+    reply = () => ({ ok: false, error: { code: "disconnected", message: "x" } })
+    render(<ApprovalCard view={view()} />)
+    await userEvent.click(screen.getByRole("button", { name: /Allow once/ }))
+    expect((await screen.findByRole("alert")).textContent).toMatch(/nothing was sent/)
+  })
+
+  it("shows the status line and the target path of an edit", () => {
+    render(
+      <ApprovalCard
+        view={view(
+          { toolName: "Edit" },
+          { rawInput: { file_path: "C:/dev/atlas/a.ts", old_string: "a", new_string: "b" } },
+        )}
+      />,
+    )
+    expect(screen.getByText(/Target: C:.dev.atlas.a.ts/)).toBeInTheDocument()
+    expect(screen.getByText(/Desktop times.out at/)).toBeInTheDocument()
+  })
+
+  it("collapses a long single-line command by characters", async () => {
+    render(<ApprovalCard view={view({}, { rawInput: { command: "x".repeat(5000) } })} />)
+    expect(screen.getByLabelText("What will run").textContent!.length).toBeLessThanOrEqual(1500)
   })
 })

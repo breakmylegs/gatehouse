@@ -58,7 +58,7 @@ body {
   margin: 0;
   background: var(--c-bg);
   color: var(--c-tx);
-  font: 13px/1.5 var(--font-ui);
+  font: 14px/1.5 var(--font-ui);
   -webkit-font-smoothing: antialiased;
 }
 [hidden] {
@@ -114,6 +114,15 @@ kbd {
 .btn-primary:hover {
   background: var(--c-acc);
   filter: brightness(1.08);
+}
+.btn-strong {
+  border-color: var(--c-acc);
+  color: var(--c-acc);
+  font-weight: 600;
+}
+::placeholder {
+  color: var(--c-mut);
+  opacity: 1;
 }
 .btn-deny {
   border-color: var(--c-sev);

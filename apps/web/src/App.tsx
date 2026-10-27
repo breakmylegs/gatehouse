@@ -119,7 +119,12 @@ export function App() {
           </button>
         )}
       </header>
-      {killed ? (
+      {conn !== "open" ? (
+        <div role="alert" className="border-b border-sev bg-s2 px-4 py-2 font-semibold text-sev">
+          Not connected to the Host. Decisions are paused, and requests keep waiting. Reconnecting
+          automatically.
+        </div>
+      ) : killed ? (
         <div role="alert" className="border-b border-sev bg-s2 px-4 py-2 font-semibold text-sev">
           Kill switch engaged. Every request is denied and no session can start until you re-arm.
         </div>

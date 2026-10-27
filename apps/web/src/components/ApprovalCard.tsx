@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { age, clock, commandText } from "../lib/format"
 import { splitByHighlights } from "../lib/highlight"
+import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { RiskBadge } from "./RiskBadge"
 
 const COLLAPSE_LINES = 12
+const COLLAPSE_CHARS = 1500
 const SEP = "\x1f"
 
 interface RememberPreview {
@@ -18,20 +20,20 @@ interface RememberPreview {
 
 type Panel = "none" | "deny" | "edit" | "remember"
 
-function useNow(ms = 15_000): number {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), ms)
-    return () => clearInterval(t)
-  }, [ms])
-  return now
-}
-
 const PHONE_TEXT: Record<PendingView["phone"], string> = {
   none: "Phone not in use",
   held: "Phone: held for quiet hours",
   delivered: "Phone notified",
   expired: "Phone: expired",
+}
+
+/** The file or folder an edit-style tool acts on, shown under Where. */
+function targetPath(raw: Record<string, unknown>): string | undefined {
+  for (const k of ["file_path", "notebook_path", "path"]) {
+    const v = raw[k]
+    if (typeof v === "string" && v) return v
+  }
+  return undefined
 }
 
 const isShell = (tool: string) => tool === "Bash" || tool === "PowerShell"
@@ -46,6 +48,8 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [message, setMessage] = useState("")
   const [error, setError] = useState<string>()
   const [expanded, setExpanded] = useState(false)
+  const [confirmStop, setConfirmStop] = useState(false)
+  const connected = useStore((s) => s.conn === "open")
   const [remember, setRemember] = useState<RememberPreview>()
   const command = useMemo(
     () => commandText(req.toolName, view.rawInput),
@@ -58,6 +62,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     setError(undefined)
     setMessage("")
     setExpanded(false)
+    setConfirmStop(false)
     setRemember(undefined)
     setEdited(command)
   }, [req.id, command])
@@ -67,9 +72,11 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     .map((s) => s.text)
   const segKey = segments.join(SEP)
   const lines = command.split("\n").length
-  const long = lines > COLLAPSE_LINES
+  const long = lines > COLLAPSE_LINES || command.length > COLLAPSE_CHARS
   const shown =
-    long && !expanded ? command.split("\n").slice(0, COLLAPSE_LINES).join("\n") : command
+    long && !expanded
+      ? command.split("\n").slice(0, COLLAPSE_LINES).join("\n").slice(0, COLLAPSE_CHARS)
+      : command
   const shownParts = useMemo(() => splitByHighlights(shown, segments), [shown, segKey])
 
   async function run(cmd: Parameters<typeof send>[0]): Promise<boolean> {
@@ -78,7 +85,12 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     const r = await send(cmd)
     setBusy(false)
     if (!r.ok) {
-      setError(r.error?.message ?? "The Host did not accept that")
+      setError(
+        r.error?.code === "disconnected"
+          ? "The Host is not connected, so nothing was sent. The request is still waiting."
+          : (r.error?.message ??
+              "The Host refused that and gave no reason. The request is still waiting."),
+      )
       return false
     }
     return true
@@ -125,7 +137,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   // The chord and Esc work only while focus is inside this card, so a Ctrl+Enter meant to send a
   // prompt can never approve something.
   function onKeyDown(e: React.KeyboardEvent) {
-    if (busy || resolved) return
+    if (busy || resolved || !connected) return
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && panel === "none") {
       e.preventDefault()
       void allow()
@@ -161,12 +173,13 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     >
       <div className="grid content-start gap-4 p-5">
         <div className="flex flex-wrap items-baseline gap-3">
-          <h2 id={`t-${req.id}`} className="m-0 text-base font-semibold">
+          <h2 id={`t-${req.id}`} className="m-0 text-[17px] font-semibold">
             {title}
           </h2>
           <span className="text-mut">
             {req.project} · {age(req.createdAt, now)} ago
           </span>
+          <RiskBadge risk={req.verdict.risk} className="ml-auto text-sm" />
         </div>
 
         {planText ? (
@@ -186,10 +199,12 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 ),
               )}
             </pre>
-            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-mut">
+            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13px] text-mut">
               {segments.length > 0 ? (
                 <span>Underlined: the part that caused the escalation.</span>
-              ) : null}
+              ) : (
+                <span>No single part was flagged. The whole input is why it was escalated.</span>
+              )}
               {long ? (
                 <button
                   className="btn !min-h-6 !px-2 text-xs"
@@ -198,7 +213,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 >
                   {expanded
                     ? "Show less"
-                    : `Show all ${lines} lines (${command.length.toLocaleString("en-GB")} characters)`}
+                    : `Show all (${lines} line${lines === 1 ? "" : "s"}, ${command.length.toLocaleString("en-GB")} characters)`}
                 </button>
               ) : null}
             </div>
@@ -207,11 +222,22 @@ export function ApprovalCard({ view }: { view: PendingView }) {
 
         <dl className="m-0 grid grid-cols-[80px_1fr] gap-x-3 gap-y-1">
           <dt className="text-mut">Where</dt>
-          <dd className="m-0 mono [overflow-wrap:anywhere]">{req.cwd}</dd>
+          <dd className="m-0 mono [overflow-wrap:anywhere]">
+            {req.cwd}
+            {targetPath(view.rawInput) ? (
+              <span className="block">Target: {targetPath(view.rawInput)}</span>
+            ) : null}
+          </dd>
           <dt className="text-mut">Rule</dt>
           <dd className="m-0 mono">{req.verdict.ruleId}</dd>
           <dt className="text-mut">Why</dt>
           <dd className="m-0">{req.verdict.reason}</dd>
+          <dt className="text-mut">Status</dt>
+          <dd className="m-0">
+            {PHONE_TEXT[view.phone]}
+            {phoneExpiry && view.phone !== "none" ? `, expires ${phoneExpiry}` : ""}. Desktop times
+            out at {hardDeadline}.
+          </dd>
         </dl>
 
         {panel === "deny" ? (
@@ -314,47 +340,32 @@ export function ApprovalCard({ view }: { view: PendingView }) {
         aria-label="Decision"
         className="grid content-start gap-2.5 border-l border-line bg-s2 p-5 max-[1100px]:border-l-0 max-[1100px]:border-t"
       >
-        <RiskBadge risk={req.verdict.risk} className="justify-self-start" />
-        {resolved ? (
-          <p role="status" className="m-0 font-semibold">
-            {resolved.summary}
+        <div role="status" aria-live="polite" className="m-0 font-semibold empty:hidden">
+          {resolved ? resolved.summary : ""}
+        </div>
+        {!connected && !resolved ? (
+          <p role="alert" className="m-0 font-semibold text-sev">
+            Not connected to the Host. Decisions are paused until it is back.
           </p>
-        ) : (
+        ) : null}
+        {resolved ? null : (
           <>
             <button
-              className="btn btn-deny w-full justify-between"
-              disabled={busy}
+              className={clsx(
+                "btn w-full justify-between",
+                view.defaultToNo ? "btn-primary" : "btn-strong",
+              )}
+              disabled={busy || !connected}
               onClick={() => void deny()}
             >
               Deny <kbd>Esc</kbd>
             </button>
             <button
-              className="btn w-full"
-              disabled={busy}
-              onClick={() => setPanel(panel === "deny" ? "none" : "deny")}
-            >
-              Deny with message…
-            </button>
-            {req.kind === "permission" ? (
-              <>
-                <button
-                  className="btn w-full"
-                  disabled={busy}
-                  onClick={() => setPanel(panel === "edit" ? "none" : "edit")}
-                >
-                  Edit then allow…
-                </button>
-                <button className="btn w-full" disabled={busy} onClick={() => void openRemember()}>
-                  Remember…
-                </button>
-              </>
-            ) : null}
-            <button className="btn w-full" disabled={busy} onClick={() => void stopSession()}>
-              Stop session
-            </button>
-            <button
-              className={clsx("btn btn-primary w-full justify-between")}
-              disabled={busy}
+              className={clsx(
+                "btn w-full justify-between",
+                view.defaultToNo ? "btn-strong" : "btn-primary",
+              )}
+              disabled={busy || !connected}
               onClick={() => void allow()}
               aria-keyshortcuts="Control+Enter"
             >
@@ -364,15 +375,60 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               </span>
             </button>
             {view.defaultToNo ? (
-              <p className="m-0 text-xs text-mut">
-                Risk is high, so nothing here is pre-selected for allowing.
+              <p className="m-0 text-[13px] text-tx">
+                Risk is high. Allowing takes a deliberate click or Ctrl+Enter inside this card.
               </p>
             ) : null}
-            <p className="m-0 text-xs text-mut">
-              {PHONE_TEXT[view.phone]}
-              {phoneExpiry && view.phone !== "none" ? `, expires ${phoneExpiry}` : ""}. Desktop
-              times out at {hardDeadline}.
-            </p>
+            <hr className="my-1 w-full border-0 border-t border-line" />
+            <button
+              className="btn w-full"
+              disabled={busy || !connected}
+              onClick={() => setPanel(panel === "deny" ? "none" : "deny")}
+            >
+              Deny with message…
+            </button>
+            {req.kind === "permission" ? (
+              <>
+                <button
+                  className="btn w-full"
+                  disabled={busy || !connected}
+                  onClick={() => setPanel(panel === "edit" ? "none" : "edit")}
+                >
+                  Edit then allow…
+                </button>
+                <button
+                  className="btn w-full"
+                  disabled={busy || !connected}
+                  onClick={() => void openRemember()}
+                >
+                  Remember…
+                </button>
+              </>
+            ) : null}
+            <hr className="my-1 w-full border-0 border-t border-line" />
+            {confirmStop ? (
+              <div className="grid gap-2" role="group" aria-label="Confirm stopping the session">
+                <p className="m-0 text-[13px]">Deny this and end the session?</p>
+                <button
+                  className="btn btn-deny w-full"
+                  disabled={busy || !connected}
+                  onClick={() => void stopSession()}
+                >
+                  Stop session
+                </button>
+                <button className="btn w-full" onClick={() => setConfirmStop(false)}>
+                  Keep session
+                </button>
+              </div>
+            ) : (
+              <button
+                className="btn w-full"
+                disabled={busy || !connected}
+                onClick={() => setConfirmStop(true)}
+              >
+                Stop session…
+              </button>
+            )}
           </>
         )}
       </aside>

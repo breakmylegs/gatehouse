@@ -120,7 +120,7 @@ export function Audit() {
   return (
     <div className="grid h-full grid-rows-[auto_auto_1fr]">
       <header className="flex flex-wrap items-baseline gap-4 px-6 pb-2 pt-5">
-        <h1 className="m-0 text-lg font-semibold">Audit log</h1>
+        <h1 className="m-0 text-[22px] font-semibold">Audit log</h1>
         <p role="status" className="m-0">
           {verify === undefined ? (
             <span className="text-mut">Checking the chain…</span>
