@@ -238,7 +238,17 @@ export function createHost(opts: HostOptions = {}): Host {
     pwsh,
     health,
     expectedOrg: () => config.expectedOrg,
-    admin: { engine, store, pwsh, audit, auditDir: dir, loadOptions, env, config: () => config, log },
+    admin: {
+      engine,
+      store,
+      pwsh,
+      audit,
+      auditDir: dir,
+      loadOptions,
+      env,
+      config: () => config,
+      log,
+    },
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),
     log,
   }

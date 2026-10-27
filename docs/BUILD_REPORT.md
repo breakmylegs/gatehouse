@@ -107,3 +107,44 @@ Sessions, `canUseTool`, the PreToolUse floor hook, the broker (desktop channel, 
 
 - Open `docs/design/prototype/approval-card.html`, and say if you prefer variant A or C over B.
 - The prototype's contrast and keyboard behaviour were not machine-checked. Phase 5 does that on the real components.
+
+## Phase 5. Desktop UI
+
+Vite and React app in `apps/web`, served by the Host from `apps/web/dist`. Every desktop surface in the spec exists and runs against the live Host: approval card and queue, session workspace (transcript, tool cards, diffs, todo list, composer with slash commands, model picker, default and plan toggle, interrupt), sessions overview, policy studio (rules, test a command, replay and activate with a diff, remember rules), audit log (filter, search, detail, chain status, export), devices, settings, first run. `DESIGN.md` records the system as built.
+
+- **Host additions** (`apps/host/src/api.ts`, token-guarded `/api/*`): audit query, verify and export; policy read, dry-run test, replay, activate (validated, hash-checked, audited) and remember removal; settings read and save (audited by key name only, never value). Config gained `workspaceRoots` and `quietHours`, honoured by both the Host and the Approver. `policy:replay` now reads real audit records (their input is a JSON string).
+- **Verified live** with the real SDK through the UI in a scratch folder: org check, session start, an escalated `npm install` appearing in the queue, Remember preview showing the exact rule, Esc closing the panel then denying, "Denied on desktop at 09:16", and the audit log showing both records with an intact chain.
+- **Detector:** `impeccable detect apps/web/src` exit 0 (19 files). In-page scan of all surfaces, light and dark: real findings fixed (placeholder contrast, a card inside a card, flat type steps). Two remaining findings on `body` (`layout-transition`, `dark-glow`) come from the detector's own overlay, which is visible in a screenshot taken while it was injected; neither string exists in our source or build. The URL form of the scan exited 0 but only saw the empty approvals page, so the in-page run is the evidence.
+- **Critique** (Assessment A as an isolated sub-agent, B run inline by me, so this is a degraded dual run): fixed every P1 and the P2 queue and type findings. Allow no longer the loudest control at risk 70 or above (Deny is filled, Allow an outline); red no longer on Deny; risk badge in the card header, Severe filled; a Status row and target path; Stop session behind a confirm and apart from Allow; Host-disconnected banner that pauses decisions and the keyboard; a persistent live region; the queue virtualised, oldest first, ages that tick, no wrap-around; long single-line commands collapse by characters. Not done: grouping the queue by session, a D shortcut (the brief said "Esc or D"; Esc is the only key), diff rendering for Write input (shown as labelled JSON with the target path), sub-agent threads as indented groups only by marker.
+- **Worst case** (`apps/web/demo.html`, built only with `DEMO=1`): 300 pending requests, 40 sessions, 5,000 character and 300 line commands, Unicode and very long names and paths, empty, Relay unreachable, Approver down, kill switch engaged. 42 page and data combinations at 1024 pixels wide: no horizontal overflow. Not run: a literal 10,000 character command (the demo's longest is about 5,000, collapse is by characters so size does not matter), real Relay offline (Phase 6).
+- **Hardening:** error boundary, kill switch and stop session confirm inline rather than `window.confirm`, session start guidance (a start takes up to a minute), reduced motion covers transitions.
+- **Not run:** Emil's `animate`, `find-animation-opportunities` and `review-animations`. The UI has no layout or main-thread animation to review: only a 120ms colour fade, NumberFlow counters and Sonner toasts. Optional Playwright smoke tests skipped.
+- **Library note:** shiki is in the spec's list but not used yet (commands and diffs are plain monospace, which is easier to verify than highlighted text); react-markdown and remark-gfm and diff are the two the spec flags as outside the curated list. `@types/diff` was a stub and was removed.
+
+### Found and fixed during Phase 5
+
+- **The Host would not start once a UI build existed:** `@fastify/static` and the Host both declared `GET /`. Never hit before because no build existed. Fixed with `index: false`, with a server test that serves a built folder (fails without the fix).
+- **A render loop on first load:** selectors that built a new array each call (zustand 5 re-renders for ever). Now `usePending` and friends, with a test that renders the app.
+- **Static files are registered at start:** a rebuilt UI is not served until the Host restarts (`wildcard: false` registers files that exist at start). Deliberate, noted for the runbook.
+- **Audit and replay mismatch:** `policy:replay` skipped every real audit record. Fixed, with a test.
+
+### Deviations in Phase 5
+
+| Spec | What was done | Why |
+|---|---|---|
+| Critique as two isolated sub-agents | A as a sub-agent, B inline | A browser pane and one live Host cannot be shared by two agents at once. A never saw detector output. |
+| `npx impeccable detect http://127.0.0.1:47820` | Run, plus an in-page scan of every surface | The URL scan cannot hold a signed-in, populated page. |
+| Quiet hours and workspace roots in settings | Stored in `config.json`, applied at the next start | Both the Host and the Approver read them at startup. The page says a restart is needed. |
+| Settings notifications | Browser notification is a per-browser choice stored locally | Nothing to store on the Host. The notification never carries detail. |
+| Remember rules "review" | List and remove | Editing a remember rule would let it grow past one command or file. |
+
+### Owner to-do added in Phase 5
+
+- Open the printed URL from `npm run host` (it ends in `#token=...`), after `npm run build -w @gatehouse/web`. Restart the Host after every UI rebuild.
+- Try the UI on your real laptop sign-in and set the organisation on the first-run page (then restart).
+
+### Phase 5 results
+
+- Full suite: 39 files, 999 tests, all passing (the web app adds 44 and the admin API 12). `npm run lint`, `npm run format`, `npm run typecheck` clean. `npm audit` 0 vulnerabilities. 577 packages scanned for licences, no AGPL, GPL or LGPL.
+- Mutation check of the admin API: 6 deliberate bugs, 5 caught, 1 survived (`restartRequired` always true) and now has a test. Approval card: 4 deliberate bugs in the safety rules (plain Enter allows, Allow takes focus, Esc always denies, edit unchanged), all caught.
+- On a loaded laptop the Host's escalation tests time out at the old 10 second wait (git and PowerShell are slow while other tools hold dozens of `git.exe` processes in `C:\dev`). The wait is now 60 seconds; both files pass.

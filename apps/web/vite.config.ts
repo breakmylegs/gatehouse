@@ -9,7 +9,9 @@ export default defineConfig({
   build: {
     target: "es2023",
     sourcemap: false,
-    ...(process.env.DEMO === "1" ? { rollupOptions: { input: { index: "index.html", demo: "demo.html" } } } : {}),
+    ...(process.env.DEMO === "1"
+      ? { rollupOptions: { input: { index: "index.html", demo: "demo.html" } } }
+      : {}),
   },
   server: {
     host: "127.0.0.1",

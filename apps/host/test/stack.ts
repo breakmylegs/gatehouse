@@ -216,7 +216,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     deps,
     records,
     git: (...args) => git(repo, ...args),
-    async waitForPending(n = 1, ms = 10_000) {
+    async waitForPending(n = 1, ms = 60_000) {
       const end = Date.now() + ms
       while (broker.list().length < n) {
         if (Date.now() > end)

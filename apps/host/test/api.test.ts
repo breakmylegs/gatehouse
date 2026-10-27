@@ -268,4 +268,10 @@ describe("settings endpoints", () => {
     expect(log.body).not.toContain("SecretClient")
     expect(log.body).toContain("redactTerms")
   })
+
+  it("says no restart is needed when nothing differs from what is running", async () => {
+    const r = await app.inject({ method: "PUT", url: "/api/settings", payload: {} })
+    expect(r.statusCode).toBe(200)
+    expect(r.json()).toMatchObject({ ok: true, restartRequired: false, changed: [] })
+  })
 })

@@ -1,6 +1,6 @@
 import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
-import { lazy, Suspense, useEffect } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
 import { Toaster } from "sonner"
 import { Approvals } from "./surfaces/Approvals"
 import { Devices } from "./surfaces/Devices"
@@ -24,6 +24,7 @@ const NAV: Array<{ route: Route; label: string }> = [
 ]
 
 export function App() {
+  const [confirmKill, setConfirmKill] = useState(false)
   const route = useStore((s) => s.route)
   const setRoute = useStore((s) => s.setRoute)
   const conn = useStore((s) => s.conn)
@@ -103,18 +104,28 @@ export function App() {
           <button className="btn btn-primary" onClick={() => void send({ type: "rearm" })}>
             Re-arm sessions
           </button>
-        ) : (
-          <button
-            className="btn btn-deny"
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Stop everything now? This denies all pending requests and refuses new sessions until you re-arm.",
-                )
-              )
-                void send({ type: "kill" })
-            }}
+        ) : confirmKill ? (
+          <span
+            role="group"
+            aria-label="Confirm the kill switch"
+            className="flex items-center gap-2"
           >
+            <span className="font-semibold">Deny everything and stop new sessions?</span>
+            <button
+              className="btn btn-deny"
+              onClick={() => {
+                setConfirmKill(false)
+                void send({ type: "kill" })
+              }}
+            >
+              Yes, stop everything
+            </button>
+            <button className="btn" onClick={() => setConfirmKill(false)} autoFocus>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button className="btn btn-deny" onClick={() => setConfirmKill(true)}>
             Kill switch
           </button>
         )}
