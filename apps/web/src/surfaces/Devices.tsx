@@ -65,6 +65,7 @@ export function Devices() {
           </p>
           <Phones phones={info.phones} onChanged={load} />
           <AddPhone onPaired={load} />
+          <Rotate />
         </>
       )}
     </div>
@@ -375,6 +376,57 @@ function AddPhone({ onPaired }: { onPaired: () => Promise<void> }) {
             Cancel
           </button>
         </div>
+      ) : null}
+    </section>
+  )
+}
+
+function Rotate() {
+  const [confirm, setConfirm] = useState(false)
+  const [msg, setMsg] = useState<string>()
+  const [busy, setBusy] = useState(false)
+  async function go() {
+    setBusy(true)
+    const r = await api("POST", "/api/relay/rotate-token")
+    setBusy(false)
+    setConfirm(false)
+    setMsg(
+      r.ok
+        ? "Done. The Relay now accepts only the new token, which this computer keeps protected."
+        : (r.error ?? "The token was not changed."),
+    )
+  }
+  return (
+    <section aria-label="Device token" className="grid gap-2">
+      <h2 className="m-0 text-[17px] font-semibold">Device token</h2>
+      <p className="m-0 text-mut">
+        This computer proves itself to the Relay with a token. Rotate it if you think it has been
+        seen. Paired phones are not affected.
+      </p>
+      {confirm ? (
+        <div
+          role="group"
+          aria-label="Confirm rotating the device token"
+          className="flex items-center gap-2"
+        >
+          <button className="btn btn-primary" disabled={busy} onClick={() => void go()}>
+            {busy ? "Rotating…" : "Rotate now"}
+          </button>
+          <button className="btn" onClick={() => setConfirm(false)} autoFocus>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div>
+          <button className="btn" onClick={() => setConfirm(true)}>
+            Rotate device token…
+          </button>
+        </div>
+      )}
+      {msg ? (
+        <p role="status" className="m-0 font-semibold">
+          {msg}
+        </p>
       ) : null}
     </section>
   )

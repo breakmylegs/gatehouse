@@ -101,6 +101,9 @@ export class RelayClient {
   ) {
     return this.#call<{ phoneId: string }>("POST", `/api/device/pairings/${id}/confirm`, body)
   }
+  rotateToken() {
+    return this.#call<{ token: string }>("POST", "/api/device/rotate-token", {})
+  }
   phones() {
     return this.#call<Array<{ id: string; name: string; push: boolean }>>(
       "GET",

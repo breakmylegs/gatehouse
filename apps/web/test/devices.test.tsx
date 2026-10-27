@@ -136,6 +136,17 @@ describe("Devices page", () => {
     )
   })
 
+  it("rotates the device token only after a second step", async () => {
+    routes["GET /api/relay"] = () => connected()
+    routes["POST /api/relay/rotate-token"] = () => ({ ok: true, data: { ok: true } })
+    render(<Devices />)
+    await userEvent.click(await screen.findByRole("button", { name: "Rotate device token…" }))
+    expect(calls.some((c) => c.url.endsWith("rotate-token"))).toBe(false)
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus()
+    await userEvent.click(screen.getByRole("button", { name: "Rotate now" }))
+    expect(await screen.findByText(/accepts only the new token/)).toBeInTheDocument()
+  })
+
   it("says plainly when the Relay cannot be reached, and that desktop decisions still work", async () => {
     routes["GET /api/relay"] = () => ({
       ok: true,

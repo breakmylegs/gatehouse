@@ -16,6 +16,13 @@ try {
   process.exit(1)
 }
 const store = new Store(cfg.dataDir)
+if (process.argv.includes("--rotate-vapid")) {
+  // New push keys. Every phone must then turn notifications on again, because its subscription is tied to the old key.
+  store.kvDelete("vapid")
+  process.stdout.write(
+    "[relay] push keys rotated. Open the phone app and choose Turn on notifications again.\n",
+  )
+}
 const enrolFile = path.join(cfg.dataDir, "enrol-token.txt")
 const relay = await buildRelay({
   publicUrl: cfg.publicUrl,

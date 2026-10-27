@@ -302,6 +302,22 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     return pinned
   }
 
+  /** A new device token. The Relay stops accepting the old one at once, and the new one is kept protected. */
+  async rotateToken(): Promise<void> {
+    const link = this.#d.store.relay()
+    if (!link) throw new Error("No Relay is set up")
+    const { token } = await (await this.#authed()).rotateToken()
+    // Written before anything else uses it, because the old token no longer works.
+    await this.#d.store.setRelay({
+      url: link.url,
+      deviceId: link.deviceId,
+      rpId: link.rpId,
+      origin: link.origin,
+      token,
+    })
+    this.#wake?.()
+  }
+
   cancelPairing(id: string): void {
     this.#pairings.delete(id)
   }

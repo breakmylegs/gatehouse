@@ -104,6 +104,10 @@ export class Store {
       .run(k, v)
   }
 
+  kvDelete(k: string): void {
+    this.db.prepare("delete from kv where k = ?").run(k)
+  }
+
   // ---- devices ----
   addDevice(name: string, tokenValue: string, now: number): DeviceRow {
     const id = newId()
@@ -111,6 +115,16 @@ export class Store {
       .prepare("insert into devices (id, name, token_hash, created_at) values (?, ?, ?, ?)")
       .run(id, name, sha256Hex(tokenValue), now)
     return { id, name }
+  }
+  /** Replaces a device's token. The old one stops working at once. */
+  rotateDeviceToken(deviceId: string, newToken: string): boolean {
+    return (
+      Number(
+        this.db
+          .prepare("update devices set token_hash = ? where id = ?")
+          .run(sha256Hex(newToken), deviceId).changes,
+      ) === 1
+    )
   }
   deviceByToken(tokenValue: string): DeviceRow | undefined {
     return this.db

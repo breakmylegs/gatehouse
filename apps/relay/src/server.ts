@@ -167,6 +167,13 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
     return { deviceId: dev.id, token: t }
   })
 
+  app.post("/api/device/rotate-token", async (req) => {
+    const t = token(32)
+    store.rotateDeviceToken(req.device!.id, t)
+    log(`device token rotated: ${req.device!.id}`)
+    return { token: t }
+  })
+
   app.post("/api/device/pairings", async (req, reply) => {
     const b = CreatePairing.safeParse(req.body)
     if (!b.success) return fail(reply, 400, "bad request")

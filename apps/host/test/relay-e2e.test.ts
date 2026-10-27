@@ -643,6 +643,17 @@ describe("the Devices endpoints the desktop page uses", () => {
     })
     expect((await call("DELETE", `/api/relay/phones/${id}`)).status).toBe(404)
     expect((await call("GET", "/api/relay/pairing/nope")).status).toBe(502)
+    // Rotating the device token: the old one stops working at the Relay and the new one is what the Host keeps.
+    const oldToken = (await phoneStore.token()) as string
+    expect((await call("POST", "/api/relay/rotate-token")).status).toBe(200)
+    const newToken = (await phoneStore.token()) as string
+    expect(newToken).not.toBe(oldToken)
+    const probe = (t: string) =>
+      fetch(relayUrl + "/api/device/phones", { headers: { authorization: "Bearer " + t } }).then(
+        (r) => r.status,
+      )
+    expect(await probe(oldToken)).toBe(401)
+    expect(await probe(newToken)).toBe(200)
     const events = stack.records().map((r) => r.event)
     for (const e of ["pairing_started", "phone_paired", "phone_revoked"])
       expect(events).toContain(e)

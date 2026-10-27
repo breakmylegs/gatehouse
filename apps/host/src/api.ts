@@ -447,6 +447,14 @@ function registerRelayRoutes(app: FastifyInstance, ctx: AdminContext): void {
     return { ok: true }
   })
 
+  app.post("/api/relay/rotate-token", (_req, reply) =>
+    guard(reply, async () => {
+      await phone.rotateToken()
+      await record("relay_token_rotated", {})
+      return { ok: true }
+    }),
+  )
+
   app.put("/api/relay/phones/:id", (req, reply) =>
     guard(reply, async () => {
       const name = (req.body as { name?: unknown } | null)?.name

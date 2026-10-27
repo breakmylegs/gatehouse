@@ -29,6 +29,11 @@ async function stop(code: number): Promise<void> {
   await host.stop().catch(() => undefined)
   process.exit(code)
 }
+// scripts/start.ps1 asks for a clean stop by closing our input, which is the one signal that works the same everywhere.
+if (env.GATEHOUSE_EXIT_ON_STDIN_CLOSE === "1") {
+  process.stdin.on("end", () => void stop(0))
+  process.stdin.resume()
+}
 process.on("SIGINT", () => void stop(0))
 process.on("SIGTERM", () => void stop(0))
 process.on("unhandledRejection", (reason) => {
