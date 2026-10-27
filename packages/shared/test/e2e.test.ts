@@ -29,7 +29,11 @@ describe("seal and open", () => {
   it("delivers the plaintext to the holder of the private key and nobody else", async () => {
     const phone = await generateKeyPair(false)
     const other = await generateKeyPair(false)
-    const sealed = await sealJson({ command: "rm -rf build", note: "unicode: 日本語 🚀" }, phone.publicKey, "req-1")
+    const sealed = await sealJson(
+      { command: "rm -rf build", note: "unicode: 日本語 🚀" },
+      phone.publicKey,
+      "req-1",
+    )
     expect(JSON.stringify(sealed)).not.toContain("rm -rf")
     expect(await openJson(sealed, phone.privateKey, "req-1")).toEqual({
       command: "rm -rf build",
@@ -46,10 +50,16 @@ describe("seal and open", () => {
 
   it("rejects any tampered field", async () => {
     const phone = await generateKeyPair(false)
-    const sealed = await seal(new TextEncoder().encode("hello") as Uint8Array<ArrayBuffer>, phone.publicKey, "r")
+    const sealed = await seal(
+      new TextEncoder().encode("hello") as Uint8Array<ArrayBuffer>,
+      phone.publicKey,
+      "r",
+    )
     const flip = (s: string) => (s[0] === "A" ? "B" : "A") + s.slice(1)
     for (const field of ["ct", "iv", "salt"] as const)
-      await expect(open({ ...sealed, [field]: flip(sealed[field]) }, phone.privateKey, "r")).rejects.toThrow()
+      await expect(
+        open({ ...sealed, [field]: flip(sealed[field]) }, phone.privateKey, "r"),
+      ).rejects.toThrow()
     const swapped = await generateKeyPair(false)
     await expect(
       open({ ...sealed, epk: await exportPublicKey(swapped.publicKey) }, phone.privateKey, "r"),
@@ -82,7 +92,9 @@ describe("seal and open", () => {
 
   it("handles an empty and a 1 MB plaintext", async () => {
     const k = await generateKeyPair(false)
-    expect((await open(await seal(new Uint8Array(0), k.publicKey, "r"), k.privateKey, "r")).length).toBe(0)
+    expect(
+      (await open(await seal(new Uint8Array(0), k.publicKey, "r"), k.privateKey, "r")).length,
+    ).toBe(0)
     const big = new Uint8Array(1 << 20).map((_, i) => i % 251)
     expect(await open(await seal(big, k.publicKey, "r"), k.privateKey, "r")).toEqual(big)
   })
@@ -94,12 +106,14 @@ describe("fingerprint", () => {
     const f = await fingerprint(parts)
     expect(f).toMatch(/^\d{6}$/)
     expect(await fingerprint({ ...parts })).toBe(f)
-    expect(new Set([
-      f,
-      await fingerprint({ ...parts, hostPublicKey: "H2" }),
-      await fingerprint({ ...parts, phonePublicKey: "P2" }),
-      await fingerprint({ ...parts, credentialId: "C2" }),
-    ]).size).toBe(4)
+    expect(
+      new Set([
+        f,
+        await fingerprint({ ...parts, hostPublicKey: "H2" }),
+        await fingerprint({ ...parts, phonePublicKey: "P2" }),
+        await fingerprint({ ...parts, credentialId: "C2" }),
+      ]).size,
+    ).toBe(4)
   })
 })
 
