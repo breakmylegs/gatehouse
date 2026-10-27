@@ -206,3 +206,36 @@ The Relay (`apps/relay`), the phone app (`apps/phone`), the Host's phone channel
 ### Owner to-do added in Phase 7
 
 - To try the judge, set `defaults.judge.enabled: true` in the rules file (Policy, Edit and activate). It uses a little of your Claude allowance for each judge-eligible call.
+
+## Phase 8. Hardening and packaging
+
+- **Threat model** (`docs/threat-model.md`): 24 threats, each with what stops it and the named tests that show it. `apps/host/test/threat-model.test.ts` reads the table and fails if a threat has no test, a test file is missing, a named test is not in its file, the ids are not consecutive, or fewer than 60 references are found (checked by corrupting one reference, which failed as it should). New tests for threats that needed a table: secrets reached through every file tool, Grep, Glob and the shell (about 100 cases); safe commands chained, wrapped or substituted with bad ones in Bash and PowerShell (about 80 cases); markup and script URLs in text from Claude or a tool (the screen where you decide).
+- **Start-up:** `scripts/start.ps1` checks Node, builds the interface if needed, starts the Host (which starts the Approver), prints the one-time address and opens Edge. `-Check` proves the Host answers with its token and refuses without it, then stops everything (an automated test runs it). `-Relay` also starts the Relay. The Host now stops cleanly when its input is closed, so the script ends it without killing it. Start at logon is documented, not enabled.
+- **Runbook** (`docs/runbook.md`): start and sign in, pair and revoke, lost phone, rotate the device token (new Relay route, Devices button, tested) and the push keys (`--rotate-vapid`), update the SDK safely, verify the audit chain, back up, common problems. `docs/relay-local.md` covers the local Relay.
+- **Final checks:** `npm audit` 0 vulnerabilities; 614 packages scanned, no AGPL, GPL, SSPL, BUSL or unknown licences, no LGPL.
+
+### Observation
+
+- After `start.ps1` exits, a Node parent that reads its output through pipes never sees them close on this machine, although the script's exit code is 0 and no process of ours is left. I could not find the holder (the machine runs hundreds of the Claude desktop app's own search processes). The automated test therefore waits for the script's exit. If you run it from a tool that waits on pipes, redirect the output to a file.
+
+### Dependencies added after Phase 3, and why
+
+| Dependency | Where | Why |
+|---|---|---|
+| react, react-dom, vite, @vitejs/plugin-react, tailwindcss, @tailwindcss/vite | web, phone | The spec's UI stack |
+| zustand, clsx, sonner, cmdk, @number-flow/react, react-virtuoso, recharts | web | The spec's curated list, all in use: cmdk for the Ctrl+K palette, Sonner for toasts, NumberFlow for counters, Virtuoso for long lists, recharts for Insights |
+| react-markdown, remark-gfm, diff | web | Flagged in the spec as outside the curated list: assistant text and line diffs |
+| @simplewebauthn/server, @simplewebauthn/browser | host, relay, phone | WebAuthn, as specified |
+| web-push | relay | Web Push with VAPID |
+| tsx | relay | Runs the Relay's TypeScript in its container and locally, as the Host does |
+| @anthropic-ai/claude-agent-sdk | approver | The judge's query (already pinned for the Host) |
+| zod | policy | Declared (it was used through the workspace before) |
+| jsdom, @testing-library/react, user-event, jest-dom | web tests | Component tests |
+
+From the spec's list I did **not** use `motion` (the UI has almost no motion, and what it has is a 120ms colour fade), `@base-ui/react` (confirmations are inline, so there are no dialogs, menus or popovers to build), `class-variance-authority` (a handful of plain button classes) and `shiki` (commands and diffs are plain monospace on purpose, so what you read is exactly the text that runs). They were installed early and have been removed rather than left unused.
+
+The command palette (Ctrl+K) only moves you: to a page, a session or a waiting request, or switches theme. It has no allow, deny or kill, so a decision can only be made on the card.
+
+## Final summary
+
+@@FINAL@@

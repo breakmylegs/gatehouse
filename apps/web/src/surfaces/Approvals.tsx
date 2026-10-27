@@ -121,7 +121,8 @@ export function Approvals() {
             <ApprovalCard view={view} />
             <p className="mt-3 text-[13px] text-mut">
               <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> moves focus to the card. <kbd>Alt</kbd>+
-              <kbd>Up</kbd> and <kbd>Alt</kbd>+<kbd>Down</kbd> change request.
+              <kbd>Up</kbd> and <kbd>Alt</kbd>+<kbd>Down</kbd> change request. <kbd>Ctrl</kbd>+
+              <kbd>K</kbd> opens the palette.
             </p>
           </div>
         ) : (

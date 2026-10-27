@@ -2,6 +2,7 @@ import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { Toaster } from "sonner"
+import { CommandPalette } from "./components/CommandPalette"
 import { Approvals } from "./surfaces/Approvals"
 import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
@@ -182,6 +183,7 @@ export function App() {
           </Suspense>
         </main>
       </div>
+      <CommandPalette />
       <Toaster position="bottom-right" theme={theme} closeButton />
     </div>
   )

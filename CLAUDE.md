@@ -2,7 +2,7 @@
 
 Local Windows workbench for running Claude agent sessions with the Claude Agent SDK on the user's Accenture SSO Claude login. A custom MCP Approver decides low-risk permission requests automatically. Everything else escalates to the desktop UI and an iPhone at the same time, and the first valid answer wins.
 
-The authoritative specification is `docs/BUILD_SPEC.md`. Read it before starting any phase. Work phase by phase, plan first, and stop at every CHECKPOINT.
+The authoritative specification is `docs/BUILD_SPEC.md`. Read it before starting any phase. The build is complete through Phase 8. See `docs/BUILD_REPORT.md` for what was built, the deviations and the owner to-do list.
 
 ## Security invariants (non-negotiable)
 
@@ -57,6 +57,11 @@ Every phase must keep these true. Write an automated test for every invariant th
 | `npm run approver` | Start the Approver on its own (the Host normally starts it with a per-launch token) |
 | `npm run policy:replay -- --rules <file> --audit <file>` | List decisions a candidate rules file would change |
 | `npm run audit:verify` | Check the audit hash chain. `pwsh scripts/verify-audit.ps1` does the same without Node. |
+| `pwsh scripts/start.ps1` | Start the Host (which starts the Approver) and open the interface. `-Check` tests it, `-Relay` also starts the phone Relay. |
+| `npm run build -w @gatehouse/web` | Build the desktop interface the Host serves. Restart the Host after a rebuild. |
+| `npm run relay` / `npm run relay:build-phone` | Run the phone Relay locally (see `docs/relay-local.md`) and build the phone app. |
+
+Layout: `apps/host` (Host, admin API, phone channel), `apps/approver`, `apps/companion`, `apps/web` (desktop UI), `apps/relay` (phone Relay), `apps/phone` (iPhone PWA), `packages/policy`, `packages/shared`. Design notes are in `PRODUCT.md`, `DESIGN.md` and `docs/design`. The threat model (`docs/threat-model.md`) is checked against real test names by `apps/host/test/threat-model.test.ts`.
 
 Machine facts that shape the design (details in `docs/sdk-notes.md`): the managed policy on this laptop blocks stdio and http MCP servers in sessions but allows in-process SDK servers, so the Companion reaches sessions as an in-process server.
 

@@ -9,21 +9,17 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@base-ui/react": "1.9.0",
     "@gatehouse/shared": "0.0.0",
     "@number-flow/react": "0.6.2",
-    "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
     "diff": "9.0.0",
-    "motion": "14.6.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-markdown": "10.1.0",
     "react-virtuoso": "4.18.19",
     "recharts": "3.10.1",
     "remark-gfm": "4.0.1",
-    "shiki": "4.5.0",
     "sonner": "2.0.8",
     "zod": "4.6.7",
     "zustand": "5.0.16"
