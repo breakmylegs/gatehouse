@@ -12,7 +12,8 @@
     "./contracts": "./src/contracts.ts",
     "./e2e": "./src/e2e.ts",
     "./canonical-json": "./src/canonical-json.ts",
-    "./relay-protocol": "./src/relay-protocol.ts"
+    "./relay-protocol": "./src/relay-protocol.ts",
+    "./phone-protocol": "./src/phone-protocol.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
