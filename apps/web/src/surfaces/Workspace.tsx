@@ -333,7 +333,7 @@ function SessionFacts({ sessionId }: { sessionId: string }) {
   )
 }
 
-const ItemView = memo(function ItemView({ item }: { item: Item }) {
+export const ItemView = memo(function ItemView({ item }: { item: Item }) {
   switch (item.kind) {
     case "user":
       return (
