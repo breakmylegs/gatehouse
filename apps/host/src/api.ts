@@ -4,6 +4,8 @@ import os from "node:os"
 import path from "node:path"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import {
+  appendRemember,
+  checkRemember,
   loadPolicy,
   PolicyEngine,
   PolicyLoadError,
@@ -17,7 +19,14 @@ import {
 } from "@gatehouse/policy"
 import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
 import { configPath, GatehouseConfig, writeFileAtomic } from "@gatehouse/shared/node"
+import {
+  computeAnalytics,
+  computeDigest,
+  groupApprovals,
+  type SuggestionCandidate,
+} from "./analytics.js"
 import type { HostAudit } from "./hostaudit.js"
+import { localDay, type UsageStore } from "./usage.js"
 import type { PhoneService } from "./relay/service.js"
 
 /**
@@ -35,6 +44,8 @@ export interface AdminContext {
   /** The config the Host started with. Saved changes need a restart to take effect. */
   config: () => GatehouseConfig
   log: (line: string) => void
+  /** For the digest's spend and the usage views. */
+  usage?: UsageStore
   /** The phone channel, for the Devices page. */
   phone?: PhoneService
 }
@@ -316,6 +327,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   })
 
   registerRelayRoutes(app, ctx)
+  registerInsightRoutes(app, ctx)
 
   app.get("/api/settings", async () => {
     const file = configPath(ctx.env)
@@ -454,4 +466,127 @@ function registerRelayRoutes(app: FastifyInstance, ctx: AdminContext): void {
       return { ok: true, ...r }
     }),
   )
+}
+
+/** Every record newer than `fromMs`, oldest first. Reads newest files first and stops at the first old record. */
+export function recordsSince(dir: string, fromMs: number): AuditRecord[] {
+  const out: AuditRecord[] = []
+  outer: for (const file of listAuditFiles(dir).reverse()) {
+    const lines = fs.readFileSync(path.join(dir, file), "utf8").split("\n")
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const raw = lines[i]
+      if (!raw) continue
+      try {
+        const parsed = AuditRecord.safeParse(JSON.parse(raw))
+        if (!parsed.success) continue
+        if (Date.parse(parsed.data.ts) < fromMs) break outer
+        out.push(parsed.data)
+      } catch {
+        continue
+      }
+    }
+  }
+  return out.reverse()
+}
+
+const DAY = 86_400_000
+
+/** Policy analytics, the digest and suggestions. Read-only except accepting a suggestion, which is desktop only. */
+function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
+  app.get("/api/analytics", async (req) => {
+    const days = Math.min(
+      90,
+      Math.max(1, Number((req.query as { days?: string }).days ?? 30) || 30),
+    )
+    const to = Date.now()
+    return computeAnalytics(recordsSince(ctx.auditDir, to - days * DAY), to - days * DAY, to)
+  })
+
+  app.get("/api/digest", async () => {
+    const to = Date.now()
+    const cost = ctx.usage?.snapshot().byDay[localDay(new Date(to))]?.costUsd ?? 0
+    return computeDigest(recordsSince(ctx.auditDir, to - DAY), to - DAY, to, cost)
+  })
+
+  app.get("/api/suggestions", async () => {
+    const policy = ctx.store.current
+    const from = Date.now() - 30 * DAY
+    const out: Array<{
+      candidate: SuggestionCandidate
+      preview: string
+      approvals: number
+      lastSeen: string
+      ruleIds: string[]
+    }> = []
+    for (const g of groupApprovals(recordsSince(ctx.auditDir, from), from).slice(0, 40)) {
+      // The same check the Remember button uses: one exact command or file, never a chain, never a deny.
+      const check = await checkRemember(
+        ctx.engine,
+        policy,
+        { toolName: g.tool, input: g.input },
+        { cwd: g.cwd },
+        ctx.pwsh,
+      )
+      if (check.ok)
+        out.push({
+          candidate: check.candidate,
+          preview: check.preview,
+          approvals: g.approvals,
+          lastSeen: g.lastSeen,
+          ruleIds: g.ruleIds,
+        })
+      if (out.length >= 20) break
+    }
+    return out
+  })
+
+  app.post("/api/suggestions/accept", async (req, reply) => {
+    const b = req.body as {
+      candidate?: { tool?: unknown; command?: unknown; path?: unknown }
+      cwd?: unknown
+    } | null
+    const c = b?.candidate
+    if (
+      !c ||
+      typeof c.tool !== "string" ||
+      (typeof c.command !== "string") === (typeof c.path !== "string")
+    )
+      return bad(reply, 400, "Give a candidate with a tool and exactly one of command or path.")
+    const localPath = ctx.loadOptions.localPath
+    if (!localPath) return bad(reply, 404, "There is no local rules file.")
+    // Rebuild the call from the candidate and check it again: what is added is only ever what the Remember check allows.
+    const input =
+      typeof c.command === "string" ? { command: c.command } : { file_path: c.path as string }
+    const cwd =
+      typeof b?.cwd === "string" && b.cwd
+        ? b.cwd
+        : (ctx.store.current?.rules.workspaceRoots[0] ?? process.cwd())
+    const check = await checkRemember(
+      ctx.engine,
+      ctx.store.current,
+      { toolName: c.tool, input },
+      { cwd },
+      ctx.pwsh,
+    )
+    if (!check.ok) return bad(reply, 422, check.reason)
+    const r = await appendRemember(localPath, check.candidate)
+    ctx.store.load()
+    await ctx.audit.record({
+      session: "desktop",
+      event: "remember_added",
+      channel: "desktop",
+      tool: "policy",
+      input: { id: r.id, preview: check.preview, from: "suggestion" },
+      verdict: {
+        outcome: "allow",
+        ruleId: "remember-added",
+        reason: "A suggested remember rule was accepted on the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "none",
+      },
+      latencyMs: 0,
+    })
+    return { ok: true, id: r.id, added: r.added, preview: check.preview }
+  })
 }

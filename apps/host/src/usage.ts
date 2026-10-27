@@ -18,6 +18,8 @@ export interface UsageSnapshot {
   bySession: Record<string, UsageTotals & { project: string }>
   byProject: Record<string, UsageTotals>
   byModel: Record<string, UsageTotals>
+  /** By local calendar day, YYYY-MM-DD. Files written before this existed load with none. */
+  byDay: Record<string, UsageTotals>
 }
 
 const zero = (): UsageTotals => ({
@@ -30,6 +32,12 @@ const zero = (): UsageTotals => ({
   durationMs: 0,
   results: 0,
 })
+
+/** The local calendar day, YYYY-MM-DD. */
+export function localDay(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
 
 function num(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? v : 0
@@ -91,7 +99,8 @@ export function usageFromResult(msg: Record<string, unknown>): {
  */
 export class UsageStore {
   readonly #file: string | undefined
-  #snap: UsageSnapshot = { total: zero(), bySession: {}, byProject: {}, byModel: {} }
+  #snap: UsageSnapshot = { total: zero(), bySession: {}, byProject: {}, byModel: {}, byDay: {} }
+  readonly #now: () => Date
   /** The cumulative figures last seen for each session, to turn them into changes. */
   readonly #last = new Map<string, UsageTotals>()
   readonly #lastModels = new Map<string, Record<string, UsageTotals>>()
@@ -99,12 +108,14 @@ export class UsageStore {
   #writing: Promise<void> = Promise.resolve()
   onChange: ((snapshot: UsageSnapshot) => void) | undefined
 
-  constructor(file?: string) {
+  constructor(file?: string, now: () => Date = () => new Date()) {
     this.#file = file
+    this.#now = now
     if (file && fs.existsSync(file)) {
       try {
         const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as UsageSnapshot
-        if (parsed && typeof parsed === "object" && parsed.total) this.#snap = parsed
+        if (parsed && typeof parsed === "object" && parsed.total)
+          this.#snap = { ...parsed, byDay: parsed.byDay ?? {} }
       } catch {
         // A damaged usage file is not worth stopping for. It starts again from zero.
       }
@@ -140,6 +151,7 @@ export class UsageStore {
     add(session, total)
     add((this.#snap.byProject[project] ??= zero()), total)
     add(this.#snap.total, total)
+    add((this.#snap.byDay[localDay(this.#now())] ??= zero()), total)
     for (const [model, t] of Object.entries(modelDeltas))
       add((this.#snap.byModel[model] ??= zero()), t)
     this.#last.set(sessionId, { ...usageFromResult(result).total })

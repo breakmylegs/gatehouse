@@ -275,3 +275,91 @@ describe("settings endpoints", () => {
     expect(r.json()).toMatchObject({ ok: true, restartRequired: false, changed: [] })
   })
 })
+describe("insights endpoints", () => {
+  const human = (
+    input: unknown,
+    by: "human-desktop" | "human-phone" | "timeout" = "human-desktop",
+    outcome: "allow" | "deny" = "allow",
+  ) =>
+    ctx.audit.record({
+      session: "s9",
+      event: "human_decision",
+      channel: by === "human-phone" ? "phone" : "desktop",
+      tool: "Bash",
+      cwd: root,
+      project: "alpha",
+      input,
+      verdict: { ...verdict(outcome, "package-install"), decidedBy: by },
+      latencyMs: 4000,
+    })
+
+  it("reports analytics and a digest from the log", async () => {
+    await ctx.audit.record({
+      session: "s9",
+      event: "evaluate_permission",
+      channel: "approver",
+      tool: "Bash",
+      cwd: root,
+      project: "alpha",
+      input: { command: "npm install left-pad" },
+      verdict: verdict("escalate", "package-install"),
+      latencyMs: 2,
+    })
+    await human({ command: "npm install left-pad" })
+    const a = await get("/api/analytics?days=7")
+    expect(a.byOutcome.escalate).toBeGreaterThanOrEqual(1)
+    const rule = a.byRule.find((r: { ruleId: string }) => r.ruleId === "package-install")
+    expect(rule).toMatchObject({ escalated: 1, approved: 1 })
+    expect(a.timeToDecideMs.p50).toBe(4000)
+    const d = await get("/api/digest")
+    expect(d.text).toMatch(/^In the last 24 hours:/)
+    expect(d.askedYou).toBeGreaterThanOrEqual(1)
+  })
+
+  it("suggests only a call approved three times, accepts it as one exact rule, and refuses anything wider", async () => {
+    const cmd = { command: "npm install left-pad" }
+    await human(cmd)
+    await human(cmd)
+    const list = await get("/api/suggestions")
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({
+      approvals: 3,
+      candidate: { tool: "Bash", command: "npm install left-pad" },
+    })
+    expect(list[0].preview).toContain("exactly")
+    const post = (body: unknown) =>
+      app.inject({ method: "POST", url: "/api/suggestions/accept", payload: body as object })
+    expect((await post({})).statusCode).toBe(400)
+    expect((await post({ candidate: { tool: "Bash", command: "a", path: "b" } })).statusCode).toBe(
+      400,
+    )
+    expect(
+      (await post({ candidate: { tool: "Bash", command: "npm install a && rm -rf /" } }))
+        .statusCode,
+    ).toBe(422)
+    expect(
+      (await post({ candidate: { tool: "Bash", command: "git push --force origin main" } }))
+        .statusCode,
+    ).toBe(422)
+    const ok = await post({ candidate: list[0].candidate, cwd: root })
+    expect(ok.statusCode).toBe(200)
+    expect(ok.json()).toMatchObject({ ok: true, added: true })
+    expect((await get("/api/policy")).remember.length).toBeGreaterThanOrEqual(1)
+    expect((await get("/api/audit?limit=1")).records[0]).toMatchObject({ event: "remember_added" })
+    expect(await get("/api/suggestions")).toEqual([])
+    expect((await post({ candidate: list[0].candidate, cwd: root })).statusCode).toBe(422)
+  })
+
+  it("does not suggest a call that was ever denied or left to time out", async () => {
+    const cmd = { command: "npm install is-odd" }
+    await human(cmd)
+    await human(cmd)
+    await human(cmd)
+    await human(cmd, "human-desktop", "deny")
+    expect(
+      (await get("/api/suggestions")).some(
+        (x: { candidate: { command?: string } }) => x.candidate.command === "npm install is-odd",
+      ),
+    ).toBe(false)
+  })
+})

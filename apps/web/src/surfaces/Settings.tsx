@@ -7,6 +7,7 @@ interface Config {
   redactTerms: string[]
   expectedOrg?: string
   workspaceRoots?: string[]
+  digestTime?: string | null
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   phoneExpiryMs: number
   hardTimeoutMs: number
@@ -43,6 +44,8 @@ export function Settings() {
   const [qPhone, setQPhone] = useState(false)
   const [phoneMin, setPhoneMin] = useState(10)
   const [hardMin, setHardMin] = useState(30)
+  const [digestOn, setDigestOn] = useState(true)
+  const [digestAt, setDigestAt] = useState("08:00")
   const [terms, setTerms] = useState("")
   const [cpEsc, setCpEsc] = useState(true)
   const [cpBurst, setCpBurst] = useState(true)
@@ -69,6 +72,8 @@ export function Settings() {
       }
       setPhoneMin(Math.round(c.phoneExpiryMs / 60_000))
       setHardMin(Math.round(c.hardTimeoutMs / 60_000))
+      setDigestOn(c.digestTime !== null)
+      setDigestAt(c.digestTime ?? "08:00")
       setTerms(c.redactTerms.join("\n"))
       setCpEsc(c.checkpoints.beforeEscalation)
       setCpBurst(c.checkpoints.editBursts)
@@ -92,6 +97,7 @@ export function Settings() {
     const rl = lines(roots)
     if (rl.length) body.workspaceRoots = rl
     else delete body.workspaceRoots
+    body.digestTime = digestOn ? digestAt : null
     if (quiet) body.quietHours = { start: qStart, end: qEnd, tz: qTz, phone: qPhone }
     else delete body.quietHours
     const r = await api<{ restartRequired: boolean }>("PUT", "/api/settings", body)
@@ -214,6 +220,32 @@ export function Settings() {
             />
           </Field>
         </div>
+      </fieldset>
+
+      <fieldset className="m-0 grid gap-2 border-0 p-0">
+        <legend className="mb-1 text-sm font-semibold">Daily digest</legend>
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={digestOn}
+            onChange={(e) => setDigestOn(e.target.checked)}
+          />
+          Send a short summary of the last 24 hours to the phone each day
+        </label>
+        {digestOn ? (
+          <Field
+            label="Send it after"
+            help="Local time. If the computer is asleep then, it is sent at the next check. It only goes if a phone is paired."
+          >
+            <input
+              className="field w-40"
+              type="time"
+              value={digestAt}
+              onChange={(e) => setDigestAt(e.target.value)}
+              required
+            />
+          </Field>
+        ) : null}
       </fieldset>
 
       <fieldset className="m-0 grid gap-3 border-0 p-0">

@@ -3,6 +3,7 @@ import { diffLines } from "diff"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { Insights } from "./Insights"
 
 interface RuleLike {
   id: string
@@ -49,12 +50,13 @@ interface ReplayResult {
   }>
 }
 
-type Tab = "rules" | "test" | "edit" | "remember"
+type Tab = "rules" | "test" | "edit" | "remember" | "insights"
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "rules", label: "Rules" },
   { id: "test", label: "Test a command" },
   { id: "edit", label: "Edit and activate" },
   { id: "remember", label: "Remember rules" },
+  { id: "insights", label: "Insights" },
 ]
 const SECTIONS = [
   ["floor", "Floor: always blocked, nothing can lift these"],
@@ -154,6 +156,8 @@ export function Policy() {
           <Rules data={data} />
         ) : tab === "test" ? (
           <TestCommand />
+        ) : tab === "insights" ? (
+          <Insights />
         ) : tab === "edit" ? (
           <Edit data={data} onActivated={load} />
         ) : (

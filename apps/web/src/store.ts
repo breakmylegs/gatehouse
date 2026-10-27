@@ -35,6 +35,7 @@ export interface Usage {
   bySession?: Record<string, UsageTotals>
   byProject?: Record<string, UsageTotals>
   byModel?: Record<string, UsageTotals>
+  byDay?: Record<string, UsageTotals>
 }
 
 export interface State {

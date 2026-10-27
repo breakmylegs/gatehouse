@@ -25,6 +25,7 @@ interface Rec {
     segments?: Array<{ text: string }>
   }
   latencyMs: number
+  judgeRationale?: string
 }
 
 interface Verify {
@@ -311,6 +312,12 @@ function Detail({ r }: { r: Rec }) {
         <dd className="m-0 [overflow-wrap:anywhere]">{r.project ?? "none"}</dd>
         <dt className="text-mut">Where</dt>
         <dd className="m-0 mono [overflow-wrap:anywhere]">{r.cwd ?? "none"}</dd>
+        {r.judgeRationale ? (
+          <>
+            <dt className="text-mut">Judge</dt>
+            <dd className="m-0">{r.judgeRationale}</dd>
+          </>
+        ) : null}
         <dt className="text-mut">Took</dt>
         <dd className="m-0">{r.latencyMs} ms</dd>
       </dl>

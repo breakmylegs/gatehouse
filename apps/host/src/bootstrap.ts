@@ -20,13 +20,16 @@ import { CheckpointManager } from "./checkpoints.js"
 import { createCompanionSdkServer } from "./companion-server.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
+import { computeDigest } from "./analytics.js"
+import { recordsSince } from "./api.js"
+import { DigestScheduler } from "./digest.js"
 import { HostKillSwitch } from "./kill.js"
 import { DpapiProtector, PlainProtector, type Protector } from "./relay/protector.js"
 import { PhoneService } from "./relay/service.js"
 import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
 import { SessionManager, type SessionDeps } from "./sessions.js"
-import { UsageStore } from "./usage.js"
+import { localDay, UsageStore } from "./usage.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 export const REPO_ROOT = path.resolve(here, "../../..")
@@ -218,6 +221,20 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
+  // The daily digest goes to the phone once a day after the chosen time (default 08:00). Off if digestTime is null.
+  const digest = new DigestScheduler({
+    time: () => (config.digestTime === null ? null : (config.digestTime ?? "08:00")),
+    stateFile: path.join(gatehouseDataDir(env), "digest.json"),
+    log,
+    send: async () => {
+      if (phone.health().state === "not-configured" || phone.listPhones().length === 0) return false
+      const to = Date.now()
+      const cost = usage.snapshot().byDay[localDay(new Date(to))]?.costUsd ?? 0
+      const d = computeDigest(recordsSince(dir, to - 86_400_000), to - 86_400_000, to, cost)
+      await phone.notify("info", { title: "Gatehouse digest", body: d.text, project: "Gatehouse" })
+      return true
+    },
+  })
   // A finished session or a note from Claude reaches the phone as a sealed message, never as plain text (invariant 9).
   manager.on("event", ({ sessionId, type, data }) => {
     const info = manager.get(sessionId)?.info()
@@ -288,6 +305,7 @@ export function createHost(opts: HostOptions = {}): Host {
       config: () => config,
       log,
       phone,
+      usage,
     },
     phone,
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),
@@ -308,6 +326,7 @@ export function createHost(opts: HostOptions = {}): Host {
       try {
         phoneStore.load()
         phone.start()
+        digest.start()
       } catch (e) {
         log(`phone settings did not load (${(e as Error).message}), the phone channel is off`)
       }
@@ -352,6 +371,7 @@ export function createHost(opts: HostOptions = {}): Host {
       await kill.syncApprover()
     },
     async stop() {
+      digest.stop()
       phone.stop()
       await manager.closeAll()
       await usage.flush()

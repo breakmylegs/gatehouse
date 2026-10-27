@@ -32,6 +32,12 @@ export const GatehouseConfig = z
       })
       .strict()
       .optional(),
+    /** When the daily digest is sent to the phone, local time. Null turns it off. Absent means 08:00. */
+    digestTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .nullable()
+      .optional(),
     /** Overrides the default rules file. */
     rulesPath: z.string().optional(),
     /** How long a request stays deliverable to the phone. */

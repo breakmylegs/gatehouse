@@ -4,6 +4,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { money } from "../lib/format"
 import { send, useSessionList, useStore } from "../store"
+import { UsageView } from "./UsageView"
 
 export const MODELS: Array<{ id: string; label: string }> = [
   { id: "", label: "Default model" },
@@ -186,6 +187,7 @@ export function Sessions() {
           </tbody>
         </table>
       )}
+      <UsageView />
     </div>
   )
 }
