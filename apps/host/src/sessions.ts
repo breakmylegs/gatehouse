@@ -35,8 +35,43 @@ export class OrgGuardError extends Error {
     super(message)
   }
 }
-/** The folder for a new session is not there. */
+/** The folder for a new session cannot be used or made. */
 export class SessionFolderError extends Error {}
+
+/**
+ * Makes sure the project folder exists. A folder that is missing is created, with any parent folders it needs, so
+ * a whole new path can be typed in. A relative path, a path that is a file, or a drive that is not there is
+ * refused with a plain message (a missing folder otherwise shows up as a misleading "program failed to launch").
+ */
+export function ensureFolder(cwd: string, log: (line: string) => void = () => undefined): void {
+  if (!path.isAbsolute(cwd))
+    throw new SessionFolderError(
+      `"${cwd}" is not a full folder path. Type the whole path, for example C:\\dev\\my-project.`,
+    )
+  let stat: fs.Stats | undefined
+  try {
+    stat = fs.statSync(cwd)
+  } catch {
+    stat = undefined
+  }
+  if (stat) {
+    if (!stat.isDirectory()) throw new SessionFolderError(`"${cwd}" is a file, not a folder.`)
+    return
+  }
+  const root = path.parse(path.resolve(cwd)).root
+  if (!fs.existsSync(root))
+    throw new SessionFolderError(
+      `The drive ${root} does not exist, so the folder cannot be created.`,
+    )
+  try {
+    fs.mkdirSync(cwd, { recursive: true })
+  } catch (e) {
+    throw new SessionFolderError(
+      `The folder "${cwd}" could not be created: ${(e as Error).message}`,
+    )
+  }
+  log(`created the project folder ${cwd}`)
+}
 
 export class KillSwitchEngagedError extends Error {
   constructor() {
@@ -397,17 +432,6 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
 
   async start(opts: StartSessionOptions): Promise<Session> {
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
-    // A folder that is not there makes the SDK report a missing program, which is a misleading message.
-    let isDir = false
-    try {
-      isDir = fs.statSync(opts.cwd).isDirectory()
-    } catch {
-      isDir = false
-    }
-    if (!isDir)
-      throw new SessionFolderError(
-        `The folder "${opts.cwd}" does not exist. Check the name, or create the folder first.`,
-      )
     const config = this.#deps.config()
     // Checked again inside Session.start with the live account. This early check gives a clear message
     // when there is nothing to compare against.
@@ -419,6 +443,8 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     )
     if (!early.ok && early.code === "no-expected-org")
       throw new OrgGuardError(early.code, early.message)
+    // After the checks above, so a refused start leaves nothing behind.
+    ensureFolder(opts.cwd, this.#deps.log)
     const session = new Session(this.#deps, opts)
     session.on("state", (info) => this.emit("session", info))
     session.on("message", (message) => this.emit("message", { sessionId: session.id, message }))
