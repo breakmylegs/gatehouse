@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { SlackPanel } from "../components/SlackPanel"
 import { PushPanel } from "../components/PushPanel"
 import { LocalRelayPanel } from "../components/LocalRelayPanel"
 import { toast } from "sonner"
@@ -52,6 +53,7 @@ export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
     <div className="mx-auto grid max-w-[760px] gap-6 p-6">
       {embedded ? null : <h1 className="m-0">Devices and pairing</h1>}
       <PushPanel />
+      <SlackPanel />
       {info.health.state === "not-configured" ? (
         <>
           <LocalRelayPanel onChanged={() => void load()} />

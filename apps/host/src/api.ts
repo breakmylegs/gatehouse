@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import type { SlackSecrets, SlackStatus } from "./push/slack.js"
 import { randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerLibraryRoutes } from "./library-api.js"
@@ -65,6 +66,15 @@ export interface AdminContext {
     start: () => void
     stop: () => void
     test: () => Promise<{ ok: boolean; error?: string }>
+  }
+  /** The Slack push channel and its encrypted token store. Absent in tests that do not need it. */
+  slack?: {
+    status: () => SlackStatus
+    start: () => Promise<void>
+    stop: () => void
+    test: () => Promise<{ ok: boolean; error?: string }>
+    saveSecrets: (s: SlackSecrets) => Promise<void>
+    forgetSecrets: () => void
   }
   /** The phone Relay run inside JCVC. Absent in tests that do not need it. */
   localRelay?: {
@@ -495,6 +505,23 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     else delete running.localRelay
   }
   // Push through ntfy. Switching it on makes two random topics: one JCVC posts to, one your answers come back on.
+  const savePushPart = async (part: "ntfy" | "slack", value: unknown) => {
+    const file = configPath(ctx.env)
+    const saved = fs.existsSync(file)
+      ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>)
+      : {}
+    const push = { ...((saved.push as Record<string, unknown> | undefined) ?? {}) }
+    if (value === undefined) delete push[part]
+    else push[part] = value
+    if (Object.keys(push).length) saved.push = push
+    else delete saved.push
+    const parsed = GatehouseConfig.parse(saved)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(parsed, null, 2) + "\n")
+    const running = ctx.config() as Record<string, unknown>
+    if (parsed.push) running.push = parsed.push
+    else delete running.push
+  }
   const savePush = async (ntfy: NtfySettings | undefined) => {
     const file = configPath(ctx.env)
     const saved = fs.existsSync(file)
@@ -528,7 +555,56 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     })
   app.get("/api/push", async () => ({
     ntfy: ctx.ntfy?.status() ?? { enabled: false, listening: false, sent: 0 },
+    slack: ctx.slack?.status() ?? { enabled: false, connected: false, hasTokens: false, sent: 0 },
   }))
+  app.post("/api/push/slack/enable", async (req, reply) => {
+    if (!ctx.slack) return bad(reply, 501, "Slack is not available here.")
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const str = (k: string) => (typeof b[k] === "string" ? (b[k] as string).trim() : "")
+    const botToken = str("botToken")
+    const appToken = str("appToken")
+    if ((botToken || appToken) && !(botToken.startsWith("xoxb-") && appToken.startsWith("xapp-")))
+      return bad(
+        reply,
+        400,
+        "Give both tokens: the bot token starts xoxb- and the app-level token starts xapp-.",
+      )
+    if (!botToken && !ctx.slack.status().hasTokens)
+      return bad(reply, 400, "Give the bot token (xoxb-) and the app-level token (xapp-).")
+    const channel = str("channel").toUpperCase()
+    const userId = str("userId").toUpperCase()
+    if (!/^[A-Z0-9]{6,20}$/.test(channel))
+      return bad(reply, 400, "Give the channel id, or your member id for a direct message.")
+    if (!/^[UW][A-Z0-9]{6,20}$/.test(userId))
+      return bad(reply, 400, "Give your Slack member id (it starts with U).")
+    const maxRisk =
+      typeof b.maxRisk === "number" ? Math.max(0, Math.min(84, Math.round(b.maxRisk))) : 69
+    if (botToken) await ctx.slack.saveSecrets({ botToken, appToken })
+    await savePushPart("slack", { enabled: true, channel, userId, maxRisk })
+    ctx.slack.stop()
+    await ctx.slack.start()
+    await auditPush("push_slack_enabled", {
+      channel,
+      userId,
+      maxRisk,
+      newTokens: Boolean(botToken),
+    })
+    return ctx.slack.status()
+  })
+  app.post("/api/push/slack/disable", async (req, reply) => {
+    if (!ctx.slack) return bad(reply, 501, "Slack is not available here.")
+    ctx.slack.stop()
+    const old = ctx.config().push?.slack
+    if (old) await savePushPart("slack", { ...old, enabled: false })
+    if ((req.body as { forgetTokens?: unknown } | undefined)?.forgetTokens === true)
+      ctx.slack.forgetSecrets()
+    await auditPush("push_slack_disabled", {})
+    return ctx.slack.status()
+  })
+  app.post("/api/push/slack/test", async (_req, reply) => {
+    if (!ctx.slack) return bad(reply, 501, "Slack is not available here.")
+    return await ctx.slack.test()
+  })
   app.post("/api/push/ntfy/enable", async (req, reply) => {
     if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")
     const b = (req.body ?? {}) as { server?: unknown; maxRisk?: unknown; newTopics?: unknown }

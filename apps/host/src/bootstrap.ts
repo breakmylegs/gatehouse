@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
@@ -264,6 +265,37 @@ export function createHost(opts: HostOptions = {}): Host {
         latencyMs: 0,
       }),
   })
+  // Slack through Socket Mode: outbound only. Its tokens are kept with the same protection as the phone keys.
+  const slackSecrets = new SlackSecretStore(
+    path.join(gatehouseDataDir(env), "slack.sealed"),
+    opts.phoneProtector ??
+      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+  )
+  const slack = new SlackChannel({
+    broker,
+    settings: () => config.push?.slack,
+    secrets: () => slackSecrets.load(),
+    redact: (t) => redactString(t, { terms: config.redactTerms }),
+    expiryMs: () => config.phoneExpiryMs,
+    log,
+    onRefused: (reason, requestId) =>
+      void audit.record({
+        session: "push",
+        event: "push_answer_refused",
+        channel: "push",
+        tool: "slack",
+        input: { reason, ...(requestId ? { requestId } : {}) },
+        verdict: {
+          outcome: "deny",
+          ruleId: "push-answer-refused",
+          reason: `A Slack answer was refused: ${reason}.`,
+          risk: 0,
+          decidedBy: "rules",
+          policyHash: store.current?.hash ?? "",
+        },
+        latencyMs: 0,
+      }),
+  })
   const localRelay = new LocalRelay({
     command: process.execPath,
     args: ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", "relay", "src", "main.ts")],
@@ -370,6 +402,14 @@ export function createHost(opts: HostOptions = {}): Host {
       pickFolder: pickFolderWithWindows,
       localRelay,
       ntfy,
+      slack: {
+        status: () => slack.status(),
+        start: () => slack.start(),
+        stop: () => slack.stop(),
+        test: () => slack.test(),
+        saveSecrets: (v) => slackSecrets.save(v),
+        forgetSecrets: () => slackSecrets.forget(),
+      },
       ...(spawnApprover
         ? {
             approver: {
@@ -450,6 +490,7 @@ export function createHost(opts: HostOptions = {}): Host {
       }
       await kill.syncApprover()
       ntfy.start()
+      void slack.start()
       // The Relay inside JCVC starts with it when you turned it on. A failure only shows on Devices.
       if (config.localRelay?.enabled)
         void localRelay
@@ -462,6 +503,7 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     async stop() {
       ntfy.stop()
+      slack.stop()
       await localRelay.stop()
       digest.stop()
       phone.stop()

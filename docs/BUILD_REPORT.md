@@ -339,3 +339,11 @@ Owner requests, and what was done or decided:
 - **Devices.** A new panel switches ntfy on (fresh topics), shows the topic to subscribe to, sends a test, sets the risk limit, makes new topics if one leaks, and switches it off. The Devices help explains both ways (ntfy, and the iPhone app with a Relay).
 - **Tests.** `apps/host/test/ntfy.test.ts`: redacted summary, buttons and codes, single use (proved by removing it), wrong code, the other decision's code, malformed reply, expiry, risk limit and Severe, the outbound stream. API test for switching on, keeping topics, new topics, off and audit.
 - **Not yet.** Only permission requests and plan approvals get buttons; a question shows "Answer it in JCVC". Quiet hours do not hold ntfy yet. A private ntfy topic can be protected further with an access token on your own ntfy server; not built.
+
+## Phase 16: Slack push through Socket Mode (28 Oct)
+
+- **How it works.** JCVC posts each request to a Slack channel or a direct message with Approve and Deny buttons, and hears taps through Socket Mode: a WebSocket this computer opens to Slack, so nothing reaches in. When a request is decided anywhere, the message's buttons are replaced with what happened.
+- **What protects it.** The same single-use hashed codes, risk limit and Severe rule as ntfy (now shared in `apps/host/src/push/codes.ts`). Only taps by the Slack member id you give count. Both tokens are kept sealed with DPAPI in `%LOCALAPPDATA%\Gatehouse\slack.sealed`, never in the settings file or the audit log. Refused taps are audited.
+- **Devices.** A Slack panel with the steps and an app manifest to paste (bot scopes `chat:write` and `im:write`, interactivity and Socket Mode on), fields for the two tokens, your member id and the channel, a test message, the risk limit, and switch off (optionally forgetting the tokens). Node's built-in WebSocket is used, so no dependency was added.
+- **Tests.** `apps/host/test/slack.test.ts` (redacted summary and buttons, every envelope acknowledged, only your taps, single use, risk limit, forged values, tokens sealed on disk); the "only your taps" check was proved by removing it. API test: tokens never reach the settings file or the audit log.
+- **Owner to do.** A company Slack may need an administrator to approve the app.

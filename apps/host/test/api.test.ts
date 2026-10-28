@@ -694,4 +694,80 @@ describe("insights endpoints", () => {
       delete ctx.ntfy
     }
   })
+
+  it("switches Slack on with both tokens sealed away, never in the settings file, and audits it", async () => {
+    let sealed: unknown
+    let hasTokens = false
+    ctx.slack = {
+      status: () => ({
+        enabled: runningConfig.push?.slack?.enabled === true,
+        connected: false,
+        hasTokens,
+        sent: 0,
+      }),
+      start: async () => undefined,
+      stop: () => undefined,
+      test: async () => ({ ok: true }),
+      saveSecrets: async (v) => {
+        sealed = v
+        hasTokens = true
+      },
+      forgetSecrets: () => {
+        hasTokens = false
+      },
+    }
+    try {
+      const post = (payload: object) =>
+        app.inject({ method: "POST", url: "/api/push/slack/enable", payload })
+      expect((await post({ userId: "U0OWNER1" })).statusCode).toBe(400)
+      expect(
+        (await post({ botToken: "abc", appToken: "def", userId: "U0OWNER1", channel: "C0123ABCD" }))
+          .statusCode,
+      ).toBe(400)
+      expect(
+        (
+          await post({
+            botToken: "xoxb-1-2-abc",
+            appToken: "xapp-1-A-2-def",
+            userId: "nope",
+            channel: "C0123ABCD",
+          })
+        ).statusCode,
+      ).toBe(400)
+      const ok = await post({
+        botToken: "xoxb-1-2-abc",
+        appToken: "xapp-1-A-2-def",
+        userId: "u0owner1",
+        channel: "u0owner1",
+      })
+      expect(ok.statusCode).toBe(200)
+      expect(sealed).toEqual({ botToken: "xoxb-1-2-abc", appToken: "xapp-1-A-2-def" })
+      expect(runningConfig.push?.slack).toEqual({
+        enabled: true,
+        channel: "U0OWNER1",
+        userId: "U0OWNER1",
+        maxRisk: 69,
+      })
+      const file = fs.readFileSync(path.join(root, "config.json"), "utf8")
+      expect(file).not.toContain("xoxb-")
+      expect(file).not.toContain("xapp-")
+      // Saving again without tokens keeps the sealed ones.
+      expect(
+        (await post({ userId: "U0OWNER1", channel: "C0123ABCD", maxRisk: 39 })).statusCode,
+      ).toBe(200)
+      expect(runningConfig.push?.slack?.channel).toBe("C0123ABCD")
+      await app.inject({
+        method: "POST",
+        url: "/api/push/slack/disable",
+        payload: { forgetTokens: true },
+      })
+      expect(runningConfig.push?.slack?.enabled).toBe(false)
+      expect(hasTokens).toBe(false)
+      const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+      expect(log.body).toContain("push-slack-enabled")
+      expect(log.body).not.toContain("xoxb-1-2-abc")
+    } finally {
+      delete ctx.slack
+    }
+  })
 })

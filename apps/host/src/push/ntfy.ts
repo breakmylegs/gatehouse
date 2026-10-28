@@ -1,6 +1,9 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import type { PendingView } from "@gatehouse/shared"
 import type { Broker } from "../broker.js"
+import { PushCodes, riskBand, SEVERE, summarise } from "./codes.js"
+
+export { summarise } from "./codes.js"
 
 /**
  * Push notifications through ntfy, with answers coming back over a connection this computer opens. Nothing has to
@@ -47,11 +50,7 @@ export interface NtfyDeps {
   now?: () => number
 }
 
-export const SEVERE = 85
 const REPLY = /^(allow|deny) ([0-9a-f-]{36}) ([A-Za-z0-9_-]{22,64})$/
-
-const sha = (s: string) => createHash("sha256").update(s).digest()
-const code = () => randomBytes(24).toString("base64url")
 
 export function randomTopic(): string {
   return (
@@ -63,29 +62,23 @@ export function randomTopic(): string {
   )
 }
 
-/** One line about the request, redacted and short. */
-export function summarise(view: PendingView, redact: (t: string) => string): string {
-  const r = view.request
-  if (r.kind === "question") return "Claude has a question for you."
-  if (r.kind === "plan") return "Claude has a plan for you to approve."
-  const input = r.input as Record<string, unknown>
-  const pick = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined)
-  const raw = pick("command") ?? pick("file_path") ?? pick("url") ?? pick("path") ?? ""
-  const one = redact(raw).replace(/\s+/g, " ").trim()
-  return one.length > 160 ? one.slice(0, 157) + "..." : one
-}
-
 export class NtfyChannel {
   readonly #d: NtfyDeps
-  #codes = new Map<string, { allow?: Buffer; deny: Buffer; expires: number }>()
+  readonly #codes: PushCodes
   #abort: AbortController | undefined
   #status: NtfyStatus = { enabled: false, listening: false, sent: 0 }
   #onCreated = (v: PendingView) => void this.notify(v)
-  #onResolved = ({ id }: { id: string }) => this.#codes.delete(id)
+  #onResolved = ({ id }: { id: string }) => this.#codes.forget(id)
   #running = false
 
   constructor(deps: NtfyDeps) {
     this.#d = deps
+    this.#codes = new PushCodes({
+      broker: deps.broker,
+      expiryMs: deps.expiryMs,
+      onRefused: deps.onRefused,
+      ...(deps.now ? { now: deps.now } : {}),
+    })
   }
 
   status(): NtfyStatus {
@@ -121,15 +114,7 @@ export class NtfyChannel {
     const s = this.#d.settings()
     if (!s?.enabled) return
     const r = view.request
-    const ceiling = Math.min(s.maxRisk, SEVERE - 1)
-    const canAllow = r.kind === "permission" && r.verdict.risk <= ceiling
-    const allow = canAllow ? code() : undefined
-    const deny = code()
-    this.#codes.set(r.id, {
-      ...(allow ? { allow: sha(allow) } : {}),
-      deny: sha(deny),
-      expires: (this.#d.now ?? Date.now)() + this.#d.expiryMs(),
-    })
+    const { allow, deny } = this.#codes.issue(view, s.maxRisk)
     const reply = `${s.server.replace(/\/$/, "")}/${s.replyTopic}`
     const actions =
       r.kind === "question"
@@ -157,7 +142,7 @@ export class NtfyChannel {
             },
           ]
     const risk = r.verdict.risk
-    const band = risk >= 85 ? "Severe" : risk >= 70 ? "High" : risk >= 40 ? "Moderate" : "Low"
+    const band = riskBand(risk)
     const message = [
       `${r.toolName}: ${summarise(view, this.#d.redact)}`,
       `Risk ${risk} ${band}, rule ${r.verdict.ruleId}.`,
@@ -219,30 +204,7 @@ export class NtfyChannel {
       return "refused"
     }
     const [, decision, id, given] = m as unknown as [string, "allow" | "deny", string, string]
-    const entry = this.#codes.get(id)
-    if (!entry) {
-      this.#d.onRefused("a code for a request that is not waiting, or a code used already", id)
-      return "refused"
-    }
-    if ((this.#d.now ?? Date.now)() > entry.expires) {
-      this.#codes.delete(id)
-      this.#d.onRefused("an expired code", id)
-      return "refused"
-    }
-    const want = decision === "allow" ? entry.allow : entry.deny
-    const got = sha(given)
-    if (!want || want.length !== got.length || !timingSafeEqual(want, got)) {
-      this.#d.onRefused(`a wrong ${decision} code`, id)
-      return "refused"
-    }
-    // Single use: once either code works, both are gone.
-    this.#codes.delete(id)
-    const r = this.#d.broker.resolve(id, { kind: "decision", decision }, "push")
-    if (!r.ok) {
-      this.#d.onRefused(`an answer the request would not take (${r.reason})`, id)
-      return "refused"
-    }
-    return decision === "allow" ? "allowed" : "denied"
+    return this.#codes.answer(decision, id, given)
   }
 
   /** Listens to the reply topic over an outbound stream, reconnecting with a growing pause. */

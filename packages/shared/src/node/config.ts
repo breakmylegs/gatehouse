@@ -51,6 +51,16 @@ export const GatehouseConfig = z
           })
           .strict()
           .optional(),
+        /** Slack, through Socket Mode. The tokens are kept encrypted elsewhere, never here. */
+        slack: z
+          .object({
+            enabled: z.boolean(),
+            channel: z.string().regex(/^[A-Z0-9]{6,20}$/),
+            userId: z.string().regex(/^[UW][A-Z0-9]{6,20}$/),
+            maxRisk: z.number().int().min(0).max(84),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
