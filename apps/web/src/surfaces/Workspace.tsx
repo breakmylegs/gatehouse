@@ -12,6 +12,8 @@ import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { FilesPanel, Viewer, type Opened } from "../components/FilesPanel"
+import { PlusMenu } from "../components/PlusMenu"
+import { api } from "../lib/api"
 import { sessionCode } from "../lib/codes"
 import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
 
@@ -406,6 +408,31 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
   const [active, setActive] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)
   const addUserText = useStore((s) => s.addUserText)
+  const meta = useStore((s) => s.meta[sessionId])
+  const insert = (more: string) => {
+    setText((t) => (t && !/\s$/.test(t) ? t + " " : t) + more)
+    area.current?.focus()
+  }
+  async function attachPictures(files: File[]): Promise<boolean> {
+    const pictures = files.filter((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type))
+    if (pictures.length === 0) return false
+    for (const f of pictures) {
+      const data = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "")
+        reader.readAsDataURL(f)
+      })
+      const r = await api<{ rel: string }>("POST", "/api/files/attach-data", {
+        session: sessionId,
+        name: f.name,
+        type: f.type,
+        data,
+      })
+      if (r.ok && r.data) insert(`@${r.data.rel} `)
+      else toast.error(r.error ?? "The picture was not attached")
+    }
+    return true
+  }
 
   const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
   const matches = showMenu ? SLASH.filter((c) => c.cmd.startsWith(text.toLowerCase())) : []
@@ -497,38 +524,57 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
       <label htmlFor={composerId} className="sr-only">
         Prompt
       </label>
-      <textarea
-        id={composerId}
-        ref={area}
-        className="field w-full resize-y"
-        rows={2}
-        maxLength={100_000}
-        disabled={disabled}
-        placeholder={
-          disabled
-            ? "This session has ended"
-            : "Write a prompt. Enter sends, Shift+Enter adds a line. / for commands."
-        }
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value)
-          setActive(0)
-        }}
-        onKeyDown={(e) => {
-          if (matches.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      <div className="flex items-end gap-2">
+        <PlusMenu sessionId={sessionId} meta={meta} onInsert={insert} disabled={disabled} />
+        <textarea
+          id={composerId}
+          ref={area}
+          className="field w-full resize-y"
+          onPaste={(e) => {
+            const files = [...e.clipboardData.files]
+            if (files.length) {
+              e.preventDefault()
+              void attachPictures(files)
+            }
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            const files = [...e.dataTransfer.files]
+            if (!files.length) return
             e.preventDefault()
-            setActive(
-              (a) => (a + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length,
-            )
-          } else if (matches.length > 0 && e.key === "Tab") {
-            e.preventDefault()
-            setText((matches[active]?.cmd ?? text) + " ")
-          } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault()
-            void submit()
+            void attachPictures(files).then((ok) => {
+              if (!ok) toast("Use the plus button to add files other than pictures.")
+            })
+          }}
+          rows={2}
+          maxLength={100_000}
+          disabled={disabled}
+          placeholder={
+            disabled
+              ? "This session has ended"
+              : "Write a prompt. Enter sends, Shift+Enter adds a line. / for commands."
           }
-        }}
-      />
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value)
+            setActive(0)
+          }}
+          onKeyDown={(e) => {
+            if (matches.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+              e.preventDefault()
+              setActive(
+                (a) => (a + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length,
+              )
+            } else if (matches.length > 0 && e.key === "Tab") {
+              e.preventDefault()
+              setText((matches[active]?.cmd ?? text) + " ")
+            } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault()
+              void submit()
+            }
+          }}
+        />
+      </div>
     </div>
   )
 }

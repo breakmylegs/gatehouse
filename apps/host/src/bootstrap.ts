@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
 import os from "node:os"
@@ -403,6 +404,7 @@ export function createHost(opts: HostOptions = {}): Host {
       localRelay,
       ntfy,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      pickFiles: pickFilesWithWindows,
       slack: {
         status: () => slack.status(),
         start: () => slack.start(),

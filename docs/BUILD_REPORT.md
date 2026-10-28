@@ -370,3 +370,10 @@ Owner requests, and what was done or decided:
 - **Narrow panes** (container query at 980px): the files rail folds behind Files and plan, which opens it over the pane, and an open file takes the transcript's place.
 - **Found and fixed while testing.** The composer had a fixed id, so two panes would have shared one label; it now has its own id per pane. Opening beside from a single session replaced it instead of adding; fixed and covered by a test.
 - **Tests.** `apps/web/test/split.test.tsx` (open beside, three at most, close, swap, opening from elsewhere).
+
+## Phase 20: the composer plus menu (28 Oct)
+
+- **Plus button** beside the prompt: Add files or photos (the Windows file window, several at once), Add a folder, Slash commands and skills, Connectors, Plugins. Files go into the prompt as @ mentions of their place in the session folder; a file from elsewhere is copied into `.jcvc/attachments` in the folder first, so Claude reads it without leaving the folder. Pictures can also be pasted or dropped into the prompt.
+- **Commands, skills, connectors and plugins** come from the session's own start message (terminal-only commands left out), so the lists are the session's real ones.
+- **Safety.** A file the floor would refuse to read is never copied; names are cleaned and prefixed; pictures only (png, jpeg, gif, webp) can be pasted, at most 20 MB; every copy is audited by name (`files-attached`). The file window's script is fixed and takes nothing from the request.
+- **Tests.** `apps/host/test/attach.test.ts`, `apps/web/test/plus-menu.test.tsx`.

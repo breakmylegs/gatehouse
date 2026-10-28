@@ -1,3 +1,4 @@
+import { readInit, type SessionMeta } from "./lib/sessionMeta"
 import type {
   ClientCommand,
   Health,
@@ -81,6 +82,8 @@ export interface State {
   selectSession: (id: string | undefined) => void
   /** Sessions shown side by side in the workspace, left to right. At most three. */
   panes: string[]
+  /** Slash commands, skills, connectors and plugins each session reported when it started. */
+  meta: Record<string, SessionMeta>
   setPane: (index: number, id: string) => void
   openBeside: (id: string) => void
   closePane: (index: number) => void
@@ -145,6 +148,7 @@ export const useStore = create<State>((set, get) => ({
           : [selectedSession, ...s.panes.slice(1)],
     })),
   panes: [],
+  meta: {},
   setPane: (index, id) =>
     set((s) => {
       const panes = [...s.panes]
@@ -216,7 +220,9 @@ export const useStore = create<State>((set, get) => ({
       case "session":
         set((s) => ({ sessions: { ...s.sessions, [e.info.id]: e.info } }))
         return
-      case "sdk_message":
+      case "sdk_message": {
+        const meta = readInit(e.message)
+        if (meta) set((s) => ({ meta: { ...s.meta, [e.sessionId]: meta } }))
         set((s) => ({
           transcripts: {
             ...s.transcripts,
@@ -224,6 +230,7 @@ export const useStore = create<State>((set, get) => ({
           },
         }))
         return
+      }
       case "session_event": {
         if (e.event === "notify_user") {
           const text = typeof e.data.text === "string" ? e.data.text : ""

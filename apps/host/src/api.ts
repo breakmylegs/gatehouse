@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { registerAttachRoutes } from "./attach-api.js"
 import { registerFilesRoutes } from "./files-api.js"
 import type { SlackSecrets, SlackStatus } from "./push/slack.js"
 import { randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
@@ -63,6 +64,8 @@ export interface AdminContext {
   pickFolder?: FolderPicker
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** The Windows file window for the composer's Add files. Injected so tests never open a window. */
+  pickFiles?: () => Promise<string[]>
   /** Opens Explorer with a file selected. Injected so tests never open a window. */
   reveal?: (absPath: string) => void
   /** The ntfy push channel. Absent in tests that do not need it. */
@@ -398,6 +401,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerInsightRoutes(app, ctx)
   registerLibraryRoutes(app, ctx)
   registerFilesRoutes(app, ctx)
+  registerAttachRoutes(app, ctx)
 
   // Your own pictures for Jean-Claude mode: files in a folder in the data folder. Only picture files, only by a
   // name that is in the listing, so a request can never name a path.

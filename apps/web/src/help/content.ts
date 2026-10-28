@@ -92,6 +92,7 @@ The Files tab on the right lists what Claude made or changed in this session, an
 
 **The composer**
 
+- The plus button adds files or photos (from anywhere; files outside the folder are copied into .jcvc/attachments in it, secrets never), mentions a folder, and lists the session's slash commands and skills, connectors and plugins. You can also paste or drop a picture into the prompt.
 - Enter sends. Shift+Enter adds a line.
 - Type / for commands: /plan, /default, /accept-edits, /auto, /extreme, /effort high, /model, /stop and /close.
 - When a request from this session is waiting, a yellow bar above the composer takes you to it.
