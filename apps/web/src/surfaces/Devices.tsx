@@ -58,6 +58,10 @@ export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
         <>
           <LocalRelayPanel onChanged={() => void load()} />
           <h2 className="m-0 text-[17px] text-mut">Or connect to a Relay you run elsewhere</h2>
+          <p className="m-0 text-[13px] text-mut">
+            To run it on your own server, see Relay on your own server in the user guide: one
+            install command, then the address and token go below.
+          </p>
           <Setup onDone={load} />
         </>
       ) : (

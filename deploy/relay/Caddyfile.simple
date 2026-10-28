@@ -1,0 +1,6 @@
+# The simplest https front for the JCVC Relay. Add this site to the server's Caddyfile (do not replace the file),
+# change the address to yours, point its DNS at the server, then reload Caddy. Caddy gets the certificate itself.
+# The Relay already requires a passkey for every phone answer, so no extra login is needed in front of it.
+relay.example.com {
+	reverse_proxy 127.0.0.1:8087
+}

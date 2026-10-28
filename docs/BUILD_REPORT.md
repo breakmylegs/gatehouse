@@ -347,3 +347,11 @@ Owner requests, and what was done or decided:
 - **Devices.** A Slack panel with the steps and an app manifest to paste (bot scopes `chat:write` and `im:write`, interactivity and Socket Mode on), fields for the two tokens, your member id and the channel, a test message, the risk limit, and switch off (optionally forgetting the tokens). Node's built-in WebSocket is used, so no dependency was added.
 - **Tests.** `apps/host/test/slack.test.ts` (redacted summary and buttons, every envelope acknowledged, only your taps, single use, risk limit, forged values, tokens sealed on disk); the "only your taps" check was proved by removing it. API test: tokens never reach the settings file or the audit log.
 - **Owner to do.** A company Slack may need an administrator to approve the app.
+
+## Phase 17: Relay on your own server (28 Oct)
+
+- **One command on the server.** `deploy/relay/install.sh https://relay.your-domain` builds the existing image with Podman or Docker, runs it on 127.0.0.1:8087 only with a data volume, waits until it answers, and prints the one-time enrolment token. Running it again updates the Relay and keeps paired phones.
+- **https front.** `deploy/relay/Caddyfile.simple`: one site block, Caddy gets the certificate itself. No extra login is needed in front, since every phone answer needs a passkey anyway.
+- **In the app.** A user guide article, Relay on your own server, with the exact steps; the Devices form points to it.
+- **Tests.** `apps/relay/test/install-script.test.ts` runs the real script against stand-in podman and curl: it refuses a non-https address, binds to loopback only, keeps the volume, passes the address and prints the token.
+- **Owner to do.** Run the install on your server, add the Caddy site and DNS, then connect from Devices and pair the iPhone. Not run against any server from here.

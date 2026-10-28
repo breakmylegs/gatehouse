@@ -244,6 +244,34 @@ If anything goes wrong while deciding, the request waits for you or is denied. I
     body: PAGE_HELP.devices.body,
   },
   {
+    id: "relay-server",
+    title: "Relay on your own server",
+    body: `The strongest way to answer from your phone: the iPhone app with Face ID and the full request, encrypted end to end. The Relay runs on a server you own, and both this computer and your phone connect out to it, so nothing has to reach your laptop.
+
+**What you need**
+
+- A Linux server with Podman or Docker, and Caddy (or another web server that does https).
+- A name for it, for example relay.your-domain, with its DNS pointing at the server.
+
+**On the server**
+
+1. Get the code. The repository is private, so use a personal access token when git asks for a password:
+   git clone https://github.com/breakmylegs/gatehouse.git jcvc
+2. Install or update the Relay, with the address your phone will use:
+   cd jcvc and then ./deploy/relay/install.sh https://relay.your-domain
+3. Add this site to the server's Caddyfile and reload Caddy (Caddy gets the certificate itself):
+   relay.your-domain { reverse_proxy 127.0.0.1:8087 }
+4. The install prints a one-time enrolment token. Keep it for the next step.
+
+**In JCVC**
+
+1. Open Devices, then Or connect to a Relay you run elsewhere.
+2. Give the address (https://relay.your-domain), the one-time token, and a name for this computer, then Connect.
+3. Choose Add a phone and follow the steps on the iPhone.
+
+**Updating** is the same install command again; paired phones are kept. The Relay only ever holds encrypted data, and every answer from the phone is checked here before it counts.`,
+  },
+  {
     id: "trouble",
     title: "Troubleshooting",
     body: `- **A session will not start and mentions the organisation.** Open Settings and set the expected organisation to the one shown on the sign-in check, then Check again.
