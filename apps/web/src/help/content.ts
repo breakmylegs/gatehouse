@@ -82,6 +82,10 @@ Sessions waiting on you are lit and come first. Each has a code and colour that 
 
 Claude's replies, the tools it used and their results appear in order. Tool calls show what ran and whether it was allowed.
 
+**Files**
+
+The Files tab on the right lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
+
 **The composer**
 
 - Enter sends. Shift+Enter adds a line.

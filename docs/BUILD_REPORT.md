@@ -355,3 +355,11 @@ Owner requests, and what was done or decided:
 - **In the app.** A user guide article, Relay on your own server, with the exact steps; the Devices form points to it.
 - **Tests.** `apps/relay/test/install-script.test.ts` runs the real script against stand-in podman and curl: it refuses a non-https address, binds to loopback only, keeps the volume, passes the address and prints the token.
 - **Owner to do.** Run the install on your server, add the Caddy site and DNS, then connect from Devices and pair the iPhone. Not run against any server from here.
+
+## Phase 18: the files panel, viewer and local browser (28 Oct)
+
+- **Workspace, Files tab.** What Claude made or changed in the session (from the transcript's Write and Edit calls, newest first), and the session folder as a tree that opens folder by folder. The Plan tab keeps the todo list and session facts.
+- **Viewer pane** beside the transcript: code and text with line numbers (first 1 MB), markdown formatted, pictures, and HTML shown as the page in a sandboxed frame (or its source). Show in Explorer opens the folder with the file selected.
+- **Local browser** in the same pane for a dev server on this computer; the address must be localhost or 127.0.0.1.
+- **Safety.** Everything is read-only and stays inside the session folder by real path, so `..` and junctions cannot lead out. A file the floor would refuse to read (secrets, keys) is shown as Not shown and never sent. Page previews are served at `/preview/<token>/...` with a per-folder random token, a sandbox content security policy, and the floor check on every file.
+- **Tests.** `apps/host/test/files.test.ts` (listing, `..` and junction refused, secrets blocked, binary, preview sandbox and token, reveal), proved by switching the inside-the-folder check off (three tests failed). `apps/web/test/files.test.tsx` (changed files from the transcript, the tree, markdown, code, blocked, preview, local addresses only).

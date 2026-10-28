@@ -1,7 +1,7 @@
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { diffLines } from "diff"
-import { memo, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import { Virtuoso } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
@@ -11,6 +11,7 @@ import { money } from "../lib/format"
 import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
+import { FilesPanel, Viewer, type Opened } from "../components/FilesPanel"
 import { sessionCode } from "../lib/codes"
 import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
 
@@ -53,6 +54,10 @@ export function Workspace() {
     [sessionList],
   )
   const session = selected ? sessions[selected] : undefined
+  const [opened, setOpened] = useState<Opened>()
+  const [side, setSide] = useState<"files" | "plan">("files")
+  // A file from one session is never shown in another.
+  useEffect(() => setOpened(undefined), [selected])
 
   if (!session) {
     return (
@@ -189,7 +194,14 @@ export function Workspace() {
         </button>
       </header>
 
-      <div className="grid min-h-0 grid-cols-[1fr_260px] max-[1100px]:grid-cols-1">
+      <div
+        className={clsx(
+          "grid min-h-0 max-[1100px]:grid-cols-1",
+          opened
+            ? "grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_290px]"
+            : "grid-cols-[minmax(0,1fr)_290px]",
+        )}
+      >
         <section aria-label="Transcript" className="min-h-0">
           <Virtuoso
             style={{ height: "100%" }}
@@ -211,12 +223,50 @@ export function Workspace() {
             }}
           />
         </section>
+        {opened ? (
+          <Viewer
+            key={opened.kind === "file" ? opened.rel : "browser"}
+            sessionId={session.id}
+            opened={opened}
+            onClose={() => setOpened(undefined)}
+            onNavigate={setOpened}
+          />
+        ) : null}
         <aside
-          aria-label="Plan and progress"
-          className="hidden overflow-auto border-l border-line bg-s1 p-4 min-[1100px]:block"
+          aria-label="Files and plan"
+          className="hidden min-h-0 grid-rows-[auto_1fr] border-l border-line bg-s1 min-[1100px]:grid"
         >
-          <TodoPanel todos={transcript.todos} />
-          <SessionFacts sessionId={session.id} />
+          <div role="tablist" aria-label="Side panel" className="flex border-b border-line px-2">
+            {(["files", "plan"] as const).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={side === t}
+                className={clsx(
+                  "sign -mb-px border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[14px]",
+                  side === t && "border-acc font-semibold",
+                )}
+                onClick={() => setSide(t)}
+              >
+                {t === "files" ? "Files" : "Plan"}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" className="min-h-0 overflow-auto p-4">
+            {side === "files" ? (
+              <FilesPanel
+                sessionId={session.id}
+                cwd={session.cwd}
+                items={transcript.items}
+                onOpen={setOpened}
+              />
+            ) : (
+              <>
+                <TodoPanel todos={transcript.todos} />
+                <SessionFacts sessionId={session.id} />
+              </>
+            )}
+          </div>
         </aside>
       </div>
 

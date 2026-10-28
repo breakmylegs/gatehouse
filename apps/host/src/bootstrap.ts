@@ -402,6 +402,7 @@ export function createHost(opts: HostOptions = {}): Host {
       pickFolder: pickFolderWithWindows,
       localRelay,
       ntfy,
+      sessionCwd: (id) => manager.get(id)?.cwd,
       slack: {
         status: () => slack.status(),
         start: () => slack.start(),
