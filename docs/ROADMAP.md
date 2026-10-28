@@ -64,3 +64,10 @@ Items 1 to 5 are the next ones to build. Items 6 to 10 are designed after those 
 - **Done (28 Oct):** 1 per-session controls (mode, effort, model, Extreme approval per session); 1d built-in user guide and help pane on every page (F1); Windows notification from the tray when a decision is waiting, sent by the Host itself so it works while the window is hidden or minimised; the Departures visual identity across the desktop app.
 - **Next:** 1b Approver workbench, 1c preseeded rule library, 1e Relay inside the app, then 2 files panel and 3 inbuilt browser, 4 split view, 5 composer plus menu.
 - **Research:** the notes above were checked against Anthropic's documentation for the Claude desktop Code tab (code.claude.com/docs/en/desktop and related pages) on 28 Oct.
+
+## Design notes: 1c rule library (next)
+
+- Packs ship in `policy/library/*.yaml` (git, Node and npm, Python, .NET, build tools, PowerShell read-only, cloud CLIs read-only, containers read-only, file reading, documentation sites). Each rule has an id, a plain reason and golden cases. A pack does nothing until it is switched on.
+- Your own rules live in `rules.user.yaml` in the data folder: packs switched on, rules you copied and changed, and built-in allow or escalate rules you switched off. The floor and deny rules can never be switched off, copied into an allow, or edited.
+- The loader merges base rules, switched-on packs and your rules, refuses duplicate ids, and keeps the floor first. With no packs switched on, the 489 golden cases give exactly today's decisions.
+- The Policy page gets a Library: switch packs on and off, copy a rule into your own rules and edit it, switch off or remove. Every change is checked by a dry load first, and the replay shows which past decisions it would change before you save.
