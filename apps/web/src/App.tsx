@@ -33,11 +33,17 @@ export function App() {
   const health = useStore((s) => s.health)
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
+  const jcMode = useStore((s) => s.jcMode)
+  const setJcMode = useStore((s) => s.setJcMode)
   const pendingCount = usePendingCount()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.dataset.jcvc = jcMode ? "on" : "off"
+  }, [jcMode])
 
   // First run: show the checks until the account and organisation are fine.
   useEffect(() => {
@@ -60,7 +66,7 @@ export function App() {
         Skip to content
       </a>
       <header className="flex flex-wrap items-center gap-3 border-b border-line bg-s1 px-4 py-2">
-        <strong className="mr-2 text-sm">Gatehouse</strong>
+        <strong className="mr-2 text-sm">Jean-Claude Van Code</strong>
         <button
           className="btn"
           onClick={() => setRoute("approvals")}
@@ -98,6 +104,9 @@ export function App() {
           </>
         ) : null}
         <span className="ml-auto" />
+        <button className="btn" aria-pressed={jcMode} onClick={() => setJcMode(!jcMode)}>
+          Jean-Claude mode: {jcMode ? "on" : "off"}
+        </button>
         <button className="btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
           {theme === "dark" ? "Light theme" : "Dark theme"}
         </button>

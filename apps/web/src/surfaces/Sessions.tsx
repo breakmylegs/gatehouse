@@ -1,4 +1,5 @@
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
+import { JcvcArt } from "../components/JcvcArt"
 import NumberFlow from "@number-flow/react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -139,7 +140,10 @@ export function Sessions() {
       </form>
 
       {sorted.length === 0 ? (
-        <p className="text-mut">No sessions yet. Start one above.</p>
+        <div>
+          <p className="text-mut">No sessions yet. Start one above.</p>
+          <JcvcArt which="stance" />
+        </div>
       ) : (
         <table className="w-full border-collapse text-left">
           <caption className="sr-only">Sessions, those waiting on you first</caption>

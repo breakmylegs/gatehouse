@@ -58,6 +58,33 @@ beforeEach(() => {
   })
 })
 
+describe("the Jean-Claude Van Code window", () => {
+  it("is told, with one fixed word and no detail, when a request arrives, and only then", () => {
+    const sent: string[] = []
+    ;(globalThis as { chrome?: unknown }).chrome = {
+      webview: { postMessage: (m: string) => sent.push(m) },
+    }
+    try {
+      const h = useStore.getState().handleEvent
+      h({ type: "session", info: session })
+      h({ type: "audit", record: { seq: 1 } })
+      expect(sent).toEqual([])
+      h({ type: "approval_request", view: view("a", "2026-01-01T00:00:01Z") })
+      expect(sent).toEqual(["attention"])
+    } finally {
+      delete (globalThis as { chrome?: unknown }).chrome
+    }
+  })
+
+  it("does nothing, and does not fail, in a plain browser", () => {
+    expect(() =>
+      useStore
+        .getState()
+        .handleEvent({ type: "approval_request", view: view("b", "2026-01-01T00:00:02Z") }),
+    ).not.toThrow()
+  })
+})
+
 describe("store events", () => {
   it("queues requests oldest first and selects the first without moving an existing choice", () => {
     const h = useStore.getState().handleEvent

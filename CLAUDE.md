@@ -42,6 +42,7 @@ Every phase must keep these true. Write an automated test for every invariant th
     - Do not name or style the product as Claude Code or claude.ai, and do not imitate their visual design.
     - "Powered by Claude" is allowed.
     - No Anthropic logos.
+    - Owner decision, 28 Oct: the product is shown to the user as "Jean-Claude Van Code" (a pun, not Claude Code). Window, tray, header, installer and phone app use that name. File names, env vars and `%LOCALAPPDATA%\Gatehouse` keep the internal name Gatehouse. Do not imitate Claude Code or claude.ai visuals.
 
 ## Commands
 

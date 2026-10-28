@@ -287,3 +287,12 @@ Note on the test run: this laptop is heavily loaded (the Claude desktop app and 
 - An installer is a template only (`packaging/installer.iss`, Inno Setup, not compiled or tested: it is not installed here). The upgrade keeps the user's `app\policy` folder. A single file was judged not worth it (see `docs/packaging.md`).
 - Limits: not code signed (SmartScreen may warn), policy lives inside the app folder, so copy your rules across when replacing the folder.
 - Not covered by an automated test (it takes minutes and the network); use `npm run package:check`.
+
+## Phase 10: Jean-Claude Van Code naming and pictures (28 Oct)
+
+Owner requests: rename the app, show a start-up picture whatever the theme, and add an optional mode that shows extra pictures.
+
+- **Name.** The user-facing name is now "Jean-Claude Van Code": window title, tray, balloon, header, web page title, phone app name, installer name and shortcuts, README. Internal names are unchanged (exe files stay Gatehouse.exe and Gatehouse-Console.exe, data folder stays %LOCALAPPDATA%Gatehouse, so existing data and installs carry on). Invariant 16 forbids naming the product Claude Code; this is a pun on a different name, recorded as an explicit owner decision in CLAUDE.md.
+- **Start-up picture.** The picture of two trucks is in `apps/web/public/jcvc/loading-trucks.png`. It shows in the native window while the Host starts (copied to `splash.png` next to the exe) and again from `index.html` before any script runs, for about 1.8 s, in light, dark and with Jean-Claude mode on or off. Covered by `apps/web/test/jcvc.test.tsx`.
+- **Jean-Claude mode.** Optional, off by default, stored in localStorage (`gatehouse.jcmode`). Toggle in the header, Settings and the command palette. It adds three pictures (empty Approvals queue, empty Sessions list, Settings) and changes nothing else. It is separate from the light and dark themes.
+- **Owner to-dos.** The pictures are film and magazine stills supplied by the owner. They are for personal local use; do not publish the repository, the package or the installer without clearing the rights. The exe files still say Gatehouse; renaming them is a small change if wanted. The installer has to be rebuilt (`npm run installer`).

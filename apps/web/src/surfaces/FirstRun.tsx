@@ -78,11 +78,19 @@ export function FirstRun() {
       ...(cur.data?.saved ?? {}),
       expectedOrg: org.trim(),
     })
+    if (!r.ok) {
+      setBusy(false)
+      setMsg((r.errors ?? [r.error ?? "Not saved"]).join(" "))
+      return
+    }
+    // The organisation applies at once, so check the account again rather than asking for a restart.
+    setMsg("Saved. Checking your account again, which takes a few seconds.")
+    const again = await send({ type: "refresh_account" })
     setBusy(false)
     setMsg(
-      r.ok
-        ? "Saved. Restart Gatehouse, then this check will pass."
-        : (r.errors ?? [r.error ?? "Not saved"]).join(" "),
+      again.ok
+        ? "Saved and checked again."
+        : "Saved. The check could not run just now: choose Check again.",
     )
   }
 

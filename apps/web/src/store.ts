@@ -8,6 +8,7 @@ import type {
 import { toast } from "sonner"
 import { useMemo } from "react"
 import { create } from "zustand"
+import { tellShell } from "./lib/shell"
 import { Connection, type ConnState, type Reply, takeToken } from "./lib/connection"
 import { addSystem, addUser, emptyTranscript, reduce, type Transcript } from "./lib/transcript"
 
@@ -55,12 +56,14 @@ export interface State {
   selectedRequest?: string
   theme: "light" | "dark"
   notify: boolean
+  jcMode: boolean
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
   selectSession: (id: string | undefined) => void
   selectRequest: (id: string | undefined) => void
   setTheme: (t: "light" | "dark") => void
   setNotify: (on: boolean) => void
+  setJcMode: (on: boolean) => void
   addUserText: (sessionId: string, text: string) => void
 }
 
@@ -97,6 +100,7 @@ export const useStore = create<State>((set, get) => ({
   route: "approvals",
   theme: storedTheme(),
   notify: localStorage.getItem("gatehouse.notify") === "1",
+  jcMode: localStorage.getItem("gatehouse.jcmode") === "1",
 
   setRoute: (route) => set({ route }),
   selectSession: (selectedSession) => set({ selectedSession }),
@@ -108,6 +112,10 @@ export const useStore = create<State>((set, get) => ({
   setNotify: (notify) => {
     localStorage.setItem("gatehouse.notify", notify ? "1" : "0")
     set({ notify })
+  },
+  setJcMode: (jcMode) => {
+    localStorage.setItem("gatehouse.jcmode", jcMode ? "1" : "0")
+    set({ jcMode })
   },
   addUserText: (sessionId, text) =>
     set((s) => ({
@@ -246,6 +254,7 @@ function firstPending(p: Record<string, PendingView>): string | undefined {
 
 /** Tells the user without moving focus: a toast always, a browser notification only if they turned it on. */
 function announce(v: PendingView, s: State): void {
+  tellShell("attention")
   const project = v.request.project
   const what =
     v.request.kind === "question"

@@ -1,7 +1,9 @@
 // Builds a folder you can run, copy or zip:
 //
 //   dist-app/Gatehouse/
-//     Gatehouse.exe        the launcher (compiled from packaging/Launcher.cs with the compiler that ships with Windows)
+//     Gatehouse.exe        the Gatehouse window (WebView2), compiled from packaging/GatehouseApp.cs with the compiler that ships with Windows
+//     Gatehouse-Console.exe  the same Host in a console window, for troubleshooting
+//     Microsoft.Web.WebView2.*.dll, WebView2Loader.dll   Microsoft's WebView2 libraries, fetched from NuGet
 //     runtime/node.exe     the Node it runs on
 //     app/                 the application and its production node_modules
 //     README.txt
@@ -9,6 +11,7 @@
 // Usage: node scripts/package.mjs [--skip-build] [--check] [--zip] [--out <folder>]
 //   --skip-build  reuse apps/web/dist and apps/phone/dist as they are
 //   --check       afterwards run `Gatehouse.exe --check` against the packaged copy
+//   --exe-only    only recompile the exes into an existing dist-app/Gatehouse (quick, for working on the launcher)
 //   --zip         also make dist-app/Gatehouse.zip
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -37,7 +40,7 @@ const major = Number(process.versions.node.split(".")[0])
 if (major < 22)
   throw new Error(`Node ${process.versions.node} is too old: Gatehouse needs 22 or newer.`)
 
-if (!has("--skip-build")) {
+if (!has("--skip-build") && !has("--exe-only")) {
   say("building the desktop interface and the phone app")
   run("npm", ["run", "build", "-w", "@gatehouse/web"], { cwd: root })
   run("npm", ["run", "build", "-w", "@gatehouse/phone"], { cwd: root })
@@ -46,102 +49,109 @@ for (const d of ["apps/web/dist/index.html", "apps/phone/dist/index.html"])
   if (!fs.existsSync(path.join(root, d)))
     throw new Error(`${d} is missing. Run without --skip-build.`)
 
-say(`staging into ${dest}`)
-fs.rmSync(dest, { recursive: true, force: true })
-fs.mkdirSync(app, { recursive: true })
+const exeOnly = has("--exe-only")
+if (!exeOnly) {
+  say(`staging into ${dest}`)
+  fs.rmSync(dest, { recursive: true, force: true })
+  fs.mkdirSync(app, { recursive: true })
 
-const SKIP = new Set([
-  "node_modules",
-  "test",
-  "coverage",
-  ".claude",
-  "dist-demo",
-  "demo.html",
-  ".turbo",
-])
-const copy = (rel, { keepDist = false } = {}) => {
-  const from = path.join(root, rel)
-  if (!fs.existsSync(from)) return
-  fs.cpSync(from, path.join(app, rel), {
-    recursive: true,
-    filter: (src) => {
-      const name = path.basename(src)
-      if (SKIP.has(name)) return false
-      if (name === "dist" && !keepDist) return false
-      if (/\.tsbuildinfo$/.test(name) || /\.test\.tsx?$/.test(name) || name === "rules.local.yaml")
-        return false
-      return true
-    },
-  })
-}
-
-for (const f of ["package.json", "package-lock.json", "tsconfig.base.json"]) copy(f)
-for (const w of ["host", "approver", "companion", "relay"]) copy(`apps/${w}`)
-copy("apps/web", { keepDist: true })
-copy("apps/phone", { keepDist: true })
-for (const p of ["policy", "shared"]) copy(`packages/${p}`)
-copy("policy")
-for (const f of ["ps-ast.ps1", "dpapi.ps1", "verify-audit.ps1", "start.ps1"]) copy(`scripts/${f}`)
-for (const f of [
-  "runbook.md",
-  "relay-local.md",
-  "threat-model.md",
-  "policy-guide.md",
-  "audit-format.md",
-])
-  copy(`docs/${f}`)
-copy("PRODUCT.md")
-copy("DESIGN.md")
-// The web and phone source is not needed to run: only what they built.
-for (const w of ["web", "phone"]) {
-  for (const d of [
-    "src",
-    "public",
-    "index.html",
-    "vite.config.ts",
-    "vite.sw.config.ts",
-    "vite.demo.config.ts",
-    "tsconfig.json",
+  const SKIP = new Set([
+    "node_modules",
+    "test",
+    "coverage",
+    ".claude",
+    "dist-demo",
+    "demo.html",
+    ".turbo",
   ])
-    fs.rmSync(path.join(app, "apps", w, d), { recursive: true, force: true })
+  const copy = (rel, { keepDist = false } = {}) => {
+    const from = path.join(root, rel)
+    if (!fs.existsSync(from)) return
+    fs.cpSync(from, path.join(app, rel), {
+      recursive: true,
+      filter: (src) => {
+        const name = path.basename(src)
+        if (SKIP.has(name)) return false
+        if (name === "dist" && !keepDist) return false
+        if (
+          /\.tsbuildinfo$/.test(name) ||
+          /\.test\.tsx?$/.test(name) ||
+          name === "rules.local.yaml"
+        )
+          return false
+        return true
+      },
+    })
+  }
+
+  for (const f of ["package.json", "package-lock.json", "tsconfig.base.json"]) copy(f)
+  for (const w of ["host", "approver", "companion", "relay"]) copy(`apps/${w}`)
+  copy("apps/web", { keepDist: true })
+  copy("apps/phone", { keepDist: true })
+  for (const p of ["policy", "shared"]) copy(`packages/${p}`)
+  copy("policy")
+  for (const f of ["ps-ast.ps1", "dpapi.ps1", "verify-audit.ps1", "start.ps1"]) copy(`scripts/${f}`)
+  for (const f of [
+    "runbook.md",
+    "relay-local.md",
+    "threat-model.md",
+    "policy-guide.md",
+    "audit-format.md",
+  ])
+    copy(`docs/${f}`)
+  copy("PRODUCT.md")
+  copy("DESIGN.md")
+  // The web and phone source is not needed to run: only what they built.
+  for (const w of ["web", "phone"]) {
+    for (const d of [
+      "src",
+      "public",
+      "index.html",
+      "vite.config.ts",
+      "vite.sw.config.ts",
+      "vite.demo.config.ts",
+      "tsconfig.json",
+    ])
+      fs.rmSync(path.join(app, "apps", w, d), { recursive: true, force: true })
+  }
+
+  say("installing production dependencies (this needs the network the first time)")
+  run(
+    "npm",
+    [
+      "ci",
+      "--omit=dev",
+      "--no-audit",
+      "--no-fund",
+      "--workspace",
+      "@gatehouse/host",
+      "--workspace",
+      "@gatehouse/approver",
+      "--workspace",
+      "@gatehouse/companion",
+      "--workspace",
+      "@gatehouse/relay",
+      "--workspace",
+      "@gatehouse/policy",
+      "--workspace",
+      "@gatehouse/shared",
+    ],
+    { cwd: app },
+  )
+  for (const must of [
+    "tsx/dist/cli.mjs",
+    "@anthropic-ai/claude-agent-sdk/package.json",
+    "fastify/package.json",
+    "web-tree-sitter/package.json",
+  ])
+    if (!fs.existsSync(path.join(app, "node_modules", must)))
+      throw new Error(`node_modules/${must} was not installed`)
+
+  say("copying Node")
+  fs.mkdirSync(path.join(dest, "runtime"), { recursive: true })
+  fs.copyFileSync(process.execPath, path.join(dest, "runtime", "node.exe"))
+  fs.writeFileSync(path.join(dest, "runtime", "NODE-VERSION.txt"), `${process.version}\n`)
 }
-
-say("installing production dependencies (this needs the network the first time)")
-run(
-  "npm",
-  [
-    "ci",
-    "--omit=dev",
-    "--no-audit",
-    "--no-fund",
-    "--workspace",
-    "@gatehouse/host",
-    "--workspace",
-    "@gatehouse/approver",
-    "--workspace",
-    "@gatehouse/companion",
-    "--workspace",
-    "@gatehouse/relay",
-    "--workspace",
-    "@gatehouse/policy",
-    "--workspace",
-    "@gatehouse/shared",
-  ],
-  { cwd: app },
-)
-for (const must of [
-  "tsx/dist/cli.mjs",
-  "@anthropic-ai/claude-agent-sdk/package.json",
-  "fastify/package.json",
-  "web-tree-sitter/package.json",
-])
-  if (!fs.existsSync(path.join(app, "node_modules", must)))
-    throw new Error(`node_modules/${must} was not installed`)
-
-say("copying Node")
-fs.mkdirSync(path.join(dest, "runtime"), { recursive: true })
-fs.copyFileSync(process.execPath, path.join(dest, "runtime", "node.exe"))
-fs.writeFileSync(path.join(dest, "runtime", "NODE-VERSION.txt"), `${process.version}\n`)
 
 say("compiling Gatehouse.exe")
 const csc = [
@@ -164,6 +174,59 @@ ico.writeUInt32LE(22, 18)
 png.copy(ico, 22)
 const icoFile = path.join(outBase, "gatehouse.ico")
 fs.writeFileSync(icoFile, ico)
+// The window app uses Microsoft's WebView2 libraries, fetched once from NuGet and kept in dist-app/.cache.
+const WV2 = "1.0.4314.35"
+const cache = path.join(outBase, ".cache")
+const wv2Dir = path.join(cache, "webview2-" + WV2)
+if (!fs.existsSync(path.join(wv2Dir, "lib", "net462", "Microsoft.Web.WebView2.WinForms.dll"))) {
+  say(`fetching the WebView2 libraries ${WV2}`)
+  fs.mkdirSync(wv2Dir, { recursive: true })
+  const nupkg = path.join(cache, `webview2-${WV2}.zip`)
+  let bytes
+  for (let i = 0; i < 4 && !bytes; i++) {
+    try {
+      const res = await fetch(
+        `https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/${WV2}/microsoft.web.webview2.${WV2}.nupkg`,
+      )
+      if (res.ok) bytes = Buffer.from(await res.arrayBuffer())
+    } catch {
+      /* try again */
+    }
+  }
+  if (!bytes) throw new Error("Could not download the WebView2 libraries from nuget.org.")
+  fs.writeFileSync(nupkg, bytes)
+  run("pwsh", [
+    "-NoProfile",
+    "-Command",
+    `Expand-Archive -LiteralPath '${nupkg}' -DestinationPath '${wv2Dir}' -Force`,
+  ])
+}
+const wv2Core = path.join(wv2Dir, "lib", "net462", "Microsoft.Web.WebView2.Core.dll")
+const wv2Forms = path.join(wv2Dir, "lib", "net462", "Microsoft.Web.WebView2.WinForms.dll")
+const wv2Loader = path.join(wv2Dir, "runtimes", "win-x64", "native", "WebView2Loader.dll")
+for (const f of [wv2Core, wv2Forms, wv2Loader])
+  if (!fs.existsSync(f)) throw new Error(`${f} is missing from the WebView2 package`)
+const pk = (f) => path.join(root, "packaging", f)
+// Gatehouse.exe: the window. Gatehouse-Console.exe: the same Host in a console, for troubleshooting and scripts.
+execFileSync(
+  csc,
+  [
+    "/nologo",
+    "/target:winexe",
+    "/optimize+",
+    "/platform:x64",
+    `/win32icon:${icoFile}`,
+    `/win32manifest:${pk("Gatehouse.manifest")}`,
+    "/r:System.Windows.Forms.dll",
+    "/r:System.Drawing.dll",
+    `/r:${wv2Core}`,
+    `/r:${wv2Forms}`,
+    `/out:${path.join(dest, "Gatehouse.exe")}`,
+    pk("GatehouseApp.cs"),
+    pk("Common.cs"),
+  ],
+  { stdio: "inherit" },
+)
 execFileSync(
   csc,
   [
@@ -171,19 +234,29 @@ execFileSync(
     "/target:exe",
     "/optimize+",
     `/win32icon:${icoFile}`,
-    `/out:${path.join(dest, "Gatehouse.exe")}`,
-    path.join(root, "packaging", "Launcher.cs"),
+    `/out:${path.join(dest, "Gatehouse-Console.exe")}`,
+    pk("Launcher.cs"),
+    pk("Common.cs"),
   ],
   { stdio: "inherit" },
 )
+for (const f of [wv2Core, wv2Forms, wv2Loader])
+  fs.copyFileSync(f, path.join(dest, path.basename(f)))
+// The start-up picture the window shows while the Host starts (the page shows it again once it loads).
+fs.copyFileSync(
+  path.join(root, "apps", "web", "public", "jcvc", "loading-trucks.png"),
+  path.join(dest, "splash.png"),
+)
+fs.copyFileSync(path.join(wv2Dir, "LICENSE.txt"), path.join(dest, "WebView2-LICENSE.txt"))
 
 fs.writeFileSync(
   path.join(dest, "README.txt"),
   [
-    "Gatehouse",
+    "Jean-Claude Van Code (the Gatehouse application)",
     "",
-    "Double-click Gatehouse.exe. A window shows what it is doing, and your browser opens the interface.",
-    "Close the window (or press Ctrl+C in it) to stop. Gatehouse.exe --help lists the options.",
+    "Double-click Gatehouse.exe. It opens the Jean-Claude Van Code window (not a browser tab).",
+    "Closing the window keeps Gatehouse running in the tray so approvals still reach you. Quit from the tray icon.",
+    "Gatehouse-Console.exe runs the same thing in a console window, for troubleshooting. --help lists the options.",
     "",
     "Keep the folder together: Gatehouse.exe finds runtime\\node.exe and the app folder next to it.",
     "You can move or copy the whole folder anywhere. Nothing is installed and nothing starts at logon.",
@@ -227,7 +300,7 @@ say(`done: ${dest} (${Math.round(size / 1048576)} MB)`)
 if (has("--check")) {
   say("checking the packaged copy")
   const dir = fs.mkdtempSync(path.join(process.env.TEMP ?? ".", "gh-pkgcheck-"))
-  const r = spawnSync(path.join(dest, "Gatehouse.exe"), ["--check", "--no-browser"], {
+  const r = spawnSync(path.join(dest, "Gatehouse.exe"), ["--check"], {
     stdio: ["ignore", "inherit", "inherit"],
     env: {
       ...process.env,

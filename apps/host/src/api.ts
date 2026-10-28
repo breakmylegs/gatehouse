@@ -354,6 +354,13 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const changed = (Object.keys(parsed.data) as Array<keyof GatehouseConfig>).filter(
       (k) => JSON.stringify(parsed.data[k]) !== JSON.stringify(before[k]),
     )
+    // These three are read each time they are used, so a saved change takes effect at once. The rest are read at
+    // start-up and need a restart.
+    const running = ctx.config() as Record<string, unknown>
+    for (const k of LIVE_SETTINGS) {
+      if (k in parsed.data) running[k] = (parsed.data as Record<string, unknown>)[k]
+      else delete running[k]
+    }
     // The names of what changed are recorded, never the values: the redaction list is itself sensitive.
     const recorded = await ctx.audit.record({
       session: "desktop",
@@ -371,7 +378,14 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
-    return { ok: true, restartRequired: changed.length > 0, changed, audited: recorded }
+    const needsRestart = changed.filter((k) => !(LIVE_SETTINGS as readonly string[]).includes(k))
+    return {
+      ok: true,
+      restartRequired: needsRestart.length > 0,
+      changed,
+      appliedNow: changed.filter((k) => !needsRestart.includes(k)),
+      audited: recorded,
+    }
   })
 }
 
@@ -498,6 +512,9 @@ export function recordsSince(dir: string, fromMs: number): AuditRecord[] {
 }
 
 const DAY = 86_400_000
+
+/** Settings the Host reads at the moment it uses them. */
+const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime"] as const
 
 /** Policy analytics, the digest and suggestions. Read-only except accepting a suggestion, which is desktop only. */
 function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {

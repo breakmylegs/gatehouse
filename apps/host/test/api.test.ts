@@ -15,6 +15,8 @@ let app: FastifyInstance
 let ctx: AdminContext
 let rulesPath: string
 let auditDir: string
+// The real Host keeps one config object and reads it as it goes, so the test does too.
+const runningConfig = GatehouseConfig.parse({})
 
 const verdict = (outcome: "allow" | "deny" | "escalate", ruleId: string) => ({
   outcome,
@@ -52,7 +54,7 @@ beforeAll(async () => {
       workspaceRootsOverride: [root],
     },
     env,
-    config: () => GatehouseConfig.parse({}),
+    config: () => runningConfig,
     log: () => undefined,
   }
   for (const [tool, input, v, channel, project] of [
@@ -267,6 +269,37 @@ describe("settings endpoints", () => {
     const log = await app.inject({ method: "GET", url: "/api/audit/export" })
     expect(log.body).not.toContain("SecretClient")
     expect(log.body).toContain("redactTerms")
+  })
+
+  it("applies the organisation, the redaction list and the digest time at once, and says a restart is only for the rest", async () => {
+    const put = (body: unknown) =>
+      app.inject({ method: "PUT", url: "/api/settings", payload: body as object })
+    const live = await put({
+      expectedOrg: "Another Org",
+      redactTerms: ["Acme"],
+      digestTime: "09:30",
+      phoneExpiryMs: 120000,
+    })
+    expect(live.json()).toMatchObject({ ok: true, restartRequired: true })
+    expect(live.json().appliedNow).toEqual(
+      expect.arrayContaining(["expectedOrg", "redactTerms", "digestTime"]),
+    )
+    expect(ctx.config()).toMatchObject({
+      expectedOrg: "Another Org",
+      redactTerms: ["Acme"],
+      digestTime: "09:30",
+    })
+    const onlyLive = await put({
+      expectedOrg: "Third Org",
+      redactTerms: [],
+      digestTime: null,
+    })
+    expect(onlyLive.json()).toMatchObject({ ok: true, restartRequired: false })
+    expect(ctx.config().expectedOrg).toBe("Third Org")
+    expect(ctx.config().digestTime).toBeNull()
+    const cleared = await put({})
+    expect(cleared.json().restartRequired).toBe(false)
+    expect(ctx.config().expectedOrg).toBeUndefined()
   })
 
   it("says no restart is needed when nothing differs from what is running", async () => {

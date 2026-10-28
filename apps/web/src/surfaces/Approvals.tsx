@@ -1,4 +1,5 @@
 import clsx from "clsx"
+import { JcvcArt } from "../components/JcvcArt"
 import { useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { ApprovalCard } from "../components/ApprovalCard"
@@ -61,9 +62,12 @@ export function Approvals() {
           Waiting on you ({pending.length}), oldest first
         </h2>
         {pending.length === 0 ? (
-          <p className="m-0 px-4 py-2 text-mut">
-            Nothing is waiting. Automatic decisions are going through.
-          </p>
+          <div className="px-4 py-2">
+            <p className="m-0 text-mut">
+              Nothing is waiting. Automatic decisions are going through.
+            </p>
+            <JcvcArt which="soldier" />
+          </div>
         ) : (
           <Virtuoso
             ref={list}
