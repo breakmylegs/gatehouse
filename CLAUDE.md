@@ -31,7 +31,9 @@ Every phase must keep these true. Write an automated test for every invariant th
    - the nonce is unused
    - the envelope is unexpired
    - the payload hash matches the request the Host sent.
-9. **Push payloads.** Payloads routed through the Relay carry no plaintext command text, paths, file names or project names. Detail is end-to-end encrypted and only decrypted on the phone.
+
+   Owner decision, 28 Oct: outbound push channels (ntfy, later Slack) are a second kind of remote answer. They cannot carry a passkey, so each request gets single-use allow and deny codes, kept only as hashes, valid for the phone window. Allow is refused above the risk limit the owner sets and never offered for Severe (85 and over). These channels cannot edit input or create rules (invariant 11).
+9. **Push payloads.** Payloads routed through the Relay carry no plaintext command text, paths, file names or project names. Detail is end-to-end encrypted and only decrypted on the phone. Owner decision, 28 Oct: outbound push channels (ntfy, Slack) may carry the project, the tool, the risk and a short summary of the command, redacted first (invariant 12), so a decision can be made from the notification.
 10. **Edited input is re-evaluated.** If the user edits a tool input before allowing it, the edited input passes through the floor and the full policy again. A deny result blocks the allow.
 11. **Phone scope.** The phone can allow, deny, answer questions and trigger the kill switch. It cannot edit inputs, change policy or create remember rules.
 12. **Redaction first.** Redact before persisting or transmitting anything: audit log, Relay payloads and logs.

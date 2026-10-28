@@ -4,7 +4,7 @@ import { Verdict } from "../contracts.js"
 
 export const GENESIS_HASH = "0".repeat(64)
 
-export const AuditChannel = z.enum(["approver", "host", "desktop", "phone", "timeout"])
+export const AuditChannel = z.enum(["approver", "host", "desktop", "phone", "push", "timeout"])
 export type AuditChannel = z.infer<typeof AuditChannel>
 
 /**

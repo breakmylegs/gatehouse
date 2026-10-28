@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import type { FolderPicker } from "./folder-picker.js"
@@ -58,6 +59,13 @@ export interface AdminContext {
   phone?: PhoneService
   /** Opens the Windows folder chooser. Absent where there is no desktop (tests). */
   pickFolder?: FolderPicker
+  /** The ntfy push channel. Absent in tests that do not need it. */
+  ntfy?: {
+    status: () => NtfyStatus
+    start: () => void
+    stop: () => void
+    test: () => Promise<{ ok: boolean; error?: string }>
+  }
   /** The phone Relay run inside JCVC. Absent in tests that do not need it. */
   localRelay?: {
     status: () => LocalRelayStatus
@@ -486,6 +494,85 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (value) running.localRelay = value
     else delete running.localRelay
   }
+  // Push through ntfy. Switching it on makes two random topics: one JCVC posts to, one your answers come back on.
+  const savePush = async (ntfy: NtfySettings | undefined) => {
+    const file = configPath(ctx.env)
+    const saved = fs.existsSync(file)
+      ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>)
+      : {}
+    if (ntfy) saved.push = { ...((saved.push as object | undefined) ?? {}), ntfy }
+    else delete saved.push
+    const parsed = GatehouseConfig.parse(saved)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(parsed, null, 2) + "\n")
+    const running = ctx.config() as Record<string, unknown>
+    if (parsed.push) running.push = parsed.push
+    else delete running.push
+  }
+  const auditPush = (event: string, input: unknown) =>
+    ctx.audit.record({
+      session: "desktop",
+      event,
+      channel: "desktop",
+      tool: "push",
+      input,
+      verdict: {
+        outcome: "allow",
+        ruleId: event.replace(/_/g, "-"),
+        reason: "Push notifications were changed from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+  app.get("/api/push", async () => ({
+    ntfy: ctx.ntfy?.status() ?? { enabled: false, listening: false, sent: 0 },
+  }))
+  app.post("/api/push/ntfy/enable", async (req, reply) => {
+    if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")
+    const b = (req.body ?? {}) as { server?: unknown; maxRisk?: unknown; newTopics?: unknown }
+    const server =
+      typeof b.server === "string" && b.server.trim()
+        ? b.server.trim().replace(/\/$/, "")
+        : "https://ntfy.sh"
+    let u: URL
+    try {
+      u = new URL(server)
+    } catch {
+      return bad(reply, 400, "That is not a web address.")
+    }
+    if (u.protocol !== "https:") return bad(reply, 400, "The ntfy server must use https.")
+    const maxRisk =
+      typeof b.maxRisk === "number" ? Math.max(0, Math.min(84, Math.round(b.maxRisk))) : 69
+    const old = ctx.config().push?.ntfy
+    const fresh = b.newTopics === true || !old
+    const ntfy: NtfySettings = {
+      enabled: true,
+      server: u.origin,
+      topic: fresh ? randomTopic() : old.topic,
+      replyTopic: fresh ? randomTopic() : old.replyTopic,
+      maxRisk,
+    }
+    await savePush(ntfy)
+    ctx.ntfy.stop()
+    ctx.ntfy.start()
+    await auditPush("push_ntfy_enabled", { server: ntfy.server, maxRisk, newTopics: fresh })
+    return ctx.ntfy.status()
+  })
+  app.post("/api/push/ntfy/disable", async (_req, reply) => {
+    if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")
+    ctx.ntfy.stop()
+    const old = ctx.config().push?.ntfy
+    if (old) await savePush({ ...old, enabled: false })
+    await auditPush("push_ntfy_disabled", {})
+    return ctx.ntfy.status()
+  })
+  app.post("/api/push/ntfy/test", async (_req, reply) => {
+    if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")
+    return await ctx.ntfy.test()
+  })
+
   app.get("/api/relay/local", async () => ({
     ...(ctx.localRelay?.status() ?? { state: "off", port: 8087 }),
     saved: ctx.config().localRelay ?? null,

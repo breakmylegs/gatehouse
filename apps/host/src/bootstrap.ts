@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import { NtfyChannel } from "./push/ntfy.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { pickFolderWithWindows } from "./folder-picker.js"
@@ -7,7 +8,7 @@ import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { listSessions, query, resolveSettings } from "@anthropic-ai/claude-agent-sdk"
-import { PolicyEngine, PolicyStore, PwshWorker, redact } from "@gatehouse/policy"
+import { PolicyEngine, PolicyStore, PwshWorker, redact, redactString } from "@gatehouse/policy"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { AuditWriter } from "@gatehouse/shared/audit"
 import {
@@ -238,6 +239,31 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
+  // Push through ntfy: outbound only. Refused answers are recorded; good ones are recorded by the decision itself.
+  const ntfy = new NtfyChannel({
+    broker,
+    settings: () => config.push?.ntfy,
+    redact: (t) => redactString(t, { terms: config.redactTerms }),
+    expiryMs: () => config.phoneExpiryMs,
+    log,
+    onRefused: (reason, requestId) =>
+      void audit.record({
+        session: "push",
+        event: "push_answer_refused",
+        channel: "push",
+        tool: "push",
+        input: { reason, ...(requestId ? { requestId } : {}) },
+        verdict: {
+          outcome: "deny",
+          ruleId: "push-answer-refused",
+          reason: `A push answer was refused: ${reason}.`,
+          risk: 0,
+          decidedBy: "rules",
+          policyHash: store.current?.hash ?? "",
+        },
+        latencyMs: 0,
+      }),
+  })
   const localRelay = new LocalRelay({
     command: process.execPath,
     args: ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", "relay", "src", "main.ts")],
@@ -343,6 +369,7 @@ export function createHost(opts: HostOptions = {}): Host {
       usage,
       pickFolder: pickFolderWithWindows,
       localRelay,
+      ntfy,
       ...(spawnApprover
         ? {
             approver: {
@@ -422,6 +449,7 @@ export function createHost(opts: HostOptions = {}): Host {
         })
       }
       await kill.syncApprover()
+      ntfy.start()
       // The Relay inside JCVC starts with it when you turned it on. A failure only shows on Devices.
       if (config.localRelay?.enabled)
         void localRelay
@@ -433,6 +461,7 @@ export function createHost(opts: HostOptions = {}): Host {
           )
     },
     async stop() {
+      ntfy.stop()
       await localRelay.stop()
       digest.stop()
       phone.stop()

@@ -38,6 +38,22 @@ export const GatehouseConfig = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .nullable()
       .optional(),
+    /** Outbound-only push channels. Answers come back over a connection this computer opens. */
+    push: z
+      .object({
+        ntfy: z
+          .object({
+            enabled: z.boolean(),
+            server: z.string().url(),
+            topic: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+            replyTopic: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
+            maxRisk: z.number().int().min(0).max(84),
+          })
+          .strict()
+          .optional(),
+      })
+      .strict()
+      .optional(),
     /** The phone Relay run inside JCVC, started again each time JCVC starts while enabled. */
     localRelay: z
       .object({

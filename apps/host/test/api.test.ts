@@ -636,4 +636,62 @@ describe("insights endpoints", () => {
       delete ctx.localRelay
     }
   })
+
+  it("switches ntfy on with two fresh random topics, keeps them on save, and audits it", async () => {
+    let started = 0
+    ctx.ntfy = {
+      status: () => ({
+        enabled: runningConfig.push?.ntfy?.enabled === true,
+        listening: true,
+        sent: 0,
+        ...(runningConfig.push?.ntfy ? { topic: runningConfig.push.ntfy.topic } : {}),
+      }),
+      start: () => void started++,
+      stop: () => undefined,
+      test: async () => ({ ok: true }),
+    }
+    try {
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/push/ntfy/enable",
+            payload: { server: "http://ntfy.example" },
+          })
+        ).statusCode,
+      ).toBe(400)
+      const on = await app.inject({
+        method: "POST",
+        url: "/api/push/ntfy/enable",
+        payload: { maxRisk: 99 },
+      })
+      expect(on.statusCode).toBe(200)
+      const first = runningConfig.push?.ntfy
+      expect(first).toMatchObject({ enabled: true, server: "https://ntfy.sh", maxRisk: 84 })
+      expect(first?.topic).toMatch(/^jcvc-[A-Za-z0-9]{10,}$/)
+      expect(first?.topic).not.toBe(first?.replyTopic)
+      expect(started).toBe(1)
+      // Saving again keeps the topics, so the phone subscription keeps working.
+      await app.inject({ method: "POST", url: "/api/push/ntfy/enable", payload: { maxRisk: 39 } })
+      expect(runningConfig.push?.ntfy?.topic).toBe(first?.topic)
+      expect(runningConfig.push?.ntfy?.maxRisk).toBe(39)
+      // New topics on request.
+      await app.inject({
+        method: "POST",
+        url: "/api/push/ntfy/enable",
+        payload: { newTopics: true },
+      })
+      expect(runningConfig.push?.ntfy?.topic).not.toBe(first?.topic)
+      await app.inject({ method: "POST", url: "/api/push/ntfy/disable" })
+      expect(runningConfig.push?.ntfy?.enabled).toBe(false)
+      const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+      expect(log.body).toContain("push-ntfy-enabled")
+      expect(log.body).toContain("push-ntfy-disabled")
+      expect((await app.inject({ method: "POST", url: "/api/push/ntfy/test" })).json()).toEqual({
+        ok: true,
+      })
+    } finally {
+      delete ctx.ntfy
+    }
+  })
 })

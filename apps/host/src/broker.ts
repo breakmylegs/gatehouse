@@ -8,7 +8,8 @@ import {
 } from "@gatehouse/shared"
 import { msUntilPhoneAllowed, phoneHeld, type QuietHours } from "./quiet-hours.js"
 
-export type Channel = "desktop" | "phone"
+/** `push` is an outbound notification channel such as ntfy: it answers with a one-time code. */
+export type Channel = "desktop" | "phone" | "push"
 export type RequestKind = EscalationRequest["kind"]
 
 export type Answer =
@@ -327,8 +328,8 @@ export class Broker extends EventEmitter<BrokerEvents> {
         detail: `The message is limited to ${MAX_MESSAGE} characters`,
       }
     }
-    // Invariant 11: the phone can allow, deny, answer and kill. It cannot edit input or create rules.
-    if (channel === "phone" && (answer.updatedInput !== undefined || answer.remember)) {
+    // Invariant 11: the phone and push channels can allow, deny, answer and kill. They cannot edit input or create rules.
+    if (channel !== "desktop" && (answer.updatedInput !== undefined || answer.remember)) {
       return {
         ok: false,
         reason: "not-allowed-on-channel",

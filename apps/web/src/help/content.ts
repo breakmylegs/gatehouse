@@ -146,7 +146,11 @@ The log lives in your JCVC data folder and never leaves this computer.`,
   devices: {
     id: "devices",
     title: "Devices",
-    body: `Pair an iPhone so requests reach you away from your desk. You decide with Face ID or Touch ID.
+    body: `Get requests on your phone away from your desk, in one of two ways.
+
+**Push notifications with ntfy** (works behind firewalls): switch it on, install the free ntfy app, and subscribe to the topic JCVC shows. Each request arrives with Approve and Deny buttons. Everything goes out from this computer and your answer comes back over a connection JCVC opens, so nothing has to reach in. A notification shows only the project, tool, risk and a short redacted summary. Each button works once, for that request, and Severe requests always need you at the desk.
+
+**The iPhone app with a Relay** (strongest): you decide with Face ID or Touch ID and see the full request, encrypted end to end.
 
 **Run the Relay inside JCVC** (simplest): give the https address your phone uses and choose Start the Relay. JCVC runs it only while JCVC is running, links itself to it, and starts it again each time JCVC starts. The address must reach port 8087 on this computer; Tailscale Funnel (the command tailscale funnel 8087) or a Cloudflare Tunnel can provide one.
 
