@@ -58,7 +58,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
       if (deps.kill())
         return denyOutput(
-          "The Gatehouse kill switch is engaged. Everything is denied until the user re-arms it.",
+          "The JCVC kill switch is engaged. Everything is denied until the user re-arms it.",
         )
       const policy = deps.policy()
       const hit = await evaluateFloor(
@@ -94,7 +94,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       return NO_DECISION
     } catch (e) {
       deps.log(`floor hook failed (${(e as Error).name}), the call was blocked`)
-      return denyOutput("The Gatehouse floor check failed, so this call was blocked.")
+      return denyOutput("The JCVC floor check failed, so this call was blocked.")
     }
   }
 }
@@ -103,7 +103,7 @@ const SELF_APPROVED: Omit<Verdict, "policyHash"> = {
   outcome: "allow",
   ruleId: "claude-code-auto",
   reason:
-    "Claude Code approved this itself (a read inside the working folder, a read-only command or a managed rule). The Gatehouse floor had already checked it.",
+    "Claude Code approved this itself (a read inside the working folder, a read-only command or a managed rule). The JCVC floor had already checked it.",
   risk: 0,
   decidedBy: "rules",
 }

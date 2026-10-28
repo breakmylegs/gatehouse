@@ -1,10 +1,10 @@
 # Runbook
 
-How to run Gatehouse day to day. Commands are for PowerShell in the repository folder unless it says otherwise.
+How to run JCVC day to day. Commands are for PowerShell in the repository folder unless it says otherwise.
 
 ## Start and sign in
 
-1. Make sure you are signed in to Claude Code on this computer, with the account for your organisation. Gatehouse never handles your sign-in. It uses the unmodified Claude Code binary, which uses your own login.
+1. Make sure you are signed in to Claude Code on this computer, with the account for your organisation. JCVC never handles your sign-in. It uses the unmodified Claude Code binary, which uses your own login.
 2. Start it:
 
    ```
@@ -14,7 +14,7 @@ How to run Gatehouse day to day. Commands are for PowerShell in the repository f
    The first start builds the interface (a minute or two). It prints an address ending in `#token=...` and opens it in Edge. The token is new each run and is only in that address. Do not share it. Stop with Ctrl+C.
 
    To test the start-up without opening anything: `pwsh scripts/start.ps1 -Check`. To also run the phone Relay: `pwsh scripts/start.ps1 -Relay` (see `docs/relay-local.md` for the first-time address).
-3. The first run page checks that you are signed in, that your organisation matches, whether a managed policy is in force, and that the Approver is running. If the organisation is not set, enter the name shown in `/status` in Claude Code (for example `ACN - Premium`), save, and start Gatehouse again. Sessions refuse to start until it matches.
+3. The first run page checks that you are signed in, that your organisation matches, whether a managed policy is in force, and that the Approver is running. If the organisation is not set, enter the name shown in `/status` in Claude Code (for example `ACN - Premium`), save, and start JCVC again. Sessions refuse to start until it matches.
 4. Open **Sessions**, enter a folder, and start a session.
 
 ### Or run it as an exe
@@ -23,15 +23,15 @@ How to run Gatehouse day to day. Commands are for PowerShell in the repository f
 
 ### Start at logon (optional, not enabled)
 
-Gatehouse does not start at logon on its own. If you want that, run this once yourself. It opens no browser, so use the address from a terminal start or add `-NoBrowser` and open the printed address when you need it:
+JCVC does not start at logon on its own. If you want that, run this once yourself. It opens no browser, so use the address from a terminal start or add `-NoBrowser` and open the printed address when you need it:
 
 ```
 $action = New-ScheduledTaskAction -Execute pwsh -Argument '-NoProfile -File C:\dev\gatehouse\scripts\start.ps1 -NoBrowser'
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-Register-ScheduledTask -TaskName 'Gatehouse' -Action $action -Trigger $trigger -Description 'Starts Gatehouse at logon'
+Register-ScheduledTask -TaskName 'JCVC' -Action $action -Trigger $trigger -Description 'Starts JCVC at logon'
 ```
 
-Remove it with `Unregister-ScheduledTask -TaskName Gatehouse -Confirm:$false`. The printed address is not saved anywhere, so a logon start is only useful for the phone channel and the background checks, not for the interface.
+Remove it with `Unregister-ScheduledTask -TaskName JCVC -Confirm:$false`. The printed address is not saved anywhere, so a logon start is only useful for the phone channel and the background checks, not for the interface.
 
 ## Pair a phone, and revoke one
 
@@ -57,7 +57,7 @@ To **revoke** a phone, open **Devices**, choose **Revoke** next to it and confir
 The Agent SDK and the MCP SDK are pinned to exact versions in `apps/host/package.json`, `apps/approver/package.json` and `apps/companion/package.json`. Do not use a range.
 
 1. Work on a branch. Change the version in each of those files together, then `npm install`.
-2. Read what changed in the SDK's types against `docs/sdk-notes.md`. The options Gatehouse relies on are listed there: `canUseTool`, hooks, `permissionMode`, `settingSources`, `outputFormat`, `tools`.
+2. Read what changed in the SDK's types against `docs/sdk-notes.md`. The options JCVC relies on are listed there: `canUseTool`, hooks, `permissionMode`, `settingSources`, `outputFormat`, `tools`.
 3. Run the whole gate: `npm run lint`, `npm run typecheck`, `npm test`.
 4. Run a live check with a scratch folder: `npm run host:cli`, then ask for `npm install left-pad`. You should see the account and organisation checked first, the call escalated, and a denial reach Claude. Then read `.env` and confirm the floor refuses it.
 5. If the judge is on, send one benign call and one that tries to send a secret, as in the Phase 7 report.
@@ -81,7 +81,7 @@ Copy `%LOCALAPPDATA%\Gatehouse` (audit, `usage.json`, `phone.json`, `config.json
 
 ## Common problems
 
-- **A session will not start and says the organisation does not match.** Open the first run page, or **Settings**, and set the organisation to exactly what `/status` shows. Restart Gatehouse.
+- **A session will not start and says the organisation does not match.** Open the first run page, or **Settings**, and set the organisation to exactly what `/status` shows. Restart JCVC.
 - **Nothing reaches the phone.** On **Devices**, if the Relay shows "cannot be reached", start the Relay and check the tunnel. Requests keep waiting on the desktop meanwhile.
 - **A request says it is too long for the phone.** The phone can only deny those. Decide on the desktop.
 - **The page is blank after an update.** Restart the Host. It serves the files that existed when it started.

@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -45,6 +46,8 @@ export interface HostOptions {
   log?: (line: string) => void
   /** How the device token and the Host's phone key are kept on disk. Defaults to DPAPI on Windows. */
   phoneProtector?: Protector
+  /** Called when something outside the server changes health, such as a finished sign-in. */
+  onHealthChanged?: () => void
 }
 
 export interface Host {
@@ -231,7 +234,7 @@ export function createHost(opts: HostOptions = {}): Host {
       const to = Date.now()
       const cost = usage.snapshot().byDay[localDay(new Date(to))]?.costUsd ?? 0
       const d = computeDigest(recordsSince(dir, to - 86_400_000), to - 86_400_000, to, cost)
-      await phone.notify("info", { title: "Gatehouse digest", body: d.text, project: "Gatehouse" })
+      await phone.notify("info", { title: "JCVC digest", body: d.text, project: "JCVC" })
       return true
     },
   })
@@ -281,8 +284,17 @@ export function createHost(opts: HostOptions = {}): Host {
     }
   }
 
+  const signIn = new SignInFlow({
+    binary: findClaudeBinary,
+    onEnded: async () => {
+      await account.refresh()
+      opts.onHealthChanged?.()
+    },
+  })
+
   const app: HostApp = {
     manager,
+    signIn,
     broker,
     kill,
     checkpoints,

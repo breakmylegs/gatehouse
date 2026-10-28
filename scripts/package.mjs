@@ -37,8 +37,7 @@ const run = (cmd, a, opts = {}) => {
 
 if (process.platform !== "win32") throw new Error("JCVC.exe is built for Windows.")
 const major = Number(process.versions.node.split(".")[0])
-if (major < 22)
-  throw new Error(`Node ${process.versions.node} is too old: Gatehouse needs 22 or newer.`)
+if (major < 22) throw new Error(`Node ${process.versions.node} is too old: JCVC needs 22 or newer.`)
 
 if (!has("--skip-build") && !has("--exe-only")) {
   say("building the desktop interface and the phone app")
@@ -252,10 +251,10 @@ fs.copyFileSync(path.join(wv2Dir, "LICENSE.txt"), path.join(dest, "WebView2-LICE
 fs.writeFileSync(
   path.join(dest, "README.txt"),
   [
-    "Jean-Claude Van Code (the Gatehouse application)",
+    "Jean-Claude Van Code (JCVC)",
     "",
     "Double-click JCVC.exe. It opens the Jean-Claude Van Code window (not a browser tab).",
-    "Closing the window keeps Gatehouse running in the tray so approvals still reach you. Quit from the tray icon.",
+    "Closing the window keeps JCVC running in the tray so approvals still reach you. Quit from the tray icon.",
     "JCVC-Console.exe runs the same thing in a console window, for troubleshooting. --help lists the options.",
     "",
     "Keep the folder together: JCVC.exe finds runtime\\node.exe and the app folder next to it.",

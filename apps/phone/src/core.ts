@@ -42,7 +42,7 @@ export async function call<T>(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
   } catch {
-    throw new RelayError(0, "Could not reach Gatehouse. Check your connection and try again.")
+    throw new RelayError(0, "Could not reach JCVC. Check your connection and try again.")
   }
   const text = await res.text()
   let json: unknown
@@ -104,11 +104,11 @@ export async function register(
   }
   const registration = await startRegistration({
     optionsJSON: {
-      rp: { id: info.rpId, name: "Gatehouse" },
+      rp: { id: info.rpId, name: "Jean-Claude Van Code" },
       user: {
         id: b64u(crypto.getRandomValues(new Uint8Array(16))),
         name: "gatehouse",
-        displayName: "Gatehouse",
+        displayName: "Jean-Claude Van Code",
       },
       challenge: info.challenge,
       pubKeyCredParams: [{ type: "public-key", alg: -7 }],

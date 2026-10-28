@@ -113,9 +113,9 @@ internal sealed class MainForm : Form
         tray.Icon = Icon;
         tray.Text = "Jean-Claude Van Code";
         ContextMenuStrip menu = new ContextMenuStrip();
-        menu.Items.Add("Open Gatehouse", null, delegate { ShowWindow(); });
+        menu.Items.Add("Open JCVC", null, delegate { ShowWindow(); });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Quit Gatehouse", null, delegate { Quit(); });
+        menu.Items.Add("Quit JCVC", null, delegate { Quit(); });
         tray.ContextMenuStrip = menu;
         tray.MouseClick += delegate(object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowWindow(); };
         tray.BalloonTipClicked += delegate { ShowWindow(); };
@@ -185,7 +185,7 @@ internal sealed class MainForm : Form
         string hostEntry = Path.Combine(appDir, "apps", "host", "src", "main.ts");
         string node = Hosting.FindNode(root);
         if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep JCVC.exe next to its app folder."); return; }
-        if (node == null) { Fail("No Node was found. Gatehouse needs runtime\\node.exe next to it."); return; }
+        if (node == null) { Fail("No Node was found. JCVC needs runtime\\node.exe next to it."); return; }
 
         try
         {
@@ -297,7 +297,7 @@ internal sealed class MainForm : Form
         };
         core.NavigationCompleted += delegate(object s, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (!e.IsSuccess) { Fail("The window could not load the Gatehouse interface (" + e.WebErrorStatus + ")."); return; }
+            if (!e.IsSuccess) { Fail("The window could not load the JCVC interface (" + e.WebErrorStatus + ")."); return; }
             splash.Visible = false;
             if (check) CheckPage();
         };
@@ -356,7 +356,7 @@ internal sealed class MainForm : Form
         // Without the WebView2 runtime the interface still works in the default browser. Say so, rather than doing it silently.
         Say("WebView2 is not available (" + why + ")");
         if (check) { Finish(1); return; }
-        splashText.Text = "The Microsoft Edge WebView2 runtime is not available on this computer, so Gatehouse opened in your default browser instead. You can install the runtime from microsoft.com/edge/webview2 to get this window.";
+        splashText.Text = "The Microsoft Edge WebView2 runtime is not available on this computer, so JCVC opened in your default browser instead. You can install the runtime from microsoft.com/edge/webview2 to get this window.";
         if (url != null) OpenExternal(url);
         else
         {
@@ -371,7 +371,7 @@ internal sealed class MainForm : Form
     {
         if (quitting) return;
         if (check) { Say("Check failed: the Host stopped.\r\n" + Tail()); Finish(1); return; }
-        Fail("Gatehouse stopped unexpectedly.");
+        Fail("JCVC stopped unexpectedly.");
     }
 
     private void Fail(string message)
@@ -444,7 +444,7 @@ internal sealed class MainForm : Form
             if (!toldAboutTray)
             {
                 toldAboutTray = true;
-                tray.ShowBalloonTip(5000, "Gatehouse is still running", "Approvals still reach you. Use the tray icon to open it or quit.", ToolTipIcon.Info);
+                tray.ShowBalloonTip(5000, "JCVC is still running", "Approvals still reach you. Use the tray icon to open it or quit.", ToolTipIcon.Info);
             }
             return;
         }
@@ -491,8 +491,8 @@ internal static class Program
         }
         if (help)
         {
-            Console.WriteLine("Gatehouse");
-            Console.WriteLine("  JCVC.exe                 open the Gatehouse window");
+            Console.WriteLine("Jean-Claude Van Code");
+            Console.WriteLine("  JCVC.exe                 open the JCVC window");
             Console.WriteLine("  --check                       start, check the window and Host, stop (exit code 0 or 1)");
             Console.WriteLine("  --relay [--public-url URL]    also start the phone Relay (docs\\relay-local.md)");
             Console.WriteLine("  --tray                        start hidden in the tray (what start at sign-in uses)");

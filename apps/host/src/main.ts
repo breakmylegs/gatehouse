@@ -11,7 +11,7 @@ import { HostServer } from "./server.js"
 const env = process.env
 const log = (line: string) => process.stderr.write(`[host] ${line}\n`)
 
-const host = createHost({ log })
+const host = createHost({ log, onHealthChanged: () => server.announceHealth() })
 const token = generateToken()
 const server = new HostServer({
   app: host.app,

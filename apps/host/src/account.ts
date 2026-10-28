@@ -48,7 +48,7 @@ export function checkOrg(
     return {
       ok: false,
       code: "wrong-org",
-      message: `You are signed in to "${account.organization ?? "no organisation"}" but Gatehouse is set up for "${expectedOrg}". Sign in again with the right account.`,
+      message: `You are signed in to "${account.organization ?? "no organisation"}" but JCVC is set up for "${expectedOrg}". Sign in again with the right account.`,
     }
   }
   return { ok: true }

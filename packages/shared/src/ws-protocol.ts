@@ -64,6 +64,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("list_history"), dir: z.string().min(1).max(4096).optional() }),
   z.object({ type: z.literal("refresh_account") }),
+  z.object({ type: z.literal("signin_start"), method: z.enum(["claudeai", "sso"]) }),
+  z.object({ type: z.literal("signin_status") }),
+  z.object({ type: z.literal("signin_cancel") }),
 ])
 export type ClientCommand = z.infer<typeof ClientCommand>
 

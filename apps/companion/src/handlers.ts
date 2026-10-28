@@ -65,7 +65,7 @@ export class CompanionHandlers {
     })
     if (!sent) {
       this.#lastNotify = previous
-      return { text: "Not sent: the Gatehouse host could not be reached." }
+      return { text: "Not sent: the JCVC host could not be reached." }
     }
     return { text: "Sent." }
   }
@@ -85,7 +85,7 @@ export class CompanionHandlers {
         label: this.#deps.redact(label),
         excludeGlobs: secretGlobs(policy),
       })
-      return { text: `Checkpoint saved as ${cp.ref}. Gatehouse can restore it if this goes wrong.` }
+      return { text: `Checkpoint saved as ${cp.ref}. JCVC can restore it if this goes wrong.` }
     } catch (e) {
       return { text: `No checkpoint: ${(e as Error).message}`, isError: true }
     }

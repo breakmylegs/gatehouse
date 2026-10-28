@@ -214,7 +214,7 @@ export function registerApproverTools(server: McpServer, deps: ApproverDeps): vo
               section: hit.section,
               source: hit.source,
               risk: hit.builtin.risk,
-              rationale: `${hit.builtin.reason} This is built into Gatehouse and has no entry in the rules file.`,
+              rationale: `${hit.builtin.reason} This is built into JCVC and has no entry in the rules file.`,
             }
           : {
               found: true,

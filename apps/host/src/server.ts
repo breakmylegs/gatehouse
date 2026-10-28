@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import type { SignInFlow } from "./signin.js"
 import type net from "node:net"
 import path from "node:path"
 import fastifyStatic from "@fastify/static"
@@ -39,6 +40,8 @@ export interface HostApp {
   checkpoints: CheckpointManager
   usage: UsageStore
   account: AccountMonitor
+  /** Starts Anthropic's own sign-in. Absent in tests that do not need it. */
+  signIn?: SignInFlow
   audit: HostAudit
   engine: PolicyEngine
   policy: () => Policy | undefined
@@ -154,7 +157,7 @@ export class HostServer {
       app.get("/", (_req, reply) =>
         reply
           .type("text/plain; charset=utf-8")
-          .send("Gatehouse host is running. The interface is served here once it has been built."),
+          .send("JCVC host is running. The interface is served here once it has been built."),
       )
     }
     this.#wireEvents()
@@ -241,6 +244,12 @@ export class HostServer {
   /** Called when something outside the server changes health (the Approver restarting, a sign-in check). */
   announceHealth(): void {
     this.#broadcast({ type: "health", health: this.#opts.app.health() })
+  }
+
+  #signIn(): SignInFlow {
+    const f = this.#opts.app.signIn
+    if (!f) throw new CommandError("unavailable", "Signing in from the app is not available here")
+    return f
   }
 
   // ---- commands in ----
@@ -404,6 +413,12 @@ export class HostServer {
         return await a.checkpoints.restore(cmd.cwd, cmd.ref, cmd.sessionId, true)
       case "list_history":
         return await a.listHistory(cmd.dir)
+      case "signin_start":
+        return this.#signIn().start(cmd.method)
+      case "signin_status":
+        return this.#signIn().status()
+      case "signin_cancel":
+        return this.#signIn().cancel()
       case "refresh_account": {
         const snapshot = await a.account.refresh()
         // Every open window shows the new result, not only the one that asked.

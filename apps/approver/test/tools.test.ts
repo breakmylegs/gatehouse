@@ -162,7 +162,7 @@ describe("explain_verdict", () => {
     expect(allow.structured).toMatchObject({ found: true, section: "allow" })
     const builtin = await r.call("explain_verdict", { ruleId: "dynamic-segment" })
     expect(builtin.structured).toMatchObject({ found: true, source: "built-in", risk: 55 })
-    expect(builtin.structured.rationale).toContain("built into Gatehouse")
+    expect(builtin.structured.rationale).toContain("built into JCVC")
     const audit = await r.call("explain_verdict", { ruleId: "audit-failure" })
     expect(audit.structured).toMatchObject({ found: true, source: "built-in" })
   })

@@ -250,7 +250,7 @@ describe("the Host listener", () => {
   it("serves a public placeholder page, and protects /api", async () => {
     const page = await httpGet("/")
     expect(page.status).toBe(200)
-    expect(page.body).toContain("Gatehouse host is running")
+    expect(page.body).toContain("JCVC host is running")
     expect((await httpGet("/api/state")).status).toBe(401)
     expect((await httpGet("/api/state", { authorization: "Bearer nope" })).status).toBe(401)
     const state = await httpGet("/api/state", { authorization: `Bearer ${TOKEN}` })

@@ -24,7 +24,7 @@ export async function api<T = unknown>(
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     })
   } catch {
-    return { ok: false, status: 0, error: "Could not reach the Host. Is Gatehouse still running?" }
+    return { ok: false, status: 0, error: "Could not reach the Host. Is JCVC still running?" }
   }
   const text = await res.text()
   let json: unknown

@@ -123,7 +123,7 @@ export function Settings() {
       <h1 className="m-0 text-[22px] font-semibold">Settings</h1>
       {restart ? (
         <p role="status" className="panel m-0 p-3 font-semibold">
-          Saved. Restart Gatehouse for these changes to take effect.
+          Saved. Restart JCVC for these changes to take effect.
         </p>
       ) : null}
 
@@ -277,6 +277,22 @@ export function Settings() {
           <input type="checkbox" checked={cpBurst} onChange={(e) => setCpBurst(e.target.checked)} />
           Take a checkpoint before the first edit after a quiet spell
         </label>
+      </fieldset>
+
+      <fieldset className="m-0 grid gap-2 border-0 p-0">
+        <legend className="mb-1 text-sm font-semibold">Setup</legend>
+        <div>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              useStore.getState().setSetupDone(false)
+              useStore.getState().setRoute("setup")
+            }}
+          >
+            Run the setup wizard again
+          </button>
+        </div>
       </fieldset>
 
       <fieldset className="m-0 grid gap-2 border-0 p-0">

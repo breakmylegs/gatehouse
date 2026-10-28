@@ -1,8 +1,8 @@
-# Running Gatehouse as a Windows app
+# Running JCVC as a Windows app
 
-The app is shown to you as **Jean-Claude Van Code**, and its files are named JCVC. The data folder and internal names keep the name Gatehouse.
+The app is shown to you as **Jean-Claude Van Code** (JCVC for short), and its files are named JCVC. The data folder `%LOCALAPPDATA%\Gatehouse` and internal names keep the old name Gatehouse so existing data carries on.
 
-`JCVC.exe` is a normal Windows application with its own window. It is not a browser tab: it has its own icon and taskbar button, a title bar with minimise, maximise and close, no address bar, and a tray icon so approvals still reach you when the window is closed. It shows the Gatehouse interface using Microsoft's WebView2 (the engine Edge uses, installed with Windows 11).
+`JCVC.exe` is a normal Windows application with its own window. It is not a browser tab: it has its own icon and taskbar button, a title bar with minimise, maximise and close, no address bar, and a tray icon so approvals still reach you when the window is closed. It shows the JCVC interface using Microsoft's WebView2 (the engine Edge uses, installed with Windows 11).
 
 It does not contain the whole application. It finds its files in the folder around it, so the folder can be moved, copied or zipped as a unit.
 
@@ -35,10 +35,10 @@ Both exes are compiled from `packaging/*.cs` with the C# compiler that ships wit
 
 Double-click `JCVC.exe`. A window opens (a short "Starting" page first, then the interface). What it does that a browser tab would not:
 
-- **Closing the window keeps Gatehouse running in the tray**, so a request that needs you can still reach you. The taskbar button flashes and a balloon says "Something needs your decision" when one arrives and the window is not in front. The balloon never shows what the request is.
+- **Closing the window keeps JCVC running in the tray**, so a request that needs you can still reach you. The taskbar button flashes and a balloon says "Something needs your decision" when one arrives and the window is not in front. The balloon never shows what the request is.
 - **Quit** from the tray icon's menu (right-click), which also stops the Host and the Approver. Left-click the tray icon, or double-click `JCVC.exe` again, to bring the window back. A second copy never starts: it just shows the first.
 - It remembers its size and position, follows the Windows light or dark setting, and opens links from Claude's text in your default browser instead of inside the window.
-- It only ever loads the Gatehouse page from its own Host. Anything else is refused or sent to your browser.
+- It only ever loads the JCVC page from its own Host. Anything else is refused or sent to your browser.
 
 | Option | What it does |
 |---|---|
@@ -48,7 +48,7 @@ Double-click `JCVC.exe`. A window opens (a short "Starting" page first, then the
 | `--browser` | Use your default browser instead of this window (runs `JCVC-Console.exe`). |
 | `--help` | List the options. |
 
-If the WebView2 runtime is missing (it is part of Windows 11 and most Windows 10), Gatehouse says so and opens in your default browser instead. You can install the runtime from Microsoft to get the window.
+If the WebView2 runtime is missing (it is part of Windows 11 and most Windows 10), JCVC says so and opens in your default browser instead. You can install the runtime from Microsoft to get the window.
 
 It runs the same Host as `pwsh scripts/start.ps1`, so everything in `docs/runbook.md` applies. If `runtime\node.exe` is missing it falls back to a Node 22 or newer on the PATH.
 
@@ -62,9 +62,9 @@ It runs the same Host as `pwsh scripts/start.ps1`, so everything in `docs/runboo
 
 `npm run installer` runs Inno Setup on `packaging/installer.iss` and writes `dist-app\JCVC-Setup.exe` (about 135 MB). It finds `ISCC.exe` in the usual Inno Setup folders or on the PATH; give another path with `--iscc <path>` or `GATEHOUSE_ISCC`. It builds the package first if needed.
 
-The installer puts Gatehouse in `%LOCALAPPDATA%\Programs\JCVC` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start Gatehouse when I sign in" choice. Compiling it works, and it has not been run through an install on this machine. Try it on a spare account or machine first.
+The installer puts JCVC in `%LOCALAPPDATA%\Programs\JCVC` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start JCVC when I sign in" choice. Compiling it works, and it has not been run through an install on this machine. Try it on a spare account or machine first.
 
-A single-file exe was judged not worth it: Gatehouse also needs the WebView2 libraries, its WebAssembly files, the Agent SDK's binary and the PowerShell scripts at run time, so a single file would unpack them next to itself anyway.
+A single-file exe was judged not worth it: JCVC also needs the WebView2 libraries, its WebAssembly files, the Agent SDK's binary and the PowerShell scripts at run time, so a single file would unpack them next to itself anyway.
 
 ## Known limits
 

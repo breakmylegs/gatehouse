@@ -514,7 +514,7 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
       return payload
     })
   } else {
-    app.get("/", (_req, reply) => reply.type("text/plain; charset=utf-8").send("Gatehouse relay"))
+    app.get("/", (_req, reply) => reply.type("text/plain; charset=utf-8").send("JCVC relay"))
   }
 
   app.setNotFoundHandler((req, reply) =>

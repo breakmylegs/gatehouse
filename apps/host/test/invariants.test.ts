@@ -346,7 +346,7 @@ describe("invariant 2: the floor hook only denies", () => {
     )) as {
       hookSpecificOutput?: { permissionDecision?: string }
     }
-    expect(out).toEqual(denyOutput("The Gatehouse floor check failed, so this call was blocked."))
+    expect(out).toEqual(denyOutput("The JCVC floor check failed, so this call was blocked."))
   })
 
   it("ignores other hook events, and denies everything while the kill switch is engaged", async () => {
@@ -543,9 +543,7 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
       s.approver.evaluate = original
     }
     expect(results[0]).toMatchObject({ executed: false, blockedBy: "permission" })
-    expect(results[0]?.message).toBe(
-      "Gatehouse could not decide this call safely, so it was denied.",
-    )
+    expect(results[0]?.message).toBe("JCVC could not decide this call safely, so it was denied.")
   })
 
   it("does not apply an allow it cannot record in the audit log (invariant 13)", async () => {

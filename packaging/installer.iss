@@ -1,4 +1,4 @@
-; Inno Setup script for Gatehouse. NOT COMPILED OR TESTED (Inno Setup was not installed when this was written).
+; Inno Setup script for Jean-Claude Van Code (JCVC).
 ; Build with:  npm run package   then   ISCC packaging\installer.iss
 ; See docs/packaging.md.
 

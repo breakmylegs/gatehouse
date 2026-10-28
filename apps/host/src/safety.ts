@@ -83,7 +83,7 @@ export function assertSafeOptions(options: Options): void {
       throw new SafetyError(6, `${key} must not be passed to a session`)
   }
   if (typeof options.canUseTool !== "function") {
-    throw new SafetyError(1, "canUseTool must be set so every prompt reaches Gatehouse")
+    throw new SafetyError(1, "canUseTool must be set so every prompt reaches JCVC")
   }
   if ((options.hooks?.PreToolUse?.length ?? 0) === 0) {
     throw new SafetyError(2, "the PreToolUse floor hook must be registered")

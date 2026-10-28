@@ -16,7 +16,7 @@ function describeAllow(rule: Rule, roots: string): string | undefined {
   if (rule.tools) {
     const where = rule.pathInside === "workspaceRoots" ? ` inside the workspace (${roots})` : ""
     const globs = rule.pathGlobs ? ` limited to ${list(rule.pathGlobs)}` : ""
-    const source = rule.mcpSource ? " (the Gatehouse tools only)" : ""
+    const source = rule.mcpSource ? " (the JCVC tools only)" : ""
     return `${list(rule.tools)}${where}${globs}${source}.`
   }
   return undefined
@@ -35,9 +35,7 @@ export function summarisePolicy(policy: Policy | undefined, cwd: string): string
   const overlay = policy.overlays[project]
   const removed = new Set(overlay?.removeAllow ?? [])
   const roots = policy.rules.workspaceRoots.join(", ")
-  const lines: string[] = [
-    `Gatehouse policy ${policy.hash.slice(0, 12)}. These run without asking:`,
-  ]
+  const lines: string[] = [`JCVC policy ${policy.hash.slice(0, 12)}. These run without asking:`]
   for (const rule of policy.rules.allow) {
     if (removed.has(rule.id)) continue
     const text = describeAllow(rule, roots)

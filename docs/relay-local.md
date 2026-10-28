@@ -1,6 +1,6 @@
 # Running the Relay on your own computer
 
-The Relay is a small service that passes sealed messages between Gatehouse on your computer and your iPhone. It runs on the same computer as Gatehouse, either directly with Node or in a Podman container. It only ever holds ciphertext, so it needs no trust.
+The Relay is a small service that passes sealed messages between JCVC on your computer and your iPhone. It runs on the same computer as JCVC, either directly with Node or in a Podman container. It only ever holds ciphertext, so it needs no trust.
 
 Because it runs on your own computer, the phone can only reach it while that computer is on and connected. That is deliberate: the decision point is your computer.
 
@@ -16,7 +16,7 @@ The address must stay the same for good: the passkey is tied to it. If it change
 
 ## First start (no container)
 
-This is the simplest way and needs only Node, which Gatehouse already uses.
+This is the simplest way and needs only Node, which JCVC already uses.
 
 1. Build the phone app once: `npm run relay:build-phone`.
 2. Start the Relay, giving it your https address the first time:
@@ -27,7 +27,7 @@ This is the simplest way and needs only Node, which Gatehouse already uses.
 
    It remembers the address, so after that `npm run relay` is enough. It keeps its data in `%LOCALAPPDATA%\Gatehouse\relay` and listens on `127.0.0.1:8087` only. It refuses a different address later, because that would break every paired phone.
 3. Read the one-time enrolment token from `%LOCALAPPDATA%\Gatehouse\relay\enrol-token.txt`.
-4. In Gatehouse, open **Devices**, enter the address and the token, and choose Connect. The token works once. The Relay writes a new one for the next device.
+4. In JCVC, open **Devices**, enter the address and the token, and choose Connect. The token works once. The Relay writes a new one for the next device.
 
 Stop it with Ctrl+C. Restart it after rebuilding the phone app.
 
@@ -43,12 +43,12 @@ The container is published on `127.0.0.1:8087` only. Data lives in the `gatehous
 
 ## Pairing the iPhone
 
-1. In Gatehouse, **Devices**, choose **Show a pairing code**.
+1. In JCVC, **Devices**, choose **Show a pairing code**.
 2. On the iPhone, open your address in Safari, tap Share, **Add to Home Screen**, then open the new icon. Notifications only work from the Home Screen app.
 3. Type the code and pair. The phone asks for a passkey (Face ID) and for notification permission.
 4. The phone and the computer each show six digits. If they match, choose **They match** on the computer. If they differ, cancel.
 
-To remove a phone, revoke it in Gatehouse. It stops being believed at once, even if the Relay is down.
+To remove a phone, revoke it in JCVC. It stops being believed at once, even if the Relay is down.
 
 ## Things to check on a real iPhone (cannot be tested without one)
 

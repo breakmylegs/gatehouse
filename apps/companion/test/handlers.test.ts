@@ -154,7 +154,7 @@ describe("get_policy_summary", () => {
   it("lists what is pre-approved and what is never available, in a fixed shape", () => {
     const { handlers } = make()
     const text = handlers.getPolicySummary().text
-    expect(text).toContain(`Gatehouse policy ${policy.hash.slice(0, 12)}`)
+    expect(text).toContain(`JCVC policy ${policy.hash.slice(0, 12)}`)
     expect(text).toContain("Read, Glob, Grep inside the workspace")
     expect(text).toContain("git status*")
     expect(text).toContain("src/**")

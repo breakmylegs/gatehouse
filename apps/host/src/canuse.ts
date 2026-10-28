@@ -111,7 +111,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
     try {
       if (deps.kill()) {
         return deny(
-          "The Gatehouse kill switch is engaged. Everything is denied until the user re-arms it.",
+          "The JCVC kill switch is engaged. Everything is denied until the user re-arms it.",
           toolUseID,
         )
       }
@@ -138,7 +138,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
     } catch (e) {
       // Invariant 1: a failure in here is a denial, never an allow.
       deps.log(`canUseTool failed (${(e as Error).name}), the call was denied`)
-      return deny("Gatehouse could not decide this call safely, so it was denied.", toolUseID)
+      return deny("JCVC could not decide this call safely, so it was denied.", toolUseID)
     }
   }
 }

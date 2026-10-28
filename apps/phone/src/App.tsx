@@ -127,11 +127,11 @@ export function App() {
     }
   }
 
-  if (device === undefined) return <Frame title="Gatehouse">{null}</Frame>
+  if (device === undefined) return <Frame title="Jean-Claude Van Code">{null}</Frame>
 
   if (!isStandalone() && !browserOk)
     return (
-      <Frame title="Add Gatehouse to your Home Screen">
+      <Frame title="Add JCVC to your Home Screen">
         <InstallGuide ios={isIos()} onSkip={() => setBrowserOk(true)} />
       </Frame>
     )
@@ -150,7 +150,7 @@ export function App() {
 
   if (!session)
     return (
-      <Frame title="Gatehouse">
+      <Frame title="Jean-Claude Van Code">
         <div className="grid gap-4 p-5">
           <p className="m-0">Locked. Use Face ID to see what is waiting for you.</p>
           {error ? (
@@ -327,8 +327,7 @@ function InstallGuide({ ios, onSkip }: { ios: boolean; onSkip: () => void }) {
   return (
     <div className="grid gap-4 p-5">
       <p className="m-0">
-        An iPhone only allows notifications for apps on the Home Screen, so add Gatehouse there
-        first.
+        An iPhone only allows notifications for apps on the Home Screen, so add JCVC there first.
       </p>
       {ios ? (
         <ol className="m-0 grid gap-2 pl-5">
@@ -337,7 +336,7 @@ function InstallGuide({ ios, onSkip }: { ios: boolean; onSkip: () => void }) {
             Scroll down and tap <strong>Add to Home Screen</strong>.
           </li>
           <li>
-            Tap <strong>Add</strong>, then open Gatehouse from your Home Screen.
+            Tap <strong>Add</strong>, then open JCVC from your Home Screen.
           </li>
         </ol>
       ) : (
@@ -407,8 +406,7 @@ function Pair({ onPaired }: { onPaired: (d: DeviceInfo) => Promise<void> }) {
   return (
     <form onSubmit={go} className="grid gap-4 p-5" aria-label="Pair this phone">
       <p className="m-0">
-        On your computer, open Gatehouse, go to Devices and choose Show a pairing code. Type it
-        here.
+        On your computer, open JCVC, go to Devices and choose Show a pairing code. Type it here.
       </p>
       <label className="grid gap-1">
         <span className="font-semibold">Pairing code</span>
@@ -764,7 +762,7 @@ function SettingsScreen({
       <section className="grid gap-2" aria-label="This phone">
         <h2 className="m-0 text-[22px] font-semibold">This phone</h2>
         <p className="m-0 text-mut">
-          Paired as {device.name}. To stop it answering, revoke it in Gatehouse on your computer.
+          Paired as {device.name}. To stop it answering, revoke it in JCVC on your computer.
         </p>
         {confirmForget ? (
           <div role="group" aria-label="Confirm forgetting this phone" className="grid gap-2">

@@ -13,7 +13,15 @@ import { Connection, type ConnState, type Reply, takeToken } from "./lib/connect
 import { addSystem, addUser, emptyTranscript, reduce, type Transcript } from "./lib/transcript"
 
 export type Route =
-  "approvals" | "sessions" | "workspace" | "policy" | "audit" | "devices" | "settings" | "first-run"
+  | "approvals"
+  | "sessions"
+  | "workspace"
+  | "policy"
+  | "audit"
+  | "devices"
+  | "settings"
+  | "first-run"
+  | "setup"
 
 export interface ResolvedView {
   id: string
@@ -57,6 +65,7 @@ export interface State {
   theme: "light" | "dark"
   notify: boolean
   jcMode: boolean
+  setupDone: boolean
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
   selectSession: (id: string | undefined) => void
@@ -64,6 +73,7 @@ export interface State {
   setTheme: (t: "light" | "dark") => void
   setNotify: (on: boolean) => void
   setJcMode: (on: boolean) => void
+  setSetupDone: (done: boolean) => void
   addUserText: (sessionId: string, text: string) => void
 }
 
@@ -101,6 +111,7 @@ export const useStore = create<State>((set, get) => ({
   theme: storedTheme(),
   notify: localStorage.getItem("gatehouse.notify") === "1",
   jcMode: localStorage.getItem("gatehouse.jcmode") === "1",
+  setupDone: localStorage.getItem("gatehouse.setup") === "done",
 
   setRoute: (route) => set({ route }),
   selectSession: (selectedSession) => set({ selectedSession }),
@@ -112,6 +123,10 @@ export const useStore = create<State>((set, get) => ({
   setNotify: (notify) => {
     localStorage.setItem("gatehouse.notify", notify ? "1" : "0")
     set({ notify })
+  },
+  setSetupDone: (setupDone) => {
+    localStorage.setItem("gatehouse.setup", setupDone ? "done" : "")
+    set({ setupDone })
   },
   setJcMode: (jcMode) => {
     localStorage.setItem("gatehouse.jcmode", jcMode ? "1" : "0")
@@ -267,7 +282,10 @@ function announce(v: PendingView, s: State): void {
   })
   if (s.notify && typeof Notification !== "undefined" && Notification.permission === "granted") {
     // Detail stays out of the notification: it can show on a locked screen or be mirrored.
-    new Notification("Gatehouse", { body: `${what} needs your decision`, tag: v.request.id })
+    new Notification("Jean-Claude Van Code", {
+      body: `${what} needs your decision`,
+      tag: v.request.id,
+    })
   }
 }
 

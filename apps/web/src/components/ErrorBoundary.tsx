@@ -9,7 +9,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error?: 
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("Gatehouse screen crashed:", error.message, info.componentStack)
+    console.error("JCVC screen crashed:", error.message, info.componentStack)
   }
 
   override render() {

@@ -6,6 +6,7 @@ import { CommandPalette } from "./components/CommandPalette"
 import { Approvals } from "./surfaces/Approvals"
 import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
+import { Setup } from "./surfaces/Setup"
 import { Sessions } from "./surfaces/Sessions"
 import { type Route, send, usePendingCount, useStore } from "./store"
 
@@ -34,6 +35,7 @@ export function App() {
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
   const jcMode = useStore((s) => s.jcMode)
+  const setupDone = useStore((s) => s.setupDone)
   const setJcMode = useStore((s) => s.setJcMode)
   const pendingCount = usePendingCount()
 
@@ -45,9 +47,19 @@ export function App() {
     document.documentElement.dataset.jcvc = jcMode ? "on" : "off"
   }, [jcMode])
 
+  // First launch: the setup wizard, once. It can be run again from Settings.
+  useEffect(() => {
+    if (!setupDone && route === "approvals") setRoute("setup")
+  }, [setupDone, route, setRoute])
+
   // First run: show the checks until the account and organisation are fine.
   useEffect(() => {
-    if (health && (!health.signin.signedIn || !health.signin.orgOk) && route === "approvals")
+    if (
+      health &&
+      setupDone &&
+      (!health.signin.signedIn || !health.signin.orgOk) &&
+      route === "approvals"
+    )
       setRoute("first-run")
   }, [health, route, setRoute])
 
@@ -189,6 +201,7 @@ export function App() {
             {route === "devices" && <Devices />}
             {route === "settings" && <Settings />}
             {route === "first-run" && <FirstRun />}
+            {route === "setup" && <Setup />}
           </Suspense>
         </main>
       </div>

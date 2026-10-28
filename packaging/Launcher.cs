@@ -63,7 +63,7 @@ internal static class Launcher
         string node = Hosting.FindNode(root);
         if (node == null)
         {
-            Say("No Node was found. Gatehouse needs runtime\\node.exe next to it, or Node 22 or newer on the PATH.");
+            Say("No Node was found. JCVC needs runtime\\node.exe next to it, or Node 22 or newer on the PATH.");
             return 1;
         }
 

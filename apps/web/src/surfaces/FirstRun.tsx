@@ -1,8 +1,8 @@
 import { useState } from "react"
-import { api } from "../lib/api"
+import { OrgForm, SignInPanel } from "../components/SetupParts"
 import { send, useStore } from "../store"
 
-function Check({
+export function Check({
   ok,
   title,
   info,
@@ -60,41 +60,13 @@ function Check({
 
 export function FirstRun() {
   const health = useStore((s) => s.health)
-  const expectedOrg = useStore((s) => s.expectedOrg)
   const setRoute = useStore((s) => s.setRoute)
-  const [org, setOrg] = useState("")
-  const [msg, setMsg] = useState<string>()
-  const [busy, setBusy] = useState(false)
   const [checking, setChecking] = useState(false)
   const [checkMsg, setCheckMsg] = useState<string>()
 
   if (!health) return <p className="p-6 text-mut">Waiting for the Host…</p>
   const s = health.signin
   const all = s.signedIn && s.orgOk
-
-  async function saveOrg(e: React.FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    const cur = await api<{ saved: Record<string, unknown> }>("GET", "/api/settings")
-    const r = await api("PUT", "/api/settings", {
-      ...(cur.data?.saved ?? {}),
-      expectedOrg: org.trim(),
-    })
-    if (!r.ok) {
-      setBusy(false)
-      setMsg((r.errors ?? [r.error ?? "Not saved"]).join(" "))
-      return
-    }
-    // The organisation applies at once, so check the account again rather than asking for a restart.
-    setMsg("Saved. Checking your account again, which takes a few seconds.")
-    const again = await send({ type: "refresh_account" })
-    setBusy(false)
-    setMsg(
-      again.ok
-        ? "Saved and checked again."
-        : "Saved. The check could not run just now: choose Check again.",
-    )
-  }
 
   async function checkAgain() {
     setChecking(true)
@@ -111,7 +83,7 @@ export function FirstRun() {
   return (
     <div className="mx-auto grid max-w-[720px] gap-4 p-6">
       <h1 className="m-0 text-[22px] font-semibold">Before you start</h1>
-      <p className="m-0 text-mut">Gatehouse checks four things before it lets a session run.</p>
+      <p className="m-0 text-mut">JCVC checks four things before it lets a session run.</p>
       <ul
         className="m-0 list-none divide-y divide-line border-y border-line p-0"
         aria-label="Checks"
@@ -119,7 +91,7 @@ export function FirstRun() {
         <Check ok={s.signedIn} title="Signed in to Claude">
           {s.signedIn
             ? `Signed in as ${s.email ?? "your account"}.`
-            : "Sign in with the Claude Code app on this computer, then check again. Gatehouse never handles your sign-in."}
+            : "Use the sign-in buttons below. JCVC never handles your sign-in."}
         </Check>
         <Check ok={s.orgOk} title="Organisation matches">
           {s.orgMessage ??
@@ -129,7 +101,7 @@ export function FirstRun() {
         </Check>
         <Check ok={s.managedPolicy === "detected"} info title="Managed policy">
           {s.managedPolicy === "detected"
-            ? "Your organisation's managed settings are in force and Gatehouse works within them."
+            ? "Your organisation's managed settings are in force and JCVC works within them."
             : s.managedPolicy === "unknown"
               ? "Not known yet. This is information only and does not stop you."
               : "No managed settings found. Information only."}
@@ -141,39 +113,8 @@ export function FirstRun() {
         </Check>
       </ul>
 
-      {!s.orgOk && s.signedIn ? (
-        <form
-          onSubmit={saveOrg}
-          className="panel grid gap-2 p-4"
-          aria-label="Set the expected organisation"
-        >
-          <label className="grid gap-1">
-            <span>Expected organisation {expectedOrg ? `(now ${expectedOrg})` : ""}</span>
-            <input
-              className="field"
-              required
-              value={org}
-              onChange={(e) => setOrg(e.target.value)}
-              placeholder={s.organization ?? "Organisation name"}
-            />
-          </label>
-          <div className="flex items-center gap-3">
-            <button className="btn btn-primary" disabled={busy || !org.trim()}>
-              Save
-            </button>
-            {s.organization ? (
-              <button type="button" className="btn" onClick={() => setOrg(s.organization ?? "")}>
-                Use {s.organization}
-              </button>
-            ) : null}
-          </div>
-          {msg ? (
-            <p role="status" className="m-0">
-              {msg}
-            </p>
-          ) : null}
-        </form>
-      ) : null}
+      {!s.signedIn ? <SignInPanel /> : null}
+      {!s.orgOk && s.signedIn ? <OrgForm /> : null}
 
       <div className="flex gap-2">
         <button className="btn" disabled={checking} onClick={() => void checkAgain()}>
