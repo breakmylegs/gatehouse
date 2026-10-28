@@ -1,4 +1,5 @@
 import clsx from "clsx"
+import { Library } from "./Library"
 import { diffLines } from "diff"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
@@ -50,9 +51,10 @@ interface ReplayResult {
   }>
 }
 
-type Tab = "rules" | "test" | "edit" | "remember" | "insights"
+type Tab = "rules" | "library" | "test" | "edit" | "remember" | "insights"
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "rules", label: "Rules" },
+  { id: "library", label: "Library" },
   { id: "test", label: "Test a command" },
   { id: "edit", label: "Edit and activate" },
   { id: "remember", label: "Remember rules" },
@@ -154,6 +156,8 @@ export function Policy() {
           <p className="text-mut">Loading…</p>
         ) : tab === "rules" ? (
           <Rules data={data} />
+        ) : tab === "library" ? (
+          <Library />
         ) : tab === "test" ? (
           <TestCommand />
         ) : tab === "insights" ? (

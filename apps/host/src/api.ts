@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { registerLibraryRoutes } from "./library-api.js"
 import type { FolderPicker } from "./folder-picker.js"
 import fs from "node:fs"
 import os from "node:os"
@@ -150,7 +151,7 @@ export function queryAudit(
   return { records: out }
 }
 
-function replayRecords(dir: string): ReplayRecord[] {
+export function replayRecords(dir: string): ReplayRecord[] {
   const records: ReplayRecord[] = []
   for (const file of listAuditFiles(dir).reverse()) {
     const lines = fs.readFileSync(path.join(dir, file), "utf8").split("\n")
@@ -365,6 +366,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
 
   registerRelayRoutes(app, ctx)
   registerInsightRoutes(app, ctx)
+  registerLibraryRoutes(app, ctx)
 
   // Your own pictures for Jean-Claude mode: files in a folder in the data folder. Only picture files, only by a
   // name that is in the listing, so a request can never name a path.

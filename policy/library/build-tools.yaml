@@ -1,0 +1,35 @@
+version: 1
+id: build-tools
+title: Rust, Go and make
+description: Lets Claude build, test and lint with cargo, go and make. Fetching new code still asks you.
+allow:
+  - id: build-tools-run
+    everySegmentMustMatch: true
+    commands:
+      - "cargo build*"
+      - "cargo test*"
+      - "cargo check*"
+      - "cargo clippy*"
+      - "cargo fmt --check*"
+      - "cargo --version"
+      - "go build*"
+      - "go test*"
+      - "go vet*"
+      - "go version"
+      - "gofmt -l *"
+      - "make"
+      - "make test*"
+      - "make build*"
+      - "make lint*"
+      - "make check*"
+      - "cmake --build *"
+escalate:
+  - id: build-tools-fetch
+    commands: ["cargo add *", "cargo install *", "go get *", "go install *"]
+    risk: 70
+    message: "Fetches code from the network."
+cases:
+  - { tool: Bash, input: { command: "cargo test --all" }, expect: allow, rule: build-tools-run }
+  - { tool: Bash, input: { command: "go vet ./..." }, expect: allow }
+  - { tool: Bash, input: { command: "make test" }, expect: allow }
+  - { tool: Bash, input: { command: "cargo install ripgrep" }, expect: escalate, rule: build-tools-fetch }

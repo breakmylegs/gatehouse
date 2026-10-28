@@ -1,0 +1,25 @@
+version: 1
+id: git-local
+title: Git, local changes
+description: Lets Claude stage, commit and switch branches on this computer. Nothing leaves the computer; pushing, force and hard resets are still blocked or asked.
+allow:
+  - id: git-local-change
+    everySegmentMustMatch: true
+    commands:
+      - "git add *"
+      - "git commit *"
+      - "git switch *"
+      - "git checkout -b *"
+      - "git restore --staged *"
+      - "git stash"
+      - "git stash push*"
+      - "git stash pop*"
+      - "git stash apply*"
+      - "git mv *"
+      - "git rm --cached *"
+cases:
+  - { tool: Bash, input: { command: "git add src/a.ts" }, expect: allow, rule: git-local-change }
+  - { tool: Bash, input: { command: "git commit -m 'fix: tidy'" }, expect: allow }
+  - { tool: Bash, input: { command: "git switch -c feature" }, expect: allow }
+  - { tool: Bash, input: { command: "git reset --hard HEAD~3" }, expect: deny, note: destructive-shell still denies }
+  - { tool: Bash, input: { command: "git push --force" }, expect: deny }

@@ -1,0 +1,24 @@
+version: 1
+id: dotnet-dev
+title: .NET, building and testing
+description: Lets Claude build, test and check formatting in a .NET project. Adding packages still asks you.
+allow:
+  - id: dotnet-dev-build
+    everySegmentMustMatch: true
+    commands:
+      - "dotnet build*"
+      - "dotnet test*"
+      - "dotnet --info"
+      - "dotnet --version"
+      - "dotnet --list-sdks"
+      - "dotnet format --verify-no-changes*"
+      - "dotnet list package*"
+escalate:
+  - id: dotnet-dev-package
+    commands: ["dotnet add * package *", "dotnet restore*", "dotnet tool install*"]
+    risk: 70
+    message: "Fetches packages from the network."
+cases:
+  - { tool: Bash, input: { command: "dotnet build -c Release" }, expect: allow, rule: dotnet-dev-build }
+  - { tool: Bash, input: { command: "dotnet test" }, expect: allow }
+  - { tool: Bash, input: { command: "dotnet add src/App.csproj package Serilog" }, expect: escalate, rule: dotnet-dev-package }

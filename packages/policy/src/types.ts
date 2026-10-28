@@ -77,9 +77,42 @@ export interface RememberFile {
   remember: RememberEntry[]
 }
 
+/** One golden case shipped with a pack: what the engine must decide with the pack switched on. */
+export interface PackCase {
+  tool: string
+  input: Record<string, unknown>
+  expect: "allow" | "deny" | "escalate"
+  rule?: string
+  note?: string
+}
+
+/** A shipped pack of extra rules. It does nothing until it is switched on in your rules file. */
+export interface RulePack {
+  version: 1
+  id: string
+  title: string
+  description: string
+  allow?: Rule[]
+  escalate?: Rule[]
+  deny?: Rule[]
+  cases?: PackCase[]
+}
+
+/** Your own rules: packs switched on, built-in allow or escalate rules switched off, and rules you wrote. */
+export interface UserRules {
+  version: 1
+  packs?: string[]
+  disabled?: string[]
+  allow?: Rule[]
+  escalate?: Rule[]
+  deny?: Rule[]
+}
+
 export interface Policy {
-  /** Base rules with workspaceRoots expanded. */
+  /** Base rules with workspaceRoots expanded, then switched-on packs and your rules merged in. */
   rules: RulesFile
+  /** Where each rule came from: base, a pack, or yours. Not part of the hash. */
+  sources?: Record<string, string>
   /** Overlays by project name (file name without extension). */
   overlays: Record<string, Overlay>
   remember: Rule[]

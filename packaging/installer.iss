@@ -28,7 +28,9 @@ Name: "logon"; Description: "Start Jean-Claude Van Code when I sign in"; Flags: 
 [Files]
 ; The program files are replaced on upgrade. The policy folder is the user's, so it is only written the first time.
 Source: "..\dist-app\JCVC\*"; DestDir: "{app}"; Excludes: "app\policy\*"; Flags: recursesubdirs ignoreversion
-Source: "..\dist-app\JCVC\app\policy\*"; DestDir: "{app}\app\policy"; Flags: recursesubdirs onlyifdoesntexist
+Source: "..\dist-app\JCVC\app\policy\*"; DestDir: "{app}\app\policy"; Excludes: "library\*"; Flags: recursesubdirs onlyifdoesntexist
+; The rule library is shipped content, not yours, so it is replaced on upgrade. Your choices live in rules.user.yaml.
+Source: "..\dist-app\JCVC\app\policy\library\*"; DestDir: "{app}\app\policy\library"; Flags: recursesubdirs ignoreversion
 
 [Icons]
 Name: "{group}\Jean-Claude Van Code"; Filename: "{app}\JCVC.exe"

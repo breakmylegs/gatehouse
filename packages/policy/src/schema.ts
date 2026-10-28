@@ -1,5 +1,5 @@
 import { Ajv } from "ajv"
-import type { Overlay, RememberFile, RulesFile } from "./types.js"
+import type { Overlay, RememberFile, RulePack, RulesFile, UserRules } from "./types.js"
 
 const stringList = { type: "array", items: { type: "string", minLength: 1 }, minItems: 1 } as const
 
@@ -121,10 +121,59 @@ export const rememberFileSchema = {
   },
 } as const
 
+const idPattern = { type: "string", pattern: "^[a-z0-9][a-z0-9-]*$" } as const
+
+export const packSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["version", "id", "title", "description"],
+  properties: {
+    version: { const: 1 },
+    id: idPattern,
+    title: { type: "string", minLength: 1 },
+    description: { type: "string", minLength: 1 },
+    allow: { type: "array", items: ruleSchema },
+    escalate: { type: "array", items: ruleSchema },
+    deny: { type: "array", items: ruleSchema },
+    cases: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["tool", "input", "expect"],
+        properties: {
+          tool: { type: "string", minLength: 1 },
+          input: { type: "object" },
+          expect: { enum: ["allow", "deny", "escalate"] },
+          rule: { type: "string" },
+          note: { type: "string" },
+        },
+      },
+    },
+  },
+} as const
+
+/** Your rules file cannot hold floor rules or change the workspace, the defaults or the judge. */
+export const userRulesSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["version"],
+  properties: {
+    version: { const: 1 },
+    packs: { type: "array", items: idPattern },
+    disabled: { type: "array", items: idPattern },
+    allow: { type: "array", items: ruleSchema },
+    escalate: { type: "array", items: ruleSchema },
+    deny: { type: "array", items: ruleSchema },
+  },
+} as const
+
 const ajv = new Ajv({ allErrors: true, strict: true })
 const validateRules = ajv.compile<RulesFile>(rulesFileSchema)
 const validateOverlay = ajv.compile<Overlay>(overlaySchema)
 const validateRemember = ajv.compile<RememberFile>(rememberFileSchema)
+const validatePack = ajv.compile<RulePack>(packSchema)
+const validateUserRules = ajv.compile<UserRules>(userRulesSchema)
 
 function describe(errors: typeof validateRules.errors): string[] {
   return (errors ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? "is invalid"}`)
@@ -151,4 +200,19 @@ export function checkOverlay(data: unknown): { ok: true; value: Overlay } | { ok
 
 export function checkRememberFile(data: unknown): { ok: true; value: RememberFile } | { ok: false; errors: string[] } {
   return validateRemember(data) ? { ok: true, value: data } : { ok: false, errors: describe(validateRemember.errors) }
+}
+
+export function checkPack(data: unknown): { ok: true; value: RulePack } | { ok: false; errors: string[] } {
+  return validatePack(data) ? { ok: true, value: data } : { ok: false, errors: describe(validatePack.errors) }
+}
+
+export function checkUserRules(data: unknown): { ok: true; value: UserRules } | { ok: false; errors: string[] } {
+  if (typeof data === "object" && data !== null) {
+    const widening = ["floor", "workspaceRoots", "defaults", "quietHours", "judgeEligible"].filter((k) => k in data)
+    if (widening.length > 0)
+      return { ok: false, errors: widening.map((k) => `/${k} is not allowed in your rules file`) }
+  }
+  return validateUserRules(data)
+    ? { ok: true, value: data }
+    : { ok: false, errors: describe(validateUserRules.errors) }
 }

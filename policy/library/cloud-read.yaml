@@ -1,0 +1,52 @@
+version: 1
+id: cloud-read
+title: Cloud and Kubernetes, looking only
+description: Lets Claude check which account it is using and list resources with the Azure, AWS and Google Cloud command lines and kubectl. Anything that creates, changes or deletes still asks you.
+allow:
+  - id: cloud-read-whoami
+    everySegmentMustMatch: true
+    commands:
+      - "az account show*"
+      - "az account list*"
+      - "az group list*"
+      - "aws sts get-caller-identity*"
+      - "aws s3 ls*"
+      - "gcloud config list*"
+      - "gcloud auth list*"
+      - "kubectl config current-context"
+      - "kubectl config get-contexts*"
+      - "kubectl get *"
+      - "kubectl describe *"
+      - "kubectl logs *"
+escalate:
+  - id: cloud-read-change
+    commands:
+      - "kubectl apply *"
+      - "kubectl delete *"
+      - "kubectl edit *"
+      - "kubectl exec *"
+      - "kubectl scale *"
+      - "kubectl rollout *"
+      - "az * create*"
+      - "az * delete*"
+      - "az * update*"
+      - "az * set*"
+      - "aws * create-*"
+      - "aws * delete-*"
+      - "aws * put-*"
+      - "aws * update-*"
+      - "aws s3 rm *"
+      - "aws s3 cp *"
+      - "aws s3 sync *"
+      - "gcloud * create*"
+      - "gcloud * delete*"
+      - "gcloud * deploy*"
+      - "terraform apply*"
+      - "terraform destroy*"
+    risk: 90
+    message: "Changes cloud resources."
+cases:
+  - { tool: Bash, input: { command: "az account show" }, expect: allow, rule: cloud-read-whoami }
+  - { tool: Bash, input: { command: "kubectl get pods -n web" }, expect: allow }
+  - { tool: Bash, input: { command: "kubectl delete pod web-1" }, expect: escalate, rule: cloud-read-change }
+  - { tool: Bash, input: { command: "terraform apply -auto-approve" }, expect: escalate, rule: cloud-read-change }

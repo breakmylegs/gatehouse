@@ -9,3 +9,9 @@ coverage/
 .claude/skills/impeccable/scripts/bin/
 dist-demo/
 dist-app/
+
+# Your own policy choices on this computer, never committed.
+policy/rules.local.yaml
+policy/rules.user.yaml
+policy/projects/
+apps/web/.impeccable/review/

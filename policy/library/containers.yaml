@@ -1,0 +1,48 @@
+version: 1
+id: containers
+title: Docker and Podman, looking only
+description: Lets Claude list and inspect containers and images and read their logs. Running, entering or removing containers still asks you.
+allow:
+  - id: containers-inspect
+    everySegmentMustMatch: true
+    commands:
+      - "docker ps*"
+      - "docker images*"
+      - "docker logs *"
+      - "docker inspect *"
+      - "docker version"
+      - "docker info"
+      - "docker compose ps*"
+      - "podman ps*"
+      - "podman images*"
+      - "podman logs *"
+      - "podman inspect *"
+      - "podman version"
+      - "podman info"
+      - "podman compose ps*"
+escalate:
+  - id: containers-change
+    commands:
+      - "docker run *"
+      - "docker exec *"
+      - "docker rm *"
+      - "docker rmi *"
+      - "docker compose up*"
+      - "docker compose down*"
+      - "podman run *"
+      - "podman exec *"
+      - "podman rm *"
+      - "podman rmi *"
+      - "podman compose up*"
+      - "podman compose down*"
+    risk: 75
+    message: "Starts, enters or removes containers."
+  - id: containers-prune
+    commands: ["docker system prune*", "podman system prune*", "docker volume prune*", "podman volume prune*"]
+    risk: 90
+    message: "Deletes containers, images or volumes in bulk."
+cases:
+  - { tool: Bash, input: { command: "podman ps -a" }, expect: allow, rule: containers-inspect }
+  - { tool: Bash, input: { command: "docker logs web --tail 50" }, expect: allow }
+  - { tool: Bash, input: { command: "podman run --rm alpine echo hi" }, expect: escalate, rule: containers-change }
+  - { tool: Bash, input: { command: "docker system prune -af" }, expect: escalate, rule: containers-prune }

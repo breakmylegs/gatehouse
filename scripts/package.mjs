@@ -262,7 +262,7 @@ fs.writeFileSync(
     "",
     "Your data (audit log, settings, usage) is in %LOCALAPPDATA%\\Gatehouse and stays when you replace this folder.",
     "Your policy rules are in app\\policy. When you replace the app folder with a newer one, copy your own",
-    "rules.yaml and rules.local.yaml across first (or keep the policy folder), or your changes are lost.",
+    "rules.yaml, rules.local.yaml and rules.user.yaml across first (or keep the policy folder), or your changes are lost.",
     "",
     "Sign in to Claude Code on this computer first. On the first run, open Settings and set the organisation.",
     "Documents: app\\docs (runbook.md, relay-local.md, threat-model.md).",

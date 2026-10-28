@@ -29,6 +29,9 @@ try {
       rulesPath,
       overlayDir: env.GATEHOUSE_OVERLAY_DIR ?? path.join(rulesDir, "projects"),
       localPath: env.GATEHOUSE_LOCAL_RULES ?? path.join(rulesDir, "rules.local.yaml"),
+      // The same library and rules of yours as the Host, so the two always decide alike.
+      libraryDir: env.GATEHOUSE_LIBRARY_DIR ?? path.join(rulesDir, "library"),
+      userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
       ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
     },
     auditDir: auditDir(env),

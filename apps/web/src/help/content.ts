@@ -103,6 +103,8 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
 
 **Test a request** runs the live policy on what you type and shows which rule decided and why. Nothing runs and nothing is written to the audit log.
 
+**Library** holds ready-made packs of rules (Git, Node, Python, .NET, Rust and Go, containers, cloud, editing, extra caution on Windows). Switch a pack on to use it, switch off a built-in allow or ask rule you do not want, or copy any rule into your own rules and change it. **Preview what changes** shows which past decisions would come out differently before you save. The floor and the deny rules always apply and cannot be switched off.
+
 Rules are files on this computer. Changes are picked up straight away.`,
   },
   approver: {

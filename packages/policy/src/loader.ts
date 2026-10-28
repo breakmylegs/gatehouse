@@ -6,6 +6,7 @@ import { canonicalize, sha256Hex } from "@gatehouse/shared"
 import { FILE_TOOLS, SHELL_TOOLS } from "./analyse.js"
 import { resolvePath, toKey } from "./paths.js"
 import { checkOverlay, checkRememberFile, checkRulesFile } from "./schema.js"
+import { loadLibrary, mergeRules, readUserRules } from "./library.js"
 import type { Overlay, Policy, RememberFile, Rule, RulesFile } from "./types.js"
 
 export class PolicyLoadError extends Error {
@@ -20,6 +21,10 @@ export interface LoadOptions {
   overlayDir?: string
   /** `rules.local.yaml`, written by the desktop UI. Optional. */
   localPath?: string
+  /** Folder of shipped rule packs. Optional. */
+  libraryDir?: string
+  /** `rules.user.yaml`: packs switched on, rules switched off, your own rules. Optional. */
+  userRulesPath?: string
   /** Replaces workspaceRoots (tests and settings). */
   workspaceRootsOverride?: string[]
   /** Replaces `<you>` in workspace roots. Defaults to the current user name. */
@@ -108,7 +113,10 @@ export function loadPolicy(opts: LoadOptions): Policy {
 
   const user = opts.user ?? os.userInfo().username
   const roots = (opts.workspaceRootsOverride ?? base.workspaceRoots).map((r) => r.replace(/<you>/g, user))
-  const rules: RulesFile = { ...base, workspaceRoots: roots }
+  const packs = loadLibrary(opts.libraryDir, errors)
+  const userRules = readUserRules(opts.userRulesPath, errors)
+  const merged = mergeRules({ ...base, workspaceRoots: roots }, packs, userRules, errors)
+  const rules: RulesFile = merged.rules
 
   const ids = new Set<string>()
   for (const section of ["floor", "deny", "escalate", "allow"] as const) {
@@ -167,7 +175,14 @@ export function loadPolicy(opts: LoadOptions): Policy {
 
   const workspaceRootKeys = roots.map((r) => resolvePath(r, process.cwd()).key)
   const hash = sha256Hex(canonicalize({ rules, overlays, remember }))
-  return { rules, overlays, remember, hash, workspaceRootKeys: workspaceRootKeys.map(toKey) }
+  return {
+    rules,
+    sources: merged.sources,
+    overlays,
+    remember,
+    hash,
+    workspaceRootKeys: workspaceRootKeys.map(toKey),
+  }
 }
 
 export interface PolicyStatus {
@@ -222,6 +237,8 @@ export class PolicyStore {
   watch(debounceMs = 150): void {
     const dirs = new Set<string>([path.dirname(this.#opts.rulesPath)])
     if (this.#opts.overlayDir) dirs.add(this.#opts.overlayDir)
+    if (this.#opts.libraryDir) dirs.add(this.#opts.libraryDir)
+    if (this.#opts.userRulesPath) dirs.add(path.dirname(this.#opts.userRulesPath))
     if (this.#opts.localPath) dirs.add(path.dirname(this.#opts.localPath))
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) continue

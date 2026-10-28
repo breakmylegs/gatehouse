@@ -493,4 +493,98 @@ describe("insights endpoints", () => {
       delete ctx.approver
     }
   })
+
+  describe("the rule library", () => {
+    const swap = () => {
+      const before = { loadOptions: ctx.loadOptions, store: ctx.store }
+      const userRulesPath = path.join(root, "rules.user.yaml")
+      const loadOptions = {
+        ...ctx.loadOptions,
+        libraryDir: path.join(REPO, "policy", "library"),
+        userRulesPath,
+      }
+      const store = new PolicyStore(loadOptions)
+      store.load()
+      ctx.loadOptions = loadOptions
+      ctx.store = store
+      return {
+        userRulesPath,
+        restore: () => {
+          ctx.loadOptions = before.loadOptions
+          ctx.store = before.store
+          fs.rmSync(userRulesPath, { force: true })
+        },
+      }
+    }
+
+    it("lists the packs, all off, and the built-in rules with the floor and deny fixed", async () => {
+      const t = swap()
+      try {
+        const lib = (await app.inject({ method: "GET", url: "/api/library" })).json()
+        expect(lib.errors).toEqual([])
+        expect(lib.packs.length).toBeGreaterThanOrEqual(10)
+        expect(lib.packs.every((p: { on: boolean }) => !p.on)).toBe(true)
+        const floor = lib.base.find((r: { id: string }) => r.id === "secrets-files")
+        expect(floor).toMatchObject({ section: "floor", fixed: true })
+        expect(lib.base.find((r: { id: string }) => r.id === "safe-shell")).toMatchObject({
+          fixed: false,
+        })
+      } finally {
+        t.restore()
+      }
+    })
+
+    it("saves only rules that load, applies them at once, and audits what changed", async () => {
+      const t = swap()
+      try {
+        const ok = await app.inject({
+          method: "PUT",
+          url: "/api/library",
+          payload: { version: 1, packs: ["node-dev"], disabled: ["safe-shell"] },
+        })
+        expect(ok.statusCode).toBe(200)
+        expect(ok.json().changed).toEqual(["pack on: node-dev", "switched off: safe-shell"])
+        expect(ctx.store.current?.rules.allow.some((r) => r.id === "node-dev-scripts")).toBe(true)
+        expect(ctx.store.current?.rules.allow.some((r) => r.id === "safe-shell")).toBe(false)
+        const lib = (await app.inject({ method: "GET", url: "/api/library" })).json()
+        expect(lib.base.find((r: { id: string }) => r.id === "safe-shell")).toMatchObject({
+          off: true,
+        })
+        expect(lib.packs.find((p: { id: string }) => p.id === "node-dev").on).toBe(true)
+        const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+        expect(log.body).toContain("policy-library-changed")
+
+        const saved = fs.readFileSync(t.userRulesPath, "utf8")
+        for (const payload of [
+          { version: 1, disabled: ["secrets-files"] },
+          { version: 1, packs: ["no-such-pack"] },
+          { version: 1, floor: [] },
+          { version: 1, allow: [{ id: "my-everything" }] },
+        ]) {
+          const r = await app.inject({ method: "PUT", url: "/api/library", payload })
+          expect(r.statusCode, JSON.stringify(payload)).toBe(422)
+        }
+        // A refused save writes nothing.
+        expect(fs.readFileSync(t.userRulesPath, "utf8")).toBe(saved)
+      } finally {
+        t.restore()
+      }
+    })
+
+    it("previews which past decisions a change would alter, without saving", async () => {
+      const t = swap()
+      try {
+        const r = await app.inject({
+          method: "POST",
+          url: "/api/library/preview",
+          payload: { version: 1, disabled: ["read-workspace"] },
+        })
+        expect(r.statusCode).toBe(200)
+        expect(r.json()).toHaveProperty("candidateHash")
+        expect(fs.existsSync(t.userRulesPath)).toBe(false)
+      } finally {
+        t.restore()
+      }
+    })
+  })
 })

@@ -86,6 +86,8 @@ export function createHost(opts: HostOptions = {}): Host {
     rulesPath,
     overlayDir: env.GATEHOUSE_OVERLAY_DIR ?? path.join(rulesDir, "projects"),
     localPath: localRules,
+    libraryDir: env.GATEHOUSE_LIBRARY_DIR ?? path.join(rulesDir, "library"),
+    userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
     ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
   }
 
@@ -391,6 +393,8 @@ export function createHost(opts: HostOptions = {}): Host {
             GATEHOUSE_RULES_PATH: rulesPath,
             GATEHOUSE_LOCAL_RULES: localRules,
             GATEHOUSE_OVERLAY_DIR: loadOptions.overlayDir,
+            GATEHOUSE_LIBRARY_DIR: loadOptions.libraryDir,
+            GATEHOUSE_USER_RULES: loadOptions.userRulesPath,
             GATEHOUSE_AUDIT_DIR: dir,
           },
           token: approverToken,
