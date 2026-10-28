@@ -600,6 +600,14 @@ describe("commands over the WebSocket", () => {
     expect(acct.data).toMatchObject({ signedIn: true, org: { ok: true } })
   })
 
+  it("tells the window the new health after a sign-in check", async () => {
+    const before = c.events.filter((e) => e.type === "health").length
+    await c.send({ type: "refresh_account" })
+    const after = c.events.filter((e) => e.type === "health")
+    expect(after.length).toBeGreaterThan(before)
+    expect(after.at(-1)).toMatchObject({ health: { signin: { signedIn: true, orgOk: true } } })
+  })
+
   it("explains an organisation refusal with the code and a message", async () => {
     s.sdk.account = { email: "x@y.z", organization: "Another Org", apiProvider: "firstParty" }
     const r = await c.send({ type: "create_session", cwd: s.repo })

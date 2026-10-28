@@ -404,8 +404,12 @@ export class HostServer {
         return await a.checkpoints.restore(cmd.cwd, cmd.ref, cmd.sessionId, true)
       case "list_history":
         return await a.listHistory(cmd.dir)
-      case "refresh_account":
-        return await a.account.refresh()
+      case "refresh_account": {
+        const snapshot = await a.account.refresh()
+        // Every open window shows the new result, not only the one that asked.
+        this.announceHealth()
+        return snapshot
+      }
     }
   }
 }

@@ -65,6 +65,8 @@ export function FirstRun() {
   const [org, setOrg] = useState("")
   const [msg, setMsg] = useState<string>()
   const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [checkMsg, setCheckMsg] = useState<string>()
 
   if (!health) return <p className="p-6 text-mut">Waiting for the Host…</p>
   const s = health.signin
@@ -91,6 +93,18 @@ export function FirstRun() {
       again.ok
         ? "Saved and checked again."
         : "Saved. The check could not run just now: choose Check again.",
+    )
+  }
+
+  async function checkAgain() {
+    setChecking(true)
+    setCheckMsg("Checking your account, which takes a few seconds.")
+    const r = await send({ type: "refresh_account" }, 120_000)
+    setChecking(false)
+    setCheckMsg(
+      r.ok
+        ? `Checked again at ${new Date().toLocaleTimeString()}.`
+        : "The check could not run. Try again.",
     )
   }
 
@@ -162,12 +176,17 @@ export function FirstRun() {
       ) : null}
 
       <div className="flex gap-2">
-        <button className="btn" onClick={() => void send({ type: "refresh_account" })}>
-          Check again
+        <button className="btn" disabled={checking} onClick={() => void checkAgain()}>
+          {checking ? "Checking..." : "Check again"}
         </button>
         <button className="btn" onClick={() => setRoute("settings")}>
           Open settings
         </button>
+        {checkMsg ? (
+          <span role="status" className="self-center text-mut">
+            {checkMsg}
+          </span>
+        ) : null}
         {all ? (
           <button className="btn btn-primary" onClick={() => setRoute("sessions")}>
             Start a session
