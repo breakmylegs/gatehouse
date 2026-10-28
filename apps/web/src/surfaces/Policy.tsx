@@ -94,7 +94,7 @@ export function Policy() {
   return (
     <div className="mx-auto grid max-w-[1100px] gap-4 p-6">
       <header className="flex flex-wrap items-baseline gap-4">
-        <h1 className="m-0 text-[22px] font-semibold">Policy studio</h1>
+        <h1 className="m-0">Policy studio</h1>
         {data ? (
           <span className="text-mut">
             Live policy <span className="mono">{data.status.hash?.slice(0, 12) ?? "none"}</span>
@@ -291,7 +291,7 @@ function TestCommand() {
       ) : null}
       {verdict ? (
         <section aria-label="Result" className="panel grid gap-2 p-4" role="status">
-          <h2 className="m-0 text-[17px] font-semibold">
+          <h2 className="m-0 text-[18px]">
             {verdict.outcome === "allow"
               ? "Allowed"
               : verdict.outcome === "deny"

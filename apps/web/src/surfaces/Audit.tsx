@@ -121,7 +121,7 @@ export function Audit() {
   return (
     <div className="grid h-full grid-rows-[auto_auto_1fr]">
       <header className="flex flex-wrap items-baseline gap-4 px-6 pb-2 pt-5">
-        <h1 className="m-0 text-[22px] font-semibold">Audit log</h1>
+        <h1 className="m-0">Audit log</h1>
         <p role="status" className="m-0">
           {verify === undefined ? (
             <span className="text-mut">Checking the chain…</span>
@@ -238,7 +238,7 @@ export function Audit() {
               computeItemKey={(_, r) => r.seq}
               endReached={() => next !== undefined && !loading && void load(applied, next)}
               fixedHeaderContent={() => (
-                <tr className="bg-s1 text-left text-xs uppercase tracking-wide text-mut">
+                <tr className="sign bg-s1 text-left text-[12.5px] font-medium text-mut">
                   <th className="px-3 py-1.5 font-semibold">Time</th>
                   <th className="px-3 py-1.5 font-semibold">Decision</th>
                   <th className="px-3 py-1.5 font-semibold">Channel</th>

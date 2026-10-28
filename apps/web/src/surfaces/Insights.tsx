@@ -114,7 +114,7 @@ export function Insights() {
       ) : null}
 
       <section aria-label="Asked you, by rule" className="grid gap-2">
-        <h2 className="m-0 text-[17px] font-semibold">What asks you most</h2>
+        <h2 className="m-0 text-[18px]">What asks you most</h2>
         {top.length === 0 ? (
           <p className="m-0 text-mut">No rule asked you in this period.</p>
         ) : (
@@ -180,7 +180,7 @@ export function Insights() {
       </section>
 
       <section aria-label="Each day" className="grid gap-2">
-        <h2 className="m-0 text-[17px] font-semibold">Each day</h2>
+        <h2 className="m-0 text-[18px]">Each day</h2>
         {a.perDay.length === 0 ? (
           <p className="m-0 text-mut">No days to show.</p>
         ) : (
@@ -254,7 +254,7 @@ export function Insights() {
       </section>
 
       <section aria-label="Suggested rules" className="grid gap-2">
-        <h2 className="m-0 text-[17px] font-semibold">Suggested rules</h2>
+        <h2 className="m-0 text-[18px]">Suggested rules</h2>
         <p className="m-0 text-mut">
           Calls you approved at least three times and never refused. Each suggestion allows one
           exact command or one exact file, nothing wider, and is checked again when you add it. Only

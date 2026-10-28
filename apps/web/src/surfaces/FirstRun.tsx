@@ -82,7 +82,7 @@ export function FirstRun() {
 
   return (
     <div className="mx-auto grid max-w-[720px] gap-4 p-6">
-      <h1 className="m-0 text-[22px] font-semibold">Before you start</h1>
+      <h1 className="m-0">Before you start</h1>
       <p className="m-0 text-mut">JCVC checks four things before it lets a session run.</p>
       <ul
         className="m-0 list-none divide-y divide-line border-y border-line p-0"

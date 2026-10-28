@@ -48,7 +48,7 @@ export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
 
   return (
     <div className="mx-auto grid max-w-[760px] gap-6 p-6">
-      {embedded ? null : <h1 className="m-0 text-[22px] font-semibold">Devices and pairing</h1>}
+      {embedded ? null : <h1 className="m-0">Devices and pairing</h1>}
       {info.health.state === "not-configured" ? (
         <Setup onDone={load} />
       ) : (
@@ -96,7 +96,7 @@ function Setup({ onDone }: { onDone: () => Promise<void> }) {
 
   return (
     <form onSubmit={submit} className="panel grid gap-3 p-5" aria-label="Set up the Relay">
-      <h2 className="m-0 text-[17px] font-semibold">Set up the phone relay</h2>
+      <h2 className="m-0 text-[18px]">Set up the phone relay</h2>
       <p className="m-0">
         To decide from your iPhone as well, run the Relay (on this computer or a server; the steps
         are in docs/relay-local.md), then enter its address and the one-time enrolment token it
@@ -177,7 +177,7 @@ function Phones({ phones, onChanged }: { phones: Phone[]; onChanged: () => Promi
 
   return (
     <section aria-label="Paired phones" className="grid gap-2">
-      <h2 className="m-0 text-[17px] font-semibold">Paired phones ({phones.length})</h2>
+      <h2 className="m-0 text-[18px]">Paired phones ({phones.length})</h2>
       {error ? (
         <p role="alert" className="m-0 font-semibold text-sev">
           {error}
@@ -305,7 +305,7 @@ function AddPhone({ onPaired }: { onPaired: () => Promise<void> }) {
 
   return (
     <section aria-label="Add a phone" className="panel grid gap-3 p-5">
-      <h2 className="m-0 text-[17px] font-semibold">Add a phone</h2>
+      <h2 className="m-0 text-[18px]">Add a phone</h2>
       {!pairing ? (
         <>
           <p className="m-0">
@@ -398,7 +398,7 @@ function Rotate() {
   }
   return (
     <section aria-label="Device token" className="grid gap-2">
-      <h2 className="m-0 text-[17px] font-semibold">Device token</h2>
+      <h2 className="m-0 text-[18px]">Device token</h2>
       <p className="m-0 text-mut">
         This computer proves itself to the Relay with a token. Rotate it if you think it has been
         seen. Paired phones are not affected.

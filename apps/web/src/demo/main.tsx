@@ -16,6 +16,7 @@ function load(c: Case) {
     resolved: {},
     transcripts: {},
     route: "approvals",
+    setupDone: true,
   })
   const h = useStore.getState().handleEvent
   h({ type: "hello", sessions: sessions(s), pending: pending(n, s), health: health(c), usage: {} })

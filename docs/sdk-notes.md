@@ -213,3 +213,9 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 - Transports: `StdioServerTransport` (`server/stdio.js`), `StreamableHTTPServerTransport` (`server/streamableHttp.js`). Stateless mode is `new StreamableHTTPServerTransport({ sessionIdGenerator: undefined })` with `transport.handleRequest(req, res, body)`. Host, Origin and bearer checks are Gatehouse's own, in front of it.
 - Client: `Client` (`client/index.js`) with `connect(transport)`, `listTools()`, `callTool({ name, arguments })`. Transports: `StreamableHTTPClientTransport`, `StdioClientTransport`.
 - Agent SDK also offers `createSdkMcpServer` and `tool(...)` for in-process servers. Gatehouse does not use them. The Approver is a separate process and the Companion is stdio.
+
+## Effort (28 Oct)
+
+- `Options.effort` takes `'low' | 'medium' | 'high' | 'xhigh' | 'max'` (`EffortLevel`) and sets the reasoning effort when a session starts.
+- Mid-session the Host calls `query.applyFlagSettings({ effortLevel })` with that one key only. The flag layer can carry other settings, including permission rules, so nothing else is ever sent through it (invariant 5).
+- `acceptEdits` and `auto` are now allowed permission modes by owner decision. Claude Code approves some calls itself in those modes without calling `canUseTool`; the PreToolUse floor still runs first and the PostToolUse hook records those calls as `claude-code-auto` in the audit log.

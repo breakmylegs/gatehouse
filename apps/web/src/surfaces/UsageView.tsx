@@ -65,12 +65,12 @@ export function UsageView() {
     <div className="grid gap-4">
       {digest ? (
         <section aria-label="Last 24 hours" className="panel grid gap-1 p-4">
-          <h2 className="m-0 text-[17px] font-semibold">Last 24 hours</h2>
+          <h2 className="m-0 text-[18px]">Last 24 hours</h2>
           <p className="m-0">{digest.text}</p>
         </section>
       ) : null}
       <section aria-label="Usage" className="grid gap-4">
-        <h2 className="m-0 text-[17px] font-semibold">Usage</h2>
+        <h2 className="m-0 text-[18px]">Usage</h2>
         {usage?.total ? (
           <p className="m-0 text-mut">
             All time: <strong className="text-tx">{money(usage.total.costUsd)}</strong>,{" "}

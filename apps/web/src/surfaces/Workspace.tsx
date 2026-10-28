@@ -10,6 +10,8 @@ import { emptyTranscript, type Item, type Todo } from "../lib/transcript"
 import { money } from "../lib/format"
 import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
+import { SessionCode } from "../components/SessionCode"
+import { sessionCode } from "../lib/codes"
 import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
@@ -54,19 +56,37 @@ export function Workspace() {
 
   if (!session) {
     return (
-      <div className="mx-auto mt-16 max-w-md text-center">
-        <h1 className="m-0 text-[17px] font-semibold">No session selected</h1>
-        <p className="text-mut">
-          {list.length === 0
-            ? "Start a session from the Sessions page."
-            : "Pick one to see its transcript."}
-        </p>
-        {list.map((s) => (
-          <button key={s.id} className="btn mr-2" onClick={() => selectSession(s.id)}>
-            {s.project}
-          </button>
-        ))}
-        <div className="mt-3">
+      <div className="mx-auto mt-14 grid max-w-xl gap-4 px-6">
+        <div>
+          <h1 className="m-0">Pick a session</h1>
+          <p className="m-0 mt-1 text-mut">
+            {list.length === 0
+              ? "No sessions are running. Start one from the Sessions page."
+              : "Choose a session to see its transcript and work with it."}
+          </p>
+        </div>
+        {list.length > 0 ? (
+          <div className="panel overflow-hidden">
+            {list.map((s) => (
+              <button
+                key={s.id}
+                className="board-row grid-cols-[auto_minmax(0,1fr)_auto]"
+                data-lit={s.state === "waiting" ? "" : undefined}
+                onClick={() => selectSession(s.id)}
+              >
+                <SessionCode session={s} className="!text-[15px]" />
+                <span className="min-w-0">
+                  <span className="block truncate text-[15px] font-semibold">{s.project}</span>
+                  <span className="mono block truncate text-xs text-mut">{s.cwd}</span>
+                </span>
+                <span className="text-[13px] text-mut">
+                  {s.state === "waiting" ? "Waiting on you" : s.state}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+        <div>
           <button className="btn" onClick={() => setRoute("sessions")}>
             Go to sessions
           </button>
@@ -80,23 +100,25 @@ export function Workspace() {
 
   return (
     <div className="grid h-full grid-rows-[auto_1fr_auto] max-[900px]:grid-rows-[auto_1fr_auto]">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line bg-s1 px-4 py-2">
-        <label className="flex items-center gap-2">
-          <span className="text-mut">Session</span>
-          <select
-            className="field"
-            value={session.id}
-            onChange={(e) => selectSession(e.target.value)}
-          >
-            {list.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.project} ({s.cwd.split(/[\\/]/).slice(-2).join("/")}, {s.state})
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="mono text-xs text-mut [overflow-wrap:anywhere]">{session.cwd}</span>
-        <span className="ml-auto" />
+      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-s1 px-4 py-2.5">
+        <SessionCode session={session} className="!text-[17px]" />
+        <div className="grid min-w-[220px] flex-1 gap-0.5">
+          <label className="flex items-center gap-2">
+            <span className="sr-only">Session</span>
+            <select
+              className="field"
+              value={session.id}
+              onChange={(e) => selectSession(e.target.value)}
+            >
+              {list.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {sessionCode(s)} {s.project} ({s.state})
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="mono truncate text-xs text-mut">{session.cwd}</span>
+        </div>
         <label className="flex items-center gap-2">
           <span className="text-mut">Model</span>
           <select
@@ -200,7 +222,10 @@ export function Workspace() {
 
       <footer className="border-t border-line bg-s1 p-3">
         {pending.length > 0 ? (
-          <div role="status" className="mb-2 flex items-center gap-3 bg-s2 px-3 py-1.5">
+          <div
+            role="status"
+            className="mb-2 flex items-center gap-3 rounded bg-sign px-3 py-1.5 text-sign-tx"
+          >
             <span className="font-semibold">
               {pending.length} request{pending.length === 1 ? "" : "s"} from this session waiting on
               you
@@ -357,9 +382,7 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
 function TodoPanel({ todos }: { todos: Todo[] }) {
   return (
     <section aria-label="Todo list">
-      <h2 className="m-0 mb-2 text-[11px] font-semibold uppercase tracking-wide text-mut">
-        Todo list
-      </h2>
+      <h2 className="m-0 mb-2 text-[15px]">Todo list</h2>
       {todos.length === 0 ? (
         <p className="m-0 text-mut">Claude has not made a list yet.</p>
       ) : (

@@ -65,6 +65,9 @@ export interface State {
   theme: "light" | "dark"
   notify: boolean
   jcMode: boolean
+  /** Requests you have looked at. A new one stays lit on the board until it is in here. */
+  seen: Record<string, true>
+  markSeen: (id: string) => void
   /** "auto", a built-in picture id, or "user:<file name>". */
   jcPic: string
   setupDone: boolean
@@ -114,6 +117,8 @@ export const useStore = create<State>((set, get) => ({
   theme: storedTheme(),
   notify: localStorage.getItem("gatehouse.notify") === "1",
   jcMode: localStorage.getItem("gatehouse.jcmode") === "1",
+  seen: {},
+  markSeen: (id) => set((s) => (s.seen[id] ? s : { seen: { ...s.seen, [id]: true } })),
   setupDone: localStorage.getItem("gatehouse.setup") === "done",
   jcPic: localStorage.getItem("gatehouse.jcpic") || "auto",
 

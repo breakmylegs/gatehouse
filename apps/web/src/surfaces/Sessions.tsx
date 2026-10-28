@@ -9,11 +9,14 @@ import {
   EFFORTS,
   MODE_OPTIONS,
   wireOf,
+  uiModeOf,
   type EffortId,
   type UiMode,
 } from "../lib/modes"
 import { send, useSessionList, useStore } from "../store"
 import { UsageView } from "./UsageView"
+import { SessionCode } from "../components/SessionCode"
+import clsx from "clsx"
 
 export const MODELS: Array<{ id: string; label: string }> = [
   { id: "", label: "Default model" },
@@ -106,14 +109,14 @@ export function Sessions() {
   return (
     <div className="mx-auto grid max-w-[1100px] gap-6 p-6">
       <header className="flex items-baseline gap-4">
-        <h1 className="m-0 text-[22px] font-semibold">Sessions</h1>
+        <h1 className="m-0">Sessions</h1>
         <span className="text-mut">
           Spend so far: <strong>{money(usage?.total?.costUsd ?? 0)}</strong>
         </span>
       </header>
 
       <form onSubmit={create} className="panel grid gap-3 p-4" aria-label="Start a session">
-        <h2 className="m-0 text-sm font-semibold">Start a session</h2>
+        <h2 className="m-0 text-[17px]">Start a session</h2>
         <div className="grid grid-cols-[1fr_160px_170px_180px_auto] items-end gap-3 max-[900px]:grid-cols-1">
           <label className="grid gap-1">
             <span>Folder</span>
@@ -193,37 +196,55 @@ export function Sessions() {
           <p className="text-mut">No sessions yet. Start one above.</p>
         </div>
       ) : (
-        <table className="w-full border-collapse text-left">
+        <table className="panel w-full border-separate border-spacing-0 overflow-hidden text-left">
           <caption className="sr-only">Sessions, those waiting on you first</caption>
           <thead>
-            <tr className="border-b border-line text-xs uppercase tracking-wide text-mut">
-              <th className="py-1.5 pr-3 font-semibold">State</th>
-              <th className="py-1.5 pr-3 font-semibold">Project</th>
-              <th className="py-1.5 pr-3 font-semibold">Model</th>
-              <th className="py-1.5 pr-3 font-semibold">Mode</th>
-              <th className="py-1.5 pr-3 text-right font-semibold">Pending</th>
-              <th className="py-1.5 font-semibold"> </th>
+            <tr className="sign border-b border-line text-[12.5px] font-medium text-mut">
+              <th className="py-2 pl-3 pr-3 font-medium">Code</th>
+              <th className="py-2 pr-3 font-medium">State</th>
+              <th className="py-2 pr-3 font-medium">Project</th>
+              <th className="py-2 pr-3 font-medium">Model</th>
+              <th className="py-2 pr-3 font-medium">Mode</th>
+              <th className="py-2 pr-3 text-right font-medium">Waiting</th>
+              <th className="py-2 font-medium">
+                <span className="sr-only">Open</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {sorted.map((s) => (
-              <tr key={s.id} className="border-b border-line">
-                <td className="py-1.5 pr-3">
+              <tr
+                key={s.id}
+                className={clsx("border-b border-line", s.state === "waiting" && "bg-lit")}
+              >
+                <td className="py-2.5 pl-3 pr-3 align-top">
+                  <SessionCode session={s} className="!text-[15px]" />
+                </td>
+                <td className="sign py-2.5 pr-3 align-top text-[14px] font-medium">
                   <StateMark state={s.state} />
                 </td>
-                <td className="py-1.5 pr-3">
-                  <span className="block font-semibold">{s.project}</span>
+                <td className="py-2.5 pr-3 align-top">
+                  <span className="sign block text-[15px] font-semibold">{s.project}</span>
                   <span className="mono block text-xs text-mut [overflow-wrap:anywhere]">
                     {s.cwd}
                   </span>
                   {s.error ? <span className="block text-xs text-sev">{s.error}</span> : null}
                 </td>
-                <td className="py-1.5 pr-3">{s.model ?? "Default"}</td>
-                <td className="py-1.5 pr-3">{s.mode === "plan" ? "Plan" : "Default"}</td>
-                <td className="py-1.5 pr-3 text-right">
+                <td className="sign py-2.5 pr-3 align-top">
+                  {MODELS.find((m) => m.id === s.model)?.label ?? s.model ?? "Default"}
+                  {s.effort ? (
+                    <span className="block text-[12.5px] text-mut">
+                      {EFFORTS.find((x) => x.id === s.effort)?.label ?? s.effort} effort
+                    </span>
+                  ) : null}
+                </td>
+                <td className="sign py-2.5 pr-3 align-top">
+                  {MODE_OPTIONS.find((m) => m.id === uiModeOf(s))?.label}
+                </td>
+                <td className="sign py-2.5 pr-3 text-right align-top text-[15px] font-semibold">
                   <NumberFlow value={s.pendingApprovals} />
                 </td>
-                <td className="py-1.5 text-right">
+                <td className="py-2 pr-3 text-right align-top">
                   <button
                     className="btn"
                     onClick={() => {

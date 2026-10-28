@@ -1,5 +1,4 @@
 import NumberFlow from "@number-flow/react"
-import clsx from "clsx"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { Toaster } from "sonner"
 import { CommandPalette } from "./components/CommandPalette"
@@ -74,18 +73,24 @@ export function App() {
           e.preventDefault()
           document.getElementById("main")?.focus()
         }}
-        className="absolute left-2 top-2 z-50 -translate-y-16 rounded bg-s1 px-3 py-1.5 focus:translate-y-0"
+        className="absolute left-2 top-2 z-50 -translate-y-16 rounded bg-sign px-3 py-1.5 text-sign-tx focus:translate-y-0"
       >
         Skip to content
       </a>
-      <header className="flex flex-wrap items-center gap-3 border-b border-line bg-s1 px-4 py-2">
-        <strong className="mr-2 text-sm">Jean-Claude Van Code</strong>
+      <header className="shell flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
+        <span className="flex items-baseline gap-2">
+          <strong className="sign text-[19px] tracking-tight [font-stretch:85%]">JCVC</strong>
+          <span className="sign text-[13px] font-normal text-shell-mut max-[1200px]:hidden">
+            Jean-Claude Van Code
+          </span>
+        </span>
         <button
-          className="btn"
+          className="sign-pill"
+          data-on={pendingCount > 0 ? "" : undefined}
           onClick={() => setRoute("approvals")}
           aria-label={`Approvals, ${pendingCount} waiting`}
         >
-          Needs you <NumberFlow value={pendingCount} className="font-semibold" />
+          Needs you <NumberFlow value={pendingCount} className="n" />
         </button>
         <StatusPill
           ok={conn === "open"}
@@ -154,38 +159,33 @@ export function App() {
         )}
       </header>
       {conn !== "open" ? (
-        <div role="alert" className="border-b border-sev bg-s2 px-4 py-2 font-semibold text-sev">
+        <div role="alert" className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev">
           Not connected to the Host. Decisions are paused, and requests keep waiting. Reconnecting
           automatically.
         </div>
       ) : killed ? (
-        <div role="alert" className="border-b border-sev bg-s2 px-4 py-2 font-semibold text-sev">
+        <div role="alert" className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev">
           Kill switch engaged. Every request is denied and no session can start until you re-arm.
         </div>
       ) : (
         <div />
       )}
-      <div className="grid min-h-0 grid-cols-[190px_1fr] max-[900px]:grid-cols-1">
+      <div className="grid min-h-0 grid-cols-[200px_1fr] max-[900px]:grid-cols-1">
         <nav
           aria-label="Surfaces"
-          className="overflow-auto border-r border-line bg-s1 p-2 max-[900px]:border-b max-[900px]:border-r-0"
+          className="shell overflow-auto border-t border-shell-line p-2 max-[900px]:border-b"
         >
           <ul className="m-0 grid list-none gap-0.5 p-0 max-[900px]:grid-flow-col">
             {NAV.map((n) => (
               <li key={n.route}>
                 <button
-                  className={clsx(
-                    "flex w-full items-center justify-between rounded-md border-0 bg-transparent px-2.5 py-1.5 text-left hover:bg-s2",
-                    route === n.route && "bg-s2 font-semibold",
-                  )}
+                  className="rail-item"
                   aria-current={route === n.route ? "page" : undefined}
                   onClick={() => setRoute(n.route)}
                 >
                   {n.label}
                   {n.route === "approvals" && pendingCount > 0 ? (
-                    <span className="rounded-full bg-acc px-2 text-xs font-semibold text-acc-tx">
-                      {pendingCount}
-                    </span>
+                    <span className="count">{pendingCount}</span>
                   ) : null}
                 </button>
               </li>
@@ -215,7 +215,7 @@ export function App() {
 
 function StatusPill({ ok, label, neutral }: { ok: boolean; label: string; neutral?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-mut">
+    <span className="sign inline-flex items-center gap-1.5 text-[13px] font-normal text-shell-mut">
       <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
         {ok ? (
           <circle cx="5" cy="5" r="4" fill="currentColor" className="text-ok" />

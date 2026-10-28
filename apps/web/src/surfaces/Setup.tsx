@@ -53,20 +53,27 @@ export function Setup() {
     <div className="mx-auto grid max-w-[720px] gap-4 p-6">
       <ol
         aria-label="Setup steps"
-        className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0 text-[13px]"
+        className="m-0 grid list-none grid-cols-6 overflow-hidden rounded border border-line bg-s1 p-0 max-[700px]:grid-cols-3"
       >
         {STEPS.map((name, i) => (
           <li
             key={name}
             aria-current={i === step ? "step" : undefined}
-            className={i === step ? "font-semibold" : "text-mut"}
+            className={
+              i === step
+                ? "sign border-l border-line bg-acc px-3 py-2 text-[13px] text-acc-tx first:border-l-0"
+                : i < step
+                  ? "sign border-l border-line px-3 py-2 text-[13px] font-medium first:border-l-0"
+                  : "sign border-l border-line px-3 py-2 text-[13px] font-normal text-mut first:border-l-0"
+            }
           >
-            {i + 1}. {name}
+            <span className="block text-[11.5px] opacity-80">Step {i + 1}</span>
+            {name}
           </li>
         ))}
       </ol>
 
-      <h1 ref={heading} tabIndex={-1} className="m-0 text-[22px] font-semibold outline-none">
+      <h1 ref={heading} tabIndex={-1} className="m-0 outline-none">
         {step === 0 && "Welcome to Jean-Claude Van Code"}
         {step === 1 && "Sign in to Claude"}
         {step === 2 && "Check your organisation"}

@@ -7,6 +7,7 @@ import { splitByHighlights } from "../lib/highlight"
 import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { RiskBadge } from "./RiskBadge"
+import { SessionCode } from "./SessionCode"
 
 const COLLAPSE_LINES = 12
 const COLLAPSE_CHARS = 1500
@@ -41,6 +42,7 @@ const isShell = (tool: string) => tool === "Bash" || tool === "PowerShell"
 export function ApprovalCard({ view }: { view: PendingView }) {
   const req = view.request
   const resolved = useStore((s) => s.resolved[req.id])
+  const session = useStore((s) => s.sessions[req.sessionId])
   const now = useNow()
   const root = useRef<HTMLElement>(null)
   const [panel, setPanel] = useState<Panel>("none")
@@ -169,177 +171,192 @@ export function ApprovalCard({ view }: { view: PendingView }) {
       data-approval-card
       onKeyDown={onKeyDown}
       aria-labelledby={`t-${req.id}`}
-      className="panel grid grid-cols-[1fr_250px] max-[1100px]:grid-cols-1"
+      className="pass"
     >
-      <div className="grid content-start gap-4 p-5">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h2 id={`t-${req.id}`} className="m-0 text-[17px] font-semibold">
+      <div className="grid min-w-0 content-start">
+        <div className="pass-head">
+          <span>
+            <span className="lbl">Session</span>
+            <span className="val flex items-center gap-2">
+              {session ? <SessionCode session={session} className="!text-[16px]" /> : null}
+              <span className="font-normal">{req.project}</span>
+            </span>
+          </span>
+          <span>
+            <span className="lbl">Waiting</span>
+            <span className="val">{age(req.createdAt, now)}</span>
+          </span>
+          <span className="min-w-0">
+            <span className="lbl">Held by rule</span>
+            <span className="val mono !text-[14px] [overflow-wrap:anywhere]">
+              {req.verdict.ruleId}
+            </span>
+          </span>
+          <span className="ml-auto self-center">
+            <RiskBadge risk={req.verdict.risk} className="text-sm" />
+          </span>
+        </div>
+        <div className="grid content-start gap-4 p-5">
+          <h2 id={`t-${req.id}`} className="m-0 text-[22px]">
             {title}
           </h2>
-          <span className="text-mut">
-            {req.project} · {age(req.createdAt, now)} ago
-          </span>
-          <RiskBadge risk={req.verdict.risk} className="ml-auto text-sm" />
-        </div>
 
-        {planText ? (
-          <pre className="cmd" tabIndex={0} aria-label="The plan">
-            {planText}
-          </pre>
-        ) : (
-          <div>
-            <pre className="cmd" tabIndex={0} aria-label="What will run">
-              {shownParts.map((p, i) =>
-                p.hit ? (
-                  <mark key={i} className="seg">
-                    {p.text}
-                  </mark>
-                ) : (
-                  <span key={i}>{p.text}</span>
-                ),
-              )}
+          {planText ? (
+            <pre className="cmd" tabIndex={0} aria-label="The plan">
+              {planText}
             </pre>
-            <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13px] text-mut">
-              {segments.length > 0 ? (
-                <span>Underlined: the part that caused the escalation.</span>
-              ) : (
-                <span>No single part was flagged. The whole input is why it was escalated.</span>
-              )}
-              {long ? (
-                <button
-                  className="btn !min-h-6 !px-2 text-xs"
-                  aria-expanded={expanded}
-                  onClick={() => setExpanded((v) => !v)}
-                >
-                  {expanded
-                    ? "Show less"
-                    : `Show all (${lines} line${lines === 1 ? "" : "s"}, ${command.length.toLocaleString("en-GB")} characters)`}
-                </button>
-              ) : null}
-            </div>
-          </div>
-        )}
-
-        <dl className="m-0 grid grid-cols-[80px_1fr] gap-x-3 gap-y-1">
-          <dt className="text-mut">Where</dt>
-          <dd className="m-0 mono [overflow-wrap:anywhere]">
-            {req.cwd}
-            {targetPath(view.rawInput) ? (
-              <span className="block">Target: {targetPath(view.rawInput)}</span>
-            ) : null}
-          </dd>
-          <dt className="text-mut">Rule</dt>
-          <dd className="m-0 mono">{req.verdict.ruleId}</dd>
-          <dt className="text-mut">Why</dt>
-          <dd className="m-0">{req.verdict.reason}</dd>
-          <dt className="text-mut">Status</dt>
-          <dd className="m-0">
-            {PHONE_TEXT[view.phone]}
-            {phoneExpiry && view.phone !== "none" ? `, expires ${phoneExpiry}` : ""}. Desktop times
-            out at {hardDeadline}.
-          </dd>
-        </dl>
-
-        {panel === "deny" ? (
-          <div className="grid gap-2" role="group" aria-label="Deny with a message to Claude">
-            <label htmlFor={`m-${req.id}`}>Message to Claude</label>
-            <textarea
-              id={`m-${req.id}`}
-              className="field"
-              rows={2}
-              maxLength={500}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button className="btn btn-deny" disabled={busy} onClick={() => void deny(message)}>
-                Deny with message
-              </button>
-              <button className="btn" onClick={() => setPanel("none")}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {panel === "edit" ? (
-          <div className="grid gap-2" role="group" aria-label="Edit then allow">
-            <label htmlFor={`e-${req.id}`}>
-              {isShell(req.toolName) ? "Command to run instead" : "Input to send instead (JSON)"}
-            </label>
-            <textarea
-              id={`e-${req.id}`}
-              className="field mono"
-              rows={Math.min(14, Math.max(3, edited.split("\n").length + 1))}
-              value={edited}
-              onChange={(e) => setEdited(e.target.value)}
-              spellCheck={false}
-              autoFocus
-            />
-            <p className="m-0 text-xs text-mut">
-              The edited input goes through the policy again. A deny blocks it.
-            </p>
-            <div className="flex gap-2">
-              <button
-                className="btn btn-primary"
-                disabled={busy || edited === command}
-                onClick={() => void allowEdited()}
-              >
-                Allow edited input
-              </button>
-              <button className="btn" onClick={() => setPanel("none")}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {panel === "remember" ? (
-          <div className="grid gap-2" role="group" aria-label="Remember this decision">
-            {!remember ? (
-              <p className="m-0 text-mut">Working out the narrowest rule…</p>
-            ) : remember.ok ? (
-              <>
-                <p className="m-0">This will add exactly one rule to your local policy:</p>
-                <pre className="cmd">{remember.preview}</pre>
-                <div className="flex gap-2">
+          ) : (
+            <div>
+              <pre className="cmd" tabIndex={0} aria-label="What will run">
+                {shownParts.map((p, i) =>
+                  p.hit ? (
+                    <mark key={i} className="seg">
+                      {p.text}
+                    </mark>
+                  ) : (
+                    <span key={i}>{p.text}</span>
+                  ),
+                )}
+              </pre>
+              <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13px] text-mut">
+                {segments.length > 0 ? (
+                  <span>Underlined: the part that caused the escalation.</span>
+                ) : (
+                  <span>No single part was flagged. The whole input is why it was escalated.</span>
+                )}
+                {long ? (
                   <button
-                    className="btn btn-primary"
-                    disabled={busy}
-                    onClick={() => void run({ type: "approve", requestId: req.id, remember: true })}
+                    className="btn !min-h-6 !px-2 text-xs"
+                    aria-expanded={expanded}
+                    onClick={() => setExpanded((v) => !v)}
                   >
-                    Allow once and remember
+                    {expanded
+                      ? "Show less"
+                      : `Show all (${lines} line${lines === 1 ? "" : "s"}, ${command.length.toLocaleString("en-GB")} characters)`}
                   </button>
-                  <button className="btn" onClick={() => setPanel("none")}>
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="m-0">Nothing can be remembered here. {remember.reason}</p>
-                <div>
-                  <button className="btn" onClick={() => setPanel("none")}>
-                    Close
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        ) : null}
+                ) : null}
+              </div>
+            </div>
+          )}
 
-        {error ? (
-          <p role="alert" className="m-0 font-semibold text-sev">
-            {error}
-          </p>
-        ) : null}
+          <dl className="m-0 grid grid-cols-[80px_1fr] gap-x-3 gap-y-1">
+            <dt className="text-mut">Where</dt>
+            <dd className="m-0 mono [overflow-wrap:anywhere]">
+              {req.cwd}
+              {targetPath(view.rawInput) ? (
+                <span className="block">Target: {targetPath(view.rawInput)}</span>
+              ) : null}
+            </dd>
+            <dt className="text-mut">Why</dt>
+            <dd className="m-0">{req.verdict.reason}</dd>
+            <dt className="text-mut">Status</dt>
+            <dd className="m-0">
+              {PHONE_TEXT[view.phone]}
+              {phoneExpiry && view.phone !== "none" ? `, expires ${phoneExpiry}` : ""}. Desktop
+              times out at {hardDeadline}.
+            </dd>
+          </dl>
+
+          {panel === "deny" ? (
+            <div className="grid gap-2" role="group" aria-label="Deny with a message to Claude">
+              <label htmlFor={`m-${req.id}`}>Message to Claude</label>
+              <textarea
+                id={`m-${req.id}`}
+                className="field"
+                rows={2}
+                maxLength={500}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button className="btn btn-deny" disabled={busy} onClick={() => void deny(message)}>
+                  Deny with message
+                </button>
+                <button className="btn" onClick={() => setPanel("none")}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {panel === "edit" ? (
+            <div className="grid gap-2" role="group" aria-label="Edit then allow">
+              <label htmlFor={`e-${req.id}`}>
+                {isShell(req.toolName) ? "Command to run instead" : "Input to send instead (JSON)"}
+              </label>
+              <textarea
+                id={`e-${req.id}`}
+                className="field mono"
+                rows={Math.min(14, Math.max(3, edited.split("\n").length + 1))}
+                value={edited}
+                onChange={(e) => setEdited(e.target.value)}
+                spellCheck={false}
+                autoFocus
+              />
+              <p className="m-0 text-xs text-mut">
+                The edited input goes through the policy again. A deny blocks it.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  className="btn btn-primary"
+                  disabled={busy || edited === command}
+                  onClick={() => void allowEdited()}
+                >
+                  Allow edited input
+                </button>
+                <button className="btn" onClick={() => setPanel("none")}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {panel === "remember" ? (
+            <div className="grid gap-2" role="group" aria-label="Remember this decision">
+              {!remember ? (
+                <p className="m-0 text-mut">Working out the narrowest rule…</p>
+              ) : remember.ok ? (
+                <>
+                  <p className="m-0">This will add exactly one rule to your local policy:</p>
+                  <pre className="cmd">{remember.preview}</pre>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn btn-primary"
+                      disabled={busy}
+                      onClick={() =>
+                        void run({ type: "approve", requestId: req.id, remember: true })
+                      }
+                    >
+                      Allow once and remember
+                    </button>
+                    <button className="btn" onClick={() => setPanel("none")}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="m-0">Nothing can be remembered here. {remember.reason}</p>
+                  <div>
+                    <button className="btn" onClick={() => setPanel("none")}>
+                      Close
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="m-0 font-semibold text-sev">
+              {error}
+            </p>
+          ) : null}
+        </div>
       </div>
 
-      <aside
-        aria-label="Decision"
-        className="grid content-start gap-2.5 border-l border-line bg-s2 p-5 max-[1100px]:border-l-0 max-[1100px]:border-t"
-      >
+      <aside aria-label="Decision" className="pass-stub grid content-start gap-2.5 p-5">
         <div role="status" aria-live="polite" className="m-0 font-semibold empty:hidden">
           {resolved ? resolved.summary : ""}
         </div>

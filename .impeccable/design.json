@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T14:00:00Z",
+  "title": "Design System: Jean-Claude Van Code (JCVC)",
+  "extensions": {
+    "colorMeta": {
+      "shell-slate": {
+        "role": "neutral",
+        "displayName": "Shell Slate",
+        "canonical": "oklch(25.5% 0.028 254)",
+        "tonalRamp": [
+          "oklch(13.5% 0.02 254)",
+          "oklch(25.5% 0.028 254)",
+          "oklch(31% 0.032 254)",
+          "oklch(37% 0.034 254)"
+        ]
+      },
+      "gate-blue": {
+        "role": "primary",
+        "displayName": "Gate Blue",
+        "canonical": "oklch(47% 0.15 258)",
+        "tonalRamp": ["oklch(47% 0.15 258)", "oklch(75% 0.12 255)"]
+      },
+      "signage-yellow": {
+        "role": "secondary",
+        "displayName": "Signage Yellow",
+        "canonical": "oklch(86.5% 0.165 94)",
+        "tonalRamp": [
+          "oklch(96.5% 0.06 96)",
+          "oklch(93.5% 0.09 96)",
+          "oklch(86.5% 0.165 94)",
+          "oklch(29% 0.06 92)"
+        ]
+      },
+      "risk-red": {
+        "role": "error",
+        "displayName": "Risk Red",
+        "canonical": "oklch(46% 0.18 27)",
+        "tonalRamp": ["oklch(46% 0.18 27)", "oklch(76% 0.14 27)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page titles." },
+      "board": {
+        "displayName": "Board",
+        "purpose": "Board rows, time cells and session names, with tabular figures."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "The small word above a value on the approval pass."
+      },
+      "body": { "displayName": "Body", "purpose": "Explanations and help." },
+      "code": { "displayName": "Code", "purpose": "Commands, paths and rule ids." }
+    },
+    "shadows": [
+      {
+        "name": "selected-row",
+        "value": "inset 0 0 0 1px color-mix(in srgb, var(--c-acc) 45%, transparent)",
+        "purpose": "The selected board row's outline. There are no drop shadows."
+      },
+      {
+        "name": "rail-current",
+        "value": "inset 0 -2px 0 var(--c-sign)",
+        "purpose": "The current rail item's underline."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-out-expo",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Every state transition."
+      },
+      {
+        "name": "flap",
+        "value": "0.46s rotateX(-88deg) to 0",
+        "purpose": "A new request's time cell flips in, like a departures board line. Removed under reduced motion."
+      }
+    ],
+    "breakpoints": [
+      { "name": "rail-to-tabs", "value": "900px" },
+      { "name": "board-stacks", "value": "1000px" },
+      { "name": "pass-stacks", "value": "1100px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Needs you pill",
+      "kind": "chip",
+      "refersTo": "needs-you-pill",
+      "description": "Header counter. Slate when nothing waits, signage yellow when something does.",
+      "html": "<button class=\"ds-pill\" data-on>Needs you <span class=\"n\">3</span></button>",
+      "css": ".ds-pill{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:2px 4px 2px 12px;border:0;border-radius:4px;background:oklch(31% 0.032 254);color:oklch(96.5% 0.006 250);font:600 14px Bahnschrift,'Segoe UI',sans-serif}.ds-pill .n{min-width:26px;padding:1px 7px;border-radius:3px;background:oklch(25.5% 0.028 254);text-align:center}.ds-pill[data-on]{background:oklch(86.5% 0.165 94);color:oklch(21% 0.03 85)}.ds-pill[data-on] .n{background:oklch(21% 0.03 85);color:oklch(86.5% 0.165 94)}"
+    },
+    {
+      "name": "Board row",
+      "kind": "custom",
+      "refersTo": "board-time-lit",
+      "description": "A waiting request on the board. Lit until you have seen it.",
+      "html": "<button class=\"ds-row\" data-lit><span class=\"t\">2 min</span><span><b>AT 830</b> atlas<br>Run shell command</span></button>",
+      "css": ".ds-row{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;width:320px;min-height:56px;padding:8px 14px;border:0;border-bottom:1px solid oklch(87.5% 0.011 250);background:#fff;text-align:left;font:500 15px Bahnschrift,'Segoe UI',sans-serif}.ds-row[data-lit]{background:oklch(96.5% 0.06 96)}.ds-row .t{display:grid;place-items:center;min-width:54px;height:32px;border-radius:3px;background:oklch(95.2% 0.007 250);font-weight:600}.ds-row[data-lit] .t{background:oklch(86.5% 0.165 94);color:oklch(21% 0.03 85)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Departures",
+    "overview": "What needs you is a departures board: waiting requests line up oldest first, a new one flips in and stays lit in signage yellow until you have looked at it, and the request you open is a boarding pass with a perforated decision stub. The shell is committed slate in both themes; colour does jobs (yellow needs you, blue acts, red is risk).",
+    "keyCharacteristics": [
+      "Committed slate shell",
+      "Signage yellow reserved for what needs you",
+      "Session codes with ribbon colours",
+      "Board rows and the approval pass",
+      "One authored motion: the arrival flip"
+    ],
+    "rules": [
+      {
+        "name": "The One Yellow Rule",
+        "body": "Signage yellow appears only where something needs you.",
+        "section": "colors"
+      },
+      {
+        "name": "Risk Is Never Colour Alone",
+        "body": "A word, a number and a shape on every risk band.",
+        "section": "colors"
+      },
+      {
+        "name": "Sentence Case Everywhere",
+        "body": "No uppercase tracked labels.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Keep yellow for what needs you",
+      "Show a session's code wherever it is named",
+      "Use tabular figures",
+      "Keep risk as word, number and shape"
+    ],
+    "donts": [
+      "Imitate Claude Code or claude.ai",
+      "Add drop shadows, glass, gradients or glow",
+      "Use uppercase tracked labels or kickers",
+      "Add hover tooltips",
+      "Make Deny red"
+    ]
+  }
+}

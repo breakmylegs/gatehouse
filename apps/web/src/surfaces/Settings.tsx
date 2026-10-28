@@ -119,8 +119,12 @@ export function Settings() {
   if (!data) return <p className="p-6 text-mut">Loading…</p>
 
   return (
-    <form onSubmit={save} className="mx-auto grid max-w-[760px] gap-6 p-6" aria-label="Settings">
-      <h1 className="m-0 text-[22px] font-semibold">Settings</h1>
+    <form
+      onSubmit={save}
+      className="sheet mx-auto grid max-w-[1040px] gap-0 p-6"
+      aria-label="Settings"
+    >
+      <h1 className="m-0">Settings</h1>
       {restart ? (
         <p role="status" className="panel m-0 p-3 font-semibold">
           Saved. Restart JCVC for these changes to take effect.

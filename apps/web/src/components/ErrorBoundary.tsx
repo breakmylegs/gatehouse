@@ -16,7 +16,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error?: 
     if (!this.state.error) return this.props.children
     return (
       <main role="alert" className="mx-auto mt-24 grid max-w-xl gap-3 p-6">
-        <h1 className="m-0 text-[22px] font-semibold">This screen stopped working</h1>
+        <h1 className="m-0">This screen stopped working</h1>
         <p className="m-0">
           Nothing was decided or changed by this. Pending requests are still waiting in the Host and
           your phone can still answer them. Reload to carry on.
