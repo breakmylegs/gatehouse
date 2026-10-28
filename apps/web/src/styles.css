@@ -588,3 +588,48 @@ mark.seg {
 .help-body strong {
   font-weight: 600;
 }
+
+/* A workspace pane. When it is narrow (split view, or a small window) the files rail folds behind a button, and an
+   open file takes the transcript's place rather than squeezing it. */
+.pane {
+  container-type: inline-size;
+}
+.pane-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+.pane[data-viewer] .pane-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) 290px;
+}
+.pane-rail {
+  display: grid;
+}
+.pane-rail-toggle {
+  display: none;
+}
+@container (max-width: 980px) {
+  .pane-body,
+  .pane[data-viewer] .pane-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pane[data-viewer] .pane-transcript {
+    display: none;
+  }
+  .pane-rail {
+    display: none;
+  }
+  .pane-rail-toggle {
+    display: inline-flex;
+  }
+  .pane[data-rail="open"] .pane-rail {
+    display: grid;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 5;
+    width: min(320px, 92%);
+    box-shadow: -8px 0 24px color-mix(in srgb, #000 18%, transparent);
+  }
+}

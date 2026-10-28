@@ -79,6 +79,11 @@ export interface State {
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
   selectSession: (id: string | undefined) => void
+  /** Sessions shown side by side in the workspace, left to right. At most three. */
+  panes: string[]
+  setPane: (index: number, id: string) => void
+  openBeside: (id: string) => void
+  closePane: (index: number) => void
   selectRequest: (id: string | undefined) => void
   setTheme: (t: "light" | "dark") => void
   setNotify: (on: boolean) => void
@@ -130,7 +135,35 @@ export const useStore = create<State>((set, get) => ({
   jcPic: localStorage.getItem("gatehouse.jcpic") || "auto",
 
   setRoute: (route) => set({ route }),
-  selectSession: (selectedSession) => set({ selectedSession }),
+  selectSession: (selectedSession) =>
+    set((s) => ({
+      selectedSession,
+      // Opening a session shows it in the first pane, unless it is already on screen.
+      panes:
+        selectedSession === undefined || s.panes.includes(selectedSession)
+          ? s.panes
+          : [selectedSession, ...s.panes.slice(1)],
+    })),
+  panes: [],
+  setPane: (index, id) =>
+    set((s) => {
+      const panes = [...s.panes]
+      const at = panes.indexOf(id)
+      if (at >= 0 && at !== index) panes[at] = panes[index] ?? id
+      panes[index] = id
+      return { panes, selectedSession: index === 0 ? id : s.selectedSession }
+    }),
+  openBeside: (id) =>
+    set((s) => {
+      // With nothing split yet, the session on screen is the first pane.
+      const base = s.panes.length ? s.panes : s.selectedSession ? [s.selectedSession] : []
+      return base.includes(id) || base.length >= 3 ? { panes: base } : { panes: [...base, id] }
+    }),
+  closePane: (index) =>
+    set((s) => {
+      const panes = s.panes.filter((_, i) => i !== index)
+      return { panes, selectedSession: panes[0] }
+    }),
   selectRequest: (selectedRequest) => set({ selectedRequest }),
   setTheme: (theme) => {
     localStorage.setItem("gatehouse.theme", theme)

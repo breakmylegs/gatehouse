@@ -63,6 +63,7 @@ export function Sessions() {
   const usage = useStore((s) => s.usage)
   const setRoute = useStore((s) => s.setRoute)
   const selectSession = useStore((s) => s.selectSession)
+  const openBeside = useStore((s) => s.openBeside)
   const [cwd, setCwd] = useState("")
   const [model, setModel] = useState("")
   const [mode, setMode] = useState<UiMode>("default")
@@ -253,6 +254,16 @@ export function Sessions() {
                     }}
                   >
                     Open
+                  </button>
+                  <button
+                    className="btn ml-2"
+                    aria-label={`Open ${s.project} beside the sessions already open`}
+                    onClick={() => {
+                      openBeside(s.id)
+                      setRoute("workspace")
+                    }}
+                  >
+                    Beside
                   </button>
                 </td>
               </tr>

@@ -363,3 +363,10 @@ Owner requests, and what was done or decided:
 - **Local browser** in the same pane for a dev server on this computer; the address must be localhost or 127.0.0.1.
 - **Safety.** Everything is read-only and stays inside the session folder by real path, so `..` and junctions cannot lead out. A file the floor would refuse to read (secrets, keys) is shown as Not shown and never sent. Page previews are served at `/preview/<token>/...` with a per-folder random token, a sandbox content security policy, and the floor check on every file.
 - **Tests.** `apps/host/test/files.test.ts` (listing, `..` and junction refused, secrets blocked, binary, preview sandbox and token, reveal), proved by switching the inside-the-folder check off (three tests failed). `apps/web/test/files.test.tsx` (changed files from the transcript, the tree, markdown, code, blocked, preview, local addresses only).
+
+## Phase 19: split view (28 Oct)
+
+- **Up to three sessions side by side** in the workspace, each a full pane with its own header (model, effort, mode, Interrupt), transcript, files, viewer and composer. Open beside (in the last pane's header) adds one; Close pane removes one; switching a pane to a session already on screen swaps the two. Sessions has a Beside button. Opening a session from elsewhere puts it in the first pane unless it is already shown.
+- **Narrow panes** (container query at 980px): the files rail folds behind Files and plan, which opens it over the pane, and an open file takes the transcript's place.
+- **Found and fixed while testing.** The composer had a fixed id, so two panes would have shared one label; it now has its own id per pane. Opening beside from a single session replaced it instead of adding; fixed and covered by a test.
+- **Tests.** `apps/web/test/split.test.tsx` (open beside, three at most, close, swap, opening from elsewhere).

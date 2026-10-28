@@ -1,7 +1,7 @@
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { diffLines } from "diff"
-import { memo, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import { Virtuoso } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
@@ -35,29 +35,24 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/close", help: "End this session" },
 ]
 
+/** The workspace: one session, or up to three side by side, each with its own transcript, files and composer. */
 export function Workspace() {
   const sessions = useStore((s) => s.sessions)
+  const storePanes = useStore((s) => s.panes)
   const selected = useStore((s) => s.selectedSession)
   const selectSession = useStore((s) => s.selectSession)
   const setRoute = useStore((s) => s.setRoute)
-  const selectRequest = useStore((s) => s.selectRequest)
-  const transcript =
-    useStore((s) => (selected ? s.transcripts[selected] : undefined)) ?? emptyTranscript()
-  const allPending = usePending()
-  const pending = useMemo(
-    () => allPending.filter((p) => p.request.sessionId === selected),
-    [allPending, selected],
-  )
+  const setPane = useStore((s) => s.setPane)
   const sessionList = useSessionList()
   const list = useMemo(
     () => [...sessionList].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [sessionList],
   )
-  const session = selected ? sessions[selected] : undefined
-  const [opened, setOpened] = useState<Opened>()
-  const [side, setSide] = useState<"files" | "plan">("files")
-  // A file from one session is never shown in another.
-  useEffect(() => setOpened(undefined), [selected])
+  const panes = useMemo(() => {
+    const live = storePanes.filter((id) => sessions[id])
+    return live.length ? live : selected && sessions[selected] ? [selected] : []
+  }, [storePanes, sessions, selected])
+  const session = panes[0] ? sessions[panes[0]] : undefined
 
   if (!session) {
     return (
@@ -100,11 +95,116 @@ export function Workspace() {
     )
   }
 
+  return (
+    <div
+      className="grid h-full min-h-0 divide-x divide-line"
+      style={{ gridTemplateColumns: `repeat(${panes.length}, minmax(0, 1fr))` }}
+    >
+      {panes.map((id, i) => (
+        <SessionPane
+          key={`${i}:${id}`}
+          sessionId={id}
+          onChangeSession={(next) => setPane(i, next)}
+          controls={<PaneControls index={i} current={id} panes={panes} list={list} />}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** Open another session beside this one, or close this pane. */
+function PaneControls({
+  index,
+  current,
+  panes,
+  list,
+}: {
+  index: number
+  current: string
+  panes: string[]
+  list: SessionInfo[]
+}) {
+  const openBeside = useStore((s) => s.openBeside)
+  const closePane = useStore((s) => s.closePane)
+  const others = list.filter((s) => !panes.includes(s.id))
+  const last = index === panes.length - 1
+  return (
+    <span className="flex items-center gap-2">
+      {last && panes.length < 3 && others.length > 0 ? (
+        <label className="flex items-center gap-1">
+          <span className="sr-only">Open another session beside this one</span>
+          <select
+            className="field"
+            value=""
+            onChange={(e) => e.target.value && openBeside(e.target.value)}
+          >
+            <option value="">Open beside…</option>
+            {others.map((s) => (
+              <option key={s.id} value={s.id}>
+                {sessionCode(s)} {s.project}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      {panes.length > 1 ? (
+        <button
+          type="button"
+          className="btn"
+          aria-label={`Close the pane for ${current}`}
+          onClick={() => closePane(index)}
+        >
+          Close pane
+        </button>
+      ) : null}
+    </span>
+  )
+}
+
+function SessionPane({
+  sessionId,
+  onChangeSession,
+  controls,
+}: {
+  sessionId: string
+  onChangeSession: (id: string) => void
+  controls: React.ReactNode
+}) {
+  const sessions = useStore((s) => s.sessions)
+  const selected = sessionId
+  const setRoute = useStore((s) => s.setRoute)
+  const selectRequest = useStore((s) => s.selectRequest)
+  const transcript =
+    useStore((s) => (selected ? s.transcripts[selected] : undefined)) ?? emptyTranscript()
+  const allPending = usePending()
+  const pending = useMemo(
+    () => allPending.filter((p) => p.request.sessionId === selected),
+    [allPending, selected],
+  )
+  const sessionList = useSessionList()
+  const list = useMemo(
+    () => [...sessionList].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    [sessionList],
+  )
+  const session = selected ? sessions[selected] : undefined
+  const [opened, setOpened] = useState<Opened>()
+  const [side, setSide] = useState<"files" | "plan">("files")
+  // A file from one session is never shown in another.
+  useEffect(() => setOpened(undefined), [selected])
+
+  const [railOpen, setRailOpen] = useState(false)
+  if (!session) return null
+
   const running = session.state === "running" || session.state === "waiting"
   const ended = session.state === "ended" || session.state === "error"
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr_auto] max-[900px]:grid-rows-[auto_1fr_auto]">
+    <div
+      className="pane relative grid h-full min-w-0 grid-rows-[auto_1fr_auto]"
+      data-rail={railOpen ? "open" : undefined}
+      data-viewer={opened ? "" : undefined}
+      aria-label={`Session ${session.project}`}
+    >
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-s1 px-4 py-2.5">
         <SessionCode session={session} className="!text-[17px]" />
         <div className="grid min-w-[220px] flex-1 gap-0.5">
@@ -113,7 +213,7 @@ export function Workspace() {
             <select
               className="field"
               value={session.id}
-              onChange={(e) => selectSession(e.target.value)}
+              onChange={(e) => onChangeSession(e.target.value)}
             >
               {list.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -192,17 +292,19 @@ export function Workspace() {
         >
           Interrupt
         </button>
+        <button
+          type="button"
+          className="btn pane-rail-toggle"
+          aria-expanded={railOpen}
+          onClick={() => setRailOpen((v) => !v)}
+        >
+          Files and plan
+        </button>
+        {controls}
       </header>
 
-      <div
-        className={clsx(
-          "grid min-h-0 max-[1100px]:grid-cols-1",
-          opened
-            ? "grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)_290px]"
-            : "grid-cols-[minmax(0,1fr)_290px]",
-        )}
-      >
-        <section aria-label="Transcript" className="min-h-0">
+      <div className="pane-body min-h-0">
+        <section aria-label="Transcript" className="pane-transcript min-h-0">
           <Virtuoso
             style={{ height: "100%" }}
             data={transcript.items}
@@ -234,7 +336,7 @@ export function Workspace() {
         ) : null}
         <aside
           aria-label="Files and plan"
-          className="hidden min-h-0 grid-rows-[auto_1fr] border-l border-line bg-s1 min-[1100px]:grid"
+          className="pane-rail min-h-0 grid-rows-[auto_1fr] border-l border-line bg-s1"
         >
           <div role="tablist" aria-label="Side panel" className="flex border-b border-line px-2">
             {(["files", "plan"] as const).map((t) => (
@@ -298,6 +400,8 @@ export function Workspace() {
 }
 
 function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolean }) {
+  // One composer per pane in split view, so its id must be its own.
+  const composerId = useId()
   const [text, setText] = useState("")
   const [active, setActive] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)
@@ -390,11 +494,11 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
           ))}
         </ul>
       ) : null}
-      <label htmlFor="composer" className="sr-only">
+      <label htmlFor={composerId} className="sr-only">
         Prompt
       </label>
       <textarea
-        id="composer"
+        id={composerId}
         ref={area}
         className="field w-full resize-y"
         rows={2}

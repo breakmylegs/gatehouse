@@ -82,6 +82,10 @@ Sessions waiting on you are lit and come first. Each has a code and colour that 
 
 Claude's replies, the tools it used and their results appear in order. Tool calls show what ran and whether it was allowed.
 
+**Side by side**
+
+Open beside, at the right of a session's header, shows another session next to it; up to three fit. Each has its own transcript, files and composer. Close pane removes one. On Sessions, Beside opens a session next to the ones already open. When a pane is narrow, Files and plan opens the side panel over it, and an open file takes the transcript's place until you close it.
+
 **Files**
 
 The Files tab on the right lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
