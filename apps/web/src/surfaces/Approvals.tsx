@@ -143,7 +143,7 @@ export function Approvals() {
       <section
         ref={card}
         aria-label="Selected request"
-        className="min-h-0 min-w-0 overflow-auto p-6"
+        className="pass-wrap min-h-0 min-w-0 overflow-auto p-6"
       >
         {view ? (
           <div className="mx-auto max-w-[1100px]">

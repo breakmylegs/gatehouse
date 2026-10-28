@@ -140,8 +140,8 @@ export function Setup() {
           <ul className="m-0 grid gap-1 pl-5 text-mut">
             <li>An iPhone with iOS 16.4 or newer, and Safari.</li>
             <li>
-              The phone Relay running at a secure (https) address your phone can reach. The steps
-              are in docs/relay-local.md.
+              The phone Relay running at a secure (https) address your phone can reach. Press F1 for
+              the steps.
             </li>
             <li>
               In Safari, Share, then Add to Home Screen. Notifications only work from the Home

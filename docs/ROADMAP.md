@@ -22,6 +22,17 @@ From the app's own behaviour, the screens the owner has shared, and its document
 12. **Settings and preferences**: notifications, keep awake, auto-archive, branch prefix, output style, theme.
 13. **Search and history**: search across session transcripts, export a transcript.
 
+### Confirmed detail (research rerun on Opus 5.5, 28 Oct)
+
+- Permission modes and their wording: Manual (asks before edits or commands), Accept edits (accepts file edits and common filesystem commands, still asks before other terminal commands), Plan (explores and proposes without editing), Auto (a background classifier checks each action), Bypass permissions (only with "Allow bypass permissions mode" turned on). The choice is remembered per folder.
+- Effort: low, medium, high, xhigh (shown as Extra high) and max (Max, current session only). The model and effort share one menu.
+- Panes: drag, resize and pop out; split view by Alt-clicking a session; a file tree with tabs; a diff view with line comments; a browser pane for dev servers from `.claude/launch.json` with element picking; a terminal with tabs; a background tasks list; a side chat (`/btw`) that is not saved.
+- Composer: the plus menu (files or photos, folder, skills, connectors, plugins, slash commands), drag and drop of images and PDFs, `@` file mentions, queued messages you can reorder, prompt suggestions accepted with Tab, voice.
+- Sessions: Ctrl+K searches all sessions including archived ones; pin, group, archive, delete; nested sessions that report back; resume CLI sessions; scheduled tasks with history and their own mode and model.
+- System: notifications when a session you are not viewing finishes, a tray icon that asks before quitting while work is running, and keep awake while Claude works.
+
+Source: Anthropic's documentation for the desktop app (code.claude.com/docs/en/desktop, permission-modes, model-config, desktop-scheduled-tasks) and the desktop release notes.
+
 ## What JCVC already has
 
 Sessions list and workspace, model and mode choice, plan, approvals with the Approver, diff in approvals, checkpoints and restore, audit, policy, insights, phone approvals, setup wizard, sign-in from the app, folder chooser, Jean-Claude mode, usage and cost.
@@ -47,3 +58,9 @@ Sessions list and workspace, model and mode choice, plan, approvals with the App
 | 10 | **Voice input, queued messages, `@` mentions** | |
 
 Items 1 to 5 are the next ones to build. Items 6 to 10 are designed after those ship.
+
+## Progress
+
+- **Done (28 Oct):** 1 per-session controls (mode, effort, model, Extreme approval per session); 1d built-in user guide and help pane on every page (F1); Windows notification from the tray when a decision is waiting, sent by the Host itself so it works while the window is hidden or minimised; the Departures visual identity across the desktop app.
+- **Next:** 1b Approver workbench, 1c preseeded rule library, 1e Relay inside the app, then 2 files panel and 3 inbuilt browser, 4 split view, 5 composer plus menu.
+- **Research:** the notes above were checked against Anthropic's documentation for the Claude desktop Code tab (code.claude.com/docs/en/desktop and related pages) on 28 Oct.

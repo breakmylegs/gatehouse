@@ -195,6 +195,7 @@ internal sealed class MainForm : Form
                 if (ev.Data == null) return;
                 Match m = Hosting.ReadyLine.Match(ev.Data);
                 if (m.Success) OnUi(delegate { OnHostReady(m.Groups[1].Value); });
+                else if (ev.Data.Contains("\"event\":\"attention\"")) OnUi(delegate { Attention(); });
                 else Remember(ev.Data);
             };
             host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
@@ -407,9 +408,14 @@ internal sealed class MainForm : Form
         TopMost = false;
     }
 
+    private DateTime lastAttention = DateTime.MinValue;
+
     private void Attention()
     {
         if (ContainsFocus && Visible && WindowState != FormWindowState.Minimized) return;
+        // The Host's line and the page can both report the same request; show one notification for it.
+        if ((DateTime.UtcNow - lastAttention).TotalSeconds < 3) return;
+        lastAttention = DateTime.UtcNow;
         try
         {
             FlashInfo fi = new FlashInfo();
@@ -421,7 +427,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception) { }
         // No detail in the balloon: it can show on a locked screen or be mirrored.
-        tray.ShowBalloonTip(5000, "Jean-Claude Van Code", "Something needs your decision.", ToolTipIcon.Warning);
+        tray.ShowBalloonTip(8000, "JCVC: a decision is waiting", "Open JCVC from the tray icon to decide. Your phone was told too if one is paired.", ToolTipIcon.Warning);
     }
 
     private void Quit()

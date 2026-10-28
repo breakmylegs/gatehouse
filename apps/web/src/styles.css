@@ -456,7 +456,11 @@ mark.seg {
   bottom: -11px;
   clip-path: inset(0 0 50% 0);
 }
-@media (max-width: 1100px) {
+/* The pass stacks when its own column is narrow, for example with the help pane open. */
+.pass-wrap {
+  container-type: inline-size;
+}
+@container (max-width: 780px) {
   .pass {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -548,4 +552,39 @@ mark.seg {
   .sheet fieldset > :not(legend) {
     grid-column: 1;
   }
+}
+
+/* Help: the pane on the right of every page, and the user guide. */
+.help-pane {
+  width: 380px;
+}
+@media (max-width: 1200px) {
+  .help-pane {
+    width: 320px;
+  }
+}
+.help-body {
+  max-width: 72ch;
+  line-height: 1.6;
+}
+.help-body p,
+.help-body ul,
+.help-body ol {
+  margin: 0 0 12px;
+}
+.help-body ul,
+.help-body ol {
+  padding-left: 20px;
+}
+.help-body ul {
+  list-style: disc;
+}
+.help-body ol {
+  list-style: decimal;
+}
+.help-body li + li {
+  margin-top: 4px;
+}
+.help-body strong {
+  font-weight: 600;
 }

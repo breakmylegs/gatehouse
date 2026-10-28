@@ -22,6 +22,7 @@ export type Route =
   | "settings"
   | "first-run"
   | "setup"
+  | "guide"
 
 export interface ResolvedView {
   id: string
@@ -67,6 +68,9 @@ export interface State {
   jcMode: boolean
   /** Requests you have looked at. A new one stays lit on the board until it is in here. */
   seen: Record<string, true>
+  /** The help pane on the right. */
+  helpOpen: boolean
+  setHelpOpen: (open: boolean) => void
   markSeen: (id: string) => void
   /** "auto", a built-in picture id, or "user:<file name>". */
   jcPic: string
@@ -118,6 +122,8 @@ export const useStore = create<State>((set, get) => ({
   notify: localStorage.getItem("gatehouse.notify") === "1",
   jcMode: localStorage.getItem("gatehouse.jcmode") === "1",
   seen: {},
+  helpOpen: false,
+  setHelpOpen: (helpOpen) => set({ helpOpen }),
   markSeen: (id) => set((s) => (s.seen[id] ? s : { seen: { ...s.seen, [id]: true } })),
   setupDone: localStorage.getItem("gatehouse.setup") === "done",
   jcPic: localStorage.getItem("gatehouse.jcpic") || "auto",

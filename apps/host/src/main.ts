@@ -13,6 +13,11 @@ const log = (line: string) => process.stderr.write(`[host] ${line}\n`)
 
 const host = createHost({ log, onHealthChanged: () => server.announceHealth() })
 const token = generateToken()
+// The window app shows a Windows notification from this line, so it works even while the page is hidden in the
+// tray or minimised. The line carries no detail: what the request is stays inside the app.
+host.app.broker.on("created", () => {
+  process.stdout.write(JSON.stringify({ event: "attention" }) + "\n")
+})
 const server = new HostServer({
   app: host.app,
   token,

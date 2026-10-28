@@ -7,6 +7,8 @@ import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
 import { Setup } from "./surfaces/Setup"
 import { JcvcBackdrop } from "./components/JcvcBackdrop"
+import { HelpPane } from "./components/HelpPane"
+import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
 import { type Route, send, usePendingCount, useStore } from "./store"
 
@@ -23,6 +25,7 @@ const NAV: Array<{ route: Route; label: string }> = [
   { route: "audit", label: "Audit log" },
   { route: "devices", label: "Devices" },
   { route: "settings", label: "Settings" },
+  { route: "guide", label: "User guide" },
 ]
 
 export function App() {
@@ -37,6 +40,20 @@ export function App() {
   const jcMode = useStore((s) => s.jcMode)
   const setupDone = useStore((s) => s.setupDone)
   const setJcMode = useStore((s) => s.setJcMode)
+  const helpOpen = useStore((s) => s.helpOpen)
+  const setHelpOpen = useStore((s) => s.setHelpOpen)
+
+  // F1 opens and closes the help for the page you are on.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "F1") {
+        e.preventDefault()
+        setHelpOpen(!useStore.getState().helpOpen)
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [setHelpOpen])
   const pendingCount = usePendingCount()
 
   useEffect(() => {
@@ -122,6 +139,9 @@ export function App() {
           </>
         ) : null}
         <span className="ml-auto" />
+        <button className="btn" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)}>
+          Help <kbd className="!border-shell-line !bg-shell-2 !text-shell-tx">F1</kbd>
+        </button>
         <button className="btn" aria-pressed={jcMode} onClick={() => setJcMode(!jcMode)}>
           Jean-Claude mode: {jcMode ? "on" : "off"}
         </button>
@@ -192,19 +212,23 @@ export function App() {
             ))}
           </ul>
         </nav>
-        <main id="main" tabIndex={-1} className="min-h-0 overflow-auto outline-none">
-          <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
-            {route === "approvals" && <Approvals />}
-            {route === "sessions" && <Sessions />}
-            {route === "workspace" && <Workspace />}
-            {route === "policy" && <Policy />}
-            {route === "audit" && <Audit />}
-            {route === "devices" && <Devices />}
-            {route === "settings" && <Settings />}
-            {route === "first-run" && <FirstRun />}
-            {route === "setup" && <Setup />}
-          </Suspense>
-        </main>
+        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto]">
+          <main id="main" tabIndex={-1} className="min-h-0 overflow-auto outline-none">
+            <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
+              {route === "approvals" && <Approvals />}
+              {route === "sessions" && <Sessions />}
+              {route === "workspace" && <Workspace />}
+              {route === "policy" && <Policy />}
+              {route === "audit" && <Audit />}
+              {route === "devices" && <Devices />}
+              {route === "settings" && <Settings />}
+              {route === "first-run" && <FirstRun />}
+              {route === "setup" && <Setup />}
+              {route === "guide" && <Guide />}
+            </Suspense>
+          </main>
+          <HelpPane />
+        </div>
       </div>
       <CommandPalette />
       <JcvcBackdrop />
