@@ -46,6 +46,12 @@ internal sealed class MainForm : Form
     private readonly Panel splash = new Panel();
     private readonly Label splashTitle = new Label();
     private readonly Label splashText = new Label();
+    // The start-up progress: a band across the foot of the picture with what is happening and a moving bar.
+    private readonly Panel splashBand = new Panel();
+    private readonly ProgressBar splashBar = new ProgressBar();
+    private readonly System.Windows.Forms.Timer splashClock = new System.Windows.Forms.Timer();
+    private readonly DateTime startedAt = DateTime.Now;
+    private volatile string stage = "Starting JCVC";
     private readonly NotifyIcon tray = new NotifyIcon();
     private readonly StringBuilder log = new StringBuilder();
     private readonly string dataDir;
@@ -91,22 +97,39 @@ internal sealed class MainForm : Form
             }
         }
         catch (Exception) { }
+        splashBand.Dock = DockStyle.Bottom;
+        splashBand.Height = 132;
+        splashBand.BackColor = Color.FromArgb(18, 22, 30);
+        splashBand.Padding = new Padding(28, 16, 28, 18);
         splashTitle.Text = "Jean-Claude Van Code";
-        splashTitle.Font = new Font("Segoe UI", 22f, FontStyle.Bold);
+        splashTitle.Font = new Font("Bahnschrift", 20f, FontStyle.Bold);
         splashTitle.ForeColor = Color.White;
-        splashTitle.BackColor = Color.FromArgb(150, 0, 0, 0);
-        splashTitle.AutoSize = true;
-        splashTitle.Location = new Point(48, 64);
-        splashText.Text = "Starting. The first start can take a minute.";
+        splashTitle.BackColor = Color.Transparent;
+        splashTitle.AutoSize = false;
+        splashTitle.Dock = DockStyle.Top;
+        splashTitle.Height = 38;
+        splashText.Text = "Starting JCVC. The first start can take a minute.";
         splashText.Font = new Font("Segoe UI", 11f);
-        splashText.ForeColor = Color.White;
+        splashText.ForeColor = Color.FromArgb(214, 220, 232);
         splashText.BackColor = Color.Transparent;
         splashText.AutoSize = false;
-        splashText.Location = new Point(52, 120);
-        splashText.Size = new Size(900, 400);
-        splashText.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
-        splash.Controls.Add(splashTitle);
-        splash.Controls.Add(splashText);
+        splashText.Dock = DockStyle.Fill;
+        splashBar.Style = ProgressBarStyle.Marquee;
+        splashBar.MarqueeAnimationSpeed = 28;
+        splashBar.Dock = DockStyle.Bottom;
+        splashBar.Height = 10;
+        splashBand.Controls.Add(splashText);
+        splashBand.Controls.Add(splashBar);
+        splashBand.Controls.Add(splashTitle);
+        splash.Controls.Add(splashBand);
+        // Each second: what it is doing now, and for how long, so a slow first start never looks stuck.
+        splashClock.Interval = 1000;
+        splashClock.Tick += delegate
+        {
+            int secs = (int)(DateTime.Now - startedAt).TotalSeconds;
+            splashText.Text = stage + ", " + secs + " second" + (secs == 1 ? "" : "s") + "." + (secs > 20 ? " The first start can take a minute." : "");
+        };
+        splashClock.Start();
         Controls.Add(splash);
         splash.BringToFront();
 
@@ -234,6 +257,11 @@ internal sealed class MainForm : Form
 
     private void Remember(string line)
     {
+        string l = line.ToLowerInvariant();
+        if (l.Contains("approver")) stage = "Starting the Approver, which decides requests";
+        else if (l.Contains("powershell") || l.Contains("pwsh")) stage = "Starting the PowerShell checker";
+        else if (l.Contains("relay")) stage = "Starting the phone Relay";
+        else if (l.Contains("policy")) stage = "Loading your rules";
         lock (log)
         {
             log.AppendLine(line);
@@ -256,6 +284,7 @@ internal sealed class MainForm : Form
     {
         url = readyUrl;
         hostReady = true;
+        stage = "Opening the window";
         try { hostOrigin = new Uri(url).GetLeftPart(UriPartial.Authority); } catch (Exception) { hostOrigin = null; }
         Say("Ready: " + hostOrigin);
         if (check)
@@ -300,6 +329,7 @@ internal sealed class MainForm : Form
         {
             if (!e.IsSuccess) { Fail("The window could not load the JCVC interface (" + e.WebErrorStatus + ")."); return; }
             splash.Visible = false;
+            splashClock.Stop();
             if (check) CheckPage();
         };
         TryNavigate();
@@ -329,7 +359,7 @@ internal sealed class MainForm : Form
     {
         if (!hostReady || !webReady || navigated) return;
         navigated = true;
-        splashText.Text = "Opening...";
+        stage = "Opening the window";
         web.CoreWebView2.Navigate(url);
     }
 
@@ -357,6 +387,8 @@ internal sealed class MainForm : Form
         // Without the WebView2 runtime the interface still works in the default browser. Say so, rather than doing it silently.
         Say("WebView2 is not available (" + why + ")");
         if (check) { Finish(1); return; }
+        splashClock.Stop();
+        splashBar.Visible = false;
         splashText.Text = "The Microsoft Edge WebView2 runtime is not available on this computer, so JCVC opened in your default browser instead. You can install the runtime from microsoft.com/edge/webview2 to get this window.";
         if (url != null) OpenExternal(url);
         else
@@ -382,7 +414,10 @@ internal sealed class MainForm : Form
         if (check) { Finish(1); return; }
         splash.Visible = true;
         splash.BringToFront();
-        splashTitle.ForeColor = Color.FromArgb(160, 30, 30);
+        splashClock.Stop();
+        splashBar.Visible = false;
+        splashBand.Height = Math.Max(260, ClientSize.Height / 2);
+        splashTitle.ForeColor = Color.FromArgb(255, 150, 140);
         splashText.Text = message + (t.Length > 0 ? "\r\n\r\nWhat it said:\r\n" + t : "") + "\r\n\r\nClose this window to leave.";
         if (!Visible) ShowWindow();
         quitting = true; // closing now really closes
