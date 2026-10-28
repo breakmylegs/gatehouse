@@ -329,6 +329,20 @@ export function createHost(opts: HostOptions = {}): Host {
       phone,
       usage,
       pickFolder: pickFolderWithWindows,
+      ...(spawnApprover
+        ? {
+            approver: {
+              state: () => approverProcess?.state ?? "stopped",
+              restart: async () => {
+                if (!approverProcess) throw new Error("the Approver has not started yet")
+                await approverProcess.stop()
+                await approverProcess.start()
+                await kill.syncApprover()
+                opts.onHealthChanged?.()
+              },
+            },
+          }
+        : {}),
     },
     phone,
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),

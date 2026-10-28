@@ -56,7 +56,36 @@ export interface AdminContext {
   phone?: PhoneService
   /** Opens the Windows folder chooser. Absent where there is no desktop (tests). */
   pickFolder?: FolderPicker
+  /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
+  approver?: {
+    state: () => string
+    restart: () => Promise<void>
+  }
 }
+
+/** What the Approver offers over MCP, in words, for the workbench. */
+export const APPROVER_TOOLS = [
+  {
+    name: "evaluate_permission",
+    purpose:
+      "Decides one permission request: allow, deny or escalate, with the rule id, the reason and a risk score.",
+  },
+  {
+    name: "explain_verdict",
+    purpose:
+      "Explains a rule by its id: what it matches, which section it belongs to, and why it exists.",
+  },
+  {
+    name: "policy_status",
+    purpose:
+      "Reports the policy hash, load errors, overlays, remembered rules, the PowerShell parser and the audit head.",
+  },
+  {
+    name: "approval_prompt",
+    purpose:
+      "The same decision for a headless Claude Code run, where anything that would wait is denied with a clear message.",
+  },
+] as const
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex")
 const MAX_REPLAY = 5000
@@ -368,6 +397,69 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       .header("cache-control", "no-store")
       .type(pictureTypes[path.extname(name).toLowerCase()] ?? "application/octet-stream")
       .send(fs.readFileSync(path.join(picturesDir(), name)))
+  })
+
+  app.get("/api/approver", async () => {
+    const status = ctx.store.status()
+    return {
+      state: ctx.approver?.state() ?? "up",
+      supervised: ctx.approver !== undefined,
+      policy: {
+        hash: ctx.store.current?.hash ?? null,
+        errors: status.errors,
+        overlays: Object.keys(ctx.store.current?.overlays ?? {}),
+        remembered: ctx.store.current?.remember.length ?? 0,
+      },
+      pwsh: {
+        running: ctx.pwsh?.running ?? false,
+        languageMode: ctx.pwsh?.languageMode ?? null,
+      },
+      tools: APPROVER_TOOLS,
+      recent: queryAudit(ctx.auditDir, { limit: 25, channel: "approver" }).records.map((r) => ({
+        seq: r.seq,
+        ts: r.ts,
+        tool: r.tool,
+        project: r.project ?? null,
+        outcome: r.verdict.outcome,
+        ruleId: r.verdict.ruleId,
+        reason: r.verdict.reason,
+        risk: r.verdict.risk,
+        latencyMs: r.latencyMs,
+      })),
+    }
+  })
+
+  // A restart goes through the supervisor, never around it. Calls made while it restarts escalate to you.
+  app.post("/api/approver/restart", async (_req, reply) => {
+    if (!ctx.approver)
+      return bad(
+        reply,
+        409,
+        "The Approver is not run by this Host, so it cannot be restarted here.",
+      )
+    const before = ctx.approver.state()
+    try {
+      await ctx.approver.restart()
+    } catch (e) {
+      return bad(reply, 500, `The Approver did not restart: ${(e as Error).message}`)
+    }
+    await ctx.audit.record({
+      session: "desktop",
+      event: "approver_restarted",
+      channel: "desktop",
+      tool: "approver",
+      input: { before },
+      verdict: {
+        outcome: "allow",
+        ruleId: "approver-restarted",
+        reason: "The Approver was restarted from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    return { ok: true, state: ctx.approver.state() }
   })
 
   app.post("/api/pick-folder", async (req, reply) => {

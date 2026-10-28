@@ -105,6 +105,30 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
 
 Rules are files on this computer. Changes are picked up straight away.`,
   },
+  approver: {
+    id: "approver",
+    title: "Approver",
+    body: `The Approver is the MCP server that decides each permission request. It runs on this computer next to JCVC and answers only JCVC, with a token that changes every time JCVC starts.
+
+**Status**
+
+- **State**: running, starting or not running. While it is not running, every request waits for you; nothing is allowed without it.
+- **Policy**: the fingerprint of the rules it is using, how many rules you remembered, and any problems loading the rules.
+- **PowerShell parser**: PowerShell commands are parsed by PowerShell itself. Without it they all wait for you.
+- **Restart the Approver** stops and starts it through its supervisor. The restart is recorded in the audit log.
+
+**Try a request**
+
+Type a command, file or address and see what the Approver would decide, which rule decided and why. Nothing runs and nothing is written to the audit log.
+
+**What it offers**
+
+The tools it answers over MCP: deciding a request, explaining a rule, reporting its status, and the same decision for headless runs.
+
+**What it decided lately**
+
+Its last 25 decisions, newest first, with the rule, the reason and how long it took.`,
+  },
   audit: {
     id: "audit",
     title: "Audit log",

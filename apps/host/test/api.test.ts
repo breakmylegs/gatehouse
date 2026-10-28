@@ -448,4 +448,49 @@ describe("insights endpoints", () => {
       ctx.env = before
     }
   })
+
+  it("reports the Approver's status, tools and recent decisions for the workbench", async () => {
+    const info = (await app.inject({ method: "GET", url: "/api/approver" })).json()
+    expect(info.supervised).toBe(false)
+    expect(info.tools.map((t: { name: string }) => t.name)).toEqual([
+      "evaluate_permission",
+      "explain_verdict",
+      "policy_status",
+      "approval_prompt",
+    ])
+    expect(info.recent.length).toBeGreaterThan(0)
+    expect(info.recent.every((r: { outcome: string }) => typeof r.outcome === "string")).toBe(true)
+    // Only the Approver's own decisions: none of the desktop's.
+    expect(JSON.stringify(info.recent)).not.toContain("npm install left-pad")
+  })
+
+  it("restarts the Approver only through its supervisor, and audits the restart", async () => {
+    expect((await app.inject({ method: "POST", url: "/api/approver/restart" })).statusCode).toBe(
+      409,
+    )
+    let restarts = 0
+    let state = "up"
+    ctx.approver = {
+      state: () => state,
+      restart: async () => {
+        restarts++
+        state = "up"
+      },
+    }
+    try {
+      const r = await app.inject({ method: "POST", url: "/api/approver/restart" })
+      expect(r.json()).toEqual({ ok: true, state: "up" })
+      expect(restarts).toBe(1)
+      const audit = (await app.inject({ method: "GET", url: "/api/audit?limit=5" })).json()
+      expect(JSON.stringify(audit)).toContain("approver-restarted")
+      ctx.approver.restart = async () => {
+        throw new Error("port in use")
+      }
+      const bad = await app.inject({ method: "POST", url: "/api/approver/restart" })
+      expect(bad.statusCode).toBe(500)
+      expect(bad.json().error).toContain("port in use")
+    } finally {
+      delete ctx.approver
+    }
+  })
 })

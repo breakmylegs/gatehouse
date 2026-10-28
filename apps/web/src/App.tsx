@@ -14,6 +14,7 @@ import { type Route, send, usePendingCount, useStore } from "./store"
 
 const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
 const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.Policy })))
+const Approver = lazy(() => import("./surfaces/Approver").then((m) => ({ default: m.Approver })))
 const Settings = lazy(() => import("./surfaces/Settings").then((m) => ({ default: m.Settings })))
 const Workspace = lazy(() => import("./surfaces/Workspace").then((m) => ({ default: m.Workspace })))
 
@@ -22,6 +23,7 @@ const NAV: Array<{ route: Route; label: string }> = [
   { route: "sessions", label: "Sessions" },
   { route: "workspace", label: "Workspace" },
   { route: "policy", label: "Policy" },
+  { route: "approver", label: "Approver" },
   { route: "audit", label: "Audit log" },
   { route: "devices", label: "Devices" },
   { route: "settings", label: "Settings" },
@@ -225,6 +227,7 @@ export function App() {
               {route === "first-run" && <FirstRun />}
               {route === "setup" && <Setup />}
               {route === "guide" && <Guide />}
+              {route === "approver" && <Approver />}
             </Suspense>
           </main>
           <HelpPane />

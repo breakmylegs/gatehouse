@@ -23,6 +23,7 @@ export type Route =
   | "first-run"
   | "setup"
   | "guide"
+  | "approver"
 
 export interface ResolvedView {
   id: string
