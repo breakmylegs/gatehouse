@@ -587,4 +587,53 @@ describe("insights endpoints", () => {
       }
     })
   })
+
+  it("starts the Relay inside JCVC, remembers it for next time, audits it, and forgets it on stop", async () => {
+    expect(
+      (await app.inject({ method: "POST", url: "/api/relay/local/start", payload: {} })).statusCode,
+    ).toBe(501)
+    let state: "off" | "running" = "off"
+    ctx.localRelay = {
+      status: () => ({ state, port: 8099, publicUrl: "https://x.ts.net" }),
+      start: async (publicUrl, port) => {
+        state = "running"
+        return { state, port, publicUrl: new URL(publicUrl).origin }
+      },
+      stop: async () => {
+        state = "off"
+      },
+    }
+    try {
+      const bad = await app.inject({
+        method: "POST",
+        url: "/api/relay/local/start",
+        payload: { port: 8099 },
+      })
+      expect(bad.statusCode).toBe(400)
+      const r = await app.inject({
+        method: "POST",
+        url: "/api/relay/local/start",
+        payload: { publicUrl: "https://x.ts.net", port: 8099 },
+      })
+      expect(r.json()).toMatchObject({ state: "running", port: 8099 })
+      expect(runningConfig.localRelay).toEqual({
+        enabled: true,
+        publicUrl: "https://x.ts.net",
+        port: 8099,
+      })
+      const saved = JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8"))
+      expect(saved.localRelay).toEqual({ enabled: true, publicUrl: "https://x.ts.net", port: 8099 })
+      const status = (await app.inject({ method: "GET", url: "/api/relay/local" })).json()
+      expect(status).toMatchObject({ state: "running", saved: { enabled: true } })
+      const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+      expect(log.body).toContain("relay-local-started")
+      await app.inject({ method: "POST", url: "/api/relay/local/stop" })
+      expect(runningConfig.localRelay).toBeUndefined()
+      expect(
+        JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).localRelay,
+      ).toBeUndefined()
+    } finally {
+      delete ctx.localRelay
+    }
+  })
 })

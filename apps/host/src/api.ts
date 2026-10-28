@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import type { LocalRelayStatus } from "./relay/local.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import type { FolderPicker } from "./folder-picker.js"
 import fs from "node:fs"
@@ -57,6 +58,12 @@ export interface AdminContext {
   phone?: PhoneService
   /** Opens the Windows folder chooser. Absent where there is no desktop (tests). */
   pickFolder?: FolderPicker
+  /** The phone Relay run inside JCVC. Absent in tests that do not need it. */
+  localRelay?: {
+    status: () => LocalRelayStatus
+    start: (publicUrl: string, port: number) => Promise<LocalRelayStatus>
+    stop: () => Promise<void>
+  }
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
   approver?: {
     state: () => string
@@ -462,6 +469,65 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       latencyMs: 0,
     })
     return { ok: true, state: ctx.approver.state() }
+  })
+
+  // The Relay run inside JCVC. Starting saves the choice so it starts again with JCVC; stopping clears it.
+  const saveLocalRelay = async (value: GatehouseConfig["localRelay"]) => {
+    const file = configPath(ctx.env)
+    const saved = fs.existsSync(file)
+      ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>)
+      : {}
+    if (value) saved.localRelay = value
+    else delete saved.localRelay
+    const parsed = GatehouseConfig.parse(saved)
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(parsed, null, 2) + "\n")
+    const running = ctx.config() as Record<string, unknown>
+    if (value) running.localRelay = value
+    else delete running.localRelay
+  }
+  app.get("/api/relay/local", async () => ({
+    ...(ctx.localRelay?.status() ?? { state: "off", port: 8087 }),
+    saved: ctx.config().localRelay ?? null,
+  }))
+  app.post("/api/relay/local/start", async (req, reply) => {
+    if (!ctx.localRelay)
+      return bad(reply, 501, "Running the Relay inside JCVC is not available here.")
+    const b = (req.body ?? {}) as { publicUrl?: unknown; port?: unknown }
+    const port =
+      typeof b.port === "number" && Number.isInteger(b.port) && b.port >= 1024 && b.port <= 65535
+        ? b.port
+        : 8087
+    if (typeof b.publicUrl !== "string" || b.publicUrl.length > 300)
+      return bad(reply, 400, "Give the https address your phone uses.")
+    const status = await ctx.localRelay.start(b.publicUrl, port)
+    if (status.state === "running") {
+      await saveLocalRelay({ enabled: true, publicUrl: status.publicUrl ?? b.publicUrl, port })
+      await ctx.audit.record({
+        session: "desktop",
+        event: "relay_local_started",
+        channel: "desktop",
+        tool: "relay",
+        input: { publicUrl: status.publicUrl, port },
+        verdict: {
+          outcome: "allow",
+          ruleId: "relay-local-started",
+          reason: "The Relay was started inside JCVC from the desktop.",
+          risk: 0,
+          decidedBy: "human-desktop",
+          policyHash: ctx.store.current?.hash ?? "",
+        },
+        latencyMs: 0,
+      })
+    }
+    return status
+  })
+  app.post("/api/relay/local/stop", async (_req, reply) => {
+    if (!ctx.localRelay)
+      return bad(reply, 501, "Running the Relay inside JCVC is not available here.")
+    await ctx.localRelay.stop()
+    await saveLocalRelay(undefined)
+    return ctx.localRelay.status()
   })
 
   app.post("/api/pick-folder", async (req, reply) => {

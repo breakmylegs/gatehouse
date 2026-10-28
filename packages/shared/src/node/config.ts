@@ -38,6 +38,15 @@ export const GatehouseConfig = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .nullable()
       .optional(),
+    /** The phone Relay run inside JCVC, started again each time JCVC starts while enabled. */
+    localRelay: z
+      .object({
+        enabled: z.boolean(),
+        publicUrl: z.string().url(),
+        port: z.number().int().min(1024).max(65535),
+      })
+      .strict()
+      .optional(),
     /** Overrides the default rules file. */
     rulesPath: z.string().optional(),
     /** How long a request stays deliverable to the phone. */

@@ -233,8 +233,12 @@ describe("what a real session is started with", () => {
         const text = fs.readFileSync(full, "utf8")
         // Reading means a file API near the name. The safety code only names the variables to remove.
         if (/\.credentials\.json/i.test(text)) offenders.push(`${full}: credentials file`)
-        if (/readFile(Sync)?\([^)]*(credential|token)/i.test(text))
+        // One reviewed exception: the Relay run inside JCVC writes its own one-time enrolment token, and the Host
+        // reads it to link itself. It is JCVC's own secret, never a Claude credential. Nothing else may read one.
+        const reviewed = full.split(path.sep).join("/").endsWith("src/relay/local.ts")
+        if (!reviewed && /readFile(Sync)?\([^)]*(credential|token)/i.test(text))
           offenders.push(`${full}: reads a token file`)
+        if (reviewed && /credential/i.test(text)) offenders.push(`${full}: mentions credentials`)
       }
     }
     expect(offenders).toEqual([])

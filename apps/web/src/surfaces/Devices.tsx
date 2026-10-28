@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { LocalRelayPanel } from "../components/LocalRelayPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { useStore } from "../store"
@@ -50,7 +51,11 @@ export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
     <div className="mx-auto grid max-w-[760px] gap-6 p-6">
       {embedded ? null : <h1 className="m-0">Devices and pairing</h1>}
       {info.health.state === "not-configured" ? (
-        <Setup onDone={load} />
+        <>
+          <LocalRelayPanel onChanged={() => void load()} />
+          <h2 className="m-0 text-[17px] text-mut">Or connect to a Relay you run elsewhere</h2>
+          <Setup onDone={load} />
+        </>
       ) : (
         <>
           <p role="status" className="m-0">
@@ -66,6 +71,7 @@ export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
           <Phones phones={info.phones} onChanged={load} />
           <AddPhone onPaired={load} />
           <Rotate />
+          <LocalRelayPanel onChanged={() => void load()} />
         </>
       )}
     </div>

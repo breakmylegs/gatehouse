@@ -148,9 +148,11 @@ The log lives in your JCVC data folder and never leaves this computer.`,
     title: "Devices",
     body: `Pair an iPhone so requests reach you away from your desk. You decide with Face ID or Touch ID.
 
+**Run the Relay inside JCVC** (simplest): give the https address your phone uses and choose Start the Relay. JCVC runs it only while JCVC is running, links itself to it, and starts it again each time JCVC starts. The address must reach port 8087 on this computer; Tailscale Funnel (the command tailscale funnel 8087) or a Cloudflare Tunnel can provide one.
+
 **What you need**
 
-1. The phone Relay running at a secure (https) address your phone can reach.
+1. The phone Relay running at a secure (https) address your phone can reach, inside JCVC or elsewhere.
 2. An iPhone with iOS 16.4 or newer.
 3. The Relay's one-time enrolment token, to connect this computer to it.
 

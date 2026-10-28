@@ -1,4 +1,6 @@
 import fs from "node:fs"
+import os from "node:os"
+import { LocalRelay } from "./relay/local.js"
 import { pickFolderWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { createRequire } from "node:module"
@@ -236,6 +238,15 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
+  const localRelay = new LocalRelay({
+    command: process.execPath,
+    args: ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", "relay", "src", "main.ts")],
+    cwd: REPO_ROOT,
+    dataDir: path.join(gatehouseDataDir(env), "relay"),
+    log,
+    enrol: (url, token) => phone.setup(url, token, os.hostname()),
+    linked: () => phoneStore.relay() !== undefined,
+  })
   // The daily digest goes to the phone once a day after the chosen time (default 08:00). Off if digestTime is null.
   const digest = new DigestScheduler({
     time: () => (config.digestTime === null ? null : (config.digestTime ?? "08:00")),
@@ -331,6 +342,7 @@ export function createHost(opts: HostOptions = {}): Host {
       phone,
       usage,
       pickFolder: pickFolderWithWindows,
+      localRelay,
       ...(spawnApprover
         ? {
             approver: {
@@ -410,8 +422,18 @@ export function createHost(opts: HostOptions = {}): Host {
         })
       }
       await kill.syncApprover()
+      // The Relay inside JCVC starts with it when you turned it on. A failure only shows on Devices.
+      if (config.localRelay?.enabled)
+        void localRelay
+          .start(config.localRelay.publicUrl, config.localRelay.port)
+          .then((st) =>
+            st.state === "failed"
+              ? log(`relay inside JCVC did not start: ${st.message ?? ""}`)
+              : undefined,
+          )
     },
     async stop() {
+      await localRelay.stop()
       digest.stop()
       phone.stop()
       await manager.closeAll()

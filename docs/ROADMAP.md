@@ -62,8 +62,8 @@ Items 1 to 5 are the next ones to build. Items 6 to 10 are designed after those 
 ## Progress
 
 - **Done (28 Oct):** 1 per-session controls (mode, effort, model, Extreme approval per session); 1d built-in user guide and help pane on every page (F1); Windows notification from the tray when a decision is waiting, sent by the Host itself so it works while the window is hidden or minimised; the Departures visual identity across the desktop app.
-- **Done since:** 1b Approver workbench, 1c preseeded rule library with your own rules.
-- **Next:** 1e Relay inside the app, then 2 files panel and 3 inbuilt browser, 4 split view, 5 composer plus menu.
+- **Done since:** 1b Approver workbench, 1c preseeded rule library with your own rules, 1e the Relay inside the app.
+- **Next:** 1f more notification channels, then 2 files panel and 3 inbuilt browser, 4 split view, 5 composer plus menu.
 - **Research:** the notes above were checked against Anthropic's documentation for the Claude desktop Code tab (code.claude.com/docs/en/desktop and related pages) on 28 Oct.
 
 ## Design notes: 1c rule library (next)

@@ -322,3 +322,10 @@ Owner requests, and what was done or decided:
 - **Policy, Library tab.** Switch packs on and off, switch built-in rules off and on, copy any rule into your own rules and change it, remove rules, preview which past decisions would change (replay of the audit log), then save. A save is a dry load first; a file that does not load is never written. Every save is audited by name (`policy-library-changed`).
 - **Upgrade.** The installer now replaces `app\policy\library` on upgrade and keeps the rest of `app\policy`.
 - **Tests and proof.** Policy suite 701 tests, 97.5% lines (gate 95%). With no packs on, the policy hash is unchanged, so all 489 golden cases decide as before. Two deliberate breaks were caught: letting a deny rule be switched off, and not merging switched-on packs.
+
+## Phase 14: the Relay inside JCVC (28 Oct)
+
+- **Devices, Run the Relay inside JCVC.** Give the https address your phone uses and choose Start. The Host runs the Relay as its own child on 127.0.0.1 (port 8087 by default), only while JCVC runs, reads the Relay's one-time enrolment token from its data folder and links itself over loopback, so there is nothing to copy. The choice is saved (`localRelay` in settings) and the Relay starts again with JCVC; Stop clears it. Starting is audited (`relay-local-started`).
+- **What it cannot do for you.** The iPhone still needs an https address that reaches this computer. The panel and the Devices help explain Tailscale Funnel and Cloudflare Tunnel; setting one up is the owner's step.
+- **Security.** Nothing changes for invariants 8 and 9: the Relay still only carries ciphertext and every phone answer is verified by the Host. The Relay gets the sanitised environment and binds to loopback.
+- **Tests.** `apps/host/test/local-relay.test.ts` (start, enrol with the token, no second enrol when linked, refuses non-https, a Relay that dies before it is ready) and an API test for start, save, audit and stop.
