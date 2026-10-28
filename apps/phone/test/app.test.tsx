@@ -301,6 +301,6 @@ describe("settings", () => {
 
   it("says that only the computer can revoke this phone", async () => {
     await inSettings()
-    expect(screen.getByText(/revoke it in Gatehouse on your computer/)).toBeInTheDocument()
+    expect(screen.getByText(/revoke it in JCVC on your computer/)).toBeInTheDocument()
   })
 })

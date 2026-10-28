@@ -134,6 +134,8 @@ export const Health = z.object({
     approverConfirmed: z.boolean(),
   }),
   pwsh: z.object({ running: z.boolean(), languageMode: z.string().optional() }),
+  /** True while Extreme approval mode is on. */
+  extremeApproval: z.boolean().optional(),
 })
 export type Health = z.infer<typeof Health>
 

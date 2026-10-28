@@ -22,7 +22,7 @@ interface Pairing {
   reason?: string
 }
 
-export function Devices() {
+export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
   const [info, setInfo] = useState<RelayInfo>()
   const [error, setError] = useState<string>()
   const health = useStore((s) => s.health?.relay)
@@ -48,7 +48,7 @@ export function Devices() {
 
   return (
     <div className="mx-auto grid max-w-[760px] gap-6 p-6">
-      <h1 className="m-0 text-[22px] font-semibold">Devices and pairing</h1>
+      {embedded ? null : <h1 className="m-0 text-[22px] font-semibold">Devices and pairing</h1>}
       {info.health.state === "not-configured" ? (
         <Setup onDone={load} />
       ) : (
@@ -98,9 +98,9 @@ function Setup({ onDone }: { onDone: () => Promise<void> }) {
     <form onSubmit={submit} className="panel grid gap-3 p-5" aria-label="Set up the Relay">
       <h2 className="m-0 text-[17px] font-semibold">Set up the phone relay</h2>
       <p className="m-0">
-        To decide from your iPhone as well, run the Relay on your server (the steps are in the
-        runbook), then enter its address and the one-time enrolment token it wrote to its data
-        folder. Nothing leaves this computer until you do.
+        To decide from your iPhone as well, run the Relay (on this computer or a server; the steps
+        are in docs/relay-local.md), then enter its address and the one-time enrolment token it
+        wrote to its data folder. Nothing leaves this computer until you do.
       </p>
       <label className="grid gap-1">
         <span>Relay address</span>

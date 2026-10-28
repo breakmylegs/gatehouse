@@ -17,6 +17,7 @@ export const Verdict = z.object({
     "judge",
     "human-desktop",
     "human-phone",
+    "extreme-mode",
     "timeout",
     "evaluator-unavailable",
   ]),

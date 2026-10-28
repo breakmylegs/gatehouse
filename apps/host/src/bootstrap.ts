@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import { pickFolderWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { createRequire } from "node:module"
 import path from "node:path"
@@ -205,6 +206,15 @@ export function createHost(opts: HostOptions = {}): Host {
     }),
     managedDetected,
     localRulesPath: localRules,
+    // Sealed for the phone like any other note. It names the tool and the project, never the input.
+    notifyAutoApproved: (toolName, project) =>
+      void phoneHolder.svc
+        ?.notify("notify", {
+          title: "Approved automatically",
+          body: `Extreme approval mode is on, so this was approved without asking: ${toolName}.`,
+          project,
+        })
+        .catch(() => undefined),
     log,
   }
   // The client is replaced once the Approver's port is known, so the session deps hold a stable proxy.
@@ -277,6 +287,7 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(ks.by ? { by: ks.by } : {}),
         approverConfirmed: ks.approverConfirmed,
       },
+      extremeApproval: config.extremeApproval === true,
       pwsh: {
         running: pwsh.running,
         ...(pwsh.languageMode ? { languageMode: pwsh.languageMode } : {}),
@@ -318,6 +329,8 @@ export function createHost(opts: HostOptions = {}): Host {
       log,
       phone,
       usage,
+      pickFolder: pickFolderWithWindows,
+      healthChanged: () => opts.onHealthChanged?.(),
     },
     phone,
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),

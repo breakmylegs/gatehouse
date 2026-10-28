@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react"
 import { OrgForm, SignInPanel } from "../components/SetupParts"
 import { send, useStore } from "../store"
+import { Devices } from "./Devices"
 import { Check } from "./FirstRun"
 
-const STEPS = ["Welcome", "Sign in", "Organisation", "Your choices", "Finish"] as const
+const STEPS = [
+  "Welcome",
+  "Sign in",
+  "Organisation",
+  "Phone alerts",
+  "Your choices",
+  "Finish",
+] as const
 
 /**
  * The first-launch wizard: sign in, set the organisation, choose a theme, then start. Each step that needs
@@ -62,8 +70,9 @@ export function Setup() {
         {step === 0 && "Welcome to Jean-Claude Van Code"}
         {step === 1 && "Sign in to Claude"}
         {step === 2 && "Check your organisation"}
-        {step === 3 && "Your choices"}
-        {step === 4 && "You are ready"}
+        {step === 3 && "Phone alerts (optional)"}
+        {step === 4 && "Your choices"}
+        {step === 5 && "You are ready"}
       </h1>
 
       {step === 0 && (
@@ -115,6 +124,32 @@ export function Setup() {
       )}
 
       {step === 3 && (
+        <div className="grid gap-3">
+          <p className="m-0">
+            Get a notification on your iPhone when something needs your decision, and answer it
+            there with Face ID or Touch ID. You can do this now, or skip it and do it later from
+            Devices.
+          </p>
+          <ul className="m-0 grid gap-1 pl-5 text-mut">
+            <li>An iPhone with iOS 16.4 or newer, and Safari.</li>
+            <li>
+              The phone Relay running at a secure (https) address your phone can reach. The steps
+              are in docs/relay-local.md.
+            </li>
+            <li>
+              In Safari, Share, then Add to Home Screen. Notifications only work from the Home
+              Screen.
+            </li>
+          </ul>
+          <p className="m-0 text-xs text-mut">
+            Nothing readable passes through the Relay: the details are encrypted for your phone
+            only.
+          </p>
+          <Devices embedded />
+        </div>
+      )}
+
+      {step === 4 && (
         <div className="grid gap-4">
           <fieldset className="m-0 grid gap-2 border-0 p-0">
             <legend className="mb-1 text-sm font-semibold">Theme</legend>
@@ -141,7 +176,7 @@ export function Setup() {
         </div>
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="grid gap-3">
           <ul
             className="m-0 list-none divide-y divide-line border-y border-line p-0"
@@ -176,7 +211,7 @@ export function Setup() {
         ) : null}
         {step < STEPS.length - 1 ? (
           <button className="btn btn-primary" disabled={!canNext} onClick={() => setStep(step + 1)}>
-            {step === 0 ? "Get started" : "Next"}
+            {step === 0 ? "Get started" : step === 3 ? "Next, or skip for now" : "Next"}
           </button>
         ) : (
           <button

@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events"
+import fs from "node:fs"
 import path from "node:path"
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { findProjectRoot, type Policy, type PwshWorker, type PolicyEngine } from "@gatehouse/policy"
@@ -34,6 +35,9 @@ export class OrgGuardError extends Error {
     super(message)
   }
 }
+/** The folder for a new session is not there. */
+export class SessionFolderError extends Error {}
+
 export class KillSwitchEngagedError extends Error {
   constructor() {
     super("The kill switch is engaged. Re-arm it on the desktop before starting a session.")
@@ -83,6 +87,8 @@ export interface SessionDeps {
   companion: (s: { sessionId: string; cwd: string }) => Record<string, unknown>
   managedDetected: () => Promise<boolean | undefined>
   localRulesPath?: string
+  /** Tells the phone about a request that Extreme approval mode approved. */
+  notifyAutoApproved?: (toolName: string, project: string) => void
   log: (line: string) => void
 }
 
@@ -232,6 +238,8 @@ export class Session extends EventEmitter<SessionEvents> {
         checkpoints: d.checkpoints,
         ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
         decided: this.#decided,
+        extreme: () => d.config().extremeApproval === true,
+        ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
         log: d.log,
       }),
       hooks: {
@@ -389,6 +397,17 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
 
   async start(opts: StartSessionOptions): Promise<Session> {
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
+    // A folder that is not there makes the SDK report a missing program, which is a misleading message.
+    let isDir = false
+    try {
+      isDir = fs.statSync(opts.cwd).isDirectory()
+    } catch {
+      isDir = false
+    }
+    if (!isDir)
+      throw new SessionFolderError(
+        `The folder "${opts.cwd}" does not exist. Check the name, or create the folder first.`,
+      )
     const config = this.#deps.config()
     // Checked again inside Session.start with the live account. This early check gives a clear message
     // when there is nothing to compare against.

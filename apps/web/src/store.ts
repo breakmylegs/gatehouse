@@ -65,6 +65,8 @@ export interface State {
   theme: "light" | "dark"
   notify: boolean
   jcMode: boolean
+  /** "auto", a built-in picture id, or "user:<file name>". */
+  jcPic: string
   setupDone: boolean
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
@@ -74,6 +76,7 @@ export interface State {
   setNotify: (on: boolean) => void
   setJcMode: (on: boolean) => void
   setSetupDone: (done: boolean) => void
+  setJcPic: (pic: string) => void
   addUserText: (sessionId: string, text: string) => void
 }
 
@@ -112,6 +115,7 @@ export const useStore = create<State>((set, get) => ({
   notify: localStorage.getItem("gatehouse.notify") === "1",
   jcMode: localStorage.getItem("gatehouse.jcmode") === "1",
   setupDone: localStorage.getItem("gatehouse.setup") === "done",
+  jcPic: localStorage.getItem("gatehouse.jcpic") || "auto",
 
   setRoute: (route) => set({ route }),
   selectSession: (selectedSession) => set({ selectedSession }),
@@ -123,6 +127,10 @@ export const useStore = create<State>((set, get) => ({
   setNotify: (notify) => {
     localStorage.setItem("gatehouse.notify", notify ? "1" : "0")
     set({ notify })
+  },
+  setJcPic: (jcPic) => {
+    localStorage.setItem("gatehouse.jcpic", jcPic)
+    set({ jcPic })
   },
   setSetupDone: (setupDone) => {
     localStorage.setItem("gatehouse.setup", setupDone ? "done" : "")

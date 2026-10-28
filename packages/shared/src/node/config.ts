@@ -38,6 +38,11 @@ export const GatehouseConfig = z
       .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
       .nullable()
       .optional(),
+    /**
+     * Extreme approval mode: a request that would wait for a person is approved at once, and the phone is told. The
+     * floor, every deny and every failure still stop the call. Off unless the owner turns it on.
+     */
+    extremeApproval: z.boolean().optional(),
     /** Overrides the default rules file. */
     rulesPath: z.string().optional(),
     /** How long a request stays deliverable to the phone. */

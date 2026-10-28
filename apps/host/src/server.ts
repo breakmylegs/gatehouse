@@ -30,7 +30,12 @@ import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
 import { SafetyError } from "./safety.js"
 import { checkHostRequest } from "./server-guard.js"
-import { KillSwitchEngagedError, OrgGuardError, type SessionManager } from "./sessions.js"
+import {
+  KillSwitchEngagedError,
+  OrgGuardError,
+  SessionFolderError,
+  type SessionManager,
+} from "./sessions.js"
 import type { UsageStore } from "./usage.js"
 
 export interface HostApp {
@@ -440,6 +445,7 @@ function resolveResult(r: ReturnType<Broker["resolve"]>): unknown {
 function classify(e: unknown): CommandError {
   if (e instanceof OrgGuardError) return new CommandError(`org-guard.${e.code}`, e.message)
   if (e instanceof KillSwitchEngagedError) return new CommandError("kill-switch", e.message)
+  if (e instanceof SessionFolderError) return new CommandError("folder-missing", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)
   return new CommandError("failed", (e as Error).message ?? "The command failed")
 }

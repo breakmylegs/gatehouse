@@ -395,4 +395,57 @@ describe("insights endpoints", () => {
       ),
     ).toBe(false)
   })
+
+  it("opens the folder chooser through the picker it is given, and says when you cancel", async () => {
+    const starts: Array<string | undefined> = []
+    ctx.pickFolder = async (start) => {
+      starts.push(start)
+      return start === "cancel" ? undefined : "C:\dev\chosen"
+    }
+    const ok = await app.inject({
+      method: "POST",
+      url: "/api/pick-folder",
+      payload: { start: "C:\dev" },
+    })
+    expect(ok.json()).toEqual({ path: "C:\dev\chosen" })
+    const no = await app.inject({
+      method: "POST",
+      url: "/api/pick-folder",
+      payload: { start: "cancel" },
+    })
+    expect(no.json()).toEqual({ path: null })
+    const bad = await app.inject({
+      method: "POST",
+      url: "/api/pick-folder",
+      payload: { start: 42 },
+    })
+    expect(bad.statusCode).toBe(200)
+    expect(starts.at(-1)).toBeUndefined()
+    delete ctx.pickFolder
+    const none = await app.inject({ method: "POST", url: "/api/pick-folder", payload: {} })
+    expect(none.statusCode).toBe(501)
+  })
+
+  it("lists and serves your own Jean-Claude pictures, and nothing else", async () => {
+    const dataDir = path.join(root, "data-pics")
+    const dir = path.join(dataDir, "jcvc")
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, "mine.png"), Buffer.from([137, 80, 78, 71]))
+    fs.writeFileSync(path.join(dir, "notes.txt"), "not a picture")
+    const before = ctx.env
+    ctx.env = { ...before, GATEHOUSE_DATA_DIR: dataDir }
+    try {
+      const list = (await app.inject({ method: "GET", url: "/api/jcvc/pictures" })).json()
+      expect(list.names).toEqual(["mine.png"])
+      const got = await app.inject({ method: "GET", url: "/api/jcvc/pictures/mine.png" })
+      expect(got.headers["content-type"]).toContain("image/png")
+      expect(got.rawPayload.length).toBe(4)
+      for (const bad of ["notes.txt", "..%2F..%2Fconfig.json", "nope.png"])
+        expect(
+          (await app.inject({ method: "GET", url: "/api/jcvc/pictures/" + bad })).statusCode,
+        ).toBe(404)
+    } finally {
+      ctx.env = before
+    }
+  })
 })

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import type { FolderPicker } from "./folder-picker.js"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -18,7 +19,12 @@ import {
   type ReplayRecord,
 } from "@gatehouse/policy"
 import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
-import { configPath, GatehouseConfig, writeFileAtomic } from "@gatehouse/shared/node"
+import {
+  configPath,
+  GatehouseConfig,
+  gatehouseDataDir,
+  writeFileAtomic,
+} from "@gatehouse/shared/node"
 import {
   computeAnalytics,
   computeDigest,
@@ -48,6 +54,10 @@ export interface AdminContext {
   usage?: UsageStore
   /** The phone channel, for the Devices page. */
   phone?: PhoneService
+  /** Opens the Windows folder chooser. Absent where there is no desktop (tests). */
+  pickFolder?: FolderPicker
+  /** Tells every open window that health changed (Extreme approval mode, for one). */
+  healthChanged?: () => void
 }
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex")
@@ -329,6 +339,53 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerRelayRoutes(app, ctx)
   registerInsightRoutes(app, ctx)
 
+  // Your own pictures for Jean-Claude mode: files in a folder in the data folder. Only picture files, only by a
+  // name that is in the listing, so a request can never name a path.
+  const picturesDir = () => path.join(gatehouseDataDir(ctx.env), "jcvc")
+  const pictureTypes: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+  }
+  const listPictures = (): string[] => {
+    try {
+      return fs
+        .readdirSync(picturesDir(), { withFileTypes: true })
+        .filter((e) => e.isFile() && path.extname(e.name).toLowerCase() in pictureTypes)
+        .filter((e) => fs.statSync(path.join(picturesDir(), e.name)).size <= 8 * 1024 * 1024)
+        .map((e) => e.name)
+        .sort()
+        .slice(0, 60)
+    } catch {
+      return []
+    }
+  }
+  app.get("/api/jcvc/pictures", async () => ({ names: listPictures(), folder: picturesDir() }))
+  app.get("/api/jcvc/pictures/:name", async (req, reply) => {
+    const name = (req.params as { name: string }).name
+    if (!listPictures().includes(name)) return bad(reply, 404, "No such picture.")
+    return reply
+      .header("cache-control", "no-store")
+      .type(pictureTypes[path.extname(name).toLowerCase()] ?? "application/octet-stream")
+      .send(fs.readFileSync(path.join(picturesDir(), name)))
+  })
+
+  app.post("/api/pick-folder", async (req, reply) => {
+    if (!ctx.pickFolder)
+      return bad(reply, 501, "Choosing a folder in a window is not available here.")
+    const body = (req.body ?? {}) as { start?: unknown }
+    const start =
+      typeof body.start === "string" && body.start.length < 4096 ? body.start : undefined
+    try {
+      const path = await ctx.pickFolder(start)
+      return { path: path ?? null }
+    } catch (e) {
+      return bad(reply, 500, (e as Error).message)
+    }
+  })
+
   app.get("/api/settings", async () => {
     const file = configPath(ctx.env)
     const saved = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as unknown) : {}
@@ -378,6 +435,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
+    if (changed.includes("extremeApproval")) ctx.healthChanged?.()
     const needsRestart = changed.filter((k) => !(LIVE_SETTINGS as readonly string[]).includes(k))
     return {
       ok: true,
@@ -514,7 +572,7 @@ export function recordsSince(dir: string, fromMs: number): AuditRecord[] {
 const DAY = 86_400_000
 
 /** Settings the Host reads at the moment it uses them. */
-const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime"] as const
+const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime", "extremeApproval"] as const
 
 /** Policy analytics, the digest and suggestions. Read-only except accepting a suggestion, which is desktop only. */
 function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {

@@ -64,6 +64,21 @@ body {
 [hidden] {
   display: none !important;
 }
+/* Jean-Claude mode: one faint picture behind everything. It is below all content, never over text. */
+html[data-jcvc="on"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--jcvc-img, none) no-repeat right 3% bottom / auto 90%;
+  opacity: 0.07;
+  filter: grayscale(0.6);
+  mask-image: linear-gradient(to left, #000 35%, transparent 95%);
+}
+html[data-jcvc="on"][data-theme="dark"] body::before {
+  opacity: 0.1;
+}
 button,
 input,
 select,

@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Setup } from "../src/surfaces/Setup"
 import { useStore } from "../src/store"
+
+vi.mock("../src/lib/api", () => ({
+  api: vi.fn(async () => ({ ok: false, status: 404, error: "no route" })),
+}))
 
 const health = (signedIn: boolean, orgOk: boolean) =>
   ({
@@ -49,6 +53,7 @@ describe("the setup wizard", () => {
     await user.click(screen.getByRole("button", { name: "Get started" }))
     await user.click(screen.getByRole("button", { name: "Next" }))
     await user.click(screen.getByRole("button", { name: "Next" }))
+    await user.click(screen.getByRole("button", { name: /next, or skip for now/i }))
     await user.click(screen.getByRole("button", { name: "Next" }))
     await user.click(screen.getByRole("button", { name: "Start my first session" }))
     expect(localStorage.getItem("gatehouse.setup")).toBe("done")
@@ -59,8 +64,10 @@ describe("the setup wizard", () => {
     const user = userEvent.setup()
     useStore.setState({ health: health(true, true) })
     render(<Setup />)
-    for (let i = 0; i < 3; i++)
-      await user.click(screen.getByRole("button", { name: i === 0 ? "Get started" : "Next" }))
+    await user.click(screen.getByRole("button", { name: "Get started" }))
+    await user.click(screen.getByRole("button", { name: "Next" }))
+    await user.click(screen.getByRole("button", { name: "Next" }))
+    await user.click(screen.getByRole("button", { name: /next, or skip for now/i }))
     await user.click(screen.getByRole("radio", { name: "Dark" }))
     await user.click(screen.getByRole("checkbox", { name: /jean-claude mode/i }))
     expect(useStore.getState().theme).toBe("dark")

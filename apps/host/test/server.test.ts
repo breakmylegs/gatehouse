@@ -608,6 +608,12 @@ describe("commands over the WebSocket", () => {
     expect(after.at(-1)).toMatchObject({ health: { signin: { signedIn: true, orgOk: true } } })
   })
 
+  it("refuses a folder that does not exist, saying so plainly", async () => {
+    const r = await c.send({ type: "create_session", cwd: `${s.repo}/not-here` })
+    expect(r).toMatchObject({ ok: false, error: { code: "folder-missing" } })
+    expect(r.error?.message).toContain("does not exist")
+  })
+
   it("explains an organisation refusal with the code and a message", async () => {
     s.sdk.account = { email: "x@y.z", organization: "Another Org", apiProvider: "firstParty" }
     const r = await c.send({ type: "create_session", cwd: s.repo })

@@ -31,6 +31,10 @@ export interface CanUseDeps {
   localRulesPath?: string
   /** toolUseIDs that went through here, for the PostToolUse audit. */
   decided: Set<string>
+  /** Extreme approval mode, read at each call so it applies at once. */
+  extreme?: () => boolean
+  /** Tells the phone that a request was approved by Extreme approval mode. Never given the input. */
+  notifyAutoApproved?: (toolName: string, project: string) => void
   log: (line: string) => void
 }
 
@@ -134,6 +138,8 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       if (verdict.outcome === "deny") {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)
       }
+      if (deps.extreme?.() === true && !NEVER_AUTO_APPROVED.has(verdict.ruleId))
+        return await extremeApprove(deps, toolName, input, toolUseID, verdict)
       return await escalate(deps, toolName, input, options, verdict)
     } catch (e) {
       // Invariant 1: a failure in here is a denial, never an allow.
@@ -144,6 +150,65 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
 }
 
 type Options = Parameters<CanUseTool>[2]
+
+/**
+ * Escalations that come from something going wrong, not from a rule. Extreme approval mode never turns these into
+ * an allow, because a failure must always end in a person or a denial (invariant 1).
+ */
+export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
+  "evaluator-unavailable",
+  "audit-failure",
+  "policy-unavailable",
+  "engine-error",
+  "malformed-input",
+  "pwsh-unavailable",
+  "parse-error",
+  "kill-switch",
+])
+
+/**
+ * Extreme approval mode: an escalation is approved without asking. It is audited first (an allow that cannot be
+ * recorded is not given), then the phone is told. The floor already ran before this and every deny verdict
+ * returned earlier, so this only ever turns "ask" into "allow".
+ */
+async function extremeApprove(
+  deps: CanUseDeps,
+  toolName: string,
+  input: Record<string, unknown>,
+  toolUseID: string,
+  verdict: Verdict,
+): Promise<PermissionResult> {
+  const recorded: Verdict = {
+    ...verdict,
+    outcome: "allow",
+    decidedBy: "extreme-mode",
+    reason: "Approved without asking because Extreme approval mode is on.",
+  }
+  const written = await deps.audit.record({
+    session: deps.sessionId,
+    event: "human_decision",
+    channel: "host",
+    tool: toolName,
+    toolUseId: toolUseID,
+    cwd: deps.cwd,
+    project: deps.project,
+    input,
+    verdict: recorded,
+    latencyMs: 0,
+  })
+  if (!written) {
+    return deny(
+      "The decision could not be recorded in the audit log, so it was not applied.",
+      toolUseID,
+    )
+  }
+  try {
+    deps.notifyAutoApproved?.(toolName, deps.project)
+  } catch {
+    // A notification problem never changes the decision.
+  }
+  return allow(input, toolUseID)
+}
 
 async function escalate(
   deps: CanUseDeps,

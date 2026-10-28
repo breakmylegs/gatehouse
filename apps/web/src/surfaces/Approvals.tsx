@@ -1,5 +1,4 @@
 import clsx from "clsx"
-import { JcvcArt } from "../components/JcvcArt"
 import { useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { ApprovalCard } from "../components/ApprovalCard"
@@ -66,7 +65,6 @@ export function Approvals() {
             <p className="m-0 text-mut">
               Nothing is waiting. Automatic decisions are going through.
             </p>
-            <JcvcArt which="soldier" />
           </div>
         ) : (
           <Virtuoso

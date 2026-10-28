@@ -1,9 +1,9 @@
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
-import { JcvcArt } from "../components/JcvcArt"
 import NumberFlow from "@number-flow/react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { money } from "../lib/format"
+import { api } from "../lib/api"
 import { send, useSessionList, useStore } from "../store"
 import { UsageView } from "./UsageView"
 
@@ -53,11 +53,21 @@ export function Sessions() {
   const [model, setModel] = useState("")
   const [mode, setMode] = useState<"default" | "plan">("default")
   const [busy, setBusy] = useState(false)
+  const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
 
   const sorted = [...sessions].sort(
     (a, b) => STATE[a.state].rank - STATE[b.state].rank || b.createdAt.localeCompare(a.createdAt),
   )
+
+  async function browse() {
+    setPicking(true)
+    setError(undefined)
+    const r = await api<{ path: string | null }>("POST", "/api/pick-folder", { start: cwd.trim() })
+    setPicking(false)
+    if (!r.ok) setError(r.error ?? "The folder window could not open. Type the folder instead.")
+    else if (r.data?.path) setCwd(r.data.path)
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault()
@@ -102,6 +112,14 @@ export function Sessions() {
               placeholder="C:\dev\my-project"
               spellCheck={false}
             />
+            <button
+              type="button"
+              className="w-fit cursor-pointer border-0 bg-transparent p-0 text-left text-[13px] text-acc underline"
+              disabled={picking}
+              onClick={() => void browse()}
+            >
+              {picking ? "Waiting for the folder window..." : "Choose a folder..."}
+            </button>
           </label>
           <label className="grid gap-1">
             <span>Model</span>
@@ -142,7 +160,6 @@ export function Sessions() {
       {sorted.length === 0 ? (
         <div>
           <p className="text-mut">No sessions yet. Start one above.</p>
-          <JcvcArt which="stance" />
         </div>
       ) : (
         <table className="w-full border-collapse text-left">
