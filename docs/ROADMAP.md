@@ -66,6 +66,17 @@ Items 1 to 5 are the next ones to build. Items 6 to 10 are designed after those 
 - **Next:** 1f more notification channels, then 2 files panel and 3 inbuilt browser, 4 split view, 5 composer plus menu.
 - **Research:** the notes above were checked against Anthropic's documentation for the Claude desktop Code tab (code.claude.com/docs/en/desktop and related pages) on 28 Oct.
 
+## From the owner's screenshot of the desktop app (28 Oct)
+
+Seen in the Claude desktop Code tab with two sessions side by side. Each becomes part of the workspace work (items 2 to 5):
+
+- **Session rail on the right** with cards: Environment (folder and machine), Context used (a percentage with a small bar), Connectors (how many connected), Outputs (the files the session made, each opens in the viewer, then Show more), Background tasks (running commands with their time, a stop button, and how many finished).
+- **Pane buttons in each session's header**: transcript, terminal, diff, browser, folder, more, close.
+- **Split view**: two sessions side by side, each with its own header, rail and composer.
+- **Sidebar** of sessions grouped by folder, with New, Search and More at the top and the signed-in account at the bottom.
+- **Composer** with a plus menu, Ctrl+Enter to queue a message while Claude works, a stop button and a microphone; under it the mode (Auto), the model and effort (Opus 5.5, Extra) and a context ring.
+- **In the transcript**: collapsed "Ran a command" lines you can open, a live "Running sed 16m 4s" status line, question cards with the chosen answers, and the task list with ticks.
+
 ## Design notes: 1c rule library (next)
 
 - Packs ship in `policy/library/*.yaml` (git, Node and npm, Python, .NET, build tools, PowerShell read-only, cloud CLIs read-only, containers read-only, file reading, documentation sites). Each rule has an id, a plain reason and golden cases. A pack does nothing until it is switched on.
