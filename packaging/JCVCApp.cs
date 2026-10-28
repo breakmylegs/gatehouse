@@ -1,10 +1,10 @@
-// Gatehouse.exe: the Gatehouse window. A native Windows window that shows the Gatehouse interface with
+// JCVC.exe: the Gatehouse window. A native Windows window that shows the Gatehouse interface with
 // Microsoft's WebView2 (the same engine Edge uses, installed with Windows 11). It is not a browser tab: it has
 // its own icon, its own taskbar button, no address bar, and a tray icon so approvals still reach you when the
 // window is closed.
 //
 // It starts the Host (which starts the Approver) from the folder around it:
-//   Gatehouse.exe, runtime\node.exe, app\  (see docs/packaging.md)
+//   JCVC.exe, runtime\node.exe, app\  (see docs/packaging.md)
 //
 // Options: --check (start, check, stop, exit code), --browser (use the default browser instead of this
 // window), --relay [--public-url URL], --help.
@@ -184,7 +184,7 @@ internal sealed class MainForm : Form
         string appDir = Hosting.AppDir(root);
         string hostEntry = Path.Combine(appDir, "apps", "host", "src", "main.ts");
         string node = Hosting.FindNode(root);
-        if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep Gatehouse.exe next to its app folder."); return; }
+        if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep JCVC.exe next to its app folder."); return; }
         if (node == null) { Fail("No Node was found. Gatehouse needs runtime\\node.exe next to it."); return; }
 
         try
@@ -492,19 +492,19 @@ internal static class Program
         if (help)
         {
             Console.WriteLine("Gatehouse");
-            Console.WriteLine("  Gatehouse.exe                 open the Gatehouse window");
+            Console.WriteLine("  JCVC.exe                 open the Gatehouse window");
             Console.WriteLine("  --check                       start, check the window and Host, stop (exit code 0 or 1)");
             Console.WriteLine("  --relay [--public-url URL]    also start the phone Relay (docs\\relay-local.md)");
             Console.WriteLine("  --tray                        start hidden in the tray (what start at sign-in uses)");
             Console.WriteLine("  --browser                     use the default browser instead of this window");
-            Console.WriteLine("Use Gatehouse-Console.exe for a console window with the Host's messages.");
+            Console.WriteLine("Use JCVC-Console.exe for a console window with the Host's messages.");
             return 0;
         }
         if (browser)
         {
             // The console launcher does exactly this.
-            string console = Path.Combine(Hosting.Root(), "Gatehouse-Console.exe");
-            if (!File.Exists(console)) { Console.WriteLine("[gatehouse] Gatehouse-Console.exe was not found."); return 1; }
+            string console = Path.Combine(Hosting.Root(), "JCVC-Console.exe");
+            if (!File.Exists(console)) { Console.WriteLine("[gatehouse] JCVC-Console.exe was not found."); return 1; }
             Process p = Process.Start(console, relay ? "--relay " + relayArgs : "");
             p.WaitForExit();
             return p.ExitCode;

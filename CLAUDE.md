@@ -60,7 +60,7 @@ Every phase must keep these true. Write an automated test for every invariant th
 | `npm run audit:verify` | Check the audit hash chain. `pwsh scripts/verify-audit.ps1` does the same without Node. |
 | `pwsh scripts/start.ps1` | Start the Host (which starts the Approver) and open the interface. `-Check` tests it, `-Relay` also starts the phone Relay. |
 | `npm run build -w @gatehouse/web` | Build the desktop interface the Host serves. Restart the Host after a rebuild. |
-| `npm run package` / `npm run package:check` | Build `dist-appGatehouseGatehouse.exe` with its runtime and app folder next to it (`docs/packaging.md`). |
+| `npm run package` / `npm run package:check` | Build `dist-app\JCVC\JCVC.exe` with its runtime and app folder next to it (`docs/packaging.md`). |
 | `npm run relay` / `npm run relay:build-phone` | Run the phone Relay locally (see `docs/relay-local.md`) and build the phone app. |
 
 Layout: `apps/host` (Host, admin API, phone channel), `apps/approver`, `apps/companion`, `apps/web` (desktop UI), `apps/relay` (phone Relay), `apps/phone` (iPhone PWA), `packages/policy`, `packages/shared`. Design notes are in `PRODUCT.md`, `DESIGN.md` and `docs/design`. The threat model (`docs/threat-model.md`) is checked against real test names by `apps/host/test/threat-model.test.ts`.

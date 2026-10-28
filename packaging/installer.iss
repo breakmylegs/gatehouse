@@ -9,30 +9,30 @@
 AppId={{6C1E5B0A-2F1D-4F3B-9D6E-6B7A0C2E41A7}
 AppName={#AppName}
 AppVersion={#AppVersion}
-DefaultDirName={localappdata}\Programs\Gatehouse
+DefaultDirName={localappdata}\Programs\JCVC
 DefaultGroupName={#AppName}
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
 OutputDir=..\dist-app
-OutputBaseFilename=Gatehouse-Setup
+OutputBaseFilename=JCVC-Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\dist-app\gatehouse.ico
-UninstallDisplayIcon={app}\Gatehouse.exe
+UninstallDisplayIcon={app}\JCVC.exe
 
 [Tasks]
 Name: "logon"; Description: "Start Jean-Claude Van Code when I sign in"; Flags: unchecked
 
 [Files]
 ; The program files are replaced on upgrade. The policy folder is the user's, so it is only written the first time.
-Source: "..\dist-app\Gatehouse\*"; DestDir: "{app}"; Excludes: "app\policy\*"; Flags: recursesubdirs ignoreversion
-Source: "..\dist-app\Gatehouse\app\policy\*"; DestDir: "{app}\app\policy"; Flags: recursesubdirs onlyifdoesntexist
+Source: "..\dist-app\JCVC\*"; DestDir: "{app}"; Excludes: "app\policy\*"; Flags: recursesubdirs ignoreversion
+Source: "..\dist-app\JCVC\app\policy\*"; DestDir: "{app}\app\policy"; Flags: recursesubdirs onlyifdoesntexist
 
 [Icons]
-Name: "{group}\Jean-Claude Van Code"; Filename: "{app}\Gatehouse.exe"
-Name: "{userstartup}\Jean-Claude Van Code"; Filename: "{app}\Gatehouse.exe"; Parameters: "--tray"; Tasks: logon
+Name: "{group}\Jean-Claude Van Code"; Filename: "{app}\JCVC.exe"
+Name: "{userstartup}\Jean-Claude Van Code"; Filename: "{app}\JCVC.exe"; Parameters: "--tray"; Tasks: logon
 
 [Run]
-Filename: "{app}\Gatehouse.exe"; Description: "Start Jean-Claude Van Code now"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\JCVC.exe"; Description: "Start Jean-Claude Van Code now"; Flags: nowait postinstall skipifsilent

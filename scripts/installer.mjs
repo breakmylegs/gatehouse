@@ -1,4 +1,4 @@
-// Makes dist-app\Gatehouse-Setup.exe with Inno Setup, building the package first if it is not there.
+// Makes dist-app\JCVC-Setup.exe with Inno Setup, building the package first if it is not there.
 // Usage: node scripts/installer.mjs [--iscc <path to ISCC.exe>]
 // ISCC.exe is looked for in the usual Inno Setup folders, then on the PATH. You can also set GATEHOUSE_ISCC.
 import { spawnSync } from "node:child_process"
@@ -34,7 +34,7 @@ if (!iscc) {
 }
 
 if (
-  !fs.existsSync(path.join(root, "dist-app", "Gatehouse", "Gatehouse.exe")) ||
+  !fs.existsSync(path.join(root, "dist-app", "JCVC", "JCVC.exe")) ||
   !fs.existsSync(path.join(root, "dist-app", "gatehouse.ico"))
 ) {
   say("building the package first")
@@ -55,4 +55,4 @@ if (r.status !== 0) {
   )
   process.exit(r.status ?? 1)
 }
-say(`wrote ${path.join(root, "dist-app", "Gatehouse-Setup.exe")}`)
+say(`wrote ${path.join(root, "dist-app", "JCVC-Setup.exe")}`)

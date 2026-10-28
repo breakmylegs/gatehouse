@@ -19,7 +19,7 @@ How to run Gatehouse day to day. Commands are for PowerShell in the repository f
 
 ### Or run it as an exe
 
-`npm run package` makes `dist-app\Gatehouse\Gatehouse.exe` with its runtime and application next to it. Double-click it instead of using the script. See `docs/packaging.md`.
+`npm run package` makes `dist-app\JCVC\JCVC.exe` with its runtime and application next to it. Double-click it instead of using the script. See `docs/packaging.md`.
 
 ### Start at logon (optional, not enabled)
 

@@ -1,4 +1,4 @@
-// Shared by Gatehouse.exe (the window app) and Gatehouse-Console.exe (the console launcher):
+// Shared by JCVC.exe (the window app) and JCVC-Console.exe (the console launcher):
 // finding Node, starting the Host and the Relay as children, and making sure they all stop with the launcher.
 //
 // Written in C# 5 so the compiler that ships with Windows can build it (no SDK needed).

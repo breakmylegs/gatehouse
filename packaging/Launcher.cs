@@ -1,5 +1,5 @@
-// Gatehouse-Console.exe: starts Gatehouse in a console window, for troubleshooting and scripts.
-// The normal way to run Gatehouse is Gatehouse.exe, which has its own window.
+// JCVC-Console.exe: starts Gatehouse in a console window, for troubleshooting and scripts.
+// The normal way to run Gatehouse is JCVC.exe, which has its own window.
 //
 // Layout next to this file: runtime\node.exe and app\ (see docs/packaging.md).
 // It starts the Host (which starts the Approver), prints the one-time address, and opens it in your browser
@@ -43,12 +43,12 @@ internal static class Launcher
         }
         if (help)
         {
-            Console.WriteLine("Gatehouse-Console");
-            Console.WriteLine("  Gatehouse-Console.exe         start; the address is opened in your browser");
+            Console.WriteLine("JCVC-Console");
+            Console.WriteLine("  JCVC-Console.exe         start; the address is opened in your browser");
             Console.WriteLine("  --no-browser                  do not open the browser");
             Console.WriteLine("  --check                       start, check it answers, stop (exit code 0 or 1)");
             Console.WriteLine("  --relay [--public-url URL]    also start the phone Relay (docs\\relay-local.md)");
-            Console.WriteLine("Use Gatehouse.exe for the normal window.");
+            Console.WriteLine("Use JCVC.exe for the normal window.");
             return 0;
         }
 

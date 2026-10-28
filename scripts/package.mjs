@@ -1,8 +1,8 @@
 // Builds a folder you can run, copy or zip:
 //
-//   dist-app/Gatehouse/
-//     Gatehouse.exe        the Gatehouse window (WebView2), compiled from packaging/GatehouseApp.cs with the compiler that ships with Windows
-//     Gatehouse-Console.exe  the same Host in a console window, for troubleshooting
+//   dist-app/JCVC/
+//     JCVC.exe        the Gatehouse window (WebView2), compiled from packaging/JCVCApp.cs with the compiler that ships with Windows
+//     JCVC-Console.exe  the same Host in a console window, for troubleshooting
 //     Microsoft.Web.WebView2.*.dll, WebView2Loader.dll   Microsoft's WebView2 libraries, fetched from NuGet
 //     runtime/node.exe     the Node it runs on
 //     app/                 the application and its production node_modules
@@ -10,9 +10,9 @@
 //
 // Usage: node scripts/package.mjs [--skip-build] [--check] [--zip] [--out <folder>]
 //   --skip-build  reuse apps/web/dist and apps/phone/dist as they are
-//   --check       afterwards run `Gatehouse.exe --check` against the packaged copy
-//   --exe-only    only recompile the exes into an existing dist-app/Gatehouse (quick, for working on the launcher)
-//   --zip         also make dist-app/Gatehouse.zip
+//   --check       afterwards run `JCVC.exe --check` against the packaged copy
+//   --exe-only    only recompile the exes into an existing dist-app/JCVC (quick, for working on the launcher)
+//   --zip         also make dist-app/JCVC.zip
 import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -23,7 +23,7 @@ const args = process.argv.slice(2)
 const has = (f) => args.includes(f)
 const outIdx = args.indexOf("--out")
 const outBase = path.resolve(outIdx >= 0 ? args[outIdx + 1] : path.join(root, "dist-app"))
-const dest = path.join(outBase, "Gatehouse")
+const dest = path.join(outBase, "JCVC")
 const app = path.join(dest, "app")
 const say = (t) => console.log(`[package] ${t}`)
 const run = (cmd, a, opts = {}) => {
@@ -35,7 +35,7 @@ const run = (cmd, a, opts = {}) => {
   if (r.status !== 0) throw new Error(`${cmd} ${a.join(" ")} failed (${r.status})`)
 }
 
-if (process.platform !== "win32") throw new Error("Gatehouse.exe is built for Windows.")
+if (process.platform !== "win32") throw new Error("JCVC.exe is built for Windows.")
 const major = Number(process.versions.node.split(".")[0])
 if (major < 22)
   throw new Error(`Node ${process.versions.node} is too old: Gatehouse needs 22 or newer.`)
@@ -153,7 +153,7 @@ if (!exeOnly) {
   fs.writeFileSync(path.join(dest, "runtime", "NODE-VERSION.txt"), `${process.version}\n`)
 }
 
-say("compiling Gatehouse.exe")
+say("compiling JCVC.exe")
 const csc = [
   process.env.windir + "\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe",
   process.env.windir + "\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe",
@@ -207,7 +207,7 @@ const wv2Loader = path.join(wv2Dir, "runtimes", "win-x64", "native", "WebView2Lo
 for (const f of [wv2Core, wv2Forms, wv2Loader])
   if (!fs.existsSync(f)) throw new Error(`${f} is missing from the WebView2 package`)
 const pk = (f) => path.join(root, "packaging", f)
-// Gatehouse.exe: the window. Gatehouse-Console.exe: the same Host in a console, for troubleshooting and scripts.
+// JCVC.exe: the window. JCVC-Console.exe: the same Host in a console, for troubleshooting and scripts.
 execFileSync(
   csc,
   [
@@ -216,13 +216,13 @@ execFileSync(
     "/optimize+",
     "/platform:x64",
     `/win32icon:${icoFile}`,
-    `/win32manifest:${pk("Gatehouse.manifest")}`,
+    `/win32manifest:${pk("JCVC.manifest")}`,
     "/r:System.Windows.Forms.dll",
     "/r:System.Drawing.dll",
     `/r:${wv2Core}`,
     `/r:${wv2Forms}`,
-    `/out:${path.join(dest, "Gatehouse.exe")}`,
-    pk("GatehouseApp.cs"),
+    `/out:${path.join(dest, "JCVC.exe")}`,
+    pk("JCVCApp.cs"),
     pk("Common.cs"),
   ],
   { stdio: "inherit" },
@@ -234,7 +234,7 @@ execFileSync(
     "/target:exe",
     "/optimize+",
     `/win32icon:${icoFile}`,
-    `/out:${path.join(dest, "Gatehouse-Console.exe")}`,
+    `/out:${path.join(dest, "JCVC-Console.exe")}`,
     pk("Launcher.cs"),
     pk("Common.cs"),
   ],
@@ -254,11 +254,11 @@ fs.writeFileSync(
   [
     "Jean-Claude Van Code (the Gatehouse application)",
     "",
-    "Double-click Gatehouse.exe. It opens the Jean-Claude Van Code window (not a browser tab).",
+    "Double-click JCVC.exe. It opens the Jean-Claude Van Code window (not a browser tab).",
     "Closing the window keeps Gatehouse running in the tray so approvals still reach you. Quit from the tray icon.",
-    "Gatehouse-Console.exe runs the same thing in a console window, for troubleshooting. --help lists the options.",
+    "JCVC-Console.exe runs the same thing in a console window, for troubleshooting. --help lists the options.",
     "",
-    "Keep the folder together: Gatehouse.exe finds runtime\\node.exe and the app folder next to it.",
+    "Keep the folder together: JCVC.exe finds runtime\\node.exe and the app folder next to it.",
     "You can move or copy the whole folder anywhere. Nothing is installed and nothing starts at logon.",
     "",
     "Your data (audit log, settings, usage) is in %LOCALAPPDATA%\\Gatehouse and stays when you replace this folder.",
@@ -273,7 +273,7 @@ fs.writeFileSync(
 
 if (has("--zip")) {
   say("zipping")
-  const zip = path.join(outBase, "Gatehouse.zip")
+  const zip = path.join(outBase, "JCVC.zip")
   fs.rmSync(zip, { force: true })
   run("pwsh", [
     "-NoProfile",
@@ -300,7 +300,7 @@ say(`done: ${dest} (${Math.round(size / 1048576)} MB)`)
 if (has("--check")) {
   say("checking the packaged copy")
   const dir = fs.mkdtempSync(path.join(process.env.TEMP ?? ".", "gh-pkgcheck-"))
-  const r = spawnSync(path.join(dest, "Gatehouse.exe"), ["--check"], {
+  const r = spawnSync(path.join(dest, "JCVC.exe"), ["--check"], {
     stdio: ["ignore", "inherit", "inherit"],
     env: {
       ...process.env,
@@ -313,6 +313,6 @@ if (has("--check")) {
     timeout: 300_000,
   })
   fs.rmSync(dir, { recursive: true, force: true })
-  if (r.status !== 0) throw new Error(`the packaged Gatehouse.exe --check failed (${r.status})`)
+  if (r.status !== 0) throw new Error(`the packaged JCVC.exe --check failed (${r.status})`)
   say("the packaged copy works")
 }
