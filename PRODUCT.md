@@ -35,7 +35,7 @@ A permission workbench, not a chat client. Every decision carries a rule id, a r
 ## Capabilities and Constraints
 
 - Surfaces, in order: approval card and queue; session workspace; sessions overview; policy studio; audit log; devices and pairing; settings; first run; phone app.
-- Permission modes are default and plan only. The phone can allow, deny, answer questions and trigger the kill switch. It cannot edit inputs, change policy or create remember rules.
+- Permission modes per session: Manual (default), Accept edits, Plan, Auto, and Extreme approval (Manual with every request that would ask approved, audited and told to the phone). Bypass permissions is never offered. The phone can allow, deny, answer questions and trigger the kill switch. It cannot edit inputs, change policy or create remember rules.
 - Approval actions: allow once, deny, deny with a message, edit then allow (desktop only), stop session, remember (desktop only, shows the exact rule it creates).
 - Allow needs a deliberate chord (Ctrl+Enter). Allow is never the default focus at risk 70 or above. Deny is always one step. New escalations never steal focus from the composer.
 - Terminology: "Approver", "Host", "Relay", "escalate", "rule id", "risk band", "remember rule", "kill switch".
@@ -43,7 +43,7 @@ A permission workbench, not a chat client. Every decision carries a rule id, a r
 
 ## Brand Commitments
 
-Product name: Gatehouse. Voice: plain, precise UK English in sentence case, no em dashes, no hype. No hover tooltips; explanations sit in visible text or a panel.
+Product name: Jean-Claude Van Code, JCVC for short (internal code name Gatehouse). Voice: plain, precise UK English in sentence case, no em dashes, no hype. No hover tooltips; explanations sit in visible text or a panel.
 
 ## Evidence on Hand
 

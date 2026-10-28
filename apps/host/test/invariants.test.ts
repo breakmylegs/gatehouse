@@ -37,7 +37,7 @@ describe("invariant 3: only default and plan, set explicitly", () => {
   })
 
   it("refuses every other mode, a missing mode and the dangerous flag", () => {
-    for (const mode of ["bypassPermissions", "acceptEdits", "dontAsk", "auto", "yolo", ""]) {
+    for (const mode of ["bypassPermissions", "dontAsk", "yolo", ""]) {
       expect(() => assertSafeOptions(safe({ permissionMode: mode as never })), mode).toThrow(
         SafetyError,
       )
@@ -63,7 +63,10 @@ describe("invariant 3: only default and plan, set explicitly", () => {
   it("knows which modes are allowed", () => {
     expect(isAllowedMode("default")).toBe(true)
     expect(isAllowedMode("plan")).toBe(true)
-    for (const m of ["auto", "acceptEdits", undefined, 5, null])
+    // Added on the owner's request (28 Oct). The floor and the audit still run in both.
+    expect(isAllowedMode("acceptEdits")).toBe(true)
+    expect(isAllowedMode("auto")).toBe(true)
+    for (const m of ["bypassPermissions", "dontAsk", undefined, 5, null])
       expect(isAllowedMode(m)).toBe(false)
   })
 })
@@ -134,7 +137,7 @@ describe("invariant 5, 6 and the required hooks", () => {
 
   it("carries the invariant number so a failure says what it broke", () => {
     try {
-      assertSafeOptions(safe({ permissionMode: "auto" as never }))
+      assertSafeOptions(safe({ permissionMode: "bypassPermissions" as never }))
       expect.unreachable()
     } catch (e) {
       expect((e as SafetyError).invariant).toBe(3)
@@ -606,7 +609,7 @@ describe("session lifecycle", () => {
     await session.setMode("plan")
     expect(session.info().mode).toBe("plan")
     await session.setMode("default")
-    for (const bad of ["bypassPermissions", "auto", "acceptEdits", "dontAsk"]) {
+    for (const bad of ["bypassPermissions", "dontAsk"]) {
       await expect(session.setMode(bad as never), bad).rejects.toBeInstanceOf(SafetyError)
     }
     const q = s.sdk.queries.at(-1)

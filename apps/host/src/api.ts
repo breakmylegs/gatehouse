@@ -56,8 +56,6 @@ export interface AdminContext {
   phone?: PhoneService
   /** Opens the Windows folder chooser. Absent where there is no desktop (tests). */
   pickFolder?: FolderPicker
-  /** Tells every open window that health changed (Extreme approval mode, for one). */
-  healthChanged?: () => void
 }
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex")
@@ -435,7 +433,6 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
-    if (changed.includes("extremeApproval")) ctx.healthChanged?.()
     const needsRestart = changed.filter((k) => !(LIVE_SETTINGS as readonly string[]).includes(k))
     return {
       ok: true,
@@ -572,7 +569,7 @@ export function recordsSince(dir: string, fromMs: number): AuditRecord[] {
 const DAY = 86_400_000
 
 /** Settings the Host reads at the moment it uses them. */
-const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime", "extremeApproval"] as const
+const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime"] as const
 
 /** Policy analytics, the digest and suggestions. Read-only except accepting a suggestion, which is desktop only. */
 function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {

@@ -25,7 +25,8 @@ export function JcvcBackdrop() {
         return
       }
       made = url
-      if (url) root.style.setProperty("--jcvc-img", `url("${url}")`)
+      // Absolute, because a relative address inside a custom property is read against the stylesheet, not the page.
+      if (url) root.style.setProperty("--jcvc-img", `url("${new URL(url, document.baseURI).href}")`)
       else root.style.removeProperty("--jcvc-img")
     })
     return () => {

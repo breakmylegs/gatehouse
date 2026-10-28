@@ -7,7 +7,6 @@ import { Approvals } from "./surfaces/Approvals"
 import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
 import { Setup } from "./surfaces/Setup"
-import { ExtremeBanner } from "./components/ExtremeMode"
 import { JcvcBackdrop } from "./components/JcvcBackdrop"
 import { Sessions } from "./surfaces/Sessions"
 import { type Route, send, usePendingCount, useStore } from "./store"
@@ -68,7 +67,7 @@ export function App() {
   const killed = health?.killSwitch.engaged ?? false
 
   return (
-    <div className="grid h-full grid-rows-[auto_auto_auto_1fr]">
+    <div className="grid h-full grid-rows-[auto_auto_1fr]">
       <a
         href="#main"
         onClick={(e) => {
@@ -154,9 +153,6 @@ export function App() {
           </button>
         )}
       </header>
-      <div>
-        <ExtremeBanner />
-      </div>
       {conn !== "open" ? (
         <div role="alert" className="border-b border-sev bg-s2 px-4 py-2 font-semibold text-sev">
           Not connected to the Host. Decisions are paused, and requests keep waiting. Reconnecting

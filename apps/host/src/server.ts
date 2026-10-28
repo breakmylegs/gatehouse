@@ -340,6 +340,8 @@ export class HostServer {
           cwd: cmd.cwd,
           ...(cmd.model ? { model: cmd.model } : {}),
           ...(cmd.mode ? { mode: cmd.mode } : {}),
+          ...(cmd.effort ? { effort: cmd.effort } : {}),
+          ...(cmd.extreme !== undefined ? { extreme: cmd.extreme } : {}),
           ...(cmd.resume ? { resume: cmd.resume } : {}),
           ...(cmd.fork !== undefined ? { fork: cmd.fork } : {}),
         })
@@ -356,6 +358,12 @@ export class HostServer {
         return undefined
       case "set_mode":
         await this.#session(cmd.sessionId).setMode(cmd.mode)
+        return undefined
+      case "set_effort":
+        await this.#session(cmd.sessionId).setEffort(cmd.effort)
+        return undefined
+      case "set_extreme":
+        await this.#session(cmd.sessionId).setExtreme(cmd.on)
         return undefined
       case "set_model":
         await this.#session(cmd.sessionId).setModel(cmd.model)

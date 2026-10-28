@@ -1,3 +1,4 @@
+import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { diffLines } from "diff"
 import { memo, useMemo, useRef, useState } from "react"
@@ -9,10 +10,23 @@ import { emptyTranscript, type Item, type Todo } from "../lib/transcript"
 import { money } from "../lib/format"
 import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
+import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
+
+/** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
+async function changeMode(session: SessionInfo, m: UiMode) {
+  const w = wireOf(m)
+  if (session.mode !== w.mode) await send({ type: "set_mode", sessionId: session.id, mode: w.mode })
+  if ((session.extreme === true) !== w.extreme)
+    await send({ type: "set_extreme", sessionId: session.id, on: w.extreme })
+}
 
 const SLASH: Array<{ cmd: string; help: string }> = [
-  { cmd: "/plan", help: "Switch this session to plan mode" },
-  { cmd: "/default", help: "Switch this session to default mode" },
+  { cmd: "/plan", help: "Switch this session to Plan" },
+  { cmd: "/default", help: "Switch this session to Manual" },
+  { cmd: "/accept-edits", help: "Switch this session to Accept edits" },
+  { cmd: "/auto", help: "Switch this session to Auto" },
+  { cmd: "/extreme", help: "Turn Extreme approval on or off for this session" },
+  { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
   { cmd: "/stop", help: "Interrupt the current turn" },
   { cmd: "/close", help: "End this session" },
@@ -104,22 +118,46 @@ export function Workspace() {
             ))}
           </select>
         </label>
-        <div role="group" aria-label="Mode" className="flex">
-          {(["default", "plan"] as const).map((m) => (
-            <button
-              key={m}
-              className={clsx(
-                "btn !rounded-none first:!rounded-l-md last:!rounded-r-md",
-                session.mode === m && "btn-primary",
-              )}
-              aria-pressed={session.mode === m}
-              disabled={ended}
-              onClick={() => void send({ type: "set_mode", sessionId: session.id, mode: m })}
-            >
-              {m === "plan" ? "Plan" : "Default"}
-            </button>
-          ))}
-        </div>
+        <label className="flex items-center gap-2">
+          <span className="text-mut">Effort</span>
+          <select
+            className="field"
+            value={session.effort ?? ""}
+            disabled={ended}
+            onChange={(e) =>
+              e.target.value &&
+              void send({
+                type: "set_effort",
+                sessionId: session.id,
+                effort: e.target.value as EffortId,
+              })
+            }
+          >
+            <option value="" disabled>
+              Model default
+            </option>
+            {EFFORTS.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2">
+          <span className="text-mut">Mode</span>
+          <select
+            className="field"
+            value={uiModeOf(session)}
+            disabled={ended}
+            onChange={(e) => void changeMode(session, e.target.value as UiMode)}
+          >
+            {MODE_OPTIONS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           className="btn btn-deny"
           disabled={!running}
@@ -206,6 +244,25 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
           break
         case "/default":
           r = await send({ type: "set_mode", sessionId, mode: "default" })
+          break
+        case "/accept-edits":
+          r = await send({ type: "set_mode", sessionId, mode: "acceptEdits" })
+          break
+        case "/auto":
+          r = await send({ type: "set_mode", sessionId, mode: "auto" })
+          break
+        case "/extreme": {
+          const cur = useStore.getState().sessions[sessionId]?.extreme === true
+          r = await send({ type: "set_extreme", sessionId, on: !cur })
+          break
+        }
+        case "/effort":
+          r = EFFORTS.some((x) => x.id === arg)
+            ? await send({ type: "set_effort", sessionId, effort: arg as EffortId })
+            : {
+                ok: false,
+                error: { code: "bad-effort", message: "Use low, medium, high, xhigh or max" },
+              }
           break
         case "/model":
           r = await send({ type: "set_model", sessionId, ...(arg ? { model: arg } : {}) })

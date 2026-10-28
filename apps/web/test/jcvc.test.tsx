@@ -37,6 +37,7 @@ describe("Jean-Claude mode", () => {
     useStore.getState().setJcPic("beret")
     render(<JcvcBackdrop />)
     await waitFor(() => expect(css()).toContain("beret"))
+    expect(css().startsWith('url("http')).toBe(true)
     useStore.getState().setJcMode(false)
     await waitFor(() => expect(css()).toBe(""))
   })

@@ -110,7 +110,7 @@ function Setup({ onDone }: { onDone: () => Promise<void> }) {
           required
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://gatehouse.example.com"
+          placeholder="https://relay.example.com"
         />
       </label>
       <label className="grid gap-1">

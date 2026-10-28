@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events"
+import type { Effort } from "@gatehouse/shared"
 import fs from "node:fs"
 import path from "node:path"
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
@@ -87,6 +88,8 @@ export interface SessionInfo {
   project: string
   model?: string
   mode: SessionMode
+  effort?: Effort
+  extreme?: boolean
   state: SessionState
   sdkSessionId?: string
   pendingApprovals: number
@@ -131,6 +134,8 @@ export interface StartSessionOptions {
   cwd: string
   model?: string
   mode?: SessionMode
+  effort?: Effort
+  extreme?: boolean
   resume?: string
   fork?: boolean
 }
@@ -184,6 +189,8 @@ export class Session extends EventEmitter<SessionEvents> {
   #state: SessionState = "starting"
   #mode: SessionMode
   #model: string | undefined
+  #effort: Effort | undefined
+  #extreme: boolean
   #sdkSessionId: string | undefined
   #error: string | undefined
   #running = false
@@ -198,6 +205,8 @@ export class Session extends EventEmitter<SessionEvents> {
     this.project = path.basename(findProjectRoot(opts.cwd))
     this.#mode = opts.mode ?? "default"
     this.#model = opts.model
+    this.#effort = opts.effort
+    this.#extreme = opts.extreme === true
     this.#onBrokerChange = () => this.#refreshWaiting()
     deps.broker.on("created", this.#onBrokerChange)
     deps.broker.on("resolved", this.#onBrokerChange)
@@ -210,6 +219,8 @@ export class Session extends EventEmitter<SessionEvents> {
       project: this.project,
       ...(this.#model !== undefined ? { model: this.#model } : {}),
       mode: this.#mode,
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
+      extreme: this.#extreme,
       state: this.#state,
       ...(this.#sdkSessionId !== undefined ? { sdkSessionId: this.#sdkSessionId } : {}),
       pendingApprovals: this.#deps.broker.countFor(this.id),
@@ -255,6 +266,7 @@ export class Session extends EventEmitter<SessionEvents> {
       cwd: this.cwd,
       ...(this.#model !== undefined ? { model: this.#model } : {}),
       permissionMode: this.#mode,
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
       systemPrompt: { type: "preset", preset: "claude_code", snapshot: true },
       settingSources: ["user", "project", "local"],
       includePartialMessages: true,
@@ -273,7 +285,7 @@ export class Session extends EventEmitter<SessionEvents> {
         checkpoints: d.checkpoints,
         ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
         decided: this.#decided,
-        extreme: () => d.config().extremeApproval === true,
+        extreme: () => this.#extreme,
         ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
         log: d.log,
       }),
@@ -387,10 +399,43 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!isAllowedMode(mode))
       throw new SafetyError(
         3,
-        `permission mode "${String(mode)}" is not allowed, only default and plan`,
+        `permission mode "${String(mode)}" is not allowed, only default, plan, acceptEdits and auto`,
       )
     await this.#q?.setPermissionMode(mode)
     this.#mode = mode
+    this.emit("state", this.info())
+  }
+
+  /** Reasoning effort. Applied to the running session as a flag setting that carries only this one key. */
+  async setEffort(effort: Effort): Promise<void> {
+    await this.#q?.applyFlagSettings({ effortLevel: effort })
+    this.#effort = effort
+    this.emit("state", this.info())
+  }
+
+  /** Extreme approval for this session only. Written to the audit log, because it changes what gets asked. */
+  async setExtreme(on: boolean): Promise<void> {
+    this.#extreme = on
+    await this.#deps.audit.record({
+      session: this.id,
+      event: "settings_changed",
+      channel: "desktop",
+      tool: "extreme-approval",
+      cwd: this.cwd,
+      project: this.project,
+      input: { on },
+      verdict: {
+        outcome: "allow",
+        ruleId: on ? "extreme-on" : "extreme-off",
+        reason: on
+          ? "Extreme approval turned on for this session from the desktop."
+          : "Extreme approval turned off for this session from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
     this.emit("state", this.info())
   }
 

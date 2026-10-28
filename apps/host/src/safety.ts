@@ -10,7 +10,12 @@ export class SafetyError extends Error {
   }
 }
 
-export const ALLOWED_MODES = ["default", "plan"] as const
+/**
+ * default (Manual), plan, and, since the owner asked on 28 Oct, acceptEdits and auto. Every one of them still runs the
+ * PreToolUse floor and is audited (what Claude Code approves by itself is recorded by the PostToolUse hook). The ones
+ * that skip every check are never allowed: bypassPermissions and dontAsk.
+ */
+export const ALLOWED_MODES = ["default", "plan", "acceptEdits", "auto"] as const
 export type SessionMode = (typeof ALLOWED_MODES)[number]
 
 export function isAllowedMode(mode: unknown): mode is SessionMode {
@@ -25,7 +30,7 @@ export function isBareToolName(entry: string): boolean {
 /**
  * Runs just before a session is created and refuses anything that would weaken Gatehouse. These are the
  * rules that cannot be left to a test alone, because one wrong option would silently turn the approvals off:
- *  3  the mode is set, and is default or plan, with no bypass or auto mode or equivalent;
+ *  3  the mode is set, and is one of ALLOWED_MODES, never bypassPermissions or dontAsk or an equivalent;
  *  4  allowedTools has no bare tool names (they would approve calls before canUseTool sees them);
  *  5  nothing else supplies permissions (settings, a prompt tool, extra CLI flags, agent modes);
  *  6  the environment is given explicitly and holds no credentials, and the binary is the bundled one.
@@ -38,7 +43,7 @@ export function assertSafeOptions(options: Options): void {
   if (!isAllowedMode(options.permissionMode)) {
     throw new SafetyError(
       3,
-      `permission mode "${String(options.permissionMode)}" is not allowed, only default and plan`,
+      `permission mode "${String(options.permissionMode)}" is not allowed, only default, plan, acceptEdits and auto`,
     )
   }
   if (options.allowDangerouslySkipPermissions) {

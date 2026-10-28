@@ -45,6 +45,7 @@ export interface FakeQueryHandle {
   interrupts: number
   modes: string[]
   models: (string | undefined)[]
+  flags: Record<string, unknown>[]
   prompts: string[]
   permissionResults: PermissionResult[]
   initializationResult(): Promise<{ account: AccountInfo }>
@@ -77,6 +78,7 @@ export class FakeSdk {
       interrupts: 0,
       modes: [],
       models: [],
+      flags: [],
       prompts: [],
       permissionResults: [],
       initializationResult: async () => ({ account: this.account as AccountInfo }),
@@ -273,6 +275,9 @@ export class FakeSdk {
       },
       async setModel(model?: string) {
         handle.models.push(model)
+      },
+      async applyFlagSettings(flags: Record<string, unknown>) {
+        handle.flags.push(flags)
       },
       async initializationResult() {
         return handle.initializationResult()

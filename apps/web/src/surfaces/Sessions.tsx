@@ -4,14 +4,25 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { money } from "../lib/format"
 import { api } from "../lib/api"
+import {
+  BYPASS_NOTE,
+  EFFORTS,
+  MODE_OPTIONS,
+  wireOf,
+  type EffortId,
+  type UiMode,
+} from "../lib/modes"
 import { send, useSessionList, useStore } from "../store"
 import { UsageView } from "./UsageView"
 
 export const MODELS: Array<{ id: string; label: string }> = [
   { id: "", label: "Default model" },
   { id: "claude-opus-5-5", label: "Opus 5.5" },
+  { id: "claude-opus-5", label: "Opus 5" },
   { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
+  { id: "claude-sonnet-5", label: "Sonnet 5" },
   { id: "claude-haiku-5-5", label: "Haiku 5.5" },
+  { id: "claude-haiku-4-5", label: "Haiku 4.5" },
   { id: "claude-fable-5-1", label: "Fable 5.1" },
 ]
 
@@ -51,7 +62,8 @@ export function Sessions() {
   const selectSession = useStore((s) => s.selectSession)
   const [cwd, setCwd] = useState("")
   const [model, setModel] = useState("")
-  const [mode, setMode] = useState<"default" | "plan">("default")
+  const [mode, setMode] = useState<UiMode>("default")
+  const [effort, setEffort] = useState<EffortId | "">("")
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
@@ -77,7 +89,8 @@ export function Sessions() {
       type: "create_session",
       cwd: cwd.trim(),
       ...(model ? { model } : {}),
-      mode,
+      ...(effort ? { effort } : {}),
+      ...wireOf(mode),
     })
     setBusy(false)
     if (!r.ok) {
@@ -101,7 +114,7 @@ export function Sessions() {
 
       <form onSubmit={create} className="panel grid gap-3 p-4" aria-label="Start a session">
         <h2 className="m-0 text-sm font-semibold">Start a session</h2>
-        <div className="grid grid-cols-[1fr_180px_140px_auto] items-end gap-3 max-[900px]:grid-cols-1">
+        <div className="grid grid-cols-[1fr_160px_170px_180px_auto] items-end gap-3 max-[900px]:grid-cols-1">
           <label className="grid gap-1">
             <span>Folder</span>
             <input
@@ -132,14 +145,32 @@ export function Sessions() {
             </select>
           </label>
           <label className="grid gap-1">
+            <span>Effort</span>
+            <select
+              className="field"
+              value={effort}
+              onChange={(e) => setEffort(e.target.value as EffortId | "")}
+            >
+              <option value="">Model default</option>
+              {EFFORTS.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1">
             <span>Mode</span>
             <select
               className="field"
               value={mode}
-              onChange={(e) => setMode(e.target.value as "default" | "plan")}
+              onChange={(e) => setMode(e.target.value as UiMode)}
             >
-              <option value="default">Default</option>
-              <option value="plan">Plan</option>
+              {MODE_OPTIONS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
             </select>
           </label>
           <button className="btn btn-primary" disabled={busy || !cwd.trim()}>
@@ -147,8 +178,8 @@ export function Sessions() {
           </button>
         </div>
         <p className="m-0 text-xs text-mut">
-          Sessions only ever run in Default or Plan mode. Anything risky waits for your decision.
-          Starting one can take up to a minute while Claude signs in.
+          {MODE_OPTIONS.find((m) => m.id === mode)?.help}. The floor and the audit apply in every
+          mode. {BYPASS_NOTE} A missing folder is created. Starting can take up to a minute.
         </p>
         {error ? (
           <p role="alert" className="m-0 font-semibold text-sev">

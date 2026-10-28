@@ -406,7 +406,7 @@ describe("commands over the WebSocket", () => {
     const created = await c.send({ type: "create_session", cwd: s.repo })
     expect(created.ok).toBe(true)
     const sessionId = (created.data as { sessionId: string }).sessionId
-    for (const mode of ["bypassPermissions", "auto", "acceptEdits", "dontAsk"]) {
+    for (const mode of ["bypassPermissions", "dontAsk"]) {
       const r = await c.send({ type: "set_mode", sessionId, mode })
       expect(r, mode).toMatchObject({ ok: false, error: { code: "invalid-command" } })
     }
@@ -598,6 +598,33 @@ describe("commands over the WebSocket", () => {
     const acct = await c.send({ type: "refresh_account" })
     expect(acct.ok).toBe(true)
     expect(acct.data).toMatchObject({ signedIn: true, org: { ok: true } })
+  })
+
+  it("sets effort and Extreme approval per session, and audits the switch", async () => {
+    const created = await c.send({
+      type: "create_session",
+      cwd: s.repo,
+      mode: "acceptEdits",
+      effort: "high",
+      extreme: true,
+    })
+    expect(created.ok).toBe(true)
+    const info = (created.data as { info: { mode: string; effort?: string; extreme?: boolean } })
+      .info
+    expect(info).toMatchObject({ mode: "acceptEdits", effort: "high", extreme: true })
+    const sessionId = (created.data as { sessionId: string }).sessionId
+    expect(s.sdk.queries.at(-1)?.options.effort).toBe("high")
+    expect(await c.send({ type: "set_effort", sessionId, effort: "max" })).toMatchObject({
+      ok: true,
+    })
+    expect(s.sdk.queries.at(-1)?.flags).toEqual([{ effortLevel: "max" }])
+    expect(await c.send({ type: "set_extreme", sessionId, on: false })).toMatchObject({ ok: true })
+    expect(await c.send({ type: "set_mode", sessionId, mode: "auto" })).toMatchObject({ ok: true })
+    expect(await c.send({ type: "set_effort", sessionId, effort: "huge" as never })).toMatchObject({
+      ok: false,
+      error: { code: "invalid-command" },
+    })
+    await c.send({ type: "close_session", sessionId })
   })
 
   it("tells the window the new health after a sign-in check", async () => {

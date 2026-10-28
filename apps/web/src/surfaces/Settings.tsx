@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react"
-import { ExtremePanel } from "../components/ExtremeMode"
 import { JcvcPicker } from "../components/JcvcPicker"
 import { toast } from "sonner"
 import { api } from "../lib/api"
@@ -89,10 +88,8 @@ export function Settings() {
     if (!data) return
     setBusy(true)
     setErrors(undefined)
-    const fresh = await api<{ saved: Record<string, unknown> }>("GET", "/api/settings")
     const body: Record<string, unknown> = {
       ...data.saved,
-      ...(fresh.data?.saved?.extremeApproval === true ? { extremeApproval: true } : {}),
       redactTerms: lines(terms),
       phoneExpiryMs: Math.round(phoneMin * 60_000),
       hardTimeoutMs: Math.round(hardMin * 60_000),
@@ -281,8 +278,6 @@ export function Settings() {
           Take a checkpoint before the first edit after a quiet spell
         </label>
       </fieldset>
-
-      <ExtremePanel />
 
       <fieldset className="m-0 grid gap-2 border-0 p-0">
         <legend className="mb-1 text-sm font-semibold">Setup</legend>

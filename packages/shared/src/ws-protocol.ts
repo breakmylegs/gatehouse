@@ -8,7 +8,9 @@ import { EscalationRequest } from "./contracts.js"
  */
 
 const Id = z.string().min(1).max(200)
-const Mode = z.enum(["default", "plan"])
+const Mode = z.enum(["default", "acceptEdits", "plan", "auto"])
+export const Effort = z.enum(["low", "medium", "high", "xhigh", "max"])
+export type Effort = z.infer<typeof Effort>
 const Message = z.string().max(500)
 
 export const ClientCommand = z.discriminatedUnion("type", [
@@ -17,6 +19,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
     cwd: z.string().min(1).max(4096),
     model: z.string().min(1).max(200).optional(),
     mode: Mode.optional(),
+    effort: Effort.optional(),
+    /** Extreme approval for this session: what would ask you is approved, audited and told to the phone. */
+    extreme: z.boolean().optional(),
     resume: Id.optional(),
     fork: z.boolean().optional(),
   }),
@@ -24,6 +29,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
   z.object({ type: z.literal("interrupt"), sessionId: Id }),
   z.object({ type: z.literal("set_mode"), sessionId: Id, mode: Mode }),
+  z.object({ type: z.literal("set_effort"), sessionId: Id, effort: Effort }),
+  z.object({ type: z.literal("set_extreme"), sessionId: Id, on: z.boolean() }),
   z.object({
     type: z.literal("set_model"),
     sessionId: Id,
@@ -80,6 +87,8 @@ export const SessionInfo = z.object({
   project: z.string(),
   model: z.string().optional(),
   mode: Mode,
+  effort: Effort.optional(),
+  extreme: z.boolean().optional(),
   state: z.enum(["starting", "idle", "running", "waiting", "error", "ended"]),
   sdkSessionId: z.string().optional(),
   pendingApprovals: z.number().int(),
@@ -134,8 +143,6 @@ export const Health = z.object({
     approverConfirmed: z.boolean(),
   }),
   pwsh: z.object({ running: z.boolean(), languageMode: z.string().optional() }),
-  /** True while Extreme approval mode is on. */
-  extremeApproval: z.boolean().optional(),
 })
 export type Health = z.infer<typeof Health>
 

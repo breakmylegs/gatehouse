@@ -287,7 +287,6 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(ks.by ? { by: ks.by } : {}),
         approverConfirmed: ks.approverConfirmed,
       },
-      extremeApproval: config.extremeApproval === true,
       pwsh: {
         running: pwsh.running,
         ...(pwsh.languageMode ? { languageMode: pwsh.languageMode } : {}),
@@ -330,7 +329,6 @@ export function createHost(opts: HostOptions = {}): Host {
       phone,
       usage,
       pickFolder: pickFolderWithWindows,
-      healthChanged: () => opts.onHealthChanged?.(),
     },
     phone,
     listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),

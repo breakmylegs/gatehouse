@@ -11,8 +11,8 @@ Every phase must keep these true. Write an automated test for every invariant th
 1. **Fail closed.** Any Approver error, timeout, malformed verdict or crash means escalate, never allow.
 2. **Deny-only floor.** The PreToolUse floor hook returns deny or no decision. It never returns allow.
 3. **Permission modes.**
-   - Never use `bypassPermissions`, auto mode, `allowDangerouslySkipPermissions` or any equivalent.
-   - The only allowed modes are `default` and `plan`.
+   - Never use `bypassPermissions`, `dontAsk`, `allowDangerouslySkipPermissions` or any equivalent.
+   - The allowed modes are `default` (shown as Manual), `plan`, and, by owner decision on 28 Oct 2026, `acceptEdits` and `auto`. The floor hook and the audit run in every mode. Extreme approval is a per-session flag on `default`, not an SDK mode.
    - Set the mode explicitly on every session.
 4. **No bare tool names in `allowedTools`.** Treat the SDK warning `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`, or any equivalent, as a fatal startup error.
 5. **No `updatedPermissions`.** Never return it from `canUseTool`. "Remember" writes to the Gatehouse policy overlay instead, so the Approver stays the single decider and every decision keeps a rule id.
