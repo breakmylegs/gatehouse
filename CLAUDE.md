@@ -63,6 +63,8 @@ Every phase must keep these true. Write an automated test for every invariant th
 | `pwsh scripts/start.ps1` | Start the Host (which starts the Approver) and open the interface. `-Check` tests it, `-Relay` also starts the phone Relay. |
 | `npm run build -w @gatehouse/web` | Build the desktop interface the Host serves. Restart the Host after a rebuild. |
 | `npm run package` / `npm run package:check` | Build `dist-app\JCVC\JCVC.exe` with its runtime and app folder next to it (`docs/packaging.md`). |
+| `npm run gate` | Before a push: typecheck the touched workspaces and their dependents, lint the changed files, run the tests that import what changed (vitest related) plus tests that name a changed C# file, rule, script or style, plus the security invariant tests. `-- --full` for everything; it runs everything by itself when dependencies or build config change. `-- --dry` says what it would run. |
+| `npm run release` | Publish a release from this computer: checks, package, installer, signed update parts, `gh release create`. Run it after pushing app changes; installed copies then offer the update. `docs/packaging.md` has the details. |
 | `npm run relay` / `npm run relay:build-phone` | Run the phone Relay locally (see `docs/relay-local.md`) and build the phone app. |
 
 Layout: `apps/host` (Host, admin API, phone channel), `apps/approver`, `apps/companion`, `apps/web` (desktop UI), `apps/relay` (phone Relay), `apps/phone` (iPhone PWA), `packages/policy`, `packages/shared`. Design notes are in `PRODUCT.md`, `DESIGN.md` and `docs/design`. The threat model (`docs/threat-model.md`) is checked against real test names by `apps/host/test/threat-model.test.ts`.
@@ -75,8 +77,11 @@ Machine facts that shape the design (details in `docs/sdk-notes.md`): the manage
 - Pin exact dependency versions and commit the lockfile. Add no dependency without stating why in `docs/BUILD_REPORT.md`.
 - Use only SDK APIs recorded in `docs/sdk-notes.md`. If the SDK or the machine conflicts with the spec, never break an invariant: record the deviation and the reason in `docs/BUILD_REPORT.md` and keep the invariant true.
 - Tests first, especially for the policy engine and each invariant. Prove important tests by breaking the code they guard and checking they fail.
+- Gate each change with `npm run gate`, not the whole suite (owner, 29 Oct: each test run should be specific to what is new and what it might affect). Run the full suite only when the gate says so, before a large refactor, or when asked. Do not add tests for the sake of it: each test guards a behaviour someone relies on.
 - Small conventional commits. One branch per phase, fast-forwarded into `main` when the phase is done. The owner asked for no phase gates, so work continues through the phases.
 - Cross-platform npm scripts. No shell-specific commands such as `rm -rf`.
 - Avoid native addons. Local data lives under `%LOCALAPPDATA%\Gatehouse\`. Write files atomically (temp file, then rename).
 - UI copy, docs and code comments use plain UK English with no em dashes.
 - Impeccable hooks are not enabled. Run `npx impeccable detect` manually after UI tasks.
+- No GitHub Actions (owner, 29 Oct: the account has few minutes). Actions are switched off for the repository; never add a workflow. Releases are made locally with `npm run release`.
+- Settings and other data files are read by older and newer versions alike, because an update can be undone. Read them tolerantly (keep what you do not know) and change them only by adding.
