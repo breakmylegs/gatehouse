@@ -427,3 +427,10 @@ Owner requests, and what was done or decided:
   - **Next:** build the code into a few files at package time, so a start reads a handful of files instead of 1,500.
 - **ntfy test "not working".** The owner's tests did reach ntfy (three on the topic); the phone was not on that exact topic. New topics use only letters and digits that cannot be confused (no 0 o 1 l i), in groups of four; the panel has Copy topic and the address to open in the phone's browser to check; the test now says when ntfy stored it; the counter says it counts request notifications.
 - **Release notes** list only what changed since the last release (the release tags are fetched first).
+
+## Phase 26: starting in a quarter of the time (29 Oct)
+
+- **Built code.** The package now runs the Host, the Approver and the phone Relay as one built file each (`scripts/bundle.mjs`, esbuild, already installed with tsx and vite, so no new dependency). The sources stay as a fallback.
+- **Measured on a fresh copy of the package** (what an install or an update leaves): first start 84 s before, **22 s** now (loading JCVC's code went from 50 s to 3 s); second start 32 s before, **11 s** now. Node's compile cache in the data folder helps the second start.
+- **What could have broken, and the check for it.** `scripts/package-smoke.mjs`, run by `npm run package:check`, drives the packaged copy: Approver and PowerShell checker running, `git status` allowed and `git push --force` denied through the shell parser, a PowerShell command parsed, a secrets file blocked by the floor, a token sealed with DPAPI and removed, the built Relay loading. Proved by hiding the DPAPI script for one run: that check failed. The DPAPI script path counted folders and would have broken; it now searches up for the app folder.
+- **Still slow:** about 6 s between "Opening the window" and ready, and 3 to 4 s starting the Approver. Not looked into yet.

@@ -68,6 +68,17 @@ The installer puts JCVC in `%LOCALAPPDATA%\Programs\JCVC` (no administrator need
 
 A single-file exe was judged not worth it: JCVC also needs the WebView2 libraries, its WebAssembly files, the Agent SDK's binary and the PowerShell scripts at run time, so a single file would unpack them next to itself anyway.
 
+## Built code
+
+The package does not run the TypeScript sources: `scripts/bundle.mjs` builds the Host, the Approver and the phone Relay into one file each (`appapps<name>distmain.mjs`), and the launchers and the Host start those directly. A start then reads a handful of files instead of about 1,500, which matters most on the first start after an install or update, when Windows scans every file once. Measured on a fresh copy: first start 84 s from source, 22 s built; second start 32 s and 11 s. The sources stay in the package, and each launcher falls back to them through tsx if a built file is missing.
+
+The Agent SDK and the shell parser stay outside the built files (they find their own files at run time), as do pino and thread-stream. Each built file sits in `apps<name>dist`, the same depth as `src`, so paths the code finds from its own place still lead to the same files; the one that did not (the DPAPI script) now searches up for the app folder.
+
+Node keeps compiled code in `%LOCALAPPDATA%Gatehouse
+ode-cache` (`NODE_COMPILE_CACHE`, set by the launchers), so later starts skip compiling.
+
+`npm run package:check` also runs `scripts/package-smoke.mjs` against the package: the Approver and the PowerShell checker running, real decisions through the shell parser and the PowerShell parser, a secret sealed with DPAPI and removed, and the built Relay loading.
+
 ## Installing from the source
 
 `npm run install:local` (`scripts/install-local.mjs`) is for a computer whose browser will not keep JCVC-Setup.exe. It builds the package (`--skip-build` reuses `dist-appJCVC`), copies it beside `%LOCALAPPDATA%ProgramsJCVC` without npm's workspace links, and then:

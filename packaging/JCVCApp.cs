@@ -207,7 +207,7 @@ internal sealed class MainForm : Form
         if (startInTray) Hide();
         string root = Hosting.Root();
         string appDir = Hosting.AppDir(root);
-        string hostEntry = Path.Combine(appDir, "apps", "host", "src", "main.ts");
+        string hostEntry = Hosting.Entry(appDir, "host");
         string node = Hosting.FindNode(root);
         if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep JCVC.exe next to its app folder."); return; }
         if (node == null) { Fail("No Node was found. JCVC needs runtime\\node.exe next to it."); return; }
@@ -237,7 +237,7 @@ internal sealed class MainForm : Form
             host.BeginErrorReadLine();
             if (withRelay)
             {
-                relay = Hosting.StartChild(node, appDir, Path.Combine(appDir, "apps", "relay", "src", "main.ts"), relayArgs);
+                relay = Hosting.StartChild(node, appDir, Hosting.Entry(appDir, "relay"), relayArgs);
                 relay.OutputDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember("[relay] " + ev.Data); };
                 relay.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember("[relay] " + ev.Data); };
                 relay.BeginOutputReadLine();

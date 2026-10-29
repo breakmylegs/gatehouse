@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process"
+import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -8,8 +9,20 @@ export interface Protector {
   unprotect(bytes: Uint8Array): Promise<Uint8Array>
 }
 
-const here = path.dirname(fileURLToPath(import.meta.url))
-const DEFAULT_SCRIPT = path.resolve(here, "../../../../scripts/dpapi.ps1")
+/**
+ * scripts/dpapi.ps1, found by going up from this file to the app folder. Counting folders would break when the Host
+ * is built into one file (apps/host/dist/main.mjs sits one level higher than this file does in the sources).
+ */
+function findScript(): string {
+  let dir = path.dirname(fileURLToPath(import.meta.url))
+  for (let i = 0; i < 6; i++) {
+    const p = path.join(dir, "scripts", "dpapi.ps1")
+    if (fs.existsSync(p)) return p
+    dir = path.dirname(dir)
+  }
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../scripts/dpapi.ps1")
+}
+const DEFAULT_SCRIPT = findScript()
 
 export class DpapiProtector implements Protector {
   constructor(

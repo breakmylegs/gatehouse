@@ -170,8 +170,11 @@ internal static class Hosting
         MakeJob();
         ProcessStartInfo psi = new ProcessStartInfo();
         psi.FileName = node;
-        psi.Arguments = "\"" + Path.Combine(appDir, "node_modules", "tsx", "dist", "cli.mjs") + "\" \"" + entry + "\"" +
-                        (string.IsNullOrEmpty(extraArgs) ? "" : " " + extraArgs);
+        // A built file (apps\<name>\dist\main.mjs) runs on Node directly; a TypeScript source goes through tsx.
+        string run = entry.EndsWith(".mjs", StringComparison.OrdinalIgnoreCase)
+            ? "\"" + entry + "\""
+            : "\"" + Path.Combine(appDir, "node_modules", "tsx", "dist", "cli.mjs") + "\" \"" + entry + "\"";
+        psi.Arguments = run + (string.IsNullOrEmpty(extraArgs) ? "" : " " + extraArgs);
         psi.WorkingDirectory = appDir;
         psi.UseShellExecute = false;
         psi.CreateNoWindow = true;
@@ -181,6 +184,9 @@ internal static class Hosting
         // The one clean way to ask a child to stop that works the same everywhere: close its input.
         psi.EnvironmentVariables["GATEHOUSE_EXIT_ON_STDIN_CLOSE"] = "1";
         psi.EnvironmentVariables["GATEHOUSE_PACKAGED"] = "1";
+        // Node keeps the compiled code here, so the next start reuses it instead of compiling everything again.
+        if (string.IsNullOrEmpty(psi.EnvironmentVariables["NODE_COMPILE_CACHE"]))
+            psi.EnvironmentVariables["NODE_COMPILE_CACHE"] = Path.Combine(DataDir(), "node-cache");
         Process p = new Process();
         p.StartInfo = psi;
         p.Start();
@@ -204,6 +210,22 @@ internal static class Hosting
             }
             catch (Exception) { }
         }
+    }
+
+    /// <summary>The program to start for one of JCVC's parts: its built file if the package has one, else its source.</summary>
+    internal static string Entry(string appDir, string name)
+    {
+        string built = Path.Combine(appDir, "apps", name, "dist", "main.mjs");
+        return File.Exists(built) ? built : Path.Combine(appDir, "apps", name, "src", "main.ts");
+    }
+
+    /// <summary>%LOCALAPPDATA%\Gatehouse, or GATEHOUSE_DATA_DIR when it is set.</summary>
+    internal static string DataDir()
+    {
+        string d = Environment.GetEnvironmentVariable("GATEHOUSE_DATA_DIR");
+        return string.IsNullOrEmpty(d)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Gatehouse")
+            : d;
     }
 
     internal static string AppDir(string root)

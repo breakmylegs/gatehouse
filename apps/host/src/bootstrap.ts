@@ -76,6 +76,17 @@ export interface Host {
   stop(): Promise<void>
 }
 
+/**
+ * How to start another JCVC program as a Node child: its built file when the package has one (apps/<name>/dist/
+ * main.mjs, made by scripts/bundle.mjs), otherwise its TypeScript source through tsx.
+ */
+export function childArgs(name: "approver" | "relay"): string[] {
+  const built = path.join(REPO_ROOT, "apps", name, "dist", "main.mjs")
+  return fs.existsSync(built)
+    ? [built]
+    : ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", name, "src", "main.ts")]
+}
+
 /** The loader URL a child process in another folder needs to run TypeScript directly. */
 export function tsxLoaderUrl(): string {
   return pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href
@@ -372,7 +383,7 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   const localRelay = new LocalRelay({
     command: process.execPath,
-    args: ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", "relay", "src", "main.ts")],
+    args: childArgs("relay"),
     cwd: REPO_ROOT,
     dataDir: path.join(gatehouseDataDir(env), "relay"),
     log,
@@ -546,11 +557,7 @@ export function createHost(opts: HostOptions = {}): Host {
         const port = await approverPortPromise
         approverProcess = new ApproverProcess({
           command: process.execPath,
-          args: [
-            "--import",
-            tsxLoaderUrl(),
-            path.join(REPO_ROOT, "apps", "approver", "src", "main.ts"),
-          ],
+          args: childArgs("approver"),
           cwd: REPO_ROOT,
           env: {
             GATEHOUSE_RULES_PATH: rulesPath,

@@ -167,6 +167,10 @@ if (!exeOnly) {
     throw new Error(`the workspace links in ${scope} are not what the package expects`)
   fs.writeFileSync(path.join(app, "workspace-links.json"), JSON.stringify(links, null, 2) + "\n")
 
+  // The Host, the Approver and the Relay built into one file each, so a start reads a handful of files.
+  say("building the Host, the Approver and the Relay into single files")
+  run(process.execPath, [path.join(root, "scripts", "bundle.mjs"), app], { cwd: root })
+
   say("copying Node")
   fs.mkdirSync(path.join(dest, "runtime"), { recursive: true })
   fs.copyFileSync(process.execPath, path.join(dest, "runtime", "node.exe"))
@@ -362,4 +366,6 @@ if (has("--check")) {
   fs.rmSync(dir, { recursive: true, force: true })
   if (r.status !== 0) throw new Error(`the packaged JCVC.exe --check failed (${r.status})`)
   say("the packaged copy works")
+  // Deeper: decisions through both parsers, a DPAPI secret, the built Relay (scripts/package-smoke.mjs).
+  run(process.execPath, [path.join(root, "scripts", "package-smoke.mjs"), dest], { cwd: root })
 }

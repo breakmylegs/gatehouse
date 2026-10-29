@@ -54,7 +54,7 @@ internal static class Launcher
 
         string root = Hosting.Root();
         string appDir = Hosting.AppDir(root);
-        string hostEntry = Path.Combine(appDir, "apps", "host", "src", "main.ts");
+        string hostEntry = Hosting.Entry(appDir, "host");
         if (!File.Exists(hostEntry))
         {
             Say("The application files were not found at " + appDir + ". Keep this file next to its app folder.");
@@ -138,7 +138,7 @@ internal static class Launcher
 
             if (withRelay)
             {
-                string relayEntry = Path.Combine(appDir, "apps", "relay", "src", "main.ts");
+                string relayEntry = Hosting.Entry(appDir, "relay");
                 Say("Starting the Relay...");
                 relay = Hosting.StartChild(node, appDir, relayEntry, relayArgs);
                 relay.OutputDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) Console.WriteLine(e.Data); };
