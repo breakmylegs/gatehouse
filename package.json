@@ -28,6 +28,7 @@
     "package:check": "node scripts/package.mjs --check",
     "installer": "node scripts/installer.mjs",
     "gate": "node scripts/gate.mjs",
+    "install:local": "node scripts/install-local.mjs",
     "release": "tsx scripts/release.ts ship",
     "release:version": "tsx scripts/release.ts version"
   },

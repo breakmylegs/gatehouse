@@ -68,6 +68,15 @@ The installer puts JCVC in `%LOCALAPPDATA%\Programs\JCVC` (no administrator need
 
 A single-file exe was judged not worth it: JCVC also needs the WebView2 libraries, its WebAssembly files, the Agent SDK's binary and the PowerShell scripts at run time, so a single file would unpack them next to itself anyway.
 
+## Installing from the source
+
+`npm run install:local` (`scripts/install-local.mjs`) is for a computer whose browser will not keep JCVC-Setup.exe. It builds the package (`--skip-build` reuses `dist-appJCVC`), copies it beside `%LOCALAPPDATA%ProgramsJCVC` without npm's workspace links, and then:
+
+- **No copy there yet:** renames it into place, adds the Start menu shortcut and starts JCVC.
+- **A copy there:** hands over to JCVC-Update.exe with a plan, exactly as an update does. Your policy is carried across, the old copy is kept as `JCVC.previous`, and if the new one does not report that it started, the old one is put back. It refuses to run while JCVC is running from that folder, and asks you to quit it.
+
+`--dir <folder>` installs somewhere else; `--no-shortcut` and `--no-start` are for tests.
+
 ## Updates and releases
 
 You install JCVC once. After that it updates itself (the user guide's Updates article says how it looks to you).

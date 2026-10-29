@@ -16,8 +16,23 @@ const inflate = promisify(zlib.inflateRaw)
 const UTF8 = 0x0800
 const MAX = 0xffffffff
 
-/** Writes the given files (forward-slash paths relative to root) into a zip, in that order. */
-export async function writeZip(file: string, root: string, rels: string[]): Promise<void> {
+/**
+ * Writes the given files (forward-slash paths relative to root) into a zip, in that order. Update parts carry a fixed
+ * date so the same files make the same zip; a zip for people to download can carry a real one.
+ */
+export async function writeZip(
+  file: string,
+  root: string,
+  rels: string[],
+  opts: { date?: Date } = {},
+): Promise<void> {
+  const d = opts.date
+  const dosTime = d
+    ? (d.getHours() << 11) | (d.getMinutes() << 5) | Math.floor(d.getSeconds() / 2)
+    : 0
+  const dosDate = d
+    ? ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()
+    : 0x21
   if (rels.length >= 0xffff) throw new Error("Too many files for one zip.")
   const out = await fs.promises.open(file, "w")
   const central: Buffer[] = []
@@ -43,8 +58,8 @@ export async function writeZip(file: string, root: string, rels: string[]): Prom
         local.writeUInt16LE(20, 4)
         local.writeUInt16LE(UTF8, 6)
         local.writeUInt16LE(p.method, 8)
-        local.writeUInt16LE(0, 10) // time: fixed, so the same files make the same zip
-        local.writeUInt16LE(0x21, 12) // date: 1 January 1980
+        local.writeUInt16LE(dosTime, 10) // fixed (midnight, 1 January 1980) unless a date was given
+        local.writeUInt16LE(dosDate, 12)
         local.writeUInt32LE(crc, 14)
         local.writeUInt32LE(p.body.length, 18)
         local.writeUInt32LE(p.data.length, 22)
@@ -57,8 +72,8 @@ export async function writeZip(file: string, root: string, rels: string[]): Prom
         c.writeUInt16LE(20, 6)
         c.writeUInt16LE(UTF8, 8)
         c.writeUInt16LE(p.method, 10)
-        c.writeUInt16LE(0, 12)
-        c.writeUInt16LE(0x21, 14)
+        c.writeUInt16LE(dosTime, 12)
+        c.writeUInt16LE(dosDate, 14)
         c.writeUInt32LE(crc, 16)
         c.writeUInt32LE(p.body.length, 20)
         c.writeUInt32LE(p.data.length, 24)

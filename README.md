@@ -16,6 +16,19 @@ Claude asks permission before it runs a command, edits a file or uses a tool. JC
 
 You only run the installer once. After that JCVC updates itself: see [Updates](#updates).
 
+### Your browser will not keep the installer?
+
+Some company laptops block downloaded programs. Install from the source instead: nothing is downloaded as a program, it builds what is in your copy of this repository and installs it in the same place as the installer, with a Start menu shortcut.
+
+```
+git clone https://github.com/breakmylegs/gatehouse.git
+cd gatehouse
+npm ci
+npm run install:local
+```
+
+You need Node 24 and Git. Quit JCVC from its tray icon before running it over a copy you already have: it then switches the way an update does, keeps your rules, and goes back by itself if the new copy does not start. JCVC still updates itself from GitHub afterwards.
+
 ### What you need
 
 - Windows 10 or 11, 64-bit, with Microsoft's WebView2 runtime (it is part of Windows 11).

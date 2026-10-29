@@ -398,3 +398,10 @@ Owner requests, and what was done or decided:
 - **Owner to do.**
   - Keep a copy of the release key (`%USERPROFILE%\.jcvc-release\release-key.pem`) in your password manager. Without it no installed copy accepts a new release.
   - The repository is public (owner, 29 Oct), so installed copies need no GitHub token. Outsiders can only fork: issues, projects, wiki and discussions are off, pull requests are for collaborators only, and rulesets stop main being deleted or force-pushed and published release tags being moved or deleted. The token field in Settings stays for a private fork.
+
+## Phase 23: installing without a download (29 Oct)
+
+- **Why.** The owner's company laptop blocks JCVC-Setup.exe in the browser ("Keep" is locked). An MSI would most likely be blocked the same way (an unsigned .msi is treated as the same kind of download), so it was not the answer here.
+- **`npm run install:local`** builds JCVC from the checkout and installs it where the installer would, with a Start menu shortcut, or over an existing copy through JCVC-Update.exe like an update. Tested in a temporary folder: a fresh install that starts and passes its check, then a second install over it that switched, kept the old copy and reported that the new one started.
+- **The release page** now has JCVC-Setup.exe and the same in a zip.
+- **The MSI is parked** on the branch `parked/msi`: built only with Windows (its own msi.dll through a small C# tool, makecab for the files), dual-purpose (for you alone, or for everyone with ALLUSERS=1), not yet tested. WiX could not be used: downloading and running its tools was refused as code from outside.

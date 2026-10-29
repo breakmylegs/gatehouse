@@ -21,6 +21,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { makeRelease, stampInstall } from "../apps/host/src/update/publish.js"
+import { writeZip } from "../apps/host/src/update/zip.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const REPO = "breakmylegs/gatehouse"
@@ -119,13 +120,17 @@ if (cmd === "version") {
     ...(v.commit ? { commit: v.commit } : {}),
     privateKeyPem: key,
   })
-  const setup = `https://github.com/${REPO}/releases/download/v${v.version}/JCVC-Setup.exe`
+  const dl = (f: string) => `https://github.com/${REPO}/releases/download/v${v.version}/${f}`
   fs.writeFileSync(
     path.join(path.resolve(b), "notes.md"),
     [
       "## Download",
       "",
-      `**[JCVC-Setup.exe](${setup})** for Windows 10 and 11. Run it once: it installs JCVC in your own Programs folder, no administrator needed.`,
+      "For Windows 10 and 11, 64-bit. You only install once.",
+      "",
+      `- **[JCVC-Setup.exe](${dl("JCVC-Setup.exe")})**: the installer. It installs JCVC for you alone, in your own Programs folder, with no administrator rights.`,
+      `- **[JCVC-Setup-exe.zip](${dl("JCVC-Setup-exe.zip")})**: the same installer in a zip.`,
+      "- **Your browser will not keep either?** If you have the source, `npm run install:local` builds JCVC and installs it in the same place, with nothing downloaded. See the README.",
       "",
       "Already installed? You do not need to download anything. JCVC checks for new versions (every 30 minutes unless you change it in Settings) and offers this one. Choose Update and it switches over and restarts by itself.",
       "",
@@ -190,9 +195,14 @@ if (cmd === "version") {
       JCVC_RELEASE_KEY: key,
     },
   )
+  // The installer, and the same in a zip.
   fs.copyFileSync(path.join(root, "dist-app", "JCVC-Setup.exe"), path.join(out, "JCVC-Setup.exe"))
+  await writeZip(path.join(out, "JCVC-Setup-exe.zip"), out, ["JCVC-Setup.exe"], {
+    date: new Date(),
+  })
   const files = [
     "JCVC-Setup.exe",
+    "JCVC-Setup-exe.zip",
     "release.json",
     "release.sig",
     ...fs.readdirSync(out).filter((f) => /^jcvc-.*\.zip$/.test(f)),
