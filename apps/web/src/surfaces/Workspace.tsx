@@ -1,4 +1,4 @@
-import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
+import type { PendingView, SessionInfo } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { diffLines } from "diff"
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react"
@@ -7,6 +7,10 @@ import { Virtuoso } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
 import { emptyTranscript, type Item, type Todo } from "../lib/transcript"
+import { describeActivity } from "../lib/activity"
+import { useNow } from "../lib/useNow"
+import { ApprovalCard } from "../components/ApprovalCard"
+import { QuickDecision } from "../components/QuickDecision"
 import { money } from "../lib/format"
 import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
@@ -195,6 +199,12 @@ function SessionPane({
   useEffect(() => setOpened(undefined), [selected])
 
   const [railOpen, setRailOpen] = useState(false)
+  const railToggle = useRef<HTMLButtonElement>(null)
+  // Closing puts focus back on the button that opened it, so the keyboard does not lose its place.
+  const closeRail = () => {
+    setRailOpen(false)
+    railToggle.current?.focus()
+  }
   if (!session) return null
 
   const running = session.state === "running" || session.state === "waiting"
@@ -295,9 +305,11 @@ function SessionPane({
           Interrupt
         </button>
         <button
+          ref={railToggle}
           type="button"
           className="btn pane-rail-toggle"
           aria-expanded={railOpen}
+          aria-controls={`rail-${session.id}`}
           onClick={() => setRailOpen((v) => !v)}
         >
           Files and plan
@@ -337,24 +349,38 @@ function SessionPane({
           />
         ) : null}
         <aside
+          id={`rail-${session.id}`}
           aria-label="Files and plan"
           className="pane-rail min-h-0 grid-rows-[auto_1fr] border-l border-line bg-s1"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && railOpen) {
+              e.stopPropagation()
+              closeRail()
+            }
+          }}
         >
-          <div role="tablist" aria-label="Side panel" className="flex border-b border-line px-2">
-            {(["files", "plan"] as const).map((t) => (
-              <button
-                key={t}
-                role="tab"
-                aria-selected={side === t}
-                className={clsx(
-                  "sign -mb-px border-0 border-b-2 border-transparent bg-transparent px-3 py-2 text-[14px]",
-                  side === t && "border-acc font-semibold",
-                )}
-                onClick={() => setSide(t)}
-              >
-                {t === "files" ? "Files" : "Plan"}
-              </button>
-            ))}
+          <div className="flex items-end border-b border-line px-2">
+            <div role="tablist" aria-label="Side panel" className="flex">
+              {(["files", "plan"] as const).map((t) => (
+                <button
+                  key={t}
+                  role="tab"
+                  aria-selected={side === t}
+                  className="tab !text-[14px]"
+                  onClick={() => setSide(t)}
+                >
+                  {t === "files" ? "Files" : "Plan"}
+                </button>
+              ))}
+            </div>
+            {/* Shown only while the panel covers the transcript, in a narrow window or pane. */}
+            <button
+              type="button"
+              className="btn pane-rail-close mb-1.5 ml-auto"
+              onClick={closeRail}
+            >
+              Close
+            </button>
           </div>
           <div role="tabpanel" className="min-h-0 overflow-auto p-4">
             {side === "files" ? (
@@ -375,28 +401,73 @@ function SessionPane({
       </div>
 
       <footer className="border-t border-line bg-s1 p-3">
-        {pending.length > 0 ? (
-          <div
-            role="status"
-            className="mb-2 flex items-center gap-3 rounded bg-sign px-3 py-1.5 text-sign-tx"
-          >
-            <span className="font-semibold">
-              {pending.length} request{pending.length === 1 ? "" : "s"} from this session waiting on
-              you
-            </span>
-            <button
-              className="btn ml-auto"
-              onClick={() => {
-                selectRequest(pending[0]?.request.id)
-                setRoute("approvals")
-              }}
-            >
-              Open
-            </button>
-          </div>
+        {pending[0] ? (
+          <SessionRequest
+            view={pending[0]}
+            more={pending.length - 1}
+            onOpen={(id) => {
+              selectRequest(id)
+              setRoute("approvals")
+            }}
+          />
+        ) : running ? (
+          <ActivityLine sessionId={session.id} cwd={session.cwd} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} />
       </footer>
+    </div>
+  )
+}
+
+/**
+ * The oldest request from this session, decided here. A permission gets Allow once and Deny in place; a question
+ * or a plan needs reading, so it shows the full card.
+ */
+function SessionRequest({
+  view,
+  more,
+  onOpen,
+}: {
+  view: PendingView
+  more: number
+  onOpen: (id: string) => void
+}) {
+  return (
+    <div className="grid">
+      {view.request.kind === "permission" ? (
+        <QuickDecision view={view} variant="panel" onMore={() => onOpen(view.request.id)} />
+      ) : (
+        <div className="mb-2 max-h-[55vh] overflow-auto">
+          <ApprovalCard view={view} />
+        </div>
+      )}
+      {more > 0 ? (
+        <p className="m-0 mb-2 flex items-center gap-3 text-[13.5px]">
+          {more} more from this session after this one.
+          <button type="button" className="btn" onClick={() => onOpen(view.request.id)}>
+            Open the queue
+          </button>
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
+/** What the session is doing while a turn runs: thinking, writing a file, running a command. */
+function ActivityLine({ sessionId, cwd }: { sessionId: string; cwd: string }) {
+  const activity = useStore((s) => s.activity[sessionId])
+  const now = useNow(1000)
+  const line = describeActivity(activity, now, cwd)
+  return (
+    <div className="activity">
+      <span className="activity-dot" aria-hidden="true" />
+      <span role="status" className="font-semibold">
+        {line.label}
+      </span>
+      {line.detail ? <span className="text-mut tabular-nums">{line.detail}</span> : null}
+      {line.hint ? (
+        <span className="basis-full pl-[19px] text-[13px] text-mut">{line.hint}</span>
+      ) : null}
     </div>
   )
 }
@@ -662,6 +733,10 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
   const path = s("file_path") ?? s("path")
   const edit =
     item.name === "Edit" && s("old_string") !== undefined && s("new_string") !== undefined
+  const waiting = useStore(
+    (st) =>
+      !item.result && Object.values(st.pending).some((p) => p.request.toolUseId === item.toolUseId),
+  )
   return (
     <details className={clsx("panel", item.subagent && "ml-5")} open={edit || undefined}>
       <summary className="flex cursor-pointer flex-wrap items-baseline gap-2 px-3 py-1.5">
@@ -677,8 +752,10 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
           >
             {item.result.isError ? "Failed" : "Done"}
           </span>
+        ) : waiting ? (
+          <span className="text-xs font-semibold">Waiting for you</span>
         ) : (
-          <span className="text-xs text-mut">Running or waiting</span>
+          <span className="text-xs text-mut">No result yet</span>
         )}
       </summary>
       <div className="grid gap-2 border-t border-line p-3">

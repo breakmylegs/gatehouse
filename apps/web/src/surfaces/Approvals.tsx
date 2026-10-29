@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
+import clsx from "clsx"
 import { ApprovalCard } from "../components/ApprovalCard"
+import { QuickDecision } from "../components/QuickDecision"
 import { RiskBadge } from "../components/RiskBadge"
 import { SessionCode } from "../components/SessionCode"
 import { age } from "../lib/format"
@@ -94,34 +96,45 @@ export function Approvals() {
             data={pending}
             computeItemKey={(_, p) => p.request.id}
             itemContent={(_, p) => (
-              <button
-                className="board-row grid-cols-[auto_minmax(0,1fr)]"
-                data-lit={
-                  !seen[p.request.id] && p.request.id !== current?.request.id ? "" : undefined
-                }
-                aria-current={p.request.id === current?.request.id ? "true" : undefined}
-                onClick={() => select(p.request.id)}
-              >
-                <span className="board-time">{age(p.request.createdAt, now)}</span>
-                <span className="grid min-w-0 gap-0.5">
-                  <span className="flex min-w-0 items-center gap-2">
-                    {sessions[p.request.sessionId] ? (
-                      <SessionCode session={sessions[p.request.sessionId]!} />
-                    ) : null}
-                    <span className="truncate text-[13px] text-mut">{p.request.project}</span>
+              // The row selects; Allow once and Deny sit over its foot as their own buttons, never inside it.
+              <div className="relative">
+                <button
+                  className={clsx(
+                    "board-row grid-cols-[auto_minmax(0,1fr)]",
+                    p.request.kind === "permission" && "!pb-12",
+                  )}
+                  data-lit={
+                    !seen[p.request.id] && p.request.id !== current?.request.id ? "" : undefined
+                  }
+                  aria-current={p.request.id === current?.request.id ? "true" : undefined}
+                  onClick={() => select(p.request.id)}
+                >
+                  <span className="board-time">{age(p.request.createdAt, now)}</span>
+                  <span className="grid min-w-0 gap-0.5">
+                    <span className="flex min-w-0 items-center gap-2">
+                      {sessions[p.request.sessionId] ? (
+                        <SessionCode session={sessions[p.request.sessionId]!} />
+                      ) : null}
+                      <span className="truncate text-[13px] text-mut">{p.request.project}</span>
+                    </span>
+                    <span className="block truncate text-[15px] font-semibold">
+                      {p.request.kind === "question"
+                        ? "Question from Claude"
+                        : p.request.kind === "plan"
+                          ? "Plan to approve"
+                          : p.request.toolName === "Bash" || p.request.toolName === "PowerShell"
+                            ? "Run shell command"
+                            : p.request.toolName}
+                    </span>
+                    <RiskBadge risk={p.request.verdict.risk} className="w-fit text-[12.5px]" />
                   </span>
-                  <span className="block truncate text-[15px] font-semibold">
-                    {p.request.kind === "question"
-                      ? "Question from Claude"
-                      : p.request.kind === "plan"
-                        ? "Plan to approve"
-                        : p.request.toolName === "Bash" || p.request.toolName === "PowerShell"
-                          ? "Run shell command"
-                          : p.request.toolName}
-                  </span>
-                  <RiskBadge risk={p.request.verdict.risk} className="w-fit text-[12.5px]" />
-                </span>
-              </button>
+                </button>
+                {p.request.kind === "permission" ? (
+                  <div className="absolute bottom-2.5 right-3.5">
+                    <QuickDecision view={p} variant="row" />
+                  </div>
+                ) : null}
+              </div>
             )}
           />
         )}

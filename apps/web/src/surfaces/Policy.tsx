@@ -131,10 +131,7 @@ export function Policy() {
             aria-selected={tab === t.id}
             aria-controls={`panel-${t.id}`}
             tabIndex={tab === t.id ? 0 : -1}
-            className={clsx(
-              "-mb-px border-0 border-b-2 border-transparent bg-transparent px-3 py-2",
-              tab === t.id && "border-acc font-semibold",
-            )}
+            className="tab"
             onClick={() => setTab(t.id)}
             onKeyDown={(e) => {
               const i = TABS.findIndex((x) => x.id === tab)

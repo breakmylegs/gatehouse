@@ -23,7 +23,7 @@ import {
   type GatehouseConfig,
 } from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
-import { ApproverClient } from "./approver-client.js"
+import { APPROVER_TIMEOUT_MS, ApproverClient } from "./approver-client.js"
 import { ApproverProcess, freePort, generateToken } from "./approver-process.js"
 import { Broker } from "./broker.js"
 import { CheckpointManager } from "./checkpoints.js"
@@ -140,9 +140,11 @@ export function createHost(opts: HostOptions = {}): Host {
     quietHours: () => config.quietHours ?? store.current?.rules.quietHours,
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
-  // 5 seconds, or 35 while the policy has the judge on (its own limit is 25). Still bounded, still fail-closed.
+  // 15 seconds, or 35 while the policy has the judge on (its own limit is 25). Still bounded, still fail-closed.
+  // It was 5: on a busy laptop (Claude streaming a 40,000 character file, 29 Oct) a 30 ms answer took 7 seconds
+  // to come back, and the call went to a person even in Extreme approval.
   const approverTimeout = (): number =>
-    store.current?.rules.defaults?.judge?.enabled === true ? 35_000 : 5_000
+    store.current?.rules.defaults?.judge?.enabled === true ? 35_000 : APPROVER_TIMEOUT_MS
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
   const checkpoints = new CheckpointManager({
     config: () => config,

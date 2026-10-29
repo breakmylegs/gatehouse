@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
-import { createCanUseTool, NEVER_AUTO_APPROVED, type CanUseDeps } from "../src/canuse.js"
+import {
+  createCanUseTool,
+  EXTREME_CANNOT_APPROVE,
+  NEVER_AUTO_APPROVED,
+  type CanUseDeps,
+} from "../src/canuse.js"
 
 const verdict = (outcome: "allow" | "deny" | "escalate", ruleId: string) => ({
   outcome,
@@ -12,7 +17,7 @@ const verdict = (outcome: "allow" | "deny" | "escalate", ruleId: string) => ({
 
 function setup(opts: { extreme: boolean; v: ReturnType<typeof verdict>; auditOk?: boolean }) {
   const records: Array<{ verdict: { decidedBy: string; outcome: string }; input: unknown }> = []
-  const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
+  const request = vi.fn(async (_r: unknown) => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
   const notified: Array<[string, string]> = []
   const deps = {
     sessionId: "s1",
@@ -76,6 +81,10 @@ describe("Extreme approval mode", () => {
       await t.call()
       expect(t.request, id).toHaveBeenCalledTimes(1)
       expect(t.notified, id).toEqual([])
+      // The card says why Extreme approval did not approve it.
+      expect(t.request.mock.calls[0]?.[0], id).toMatchObject({
+        verdict: { ruleId: id, reason: `because ${EXTREME_CANNOT_APPROVE}` },
+      })
     }
     expect(NEVER_AUTO_APPROVED.has("evaluator-unavailable")).toBe(true)
     expect(NEVER_AUTO_APPROVED.has("audit-failure")).toBe(true)

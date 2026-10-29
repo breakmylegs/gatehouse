@@ -15,7 +15,7 @@ describe("help for the page you are on", () => {
     expect(screen.queryByRole("complementary", { name: /help for this page/i })).toBeNull()
     act(() => useStore.getState().setHelpOpen(true))
     expect(screen.getByRole("heading", { name: "Help: Approvals" })).toBeTruthy()
-    expect(screen.getByText(/Allow once/)).toBeTruthy()
+    expect(screen.getAllByText(/Allow once/).length).toBeGreaterThan(0)
     act(() => useStore.setState({ route: "sessions" }))
     expect(screen.getByRole("heading", { name: "Help: Sessions" })).toBeTruthy()
     fireEvent.keyDown(screen.getByRole("complementary", { name: /help for this page/i }), {

@@ -396,6 +396,70 @@ mark.seg {
   color: var(--c-mut);
 }
 
+/*
+ * Tabs. The open one is marked by its own rule on aria-selected, not by utility classes: border-transparent is
+ * written after border-acc in the built CSS, so a class pair left every open tab without its underline (29 Oct).
+ */
+.tab {
+  margin-bottom: -1px;
+  padding: 9px 14px 7px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 15px var(--font-sign);
+  cursor: pointer;
+}
+.tab:hover {
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--c-acc);
+  color: var(--c-tx);
+  font-weight: 700;
+}
+
+/* A request decided in the workspace of the session that asked, above the prompt box. */
+.quick-decision {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  /* Lit like a new row on the queue: something here is waiting for you. */
+  background: var(--c-lit);
+}
+
+/* What a running session is doing, above the prompt box. */
+.activity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.activity-dot {
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-acc);
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+@keyframes activity-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-dot {
+    animation: none;
+  }
+}
+
 /* A session's code and its ribbon colour, like a flight number. */
 .code {
   display: inline-flex;
@@ -605,7 +669,8 @@ mark.seg {
 .pane-rail {
   display: grid;
 }
-.pane-rail-toggle {
+.pane-rail-toggle,
+.pane-rail-close {
   display: none;
 }
 @container (max-width: 980px) {
@@ -619,7 +684,8 @@ mark.seg {
   .pane-rail {
     display: none;
   }
-  .pane-rail-toggle {
+  .pane-rail-toggle,
+  .pane-rail-close {
     display: inline-flex;
   }
   .pane[data-rail="open"] .pane-rail {

@@ -2,6 +2,7 @@ import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
+import { decide } from "../lib/decide"
 import { age, clock, commandText } from "../lib/format"
 import { splitByHighlights } from "../lib/highlight"
 import { useNow } from "../lib/useNow"
@@ -84,18 +85,10 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   async function run(cmd: Parameters<typeof send>[0]): Promise<boolean> {
     setBusy(true)
     setError(undefined)
-    const r = await send(cmd)
+    const failed = await decide(cmd)
     setBusy(false)
-    if (!r.ok) {
-      setError(
-        r.error?.code === "disconnected"
-          ? "The Host is not connected, so nothing was sent. The request is still waiting."
-          : (r.error?.message ??
-              "The Host refused that and gave no reason. The request is still waiting."),
-      )
-      return false
-    }
-    return true
+    if (failed) setError(failed)
+    return !failed
   }
 
   const deny = (msg?: string) =>

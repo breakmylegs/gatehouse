@@ -21,6 +21,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 - Rows are oldest first, like departures. The time cell shows how long the request has waited.
 - A row lit in yellow is new: you have not looked at it yet. It stops being lit once you open it.
 - Each row shows the session code (for example AT 830), the project, what Claude wants to do and the risk.
+- A permission request has **Deny** and **Allow once** on its row, so you can decide it without opening it. Open it to read everything first, or to answer a question or a plan.
 
 **Deciding**
 
@@ -59,7 +60,9 @@ Your phone gets the same request at the same time if one is paired. The first va
 - **Accept edits**: file edits inside the folder go ahead without asking. Commands still go through the rules, and what your rules deny is denied.
 - **Plan**: Claude explores and proposes a plan before it changes anything. You approve the plan.
 - **Auto**: Claude Code's own check decides routine actions, so far fewer wait for you. JCVC still denies what your rules deny, and still asks you about anything your rules rate High or Severe, or that it could not decide. Moderate and Low requests, and commands your rules do not name, are left to Claude Code's check. Turn on the rule library's packs to rate more commands.
-- **Extreme approval**: everything that would wait for you is approved straight away, written to the audit log, and your phone is told. The floor, the rules' denies and the kill switch still block.
+- **Extreme approval**: everything that would wait for you is approved straight away, written to the audit log, and your phone is told. The floor, the rules' denies and the kill switch still block. A request JCVC could not check (the Approver did not answer, or the audit could not be written) still waits for you, and its card says so.
+
+Starting a session starts Claude Code itself. The Start button counts the seconds; the first start after JCVC is installed or updated can take a minute or more.
 
 In every mode the floor (secrets, destructive commands) is checked first and every decision is audited. Bypass permissions is never offered.
 
@@ -82,9 +85,11 @@ Sessions waiting on you are lit and come first. Each has a code and colour that 
 
 Claude's replies, the tools it used and their results appear in order. Tool calls show what ran and whether it was allowed.
 
+While a turn runs, a line above the composer says what Claude is doing and for how long: thinking, writing a reply, writing a file (with the characters so far) or running a command. A large file takes a while, because Claude writes all of it before JCVC can check it.
+
 **Side by side**
 
-Open beside, at the right of a session's header, shows another session next to it; up to three fit. Each has its own transcript, files and composer. Close pane removes one. On Sessions, Beside opens a session next to the ones already open. When a pane is narrow, Files and plan opens the side panel over it, and an open file takes the transcript's place until you close it.
+Open beside, at the right of a session's header, shows another session next to it; up to three fit. Each has its own transcript, files and composer. Close pane removes one. On Sessions, Beside opens a session next to the ones already open. When a pane is narrow, Files and plan opens the side panel over it (Close or Esc puts it away), and an open file takes the transcript's place until you close it.
 
 **Files**
 
@@ -95,7 +100,7 @@ The Files tab on the right lists what Claude made or changed in this session, an
 - The plus button adds files or photos (from anywhere; files outside the folder are copied into .jcvc/attachments in it, secrets never), mentions a folder, and lists the session's slash commands and skills, connectors and plugins. You can also paste or drop a picture into the prompt.
 - Enter sends. Shift+Enter adds a line.
 - Type / for commands: /plan, /default, /accept-edits, /auto, /extreme, /effort high, /model, /stop and /close.
-- When a request from this session is waiting, a yellow bar above the composer takes you to it.
+- When a request from this session is waiting, it appears above the composer with **Deny** and **Allow once** (Esc and Ctrl+Enter work while focus is inside it). More options opens the full card. A question or a plan shows in full there.
 
 **Todo list**
 

@@ -146,8 +146,15 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       if (verdict.outcome === "deny") {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)
       }
-      if (deps.extreme?.() === true && !NEVER_AUTO_APPROVED.has(verdict.ruleId))
-        return await extremeApprove(deps, toolName, input, toolUseID, verdict)
+      if (deps.extreme?.() === true) {
+        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId))
+          return await extremeApprove(deps, toolName, input, toolUseID, verdict)
+        // Say why on the card: you chose Extreme approval and would otherwise expect no question.
+        return await escalate(deps, toolName, input, options, {
+          ...verdict,
+          reason: `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
+        })
+      }
       return await escalate(deps, toolName, input, options, verdict)
     } catch (e) {
       // Invariant 1: a failure in here is a denial, never an allow.
@@ -173,6 +180,10 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   "parse-error",
   "kill-switch",
 ])
+
+/** Added to the reason when Extreme approval meets one of NEVER_AUTO_APPROVED. */
+export const EXTREME_CANNOT_APPROVE =
+  "Extreme approval only approves requests JCVC could check, so this one waits for you."
 
 /**
  * Extreme approval mode: an escalation is approved without asking. It is audited first (an allow that cannot be

@@ -5,8 +5,9 @@ export interface ApproverClientOptions {
   url: string
   token: string
   /**
-   * The spec's limit for one evaluation is 5 seconds. It may be a function, because the optional judge makes
-   * a judge-eligible call slower (a model call) and the Host allows for that only while the policy has it on.
+   * The limit for one evaluation, APPROVER_TIMEOUT_MS unless given. It may be a function, because the optional
+   * judge makes a judge-eligible call slower (a model call) and the Host allows for that only while the policy has
+   * it on.
    */
   timeoutMs?: number | (() => number)
 }
@@ -24,6 +25,12 @@ export interface EvaluateCtx {
   /** `options.mcpServer.source` from the SDK for mcp__ tools. */
   mcpSource?: string
 }
+
+/**
+ * How long the Host waits for one evaluation. The spec said 5 seconds; an answer that takes 30 ms on a quiet
+ * laptop took 7 on a busy one, so 15. Past it the call still escalates (invariant 1).
+ */
+export const APPROVER_TIMEOUT_MS = 15_000
 
 /** What the Host acts on whenever the Approver cannot give a valid answer. It is never an allow. */
 export function unavailableVerdict(why: string): Verdict {
@@ -47,7 +54,7 @@ export class ApproverClient {
   #id = 0
 
   constructor(opts: ApproverClientOptions) {
-    this.#opts = { timeoutMs: 5000, ...opts }
+    this.#opts = { timeoutMs: APPROVER_TIMEOUT_MS, ...opts }
   }
 
   async evaluate(call: EvaluateCall, ctx: EvaluateCtx): Promise<Verdict> {

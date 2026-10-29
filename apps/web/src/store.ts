@@ -13,6 +13,7 @@ import { create } from "zustand"
 import { tellShell } from "./lib/shell"
 import { Connection, type ConnState, type Reply, takeToken } from "./lib/connection"
 import { addSystem, addUser, emptyTranscript, reduce, type Transcript } from "./lib/transcript"
+import { nextActivity, type Activity } from "./lib/activity"
 
 export type Route =
   | "approvals"
@@ -65,6 +66,8 @@ export interface State {
   usage?: Usage
   expectedOrg?: string
   transcripts: Record<string, Transcript>
+  /** What each running session is doing now, for the line under its transcript. */
+  activity: Record<string, Activity>
   audit: unknown[]
   route: Route
   selectedSession?: string
@@ -127,6 +130,7 @@ export const useStore = create<State>((set, get) => ({
   pending: {},
   resolved: {},
   transcripts: {},
+  activity: {},
   audit: [],
   route: "approvals",
   theme: storedTheme(),
@@ -193,6 +197,7 @@ export const useStore = create<State>((set, get) => ({
         ...s.transcripts,
         [sessionId]: addUser(s.transcripts[sessionId] ?? emptyTranscript(), text),
       },
+      activity: { ...s.activity, [sessionId]: { phase: "sent", since: Date.now() } },
     })),
 
   handleEvent: (e) => {
@@ -216,11 +221,30 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       case "session":
-        set((s) => ({ sessions: { ...s.sessions, [e.info.id]: e.info } }))
+        set((s) => {
+          const sessions = { ...s.sessions, [e.info.id]: e.info }
+          // A turn that ended, by finishing, an interrupt or an error, is doing nothing any more.
+          if (e.info.state === "running" || e.info.state === "waiting" || !s.activity[e.info.id])
+            return { sessions }
+          const activity = { ...s.activity }
+          delete activity[e.info.id]
+          return { sessions, activity }
+        })
         return
       case "sdk_message": {
         const meta = readInit(e.message)
         if (meta) set((s) => ({ meta: { ...s.meta, [e.sessionId]: meta } }))
+        const was = get().activity[e.sessionId]
+        const next = nextActivity(was, e.message, Date.now())
+        if (next !== was)
+          set((s) => {
+            const activity = { ...s.activity }
+            if (next) activity[e.sessionId] = next
+            else delete activity[e.sessionId]
+            return { activity }
+          })
+        // A partial message changes nothing in the transcript itself.
+        if ((e.message as { type?: unknown } | null)?.type === "stream_event") return
         set((s) => ({
           transcripts: {
             ...s.transcripts,

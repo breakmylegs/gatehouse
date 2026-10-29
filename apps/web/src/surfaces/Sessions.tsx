@@ -3,6 +3,7 @@ import NumberFlow from "@number-flow/react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { money } from "../lib/format"
+import { useNow } from "../lib/useNow"
 import { api } from "../lib/api"
 import {
   BYPASS_NOTE,
@@ -58,6 +59,30 @@ function StateMark({ state }: { state: SessionInfo["state"] }) {
   )
 }
 
+/** How long the screen waits for a session to start. The first start after an install or update is the slow one. */
+const START_WAIT_MS = 180_000
+
+/** What starting a session is doing, with the seconds so far, so a slow start never looks like a hang. */
+function StartProgress({ since }: { since: number }) {
+  const now = useNow(1000)
+  const s = Math.max(0, Math.round((now - since) / 1000))
+  return (
+    <div className="activity !mb-0">
+      <span className="activity-dot" aria-hidden="true" />
+      <span role="status" className="font-semibold">
+        Starting Claude Code and checking your account
+      </span>
+      <span className="tabular-nums text-mut">{s} s</span>
+      {s >= 15 ? (
+        <span className="basis-full pl-[19px] text-[13px] text-mut">
+          Starting runs Claude Code itself. The first start after JCVC is installed or updated can
+          take a minute or more while Windows checks the program.
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 export function Sessions() {
   const sessions = useSessionList()
   const usage = useStore((s) => s.usage)
@@ -69,6 +94,7 @@ export function Sessions() {
   const [mode, setMode] = useState<UiMode>("default")
   const [effort, setEffort] = useState<EffortId | "">("")
   const [busy, setBusy] = useState(false)
+  const [startedAt, setStartedAt] = useState(0)
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -88,17 +114,26 @@ export function Sessions() {
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
+    setStartedAt(Date.now())
     setError(undefined)
-    const r = await send({
-      type: "create_session",
-      cwd: cwd.trim(),
-      ...(model ? { model } : {}),
-      ...(effort ? { effort } : {}),
-      ...wireOf(mode),
-    })
+    const r = await send(
+      {
+        type: "create_session",
+        cwd: cwd.trim(),
+        ...(model ? { model } : {}),
+        ...(effort ? { effort } : {}),
+        ...wireOf(mode),
+      },
+      START_WAIT_MS,
+    )
     setBusy(false)
     if (!r.ok) {
-      setError(r.error?.message ?? "The session did not start")
+      // The Host carries on after the screen stops waiting, so a slow start usually still arrives.
+      setError(
+        r.error?.code === "timeout"
+          ? "This is taking longer than usual. If the session starts it appears in the list below, and you can open it from there."
+          : (r.error?.message ?? "The session did not start"),
+      )
       return
     }
     const id = (r.data as { sessionId: string }).sessionId
@@ -183,8 +218,9 @@ export function Sessions() {
         </div>
         <p className="m-0 text-xs text-mut">
           {MODE_OPTIONS.find((m) => m.id === mode)?.help}. The floor and the audit apply in every
-          mode. {BYPASS_NOTE} A missing folder is created. Starting can take up to a minute.
+          mode. {BYPASS_NOTE} A missing folder is created.
         </p>
+        {busy ? <StartProgress since={startedAt} /> : null}
         {error ? (
           <p role="alert" className="m-0 font-semibold text-sev">
             {error}
