@@ -66,6 +66,14 @@ Items 1 to 5 are the next ones to build. Items 6 to 10 are designed after those 
 - **Next:** then 2 files panel and 3 inbuilt browser, 4 split view, 5 composer plus menu.
 - **Research:** the notes above were checked against Anthropic's documentation for the Claude desktop Code tab (code.claude.com/docs/en/desktop and related pages) on 28 Oct.
 
+## Added 29 Oct
+
+| # | Item | Notes |
+|---|---|---|
+| 11 | **Self-update** | Done 29 Oct: install once, then one-click updates from GitHub releases, rollback, releases made locally with `npm run release` (no GitHub Actions). |
+| 12 | **Resource limits per session, with a schedule** (owner, 29 Oct): cap what a session may use, for example at most 10% CPU and 1 GB of memory, and any other limit Windows offers; set a schedule, for example low limits 09:00 to 17:00 and full access after | Windows job objects do all of it: a hard CPU cap as a percentage (JOBOBJECT_CPU_RATE_CONTROL_INFORMATION), a memory cap for the whole session (JobMemoryLimit), a cap on processes (ActiveProcessLimit), and disk and network rate caps (JobObjectIoRateControlInformation, JobObjectNetRateControlInformation). Limits can be changed on a running job, so a schedule only re-applies the right set at each boundary. The session's Claude process and everything it starts go in the job. Node has no job API, so a small C# helper (like JCVC-Update.exe) creates and adjusts the jobs; the Host finds the session's process (the SDK's custom spawn option, or its child process). A memory cap makes allocations fail, which can crash a tool: show the cap and a warning near it, not just the failure. Per session in the session header, with defaults and the schedule in Settings. Audit every change of limits. |
+| 13 | **From the research (docs/research/results-2026-10-29.md, section F)**, in its order | 1 sign-in posture (plan login, API key or gateway, with the written approval kept); 2 Auto-mode hardening (destructiveHint on every in-process tool, a test that escalations still reach the Approver in Auto); 3 effect preview on approval cards (files, hosts, git refs, processes); 4 a Windows-native sandbox for shell tools; 5 sandbox-aware auto-approval; 6 context meter, live status line, compaction controls; 7 usage forecast; 8 session management. Items 2 and 1 come first: 2 is a security gap, 1 is the risk to the whole app. |
+
 ## From the owner's screenshot of the desktop app (28 Oct)
 
 Seen in the Claude desktop Code tab with two sessions side by side. Each becomes part of the workspace work (items 2 to 5):

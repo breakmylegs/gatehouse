@@ -79,7 +79,7 @@ export function pending(n: number, sessionCount: number): PendingView[] {
         toolName: i % 6 === 3 ? "Write" : "Bash",
         input: { command },
         cwd:
-          "C:/Users/peter.j.kelly/OneDrive - Accenture/Documents/" +
+          "C:/Users/alex.morgan/Documents/Client Work/" +
           "Very Long Folder Name ".repeat(6) +
           project,
         project,

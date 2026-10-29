@@ -35,7 +35,7 @@ const base = (
       kind,
       toolName: tool,
       input,
-      cwd: "C:\Users\peter.j.kelly\OneDrive - Accenture\Documents\Very Long Folder Name Very Long Folder Name\proj",
+      cwd: "C:/Users/alex.morgan/Documents/Very Long Folder Name Very Long Folder Name/proj",
       project: [
         "atlas-migration",
         "Überprüfung-日本語-проект",
