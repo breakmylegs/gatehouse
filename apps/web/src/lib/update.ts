@@ -22,6 +22,7 @@ export interface UpdateStatus {
   progress?: { step: string; done: number; total: number; label: string }
   error?: string
   ready?: string
+  applyWhenReady?: string
   lastResult?: {
     ok: boolean
     mode?: string

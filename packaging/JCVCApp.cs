@@ -51,7 +51,10 @@ internal sealed class MainForm : Form
     private readonly ProgressBar splashBar = new ProgressBar();
     private readonly System.Windows.Forms.Timer splashClock = new System.Windows.Forms.Timer();
     private readonly DateTime startedAt = DateTime.Now;
-    private volatile string stage = "Starting JCVC";
+    // What it is doing now and since when, and the steps already done with how long each took. UI thread only.
+    private string stage = "Starting JCVC";
+    private DateTime stageSince = DateTime.Now;
+    private readonly System.Collections.Generic.List<string> stepsDone = new System.Collections.Generic.List<string>();
     private readonly NotifyIcon tray = new NotifyIcon();
     private readonly StringBuilder log = new StringBuilder();
     private readonly string dataDir;
@@ -98,7 +101,7 @@ internal sealed class MainForm : Form
         }
         catch (Exception) { }
         splashBand.Dock = DockStyle.Bottom;
-        splashBand.Height = 132;
+        splashBand.Height = 176;
         splashBand.BackColor = Color.FromArgb(18, 22, 30);
         splashBand.Padding = new Padding(28, 16, 28, 18);
         splashTitle.Text = "Jean-Claude Van Code";
@@ -126,8 +129,7 @@ internal sealed class MainForm : Form
         splashClock.Interval = 1000;
         splashClock.Tick += delegate
         {
-            int secs = (int)(DateTime.Now - startedAt).TotalSeconds;
-            splashText.Text = stage + ", " + secs + " second" + (secs == 1 ? "" : "s") + "." + (secs > 20 ? " The first start can take a minute." : "");
+            splashText.Text = SplashText();
         };
         splashClock.Start();
         Controls.Add(splash);
@@ -210,8 +212,11 @@ internal sealed class MainForm : Form
         if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep JCVC.exe next to its app folder."); return; }
         if (node == null) { Fail("No Node was found. JCVC needs runtime\\node.exe next to it."); return; }
 
-        string linkNote = Hosting.FixLinks(node, appDir);
+        Step("Checking JCVC's files");
+        // Off the window's thread, so the picture and its bar keep moving while it runs.
+        string linkNote = await System.Threading.Tasks.Task.Run(() => Hosting.FixLinks(node, appDir));
         if (linkNote != null) Remember(linkNote);
+        Step("Loading JCVC's code");
         try
         {
             host = Hosting.StartChild(node, appDir, hostEntry, "");
@@ -222,6 +227,7 @@ internal sealed class MainForm : Form
                 if (m.Success) OnUi(delegate { OnHostReady(m.Groups[1].Value); });
                 else if (ev.Data.Contains("\"event\":\"attention\"")) OnUi(delegate { Attention(); });
                 else if (Hosting.ApplyLine.IsMatch(ev.Data)) { string line = ev.Data; OnUi(delegate { ApplyUpdate(line); }); }
+                else if (Hosting.ProgressLine.IsMatch(ev.Data)) { string text = Hosting.JsonField(ev.Data, "text"); OnUi(delegate { Step(text); }); }
                 else Remember(ev.Data);
             };
             host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
@@ -258,13 +264,31 @@ internal sealed class MainForm : Form
         else a();
     }
 
+    /// <summary>Starts a new step on the start-up picture; the one before goes on the done list with its time.</summary>
+    private void Step(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text == stage) return;
+        int took = (int)Math.Round((DateTime.Now - stageSince).TotalSeconds);
+        if (stage != "Starting JCVC") stepsDone.Add(stage + " (" + took + " s)");
+        stage = text;
+        stageSince = DateTime.Now;
+        splashText.Text = SplashText();
+    }
+
+    private string SplashText()
+    {
+        int secs = (int)(DateTime.Now - startedAt).TotalSeconds;
+        int now = (int)(DateTime.Now - stageSince).TotalSeconds;
+        string text = stage + "  (" + now + " s)";
+        if (stepsDone.Count > 0) text += "\r\nDone: " + string.Join(", ", stepsDone.ToArray());
+        text += "\r\n" + secs + " second" + (secs == 1 ? "" : "s") + " so far.";
+        if (secs > 15) text += " The first start after installing or updating is the slowest: Windows checks each of JCVC's files once.";
+        return text;
+    }
+
     private void Remember(string line)
     {
         string l = line.ToLowerInvariant();
-        if (l.Contains("approver")) stage = "Starting the Approver, which decides requests";
-        else if (l.Contains("powershell") || l.Contains("pwsh")) stage = "Starting the PowerShell checker";
-        else if (l.Contains("relay")) stage = "Starting the phone Relay";
-        else if (l.Contains("policy")) stage = "Loading your rules";
         lock (log)
         {
             log.AppendLine(line);
@@ -287,7 +311,7 @@ internal sealed class MainForm : Form
     {
         url = readyUrl;
         hostReady = true;
-        stage = "Opening the window";
+        Step("Opening the window");
         try { hostOrigin = new Uri(url).GetLeftPart(UriPartial.Authority); } catch (Exception) { hostOrigin = null; }
         Say("Ready: " + hostOrigin);
         if (check)
@@ -362,7 +386,7 @@ internal sealed class MainForm : Form
     {
         if (!hostReady || !webReady || navigated) return;
         navigated = true;
-        stage = "Opening the window";
+        Step("Opening the window");
         web.CoreWebView2.Navigate(url);
     }
 

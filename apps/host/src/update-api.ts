@@ -35,6 +35,7 @@ export function registerUpdateRoutes(app: FastifyInstance, ctx: AdminContext): v
   app.post("/api/update/check", async () => u.check())
   for (const [route, act] of [
     ["prepare", (v: string) => u.prepare(v)],
+    ["install", (v: string) => u.install(v)],
     ["apply", (v: string) => u.apply(v)],
     ["skip", (v: string) => u.skip(v)],
     ["unskip", (v: string) => u.unskip(v)],

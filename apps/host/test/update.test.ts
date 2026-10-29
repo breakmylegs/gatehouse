@@ -351,6 +351,13 @@ describe("fetching and staging a release", () => {
     expect(fs.readFileSync(path.join(installDir, "app/apps/host/src/main.ts"), "utf8")).toBe(
       "main a1",
     )
+    // Unchanged parts are the very same files (hard links), so nothing new is written or scanned.
+    for (const rel of ["app/node_modules/pkg/index.js", "runtime/node.exe"]) {
+      const a = fs.statSync(path.join(installDir, rel), { bigint: true })
+      const b = fs.statSync(path.join(stagedDir, rel), { bigint: true })
+      expect(b.ino, rel).toBe(a.ino)
+      expect(Number(b.nlink), rel).toBeGreaterThanOrEqual(2)
+    }
   })
 
   it("downloads a part again when the copy on disk no longer matches its hash", async () => {
@@ -578,6 +585,41 @@ describe("the update service", () => {
     expect(s.audited.map((a) => a.event)).toEqual(
       expect.arrayContaining(["update_downloaded", "update_started"]),
     )
+  })
+
+  it("keeps Update now itself: it prepares the version and switches as soon as it is ready", async () => {
+    const s = service()
+    const svc = await s.make()
+    await svc.check()
+    const handed = new Promise<{ plan: string }>((r) => svc.once("apply", r))
+    const st = await svc.install("1.0.6")
+    // Said before the new version is ready, with nothing more for the screen to do.
+    expect(st.applyWhenReady).toBe("1.0.6")
+    const { plan } = await handed
+    expect(fs.readFileSync(plan, "utf8")).toContain("to=1.0.6")
+    expect(svc.status()).toMatchObject({ phase: "applying" })
+    expect(svc.status().applyWhenReady).toBeUndefined()
+  })
+
+  it("switches at once when Update now comes for a version that is already ready", async () => {
+    const s = service({ settings: { downloadInBackground: true } })
+    const svc = await s.make()
+    const ready = new Promise<void>((r) => svc.on("status", (x) => x.phase === "ready" && r()))
+    await svc.check()
+    await ready
+    const handed = new Promise<{ plan: string }>((r) => svc.once("apply", r))
+    await svc.install("1.0.6")
+    expect(fs.readFileSync((await handed).plan, "utf8")).toContain("to=1.0.6")
+  })
+
+  it("records that it started even if its folder has gone, and never stops JCVC over it", async () => {
+    const s = service({ installed: "1.0.6" })
+    const svc = await s.make()
+    fs.rmSync(s.dir, { recursive: true, force: true })
+    expect(() => svc.markStarted(42)).not.toThrow()
+    expect(JSON.parse(fs.readFileSync(path.join(s.dir, "started.json"), "utf8"))).toMatchObject({
+      version: "1.0.6",
+    })
   })
 
   it("goes back to the kept version, and skips the one it leaves", async () => {

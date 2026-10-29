@@ -173,3 +173,40 @@ describe("ntfy push", () => {
     listening.stop()
   })
 })
+
+describe("topics and the test notification", () => {
+  it("makes topics a person can type into a phone without mixing up letters", () => {
+    for (let i = 0; i < 200; i++) {
+      const t = randomTopic()
+      expect(t).toMatch(/^jcvc-[a-z2-9]{4}(-[a-z2-9]{4}){4}$/)
+      expect(t.slice(5)).not.toMatch(/[01oli]/)
+    }
+    expect(new Set(Array.from({ length: 200 }, randomTopic)).size).toBe(200)
+  })
+
+  it("says when ntfy stored the test, from ntfy's own answer", async () => {
+    const channel = new NtfyChannel({
+      broker: new Broker({ phoneExpiryMs: 60_000, hardTimeoutMs: 600_000, redact: (v) => v }),
+      settings: () => ({
+        enabled: true,
+        server: "https://ntfy.example",
+        topic: randomTopic(),
+        replyTopic: randomTopic(),
+        maxRisk: 69,
+      }),
+      redact: (t) => t,
+      expiryMs: () => 60_000,
+      onRefused: () => undefined,
+      log: () => undefined,
+      fetchImpl: (async () =>
+        new Response(JSON.stringify({ id: "XN4EGcgFLR43", time: 1793289491, event: "message" }), {
+          status: 200,
+        })) as typeof fetch,
+    })
+    expect(await channel.test()).toEqual({
+      ok: true,
+      id: "XN4EGcgFLR43",
+      at: new Date(1793289491 * 1000).toISOString(),
+    })
+  })
+})

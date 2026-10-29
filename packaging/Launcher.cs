@@ -92,6 +92,10 @@ internal static class Launcher
                     url = m.Groups[1].Value;
                     ready.Set();
                 }
+                else if (Hosting.ProgressLine.IsMatch(e.Data))
+                {
+                    Say(Hosting.JsonField(e.Data, "text") + "...");
+                }
                 else if (Hosting.ApplyLine.IsMatch(e.Data))
                 {
                     string message;

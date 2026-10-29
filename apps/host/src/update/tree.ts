@@ -81,9 +81,13 @@ export async function mapLimit<T, R>(
 }
 
 /** sha256 over "path NUL sha256(content) LF" for each file, in sorted order. Names and contents, nothing else. */
-export async function treeHash(root: string, rels: string[]): Promise<string> {
+export async function treeHash(root: string, rels: string[], tick?: () => void): Promise<string> {
   const sorted = [...rels].sort()
-  const hashes = await mapLimit(sorted, 16, (rel) => hashFile(path.join(root, rel)))
+  const hashes = await mapLimit(sorted, 16, async (rel) => {
+    const h = await hashFile(path.join(root, rel))
+    tick?.()
+    return h
+  })
   const h = crypto.createHash("sha256")
   sorted.forEach((rel, i) => h.update(`${rel}\0${hashes[i]}\n`))
   return h.digest("hex")

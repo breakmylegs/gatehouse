@@ -11,7 +11,15 @@ import { HostServer } from "./server.js"
 const env = process.env
 const log = (line: string) => process.stderr.write(`[host] ${line}\n`)
 
-const host = createHost({ log, onHealthChanged: () => server.announceHealth() })
+// The start-up picture shows these steps as they happen. This first one means the Host's own code has loaded.
+const progress = (text: string) =>
+  process.stdout.write(JSON.stringify({ event: "progress", text }) + "\n")
+progress("Setting up")
+const host = createHost({
+  log,
+  onHealthChanged: () => server.announceHealth(),
+  onProgress: progress,
+})
 const token = generateToken()
 // The window app shows a Windows notification from this line, so it works even while the page is hidden in the
 // tray or minimised. The line carries no detail: what the request is stays inside the app.
@@ -56,6 +64,7 @@ process.on("uncaughtException", (e) => {
 
 try {
   await host.start()
+  progress("Opening the window")
   const port = await server.start()
   // Refresh the sign-in state for the header in the background. A failure only leaves it unknown.
   void host.app.account

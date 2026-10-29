@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { randomInt } from "node:crypto"
 import type { PendingView } from "@gatehouse/shared"
 import type { Broker } from "../broker.js"
 import { PushCodes, riskBand, SEVERE, summarise } from "./codes.js"
@@ -52,14 +52,14 @@ export interface NtfyDeps {
 
 const REPLY = /^(allow|deny) ([0-9a-f-]{36}) ([A-Za-z0-9_-]{22,64})$/
 
+/** Letters and digits that cannot be mistaken for each other when typed into a phone: no 0 o, 1 l i. */
+export const TOPIC_LETTERS = "abcdefghjkmnpqrstuvwxyz23456789"
+
+/** A private topic: "jcvc-" and five groups of four, about 99 bits, easy to read and to type. */
 export function randomTopic(): string {
-  return (
-    "jcvc-" +
-    randomBytes(18)
-      .toString("base64url")
-      .replace(/[^A-Za-z0-9]/g, "")
-      .slice(0, 22)
-  )
+  const group = () =>
+    Array.from({ length: 4 }, () => TOPIC_LETTERS[randomInt(TOPIC_LETTERS.length)]).join("")
+  return `jcvc-${Array.from({ length: 5 }, group).join("-")}`
 }
 
 export class NtfyChannel {
@@ -176,7 +176,7 @@ export class NtfyChannel {
   }
 
   /** Sends a plain test message, with no buttons. */
-  async test(): Promise<{ ok: boolean; error?: string }> {
+  async test(): Promise<{ ok: boolean; error?: string; id?: string; at?: string }> {
     const s = this.#d.settings()
     if (!s?.enabled) return { ok: false, error: "ntfy is not switched on" }
     try {
@@ -190,7 +190,14 @@ export class NtfyChannel {
             "Notifications from JCVC reach this phone. Approve and Deny buttons appear when a request needs you.",
         }),
       })
-      return res.ok ? { ok: true } : { ok: false, error: `ntfy answered ${res.status}` }
+      if (!res.ok) return { ok: false, error: `ntfy answered ${res.status}` }
+      // ntfy answers with the message it stored, so JCVC can say it arrived there.
+      const got = (await res.json().catch(() => ({}))) as { id?: unknown; time?: unknown }
+      return {
+        ok: true,
+        ...(typeof got.id === "string" ? { id: got.id } : {}),
+        ...(typeof got.time === "number" ? { at: new Date(got.time * 1000).toISOString() } : {}),
+      }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
     }

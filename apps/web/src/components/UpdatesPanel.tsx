@@ -50,22 +50,14 @@ export function UpdatesPanel() {
         {u.available && u.canInstall && target ? (
           <button
             className="btn btn-primary"
-            disabled={u.phase === "preparing" || u.phase === "applying"}
-            onClick={() =>
-              void updateCall(
-                "POST",
-                u.phase === "ready" && u.ready === target
-                  ? "/api/update/apply"
-                  : "/api/update/prepare",
-                { version: target },
-              )
-            }
+            disabled={u.phase === "applying" || u.applyWhenReady === target}
+            onClick={() => void updateCall("POST", "/api/update/install", { version: target })}
           >
-            {u.phase === "ready" && u.ready === target
-              ? `Restart into ${target}`
-              : u.phase === "preparing"
-                ? `Downloading ${target}`
-                : `Download ${target}`}
+            {u.applyWhenReady === target
+              ? `Updating to ${target} when it is ready`
+              : u.phase === "ready" && u.ready === target
+                ? `Restart into ${target}`
+                : `Update to ${target}`}
           </button>
         ) : null}
       </div>

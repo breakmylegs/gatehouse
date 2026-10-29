@@ -53,6 +53,8 @@ export interface UpdateStatus {
   error?: string
   /** The version built and checked beside this one, ready to switch to. */
   ready?: string
+  /** You chose Update now for this version: JCVC switches as soon as it is ready, whatever the screen does. */
+  applyWhenReady?: string
   lastResult?: UpdateResult
 }
 
@@ -92,6 +94,7 @@ export class UpdateService extends EventEmitter<{
   #error: string | undefined
   #ready: string | undefined
   #lastResult: UpdateResult | undefined
+  #applyWhenReady: string | undefined
   #why: string | undefined
   #busy: Promise<unknown> = Promise.resolve()
 
@@ -190,6 +193,7 @@ export class UpdateService extends EventEmitter<{
       ...(this.#progress ? { progress: this.#progress } : {}),
       ...(this.#error ? { error: this.#error } : {}),
       ...(this.#ready ? { ready: this.#ready } : {}),
+      ...(this.#applyWhenReady ? { applyWhenReady: this.#applyWhenReady } : {}),
       ...(this.#lastResult ? { lastResult: this.#lastResult } : {}),
     }
   }
@@ -300,6 +304,7 @@ export class UpdateService extends EventEmitter<{
       this.#progress = undefined
       void this.#o.audit("update_downloaded", { version }).catch(() => undefined)
     } catch (e) {
+      this.#applyWhenReady = undefined
       this.#phase = "failed"
       this.#progress = undefined
       this.#error =
@@ -313,7 +318,37 @@ export class UpdateService extends EventEmitter<{
     } finally {
       this.#changed()
     }
+    if (this.#phase === "ready" && this.#applyWhenReady === version) await this.#applyNow(version)
     return this.status()
+  }
+
+  /**
+   * Update now: switch to this version as soon as it is ready, preparing it first if needed. The Host keeps the
+   * choice, so it holds even if the screen reconnects or the dialog is closed while the new version is being built.
+   */
+  async install(version: string): Promise<UpdateStatus> {
+    if (this.#why) throw new UpdateError(this.#why)
+    if (this.#phase === "ready" && this.#ready === version) return this.apply(version)
+    const l = this.#latest
+    if (!l || l.manifest.version !== version)
+      throw new UpdateError(
+        `Version ${version} is not the newest release. Check for updates again.`,
+      )
+    this.#applyWhenReady = version
+    this.#changed()
+    if (this.#phase !== "preparing") void this.prepare(version).catch(() => undefined)
+    return this.status()
+  }
+
+  async #applyNow(version: string): Promise<void> {
+    this.#applyWhenReady = undefined
+    try {
+      await this.apply(version)
+    } catch (e) {
+      this.#phase = "failed"
+      this.#error = (e as Error).message
+      this.#changed()
+    }
   }
 
   /** Switches to the version that is ready. JCVC closes and JCVC-Update.exe takes over. */
@@ -379,11 +414,16 @@ export class UpdateService extends EventEmitter<{
   /** Called once the Host is ready, so JCVC-Update.exe knows the version it started really works. */
   markStarted(pid: number): void {
     if (!this.#installed) return
-    const file = path.join(this.#o.dir, "started.json")
-    fs.writeFileSync(
-      file,
-      JSON.stringify({ version: this.current, pid, at: new Date().toISOString() }) + "\n",
-    )
+    // Only an update waiting for this version reads it, so failing to write it must never stop JCVC starting.
+    try {
+      fs.mkdirSync(this.#o.dir, { recursive: true })
+      fs.writeFileSync(
+        path.join(this.#o.dir, "started.json"),
+        JSON.stringify({ version: this.current, pid, at: new Date().toISOString() }) + "\n",
+      )
+    } catch (e) {
+      this.#o.log(`could not record that this version started (${(e as Error).message})`)
+    }
   }
 
   async skip(version: string): Promise<UpdateStatus> {
@@ -393,6 +433,7 @@ export class UpdateService extends EventEmitter<{
       await this.#o.saveSettings({ ...s, skipped: [...s.skipped, version].slice(-50) })
       void this.#o.audit("update_skipped", { version }).catch(() => undefined)
     }
+    if (this.#applyWhenReady === version) this.#applyWhenReady = undefined
     if (this.#ready === version && this.#phase === "ready") {
       this.#ready = undefined
       this.#phase = "idle"

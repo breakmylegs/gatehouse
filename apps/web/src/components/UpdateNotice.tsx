@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
 import { useStore } from "../store"
 import { noteLines, updateCall, type UpdateStatus } from "../lib/update"
@@ -68,17 +68,9 @@ function UpdateDialog({ update, onClose }: { update: UpdateStatus; onClose: () =
   const running = Object.values(sessions).filter(
     (x) => x.state !== "ended" && x.state !== "error",
   ).length
-  const [wanted, setWanted] = useState(false)
   const target = update.latest?.version as string
-  const asked = useRef(false)
-
-  // Update now on a version still downloading: switch as soon as it is ready.
-  useEffect(() => {
-    if (wanted && update.phase === "ready" && update.ready === target && !asked.current) {
-      asked.current = true
-      void updateCall("POST", "/api/update/apply", { version: target })
-    }
-  }, [wanted, update.phase, update.ready, target])
+  // The Host keeps "Update now": it switches as soon as the version is ready, even if this dialog is closed.
+  const wanted = update.applyWhenReady === target
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) =>
@@ -87,16 +79,10 @@ function UpdateDialog({ update, onClose }: { update: UpdateStatus; onClose: () =
     return () => window.removeEventListener("keydown", onKey)
   }, [onClose, update.phase])
 
-  const go = () => {
-    setWanted(true)
-    if (update.phase !== "ready" && update.phase !== "preparing")
-      void updateCall("POST", "/api/update/prepare", { version: target })
-  }
+  const go = () => void updateCall("POST", "/api/update/install", { version: target })
   const p = update.progress
   const pct = p && p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : undefined
-  const busy =
-    update.phase === "applying" ||
-    (wanted && (update.phase === "preparing" || update.phase === "ready"))
+  const busy = update.phase === "applying" || wanted
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/30">
@@ -134,6 +120,11 @@ function UpdateDialog({ update, onClose }: { update: UpdateStatus; onClose: () =
             </span>
             <progress className="w-full" max={p.total || 1} value={p.done} aria-label={p.label} />
           </div>
+        ) : null}
+        {wanted && update.phase !== "applying" ? (
+          <p className="m-0 text-sm" aria-live="polite">
+            JCVC switches to {target} as soon as it is ready. You can close this and keep working.
+          </p>
         ) : null}
         {update.phase === "applying" ? (
           <p className="m-0 text-sm" aria-live="polite">

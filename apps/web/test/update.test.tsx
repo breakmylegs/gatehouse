@@ -58,16 +58,23 @@ describe("the update button and dialog", () => {
     expect(d.textContent).toContain("1 session is open")
   })
 
-  it("downloads first when needed, then switches as soon as the version is ready", async () => {
+  it("hands Update now to the Host, which keeps it even if the dialog is closed", async () => {
     render(<UpdateNotice />)
     fireEvent.click(screen.getByRole("button", { name: "Update to 1.0.6" }))
     fireEvent.click(screen.getByRole("button", { name: "Update now" }))
-    await waitFor(() => expect(calls.map((c) => c.url)).toContain("/api/update/prepare"))
-    expect(calls.find((c) => c.url === "/api/update/prepare")?.body).toEqual({ version: "1.0.6" })
-    expect(calls.some((c) => c.url === "/api/update/apply")).toBe(false)
-    act(() => useStore.setState({ update: base({ phase: "ready", ready: "1.0.6" }) }))
-    await waitFor(() => expect(calls.map((c) => c.url)).toContain("/api/update/apply"))
-    expect(calls.filter((c) => c.url === "/api/update/apply")).toHaveLength(1)
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toMatchObject({ url: "/api/update/install", body: { version: "1.0.6" } })
+    // The Host now says it will switch when ready: the dialog says so and offers nothing to click twice.
+    act(() => useStore.setState({ update: base({ phase: "preparing", applyWhenReady: "1.0.6" }) }))
+    expect(screen.getByRole("dialog").textContent).toContain(
+      "switches to 1.0.6 as soon as it is ready",
+    )
+    expect((screen.getByRole("button", { name: "Updating" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "Later" }))
+    expect(screen.queryByRole("dialog")).toBeNull()
+    expect(calls).toHaveLength(1)
   })
 
   it("switches at once when the version is already downloaded, and can skip it instead", async () => {
@@ -76,7 +83,7 @@ describe("the update button and dialog", () => {
     render(<UpdateNotice />)
     fireEvent.click(screen.getByRole("button", { name: "Update ready: 1.0.6" }))
     fireEvent.click(screen.getByRole("button", { name: "Update now" }))
-    await waitFor(() => expect(calls.map((c) => c.url)).toEqual(["/api/update/apply"]))
+    await waitFor(() => expect(calls.map((c) => c.url)).toEqual(["/api/update/install"]))
     cleanup()
     calls.length = 0
     render(<UpdateNotice />)
@@ -159,7 +166,7 @@ describe("Settings, Updates", () => {
     })
     render(<UpdatesPanel />)
     expect(screen.getByText(/running from its source folder/)).toBeTruthy()
-    expect(screen.queryByRole("button", { name: /Download 1\.0\.6/ })).toBeNull()
+    expect(screen.queryByRole("button", { name: /Update to 1\.0\.6/ })).toBeNull()
   })
 
   it("keeps a token write-only: the field empties once saved", async () => {

@@ -61,6 +61,8 @@ export interface HostOptions {
   phoneProtector?: Protector
   /** Called when something outside the server changes health, such as a finished sign-in. */
   onHealthChanged?: () => void
+  /** Each step of the start, in words, for the start-up picture. */
+  onProgress?: (text: string) => void
 }
 
 export interface Host {
@@ -321,7 +323,7 @@ export function createHost(opts: HostOptions = {}): Host {
   if (testBase) log(`updates come from ${testBase} (a test setting)`)
   const updates = new UpdateService({
     installDir,
-    sourceVersion: sourceVersion(),
+    sourceVersion: installDir ? "0.0.0-source" : sourceVersion(),
     dir: path.join(gatehouseDataDir(env), "updates"),
     source: new GitHubSource({
       token: () => updateToken.get(),
@@ -517,7 +519,9 @@ export function createHost(opts: HostOptions = {}): Host {
     store,
     pwsh,
     async start() {
+      const step = opts.onProgress ?? (() => undefined)
       fs.mkdirSync(gatehouseDataDir(env), { recursive: true })
+      step("Loading your rules")
       store.load()
       try {
         phoneStore.load()
@@ -529,6 +533,7 @@ export function createHost(opts: HostOptions = {}): Host {
       if (store.status().errors.length > 0)
         log(`policy did not load: ${store.status().errors.join("; ")}`)
       store.watch()
+      step("Starting the PowerShell checker")
       await pwsh
         .start()
         .catch((e) =>
@@ -537,6 +542,7 @@ export function createHost(opts: HostOptions = {}): Host {
           ),
         )
       if (spawnApprover) {
+        step("Starting the Approver, which decides requests")
         const port = await approverPortPromise
         approverProcess = new ApproverProcess({
           command: process.execPath,
@@ -567,6 +573,7 @@ export function createHost(opts: HostOptions = {}): Host {
         })
       }
       await kill.syncApprover()
+      step("Connecting notifications and updates")
       ntfy.start()
       await updateToken.load()
       updates.start()

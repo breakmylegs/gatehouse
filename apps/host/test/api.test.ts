@@ -683,7 +683,7 @@ describe("insights endpoints", () => {
       expect(on.statusCode).toBe(200)
       const first = runningConfig.push?.ntfy
       expect(first).toMatchObject({ enabled: true, server: "https://ntfy.sh", maxRisk: 84 })
-      expect(first?.topic).toMatch(/^jcvc-[A-Za-z0-9]{10,}$/)
+      expect(first?.topic).toMatch(/^jcvc-[a-z2-9]{4}(-[a-z2-9]{4}){4}$/)
       expect(first?.topic).not.toBe(first?.replyTopic)
       expect(started).toBe(1)
       // Saving again keeps the topics, so the phone subscription keeps working.

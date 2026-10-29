@@ -50,6 +50,12 @@ export function currentVersion(): { version: string; commit: string | undefined 
 /** The commit subjects since the last release tag, without conventional-commit prefixes. */
 function changes(): string[] {
   let range = "HEAD~30..HEAD"
+  // Release tags are made on GitHub by gh release create, so fetch them, or the last release is not found here.
+  try {
+    git("fetch", "--tags", "--quiet", "origin")
+  } catch {
+    // offline: fall back to what is here
+  }
   try {
     range = `${git("describe", "--tags", "--abbrev=0", "--match", "v*", "HEAD^")}..HEAD`
   } catch {

@@ -28,6 +28,7 @@ export function PushPanel() {
   const [maxRisk, setMaxRisk] = useState(69)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const [sent, setSent] = useState<string>()
 
   const load = useCallback(async () => {
     const r = await api<{ ntfy: NtfyStatus }>("GET", "/api/push")
@@ -60,10 +61,17 @@ export function PushPanel() {
   }
   async function test() {
     setBusy(true)
-    const r = await api<{ ok: boolean; error?: string }>("POST", "/api/push/ntfy/test")
+    const r = await api<{ ok: boolean; error?: string; at?: string }>("POST", "/api/push/ntfy/test")
     setBusy(false)
-    if (r.ok && r.data?.ok) toast("Test sent. It should arrive on your phone in a few seconds.")
-    else setError(r.data?.error ?? r.error ?? "The test was not sent")
+    if (r.ok && r.data?.ok) {
+      const at = r.data.at
+        ? ` at ${new Date(r.data.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+        : ""
+      setError(undefined)
+      setSent(
+        `ntfy received the test${at}. If your phone shows nothing, the app is on a different topic or server, or its notifications are off.`,
+      )
+    } else setError(r.data?.error ?? r.error ?? "The test was not sent")
   }
 
   const on = st?.enabled === true
@@ -92,8 +100,31 @@ export function PushPanel() {
                 </>
               ) : null}
               :
-              <span className="mono mt-1 block w-fit select-all rounded bg-s2 px-2 py-1 text-[15px]">
-                {st?.topic}
+              <span className="mt-1 flex flex-wrap items-center gap-2">
+                <span className="mono w-fit select-all rounded bg-s2 px-2 py-1 text-[15px]">
+                  {st?.topic}
+                </span>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() =>
+                    void navigator.clipboard
+                      ?.writeText(st?.topic ?? "")
+                      .then(() => toast("Topic copied"))
+                      .catch(() =>
+                        toast.error("Could not copy. Select the topic and copy it instead."),
+                      )
+                  }
+                >
+                  Copy topic
+                </button>
+              </span>
+              <span className="mt-1 block text-[13px] text-mut">
+                To check it, open{" "}
+                <span className="mono">
+                  {(st?.server ?? "https://ntfy.sh").replace(/\/$/, "")}/{st?.topic}
+                </span>{" "}
+                in your phone&apos;s browser: test messages show there.
               </span>
             </li>
             <li>
@@ -106,8 +137,13 @@ export function PushPanel() {
             {st?.listening
               ? "Listening for your answers."
               : "Not listening yet. It retries by itself."}{" "}
-            Sent {st?.sent ?? 0} this run.
+            Sent {st?.sent ?? 0} request notification{st?.sent === 1 ? "" : "s"} this run.
           </p>
+          {sent ? (
+            <p className="m-0 text-[13px]" aria-live="polite">
+              {sent}
+            </p>
+          ) : null}
           {st?.lastError ? <p className="m-0 text-[13px] text-sev">{st.lastError}</p> : null}
         </>
       ) : null}

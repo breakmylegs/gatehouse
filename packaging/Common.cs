@@ -53,8 +53,11 @@ internal static class Hosting
     /// <summary>The line the Host prints to switch versions: {"event":"apply-update","updater":"...","plan":"..."}</summary>
     internal static readonly Regex ApplyLine = new Regex(@"""event""\s*:\s*""apply-update""");
 
+    /// <summary>A start-up step the Host reports: {"event":"progress","text":"Loading your rules"}</summary>
+    internal static readonly Regex ProgressLine = new Regex(@"""event""\s*:\s*""progress""");
+
     /// <summary>A string field from a one-line JSON object, with JSON's escapes undone.</summary>
-    private static string JsonField(string line, string name)
+    internal static string JsonField(string line, string name)
     {
         Match m = Regex.Match(line, @"""" + Regex.Escape(name) + @"""\s*:\s*""((?:[^""\\]|\\.)*)""");
         if (!m.Success) return null;
