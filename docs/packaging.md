@@ -14,6 +14,8 @@ JCVC\
   Microsoft.Web.WebView2.Core.dll, Microsoft.Web.WebView2.WinForms.dll, WebView2Loader.dll, WebView2-LICENSE.txt
   runtime\node.exe           the Node it runs on
   app\                       the application, with its production node_modules
+  JCVC-Update.exe            switches to a new version after JCVC closes, and goes back if it does not start
+  release.json               this folder's version and the hash of each part
   README.txt
 ```
 
@@ -65,6 +67,24 @@ It runs the same Host as `pwsh scripts/start.ps1`, so everything in `docs/runboo
 The installer puts JCVC in `%LOCALAPPDATA%\Programs\JCVC` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start JCVC when I sign in" choice. Compiling it works, and it has not been run through an install on this machine. Try it on a spare account or machine first.
 
 A single-file exe was judged not worth it: JCVC also needs the WebView2 libraries, its WebAssembly files, the Agent SDK's binary and the PowerShell scripts at run time, so a single file would unpack them next to itself anyway.
+
+## Updates and releases
+
+You install JCVC once. After that it updates itself (the user guide's Updates article says how it looks to you).
+
+**A release** is made on this computer with `npm run release` (GitHub Actions are switched off for this repository: the account has few minutes). The commit must be pushed first. It runs the typecheck and the tests, builds and checks the package, builds the installer, then `scripts/release.ts publish` and `gh release create`. Each release has:
+
+- **JCVC-Setup.exe**, first on the release page, for new installs.
+- **release.json** and **release.sig**: the version, the notes and, for each of the three parts, its tree hash, file count, archive, size and sha256, signed with the release key (Ed25519). The private key is `%USERPROFILE%\.jcvc-release\release-key.pem` (or `JCVC_RELEASE_KEY` / `JCVC_RELEASE_KEY_FILE`); its public half is in `apps/host/src/update/manifest.ts`. Keep a copy of the private key somewhere safe: without it no installed copy will accept a new release.
+- **jcvc-<version>-app.zip, -modules.zip, -runtime.zip**: the three parts. The app part is everything except `app\node_modules` (modules) and `runtime` (Node).
+
+The version is `major.minor` from package.json and the number of commits (`npm run release:version`). A working copy with changes builds as `-dev`, which sorts before the release of that number.
+
+**Updating** (`apps/host/src/update/`): the Host reads the newest release.json from GitHub every 30 minutes (or as set), checks its signature, and offers a newer version you have not skipped. To prepare it, it builds `JCVC.next` beside the install folder: parts whose hash is unchanged are copied from the current install, the rest are downloaded, checked and unpacked by `zip.ts`, which reads only its own zips (UTF-8 names), checks every name, and refuses a zip holding more files or bytes than the signed release says before it writes anything. JCVC does not use a zip tool: Windows' tar.exe could not take some real file names (a dependency ships test files named with a snowman), which the end-to-end check found. The whole folder must then match the signed hashes. Applying it writes a plan and hands over to `JCVC-Update.exe` (`packaging/Updater.cs`), which waits for JCVC to close, renames `JCVC` to `JCVC.previous` and `JCVC.next` to `JCVC`, carries `app\policy` across (all but the shipped library) and the uninstaller files, starts the new JCVC.exe and waits for its Host to write `started.json` with the new version. If that does not happen within four minutes, it puts the old folder back and starts it. It writes `result.txt` and `update.log` in `%LOCALAPPDATA%\Gatehouse\updates`.
+
+**Workspace links.** npm links `app\node_modules\@gatehouse\*` to the workspace packages with junctions, which hold absolute paths. They are left out of releases and the installer, and `scripts/links.mjs` (run by JCVC.exe before the Host, every start) makes them point into the folder JCVC is in. That is also what lets the folder be moved.
+
+**Checking it end to end:** after `npm run package`, `node node_modules/tsx/dist/cli.mjs scripts/update-e2e.ts` installs the package into a temporary folder, serves a signed release of it as 1.0.900 from a local stand-in for GitHub, and updates the installed copy through its own Host and JCVC-Update.exe.
 
 ## Known limits
 

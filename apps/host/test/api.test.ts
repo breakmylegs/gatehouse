@@ -249,6 +249,21 @@ describe("settings endpoints", () => {
     expect(fs.existsSync(path.join(root, "config.json"))).toBe(false)
   })
 
+  it("keeps a setting a newer version wrote, but still refuses one nobody has", async () => {
+    const put = (body: unknown) =>
+      app.inject({ method: "PUT", url: "/api/settings", payload: body as object })
+    fs.writeFileSync(path.join(root, "config.json"), JSON.stringify({ fromNewer: { a: 1 } }))
+    expect((await put({ fromNewer: { a: 1 }, hardTimeoutMs: 60_000 })).statusCode).toBe(200)
+    expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).fromNewer).toEqual({
+      a: 1,
+    })
+    const r = await put({ fromNewer: { a: 2 } })
+    expect(r.statusCode).toBe(422)
+    expect(r.json().errors).toEqual(["fromNewer: not a setting JCVC knows"])
+    expect((await put({ fromNewer: { a: 1 }, typo: true })).statusCode).toBe(422)
+    fs.rmSync(path.join(root, "config.json"))
+  })
+
   it("saves valid settings, says a restart is needed, and records names but not values", async () => {
     const r = await app.inject({
       method: "PUT",

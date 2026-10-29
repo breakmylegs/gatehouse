@@ -1,4 +1,5 @@
 import { readInit, type SessionMeta } from "./lib/sessionMeta"
+import type { UpdateStatus } from "./lib/update"
 import type {
   ClientCommand,
   Health,
@@ -58,6 +59,9 @@ export interface State {
   pending: Record<string, PendingView>
   resolved: Record<string, ResolvedView>
   health?: Health
+  /** Updates to JCVC itself, from the Host. */
+  update?: UpdateStatus
+  setUpdate: (u: UpdateStatus) => void
   usage?: Usage
   expectedOrg?: string
   transcripts: Record<string, Transcript>
@@ -174,6 +178,7 @@ export const useStore = create<State>((set, get) => ({
     localStorage.setItem("gatehouse.notify", notify ? "1" : "0")
     set({ notify })
   },
+  setUpdate: (update) => set({ update }),
   setJcPic: (jcPic) => {
     localStorage.setItem("gatehouse.jcpic", jcPic)
     set({ jcPic })
@@ -288,6 +293,9 @@ export const useStore = create<State>((set, get) => ({
         return
       case "health":
         set({ health: e.health })
+        return
+      case "update":
+        set({ update: e.update as UpdateStatus })
         return
       case "error":
         toast.error(e.message)

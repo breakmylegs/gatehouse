@@ -55,6 +55,8 @@ export interface HostApp {
   expectedOrg: () => string | undefined
   /** Policy, audit and settings endpoints for the desktop UI. Absent in tests that do not need them. */
   admin?: AdminContext
+  /** Updates to JCVC itself. Absent in tests that do not need them. */
+  updates?: import("./update/service.js").UpdateService
   /** The phone channel. Absent in tests that do not need it. */
   phone?: PhoneService
   /** Past sessions from the SDK. */
@@ -244,6 +246,7 @@ export class HostServer {
     a.usage.onChange = (usage) => this.#broadcast({ type: "usage", usage })
     a.kill.on("changed", () => this.#broadcast({ type: "health", health: a.health() }))
     a.phone?.on("health", () => this.#broadcast({ type: "health", health: a.health() }))
+    a.updates?.on("status", (update) => this.#broadcast({ type: "update", update }))
   }
 
   /** Called when something outside the server changes health (the Approver restarting, a sign-in check). */

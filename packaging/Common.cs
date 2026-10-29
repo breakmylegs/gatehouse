@@ -7,6 +7,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 
 internal static class Hosting
@@ -49,6 +50,60 @@ internal static class Hosting
     /// <summary>The line the Host prints when it is ready: {"event":"ready",...,"url":"http://127.0.0.1:PORT/#token=..."}</summary>
     internal static readonly Regex ReadyLine = new Regex("\"event\"\\s*:\\s*\"ready\".*?\"url\"\\s*:\\s*\"([^\"]+)\"");
 
+    /// <summary>The line the Host prints to switch versions: {"event":"apply-update","updater":"...","plan":"..."}</summary>
+    internal static readonly Regex ApplyLine = new Regex(@"""event""\s*:\s*""apply-update""");
+
+    /// <summary>A string field from a one-line JSON object, with JSON's escapes undone.</summary>
+    private static string JsonField(string line, string name)
+    {
+        Match m = Regex.Match(line, @"""" + Regex.Escape(name) + @"""\s*:\s*""((?:[^""\\]|\\.)*)""");
+        if (!m.Success) return null;
+        string v = m.Groups[1].Value;
+        StringBuilder b = new StringBuilder();
+        char slash = (char)92;
+        for (int i = 0; i < v.Length; i++)
+        {
+            char c = v[i];
+            if (c != slash || i + 1 >= v.Length) { b.Append(c); continue; }
+            char n = v[++i];
+            if (n == 'u' && i + 4 < v.Length) { b.Append((char)Convert.ToInt32(v.Substring(i + 1, 4), 16)); i += 4; }
+            else if (n == 'n') b.Append((char)10);
+            else if (n == 'r') b.Append((char)13);
+            else if (n == 't') b.Append((char)9);
+            else b.Append(n);
+        }
+        return b.ToString();
+    }
+
+    /// <summary>
+    /// Starts JCVC-Update.exe with the plan the Host wrote. It waits for this process to end, so the caller quits
+    /// next. The updater is not put in the job, so it outlives JCVC.
+    /// </summary>
+    internal static bool StartUpdater(string line, out string message)
+    {
+        string updater = JsonField(line, "updater");
+        string plan = JsonField(line, "plan");
+        if (updater == null || plan == null || !File.Exists(updater) || !File.Exists(plan))
+        {
+            message = "the update could not start: its files were not found";
+            return false;
+        }
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo(updater, "--plan \"" + plan + "\" --wait " + Process.GetCurrentProcess().Id);
+            psi.UseShellExecute = false;
+            psi.WorkingDirectory = Path.GetDirectoryName(updater);
+            Process.Start(psi);
+            message = "started";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            message = "the update could not start: " + ex.Message;
+            return false;
+        }
+    }
+
     internal static void MakeJob()
     {
         if (job != IntPtr.Zero) return;
@@ -83,6 +138,28 @@ internal static class Hosting
             catch (ArgumentException) { }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Points the workspace links in app\node_modules\@gatehouse at this folder (scripts\links.mjs). npm makes them
+    /// with absolute paths, so they need this after the folder is moved, installed or updated. Quick when they are right.
+    /// </summary>
+    internal static string FixLinks(string node, string appDir)
+    {
+        string script = Path.Combine(appDir, "scripts", "links.mjs");
+        if (!File.Exists(script)) return null;
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo(node, "\"" + script + "\" \"" + appDir + "\"");
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+            psi.RedirectStandardError = true;
+            Process p = Process.Start(psi);
+            string err = p.StandardError.ReadToEnd();
+            if (!p.WaitForExit(30000)) { try { p.Kill(); } catch (Exception) { } return "the workspace links were not checked in time"; }
+            return p.ExitCode == 0 ? (err.Trim().Length > 0 ? err.Trim() : null) : "the workspace links could not be fixed: " + err.Trim();
+        }
+        catch (Exception ex) { return "the workspace links could not be checked: " + ex.Message; }
     }
 
     internal static Process StartChild(string node, string appDir, string entry, string extraArgs)

@@ -7,6 +7,8 @@
 //     runtime/node.exe     the Node it runs on
 //     app/                 the application and its production node_modules
 //     README.txt
+//     JCVC-Update.exe  switches to a new version after JCVC closes (packaging/Updater.cs)
+//     release.json     the version and the hash of each part (scripts/release.ts stamp)
 //
 // Usage: node scripts/package.mjs [--skip-build] [--check] [--zip] [--out <folder>]
 //   --skip-build  reuse apps/web/dist and apps/phone/dist as they are
@@ -61,6 +63,7 @@ if (!exeOnly) {
     ".claude",
     "dist-demo",
     "demo.html",
+    "screens.html",
     ".turbo",
   ])
   const copy = (rel, { keepDist = false } = {}) => {
@@ -89,7 +92,8 @@ if (!exeOnly) {
   copy("apps/phone", { keepDist: true })
   for (const p of ["policy", "shared"]) copy(`packages/${p}`)
   copy("policy")
-  for (const f of ["ps-ast.ps1", "dpapi.ps1", "verify-audit.ps1", "start.ps1"]) copy(`scripts/${f}`)
+  for (const f of ["ps-ast.ps1", "dpapi.ps1", "verify-audit.ps1", "start.ps1", "links.mjs"])
+    copy(`scripts/${f}`)
   for (const f of [
     "runbook.md",
     "relay-local.md",
@@ -145,6 +149,23 @@ if (!exeOnly) {
   ])
     if (!fs.existsSync(path.join(app, "node_modules", must)))
       throw new Error(`node_modules/${must} was not installed`)
+
+  // npm links the workspace packages into node_modules with junctions, which hold absolute paths. Record them as
+  // relative pairs; scripts/links.mjs makes them point at wherever the folder is now, on every start.
+  const scope = path.join(app, "node_modules", "@gatehouse")
+  const links = fs
+    .readdirSync(scope, { withFileTypes: true })
+    .filter((e) => e.isSymbolicLink())
+    .map((e) => ({
+      link: path.relative(app, path.join(scope, e.name)).split(path.sep).join("/"),
+      target: path
+        .relative(app, fs.realpathSync(path.join(scope, e.name)))
+        .split(path.sep)
+        .join("/"),
+    }))
+  if (links.length === 0 || links.some((l) => l.target.startsWith("..")))
+    throw new Error(`the workspace links in ${scope} are not what the package expects`)
+  fs.writeFileSync(path.join(app, "workspace-links.json"), JSON.stringify(links, null, 2) + "\n")
 
   say("copying Node")
   fs.mkdirSync(path.join(dest, "runtime"), { recursive: true })
@@ -239,6 +260,21 @@ execFileSync(
   ],
   { stdio: "inherit" },
 )
+// JCVC-Update.exe: switches folders to a new version after JCVC closes, and goes back if it does not start.
+execFileSync(
+  csc,
+  [
+    "/nologo",
+    "/target:winexe",
+    "/optimize+",
+    `/win32icon:${icoFile}`,
+    "/r:System.Windows.Forms.dll",
+    "/r:System.Drawing.dll",
+    `/out:${path.join(dest, "JCVC-Update.exe")}`,
+    pk("Updater.cs"),
+  ],
+  { stdio: "inherit" },
+)
 for (const f of [wv2Core, wv2Forms, wv2Loader])
   fs.copyFileSync(f, path.join(dest, path.basename(f)))
 // The start-up picture the window shows while the Host starts (the page shows it again once it loads).
@@ -268,6 +304,18 @@ fs.writeFileSync(
     "Documents: app\\docs (runbook.md, relay-local.md, threat-model.md).",
     "",
   ].join("\r\n"),
+)
+
+// release.json: this folder's version and the hash of each part, so the updater knows what it has.
+run(
+  process.execPath,
+  [
+    path.join(root, "node_modules", "tsx", "dist", "cli.mjs"),
+    path.join(root, "scripts", "release.ts"),
+    "stamp",
+    dest,
+  ],
+  { cwd: root },
 )
 
 if (has("--zip")) {

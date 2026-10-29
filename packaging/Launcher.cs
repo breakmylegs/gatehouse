@@ -75,6 +75,9 @@ internal static class Launcher
             Environment.Exit(0);
         };
 
+        string linkNote = Hosting.FixLinks(node, appDir);
+        if (linkNote != null) Say(linkNote);
+
         string url = null;
         ManualResetEvent ready = new ManualResetEvent(false);
         try
@@ -88,6 +91,17 @@ internal static class Launcher
                 {
                     url = m.Groups[1].Value;
                     ready.Set();
+                }
+                else if (Hosting.ApplyLine.IsMatch(e.Data))
+                {
+                    string message;
+                    if (Hosting.StartUpdater(e.Data, out message))
+                    {
+                        Say("Updating: JCVC closes now and the new version opens in its window.");
+                        Hosting.StopChildren(relay, host);
+                        Environment.Exit(0);
+                    }
+                    Say(message);
                 }
                 else Console.WriteLine(e.Data);
             };

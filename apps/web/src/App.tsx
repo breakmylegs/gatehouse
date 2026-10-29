@@ -8,6 +8,7 @@ import { FirstRun } from "./surfaces/FirstRun"
 import { Setup } from "./surfaces/Setup"
 import { JcvcBackdrop } from "./components/JcvcBackdrop"
 import { HelpPane } from "./components/HelpPane"
+import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
 import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
 import { type Route, send, usePendingCount, useStore } from "./store"
@@ -140,6 +141,7 @@ export function App() {
           </>
         ) : null}
         <span className="ml-auto" />
+        <UpdateNotice />
         <button className="btn" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)}>
           Help <kbd className="!border-shell-line !bg-shell-2 !text-shell-tx">F1</kbd>
         </button>
@@ -212,6 +214,7 @@ export function App() {
         </nav>
         <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto]">
           <main id="main" tabIndex={-1} className="min-h-0 overflow-auto outline-none">
+            <UpdateResult />
             <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
               {route === "approvals" && <Approvals />}
               {route === "sessions" && <Sessions />}

@@ -192,6 +192,7 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
 - **Daily digest**: a short summary sent to your phone each day.
 - **Redaction list**: words replaced before anything is saved or sent, for example client names.
 - **Checkpoints**: snapshots taken before risky steps so you can restore.
+- **Updates**: the version you have, how often JCVC looks for a new one, skipped versions, and going back to the version before.
 - **Background picture**: which faint Jean-Claude picture sits behind the screens, or your own.
 
 Some changes apply at once; others say a restart is needed.`,
@@ -264,7 +265,7 @@ If anything goes wrong while deciding, the request waits for you or is denied. I
 
 **On the server**
 
-1. Get the code. The repository is private, so use a personal access token when git asks for a password:
+1. Get the code:
    git clone https://github.com/breakmylegs/gatehouse.git jcvc
 2. Install or update the Relay, with the address your phone will use:
    cd jcvc and then ./deploy/relay/install.sh https://relay.your-domain
@@ -279,6 +280,35 @@ If anything goes wrong while deciding, the request waits for you or is denied. I
 3. Choose Add a phone and follow the steps on the iPhone.
 
 **Updating** is the same install command again; paired phones are kept. The Relay only ever holds encrypted data, and every answer from the phone is checked here before it counts.`,
+  },
+  {
+    id: "updates",
+    title: "Updates",
+    body: `You install JCVC once, with JCVC-Setup.exe. After that it keeps itself up to date.
+
+**How it works**
+
+1. Every 30 minutes (change it in Settings, Updates) JCVC looks for a new version on GitHub.
+2. When there is one, an **Update to** button appears in the header. It lists what is new.
+3. Choose **Update now**. JCVC downloads only the parts that changed, checks them against its release signature, and builds the new version beside the one you are using. You can keep working while it does.
+4. JCVC then closes, switches to the new version and opens again by itself, usually within a minute. Open sessions stop when it closes; resume them from Sessions.
+
+With **Download a new version as soon as it is found** on (it is, unless you turn it off), step 3 has already happened by the time you see the button, so Update is quick. Nothing changes until you choose Update.
+
+**Skipping and going back**
+
+- **Skip this version** stops JCVC offering it. A newer one is still offered. You can offer a skipped version again in Settings.
+- You can skip any number of versions and update straight to the newest: each version is complete, not a patch on the one before.
+- The version before is kept beside the current one. **Go back** in Settings switches to it. If a new version does not start, JCVC goes back by itself and tells you.
+- If JCVC will not open at all after an update, run **JCVC-Update.exe --rollback** from its folder (%LOCALAPPDATA%\\Programs\\JCVC).
+
+**What stays yours**
+
+Your settings, audit log and phone pairing live in your data folder and are never touched. Your rules (rules.yaml, rules.user.yaml, remembered decisions, project overlays) are carried to the new version; only the shipped rule library is replaced.
+
+**Safety**
+
+Each release is signed. JCVC refuses anything not signed with its release key, any download whose size or fingerprint does not match, and any address that is not GitHub's.`,
   },
   {
     id: "trouble",

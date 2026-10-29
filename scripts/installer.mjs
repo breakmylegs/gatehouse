@@ -44,8 +44,15 @@ if (
   })
   if (r.status !== 0) process.exit(r.status ?? 1)
 }
-say(`compiling with ${iscc}`)
-const r = spawnSync(iscc, [path.join(root, "packaging", "installer.iss")], {
+// The installer shows the version the package was stamped with.
+let version = "0.0.0"
+try {
+  version = JSON.parse(fs.readFileSync(path.join(root, "dist-app", "JCVC", "release.json"), "utf8")).version
+} catch {
+  say("dist-app\\JCVC\\release.json is missing, so the installer says 0.0.0")
+}
+say(`compiling version ${version} with ${iscc}`)
+const r = spawnSync(iscc, [`/DAppVersion=${version}`, path.join(root, "packaging", "installer.iss")], {
   stdio: "inherit",
   cwd: root,
 })

@@ -10,6 +10,7 @@ import {
   gatehouseDataDir,
   listCheckpoints,
   loadConfig,
+  unknownConfigKeys,
   safeSegment,
 } from "../src/node/index.js"
 
@@ -66,9 +67,60 @@ describe("data directory and config", () => {
     expect(loadConfig(env)).toMatchObject({ redactTerms: ["Acme"], expectedOrg: "ACN - Premium" })
     fs.writeFileSync(configPath(env), JSON.stringify({ redactTerms: "x" }))
     expect(() => loadConfig(env)).toThrow()
-    fs.writeFileSync(configPath(env), JSON.stringify({ unknownKey: 1 }))
-    expect(() => loadConfig(env)).toThrow()
+    // A setting from a newer version is kept, not refused, so undoing an update never breaks the settings.
+    fs.writeFileSync(
+      configPath(env),
+      JSON.stringify({ unknownKey: 1, push: { ntfy: undefined, later: 2 } }),
+    )
+    expect(loadConfig(env)).toMatchObject({ unknownKey: 1, push: { later: 2 } })
+    expect(unknownConfigKeys({ unknownKey: 1, push: { later: 2 } }).sort()).toEqual([
+      "push.later",
+      "unknownKey",
+    ])
+    expect(unknownConfigKeys({ redactTerms: [] })).toEqual([])
     expect(configPath({ GATEHOUSE_CONFIG: "Z:/c.json" })).toBe("Z:/c.json")
+  })
+})
+
+describe("settings for quiet hours and updates", () => {
+  it("accepts real times for quiet hours and the digest", () => {
+    const env = { GATEHOUSE_CONFIG: path.join(root, "qh.json") }
+    fs.writeFileSync(
+      env.GATEHOUSE_CONFIG,
+      JSON.stringify({
+        quietHours: { start: "22:00", end: "07:30", tz: "Europe/London" },
+        digestTime: "08:15",
+      }),
+    )
+    expect(loadConfig(env).quietHours).toEqual({
+      start: "22:00",
+      end: "07:30",
+      tz: "Europe/London",
+    })
+    for (const bad of ["24:00", "7:00", "07:60", "0d:00"]) {
+      fs.writeFileSync(
+        env.GATEHOUSE_CONFIG,
+        JSON.stringify({ quietHours: { start: bad, end: "07:00", tz: "Europe/London" } }),
+      )
+      expect(() => loadConfig(env), bad).toThrow()
+    }
+  })
+
+  it("checks for updates every 30 minutes unless told otherwise, and only at the offered intervals", () => {
+    const env = { GATEHOUSE_CONFIG: path.join(root, "up.json") }
+    fs.rmSync(env.GATEHOUSE_CONFIG, { force: true })
+    expect(loadConfig(env).updates).toEqual({
+      checkEveryMinutes: 30,
+      skipped: [],
+      downloadInBackground: true,
+    })
+    fs.writeFileSync(
+      env.GATEHOUSE_CONFIG,
+      JSON.stringify({ updates: { checkEveryMinutes: 0, skipped: ["1.0.7"] } }),
+    )
+    expect(loadConfig(env).updates).toMatchObject({ checkEveryMinutes: 0, skipped: ["1.0.7"] })
+    fs.writeFileSync(env.GATEHOUSE_CONFIG, JSON.stringify({ updates: { checkEveryMinutes: 1 } }))
+    expect(() => loadConfig(env)).toThrow()
   })
 })
 

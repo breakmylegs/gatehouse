@@ -210,6 +210,8 @@ internal sealed class MainForm : Form
         if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep JCVC.exe next to its app folder."); return; }
         if (node == null) { Fail("No Node was found. JCVC needs runtime\\node.exe next to it."); return; }
 
+        string linkNote = Hosting.FixLinks(node, appDir);
+        if (linkNote != null) Remember(linkNote);
         try
         {
             host = Hosting.StartChild(node, appDir, hostEntry, "");
@@ -219,6 +221,7 @@ internal sealed class MainForm : Form
                 Match m = Hosting.ReadyLine.Match(ev.Data);
                 if (m.Success) OnUi(delegate { OnHostReady(m.Groups[1].Value); });
                 else if (ev.Data.Contains("\"event\":\"attention\"")) OnUi(delegate { Attention(); });
+                else if (Hosting.ApplyLine.IsMatch(ev.Data)) { string line = ev.Data; OnUi(delegate { ApplyUpdate(line); }); }
                 else Remember(ev.Data);
             };
             host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
@@ -463,6 +466,14 @@ internal sealed class MainForm : Form
         catch (Exception) { }
         // No detail in the balloon: it can show on a locked screen or be mirrored.
         tray.ShowBalloonTip(8000, "JCVC: a decision is waiting", "Open JCVC from the tray icon to decide. Your phone was told too if one is paired.", ToolTipIcon.Warning);
+    }
+
+    // The Host has the new version ready and you chose to switch: hand over to JCVC-Update.exe and close.
+    private void ApplyUpdate(string line)
+    {
+        string message;
+        if (Hosting.StartUpdater(line, out message)) Quit();
+        else Remember("[update] " + message);
     }
 
     private void Quit()

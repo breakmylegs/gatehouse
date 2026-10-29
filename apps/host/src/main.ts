@@ -18,6 +18,10 @@ const token = generateToken()
 host.app.broker.on("created", () => {
   process.stdout.write(JSON.stringify({ event: "attention" }) + "\n")
 })
+// Switching versions: the window app starts JCVC-Update.exe with the plan, then closes JCVC.
+host.updates.on("apply", ({ updater, plan }) => {
+  process.stdout.write(JSON.stringify({ event: "apply-update", updater, plan }) + "\n")
+})
 const server = new HostServer({
   app: host.app,
   token,
@@ -66,6 +70,8 @@ try {
       pid: process.pid,
     }) + "\n",
   )
+  // Tells JCVC-Update.exe, if it is waiting, that this version started.
+  host.updates.markStarted(process.pid)
 } catch (e) {
   log(`failed to start: ${(e as Error).message}`)
   await stop(1)

@@ -178,6 +178,8 @@ export const ServerEvent = z.discriminatedUnion("type", [
   z.object({ type: z.literal("audit"), record: z.unknown() }),
   z.object({ type: z.literal("usage"), usage: z.unknown() }),
   z.object({ type: z.literal("health"), health: Health }),
+  /** Updates to JCVC itself: what is installed, what is newer, and how far a download has got. */
+  z.object({ type: z.literal("update"), update: z.unknown() }),
   z.object({
     type: z.literal("reply"),
     cmdId: z.string().optional(),

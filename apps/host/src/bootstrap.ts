@@ -15,8 +15,11 @@ import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { AuditWriter } from "@gatehouse/shared/audit"
 import {
   auditDir,
+  configPath,
   gatehouseDataDir,
+  GatehouseConfig as GatehouseConfigSchema,
   loadConfig,
+  writeFileAtomic,
   type GatehouseConfig,
 } from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
@@ -37,6 +40,10 @@ import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
 import { SessionManager, type SessionDeps } from "./sessions.js"
 import { localDay, UsageStore } from "./usage.js"
+import { UpdateService } from "./update/service.js"
+import { GitHubSource } from "./update/source.js"
+import { UpdateTokenStore } from "./update/token.js"
+import { execFileSync } from "node:child_process"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 export const REPO_ROOT = path.resolve(here, "../../..")
@@ -58,6 +65,7 @@ export interface HostOptions {
 
 export interface Host {
   app: HostApp
+  updates: UpdateService
   config: GatehouseConfig
   approverProcess: ApproverProcess | undefined
   store: PolicyStore
@@ -297,6 +305,69 @@ export function createHost(opts: HostOptions = {}): Host {
         latencyMs: 0,
       }),
   })
+  // Updates. Packaged, the Host runs from <install>\app, so the install folder is the one above it.
+  const installDir = env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined
+  const updateToken = new UpdateTokenStore(
+    path.join(gatehouseDataDir(env), "update-token.sealed"),
+    opts.phoneProtector ??
+      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+  )
+  // Test hooks only: a local stand-in for GitHub and the key its releases are signed with. Both must be set.
+  const testBase = env.GATEHOUSE_UPDATE_BASE
+  const testKey =
+    testBase && env.GATEHOUSE_UPDATE_KEY_FILE
+      ? fs.readFileSync(env.GATEHOUSE_UPDATE_KEY_FILE, "utf8")
+      : undefined
+  if (testBase) log(`updates come from ${testBase} (a test setting)`)
+  const updates = new UpdateService({
+    installDir,
+    sourceVersion: sourceVersion(),
+    dir: path.join(gatehouseDataDir(env), "updates"),
+    source: new GitHubSource({
+      token: () => updateToken.get(),
+      ...(testBase ? { base: testBase } : {}),
+    }),
+    ...(testKey ? { keys: [testKey] } : {}),
+    settings: () => {
+      const u = config.updates ?? { checkEveryMinutes: 30, skipped: [], downloadInBackground: true }
+      return {
+        checkEveryMinutes: u.checkEveryMinutes,
+        downloadInBackground: u.downloadInBackground,
+        skipped: u.skipped,
+      }
+    },
+    saveSettings: async (u) => {
+      const file = configPath(env)
+      const saved = fs.existsSync(file)
+        ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>)
+        : {}
+      saved.updates = { ...((saved.updates as object | undefined) ?? {}), ...u }
+      const parsed = GatehouseConfigSchema.parse(saved) as GatehouseConfig
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      await writeFileAtomic(file, JSON.stringify(parsed, null, 2) + "\n")
+      ;(config as { updates?: GatehouseConfig["updates"] }).updates = parsed.updates
+    },
+    audit: async (event, input) => {
+      await audit.record({
+        session: "desktop",
+        event,
+        channel: "desktop",
+        tool: "updates",
+        input,
+        verdict: {
+          outcome: "allow",
+          ruleId: event.replace(/_/g, "-"),
+          reason: "An update to JCVC itself, not a tool call.",
+          risk: 0,
+          decidedBy: "human-desktop",
+          policyHash: store.current?.hash ?? "",
+        },
+        latencyMs: 0,
+      })
+    },
+    log,
+    tokenSet: () => updateToken.get() !== undefined,
+  })
   const localRelay = new LocalRelay({
     command: process.execPath,
     args: ["--import", tsxLoaderUrl(), path.join(REPO_ROOT, "apps", "relay", "src", "main.ts")],
@@ -375,6 +446,7 @@ export function createHost(opts: HostOptions = {}): Host {
   })
 
   const app: HostApp = {
+    updates,
     manager,
     signIn,
     broker,
@@ -405,6 +477,8 @@ export function createHost(opts: HostOptions = {}): Host {
       ntfy,
       sessionCwd: (id) => manager.get(id)?.cwd,
       pickFiles: pickFilesWithWindows,
+      updates,
+      updateToken,
       slack: {
         status: () => slack.status(),
         start: () => slack.start(),
@@ -435,6 +509,7 @@ export function createHost(opts: HostOptions = {}): Host {
 
   return {
     app,
+    updates,
     config,
     get approverProcess() {
       return approverProcess
@@ -493,6 +568,8 @@ export function createHost(opts: HostOptions = {}): Host {
       }
       await kill.syncApprover()
       ntfy.start()
+      await updateToken.load()
+      updates.start()
       void slack.start()
       // The Relay inside JCVC starts with it when you turned it on. A failure only shows on Devices.
       if (config.localRelay?.enabled)
@@ -506,6 +583,7 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     async stop() {
       ntfy.stop()
+      updates.stop()
       slack.stop()
       await localRelay.stop()
       digest.stop()
@@ -517,4 +595,32 @@ export function createHost(opts: HostOptions = {}): Host {
       pwsh.close()
     },
   }
+}
+
+/** The version shown when JCVC runs from its source folder: major.minor from package.json, the commit count, -source. */
+function sourceVersion(): string {
+  let mm = "1.0"
+  try {
+    const v = (
+      JSON.parse(fs.readFileSync(path.join(REPO_ROOT, "package.json"), "utf8")) as {
+        version?: string
+      }
+    ).version
+    const m = /^(\d+)\.(\d+)\./.exec(v ?? "")
+    if (m) mm = `${m[1]}.${m[2]}`
+  } catch {
+    // keep 1.0
+  }
+  let count = "0"
+  try {
+    count = execFileSync("git", ["rev-list", "--count", "HEAD"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 5000,
+    }).trim()
+  } catch {
+    // not a git folder
+  }
+  return `${mm}.${/^\d+$/.test(count) ? count : "0"}-source`
 }

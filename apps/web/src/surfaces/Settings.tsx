@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { JcvcPicker } from "../components/JcvcPicker"
+import { UpdatesPanel } from "../components/UpdatesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { useStore } from "../store"
@@ -279,6 +280,11 @@ export function Settings() {
           <input type="checkbox" checked={cpBurst} onChange={(e) => setCpBurst(e.target.checked)} />
           Take a checkpoint before the first edit after a quiet spell
         </label>
+      </fieldset>
+
+      <fieldset className="m-0 grid gap-2 border-0 p-0">
+        <legend className="mb-1 text-sm font-semibold">Updates</legend>
+        <UpdatesPanel />
       </fieldset>
 
       <fieldset className="m-0 grid gap-2 border-0 p-0">

@@ -172,7 +172,7 @@ describe("config", () => {
     for (const bad of [
       { hardTimeoutMs: 5 },
       { phoneExpiryMs: "soon" },
-      { checkpoints: { other: 1 } },
+      { checkpoints: { burstWindowMs: 5 } },
     ]) {
       fs.writeFileSync(path.join(dir, "config.json"), JSON.stringify(bad))
       expect(() => loadConfig(e)).toThrow()

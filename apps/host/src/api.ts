@@ -5,6 +5,9 @@ import type { SlackSecrets, SlackStatus } from "./push/slack.js"
 import { randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerLibraryRoutes } from "./library-api.js"
+import { registerUpdateRoutes } from "./update-api.js"
+import type { UpdateService } from "./update/service.js"
+import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker } from "./folder-picker.js"
 import fs from "node:fs"
 import os from "node:os"
@@ -29,6 +32,7 @@ import {
   configPath,
   GatehouseConfig,
   gatehouseDataDir,
+  unknownConfigKeys,
   writeFileAtomic,
 } from "@gatehouse/shared/node"
 import {
@@ -90,6 +94,10 @@ export interface AdminContext {
     start: (publicUrl: string, port: number) => Promise<LocalRelayStatus>
     stop: () => Promise<void>
   }
+  /** Updates to JCVC itself. Absent in tests that do not need it. */
+  updates?: UpdateService
+  /** The sealed GitHub token for a private repository. */
+  updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
   approver?: {
     state: () => string
@@ -402,6 +410,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerLibraryRoutes(app, ctx)
   registerFilesRoutes(app, ctx)
   registerAttachRoutes(app, ctx)
+  registerUpdateRoutes(app, ctx)
 
   // Your own pictures for Jean-Claude mode: files in a folder in the data folder. Only picture files, only by a
   // name that is in the listing, so a request can never name a path.
@@ -736,6 +745,23 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
         errors: parsed.error.issues.map((i) => `${i.path.join(".") || "settings"}: ${i.message}`),
       })
     const file = configPath(ctx.env)
+    // A setting this version does not know is refused, unless it is already in the file: a newer version wrote it
+    // before an update was undone, and it is kept for when that version comes back.
+    const onDisk = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as unknown) : {}
+    const at = (v: unknown, dotted: string) =>
+      dotted
+        .split(".")
+        .reduce<unknown>(
+          (o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined),
+          v,
+        )
+    const strangers = unknownConfigKeys(req.body).filter(
+      (k) => JSON.stringify(at(req.body, k)) !== JSON.stringify(at(onDisk, k)),
+    )
+    if (strangers.length)
+      return bad(reply, 422, "Those settings are not valid.", {
+        errors: strangers.map((k) => `${k}: not a setting JCVC knows`),
+      })
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const before = ctx.config()
     await writeFileAtomic(file, JSON.stringify(parsed.data, null, 2) + "\n")
