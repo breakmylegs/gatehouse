@@ -48,3 +48,25 @@ Name: "{userstartup}\Jean-Claude Van Code"; Filename: "{app}\JCVC.exe"; Paramete
 
 [Run]
 Filename: "{app}\JCVC.exe"; Description: "Start Jean-Claude Van Code now"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// JCVC-Setup.msi records itself here (HKCU when installed for one user, HKLM when installed for everyone).
+// Installing this over it would leave two installers owning one folder.
+function InstalledByMsi(): Boolean;
+var
+  v: String;
+begin
+  Result := (RegQueryStringValue(HKCU, 'Software\Gatehouse\JCVC', 'Installer', v) and (v = 'msi')) or
+            (RegQueryStringValue(HKLM64, 'Software\Gatehouse\JCVC', 'Installer', v) and (v = 'msi'));
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+  if InstalledByMsi() then
+  begin
+    MsgBox('Jean-Claude Van Code is already installed from JCVC-Setup.msi. It updates itself, so you do not need this installer.' + #13#10#13#10 +
+           'To switch, uninstall it first from Windows Settings, Apps.', mbInformation, MB_OK);
+    Result := False;
+  end;
+end;

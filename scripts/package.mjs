@@ -167,6 +167,31 @@ if (!exeOnly) {
     throw new Error(`the workspace links in ${scope} are not what the package expects`)
   fs.writeFileSync(path.join(app, "workspace-links.json"), JSON.stringify(links, null, 2) + "\n")
 
+  // A few dependencies ship test fixtures with names Windows Installer and makecab cannot take (a snowman, a %,
+  // brackets). JCVC never runs a dependency's tests, so those go. The same kind of name anywhere else stops the build.
+  const plain = /^[A-Za-z0-9 ._\-+@()~=,!#&$'/]+$/
+  const testDir = /(^|\/)(test|tests|__tests__|fixtures)\//
+  const pruned = []
+  const sweep = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name)
+      if (e.isSymbolicLink()) continue
+      const rel = path.relative(app, p).split(path.sep).join("/")
+      if (plain.test(rel)) {
+        if (e.isDirectory()) sweep(p)
+        continue
+      }
+      if (!testDir.test(rel)) throw new Error(`${rel} has a name an installer cannot take`)
+      fs.rmSync(p, { recursive: true, force: true })
+      pruned.push(rel)
+    }
+  }
+  sweep(path.join(app, "node_modules"))
+  if (pruned.length)
+    say(
+      `left out ${pruned.length} dependency test fixture(s) no installer can name: ${pruned.join(", ")}`,
+    )
+
   say("copying Node")
   fs.mkdirSync(path.join(dest, "runtime"), { recursive: true })
   fs.copyFileSync(process.execPath, path.join(dest, "runtime", "node.exe"))

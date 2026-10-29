@@ -133,7 +133,8 @@ export class UpdateService extends EventEmitter<{
       fs.mkdirSync(probe, { recursive: true })
       fs.rmSync(probe, { recursive: true, force: true })
     } catch {
-      return `JCVC cannot write next to ${this.#o.installDir}, so it cannot update itself there. Install it with JCVC-Setup.exe, which puts it in your own Programs folder.`
+      // Usually a copy an IT team installed for everyone (JCVC-Setup.msi with ALLUSERS=1, in Program Files).
+      return `This copy of JCVC was installed where it cannot write (${this.#o.installDir}), usually for everyone on this computer, so it cannot update itself. New versions come as a newer JCVC-Setup.msi, which your IT team may install for you.`
     }
     return undefined
   }
