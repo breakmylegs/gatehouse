@@ -3,20 +3,15 @@ import { pictureUrl } from "../lib/jcvc"
 import { useStore } from "../store"
 
 /**
- * Jean-Claude mode: a very faint picture behind the page. It paints through a CSS variable that the page
+ * Jean-Claude mode, always on: a very faint picture behind the page, in the light and the dark theme. It paints through a CSS variable that the page
  * background reads (see styles.css), so it sits behind every panel and never over any text.
  */
 export function JcvcBackdrop() {
-  const on = useStore((s) => s.jcMode)
   const choice = useStore((s) => s.jcPic)
   const route = useStore((s) => s.route)
 
   useEffect(() => {
     const root = document.documentElement
-    if (!on) {
-      root.style.removeProperty("--jcvc-img")
-      return
-    }
     let cancelled = false
     let made: string | undefined
     void pictureUrl(choice, route).then((url) => {
@@ -33,7 +28,7 @@ export function JcvcBackdrop() {
       cancelled = true
       if (made?.startsWith("blob:")) URL.revokeObjectURL(made)
     }
-  }, [on, choice, route])
+  }, [choice, route])
 
   return null
 }

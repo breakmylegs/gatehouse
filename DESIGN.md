@@ -113,6 +113,8 @@ JCVC is a permission workbench, and what needs you is a departures board. Reques
 
 The shell (header and rail) is committed slate in both themes, so the frame never changes and the work area carries the light. Colour does jobs: yellow means "needs you" and nothing else, gate blue means "you can act here", red means risk or error, green means healthy or low risk. Labels, numbers and headings are set in Bahnschrift, the DIN face that ships with Windows, with tabular figures; reading text stays in Segoe UI Variable and commands in Cascadia Mono.
 
+Jean-Claude mode is the only look (owner, 28 Oct). It comes in two versions, Jean-Claude light and Jean-Claude dark, and cannot be turned off: a very faint picture of Jean-Claude sits behind every screen (opacity 0.08 in light, 0.11 in dark, behind all content, never clickable). Settings chooses which picture, or the owner's own. There is no plain light or dark theme.
+
 Rejected on purpose: a grey sidebar, chat column and right panel clone of a chat client; imitating Claude Code or claude.ai; glass, gradients and glow.
 
 **Key Characteristics:**

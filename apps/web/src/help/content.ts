@@ -192,7 +192,7 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
 - **Daily digest**: a short summary sent to your phone each day.
 - **Redaction list**: words replaced before anything is saved or sent, for example client names.
 - **Checkpoints**: snapshots taken before risky steps so you can restore.
-- **Jean-Claude mode**: an optional faint picture behind the screens.
+- **Background picture**: which faint Jean-Claude picture sits behind the screens, or your own.
 
 Some changes apply at once; others say a restart is needed.`,
   },

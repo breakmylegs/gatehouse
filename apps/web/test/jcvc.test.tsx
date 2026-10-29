@@ -14,39 +14,30 @@ describe("Jean-Claude mode", () => {
   beforeEach(() => {
     localStorage.clear()
     document.documentElement.style.removeProperty("--jcvc-img")
-    useStore.setState({ jcMode: false, jcPic: "auto", route: "approvals" })
+    useStore.setState({ jcPic: "auto", route: "approvals" })
   })
   afterEach(cleanup)
 
-  it("is off by default and paints nothing", async () => {
+  it("is always on, with no switch to turn it off", async () => {
+    expect("jcMode" in useStore.getState()).toBe(false)
+    expect("setJcMode" in useStore.getState()).toBe(false)
     render(<JcvcBackdrop />)
-    await new Promise((r) => setTimeout(r, 20))
-    expect(css()).toBe("")
+    await waitFor(() => expect(css()).toContain(autoPictureFor("approvals")))
   })
 
-  it("paints a picture behind the page when on, and changes with the screen in automatic", async () => {
-    useStore.getState().setJcMode(true)
+  it("changes with the screen in automatic", async () => {
     render(<JcvcBackdrop />)
     await waitFor(() => expect(css()).toContain(autoPictureFor("approvals")))
     useStore.setState({ route: "sessions" })
     await waitFor(() => expect(css()).toContain("stance"))
   })
 
-  it("uses the picture you chose, and stops when turned off", async () => {
-    useStore.getState().setJcMode(true)
+  it("uses the picture you chose, and remembers it", async () => {
     useStore.getState().setJcPic("beret")
     render(<JcvcBackdrop />)
     await waitFor(() => expect(css()).toContain("beret"))
     expect(css().startsWith('url("http')).toBe(true)
-    useStore.getState().setJcMode(false)
-    await waitFor(() => expect(css()).toBe(""))
-  })
-
-  it("remembers the choices", () => {
-    useStore.getState().setJcMode(true)
-    useStore.getState().setJcPic("soldier")
-    expect(localStorage.getItem("gatehouse.jcmode")).toBe("1")
-    expect(localStorage.getItem("gatehouse.jcpic")).toBe("soldier")
+    expect(localStorage.getItem("gatehouse.jcpic")).toBe("beret")
   })
 
   it("is faint, behind everything, and cannot be clicked", () => {

@@ -39,9 +39,7 @@ export function App() {
   const health = useStore((s) => s.health)
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
-  const jcMode = useStore((s) => s.jcMode)
   const setupDone = useStore((s) => s.setupDone)
-  const setJcMode = useStore((s) => s.setJcMode)
   const helpOpen = useStore((s) => s.helpOpen)
   const setHelpOpen = useStore((s) => s.setHelpOpen)
 
@@ -62,9 +60,10 @@ export function App() {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
+  // Jean-Claude mode is the only look (owner, 28 Oct): it comes in a light and a dark version and cannot be turned off.
   useEffect(() => {
-    document.documentElement.dataset.jcvc = jcMode ? "on" : "off"
-  }, [jcMode])
+    document.documentElement.dataset.jcvc = "on"
+  }, [])
 
   // First launch: the setup wizard, once. It can be run again from Settings.
   useEffect(() => {
@@ -144,11 +143,8 @@ export function App() {
         <button className="btn" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)}>
           Help <kbd className="!border-shell-line !bg-shell-2 !text-shell-tx">F1</kbd>
         </button>
-        <button className="btn" aria-pressed={jcMode} onClick={() => setJcMode(!jcMode)}>
-          Jean-Claude mode: {jcMode ? "on" : "off"}
-        </button>
         <button className="btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? "Light theme" : "Dark theme"}
+          {theme === "dark" ? "Jean-Claude light" : "Jean-Claude dark"}
         </button>
         {killed ? (
           <button className="btn btn-primary" onClick={() => void send({ type: "rearm" })}>

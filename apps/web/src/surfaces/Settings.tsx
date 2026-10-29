@@ -52,8 +52,6 @@ export function Settings() {
   const [cpBurst, setCpBurst] = useState(true)
 
   const notify = useStore((s) => s.notify)
-  const jcMode = useStore((s) => s.jcMode)
-  const setJcMode = useStore((s) => s.setJcMode)
   const setNotify = useStore((s) => s.setNotify)
 
   useEffect(() => {
@@ -300,17 +298,12 @@ export function Settings() {
       </fieldset>
 
       <fieldset className="m-0 grid gap-2 border-0 p-0">
-        <legend className="mb-1 text-sm font-semibold">Jean-Claude mode</legend>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={jcMode} onChange={(e) => setJcMode(e.target.checked)} />
-          Show a faint picture in the background
-        </label>
+        <legend className="mb-1 text-sm font-semibold">Background picture</legend>
         <p className="m-0 text-xs text-mut">
-          Optional. It puts a very faint picture behind the screens and changes nothing else. It
-          works with the light and dark themes. The start-up picture always shows. This choice
-          applies to this window only.
+          JCVC always shows a faint Jean-Claude picture behind the screens, in the light and the
+          dark theme. Choose which one, or add your own.
         </p>
-        {jcMode ? <JcvcPicker /> : null}
+        <JcvcPicker />
       </fieldset>
 
       <fieldset className="m-0 grid gap-2 border-0 p-0">

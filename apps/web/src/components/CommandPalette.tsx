@@ -23,8 +23,6 @@ export function CommandPalette() {
   const selectSession = useStore((s) => s.selectSession)
   const selectRequest = useStore((s) => s.selectRequest)
   const theme = useStore((s) => s.theme)
-  const jcMode = useStore((s) => s.jcMode)
-  const setJcMode = useStore((s) => s.setJcMode)
   const setTheme = useStore((s) => s.setTheme)
   const sessions = useSessionList()
   const pending = usePending()
@@ -122,10 +120,7 @@ export function CommandPalette() {
               value="switch theme dark light"
               onSelect={run(() => setTheme(theme === "dark" ? "light" : "dark"))}
             >
-              Switch to {theme === "dark" ? "light" : "dark"} theme
-            </Item>
-            <Item value="jean-claude mode pictures" onSelect={run(() => setJcMode(!jcMode))}>
-              Turn Jean-Claude mode {jcMode ? "off" : "on"}
+              Switch to Jean-Claude {theme === "dark" ? "light" : "dark"}
             </Item>
           </Command.Group>
         </Command.List>

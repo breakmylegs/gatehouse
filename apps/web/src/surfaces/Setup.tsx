@@ -23,8 +23,6 @@ export function Setup() {
   const health = useStore((s) => s.health)
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
-  const jcMode = useStore((s) => s.jcMode)
-  const setJcMode = useStore((s) => s.setJcMode)
   const setRoute = useStore((s) => s.setRoute)
   const setSetupDone = useStore((s) => s.setSetupDone)
   const heading = useRef<HTMLHeadingElement>(null)
@@ -168,14 +166,10 @@ export function Setup() {
                   checked={theme === t}
                   onChange={() => setTheme(t)}
                 />
-                {t === "light" ? "Light" : "Dark"}
+                {t === "light" ? "Jean-Claude light" : "Jean-Claude dark"}
               </label>
             ))}
           </fieldset>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={jcMode} onChange={(e) => setJcMode(e.target.checked)} />
-            Jean-Claude mode: show the extra pictures (optional)
-          </label>
           <p className="m-0 text-xs text-mut">
             When a request needs you and the window is behind others, the taskbar button flashes.
             Phone pairing is optional and can be done later from Devices.

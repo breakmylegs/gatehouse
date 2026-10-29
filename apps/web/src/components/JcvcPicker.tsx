@@ -31,7 +31,7 @@ function Thumb({ choice, label }: { choice: string; label: string }) {
   )
 }
 
-/** Choose which picture Jean-Claude mode shows: automatic (it changes by screen), one of ours, or one of yours. */
+/** Choose which picture sits behind the screens: automatic (it changes by screen), one of ours, or one of yours. */
 export function JcvcPicker() {
   const choice = useStore((s) => s.jcPic)
   const setChoice = useStore((s) => s.setJcPic)

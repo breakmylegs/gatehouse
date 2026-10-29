@@ -67,7 +67,6 @@ export interface State {
   selectedRequest?: string
   theme: "light" | "dark"
   notify: boolean
-  jcMode: boolean
   /** Requests you have looked at. A new one stays lit on the board until it is in here. */
   seen: Record<string, true>
   /** The help pane on the right. */
@@ -90,7 +89,6 @@ export interface State {
   selectRequest: (id: string | undefined) => void
   setTheme: (t: "light" | "dark") => void
   setNotify: (on: boolean) => void
-  setJcMode: (on: boolean) => void
   setSetupDone: (done: boolean) => void
   setJcPic: (pic: string) => void
   addUserText: (sessionId: string, text: string) => void
@@ -129,7 +127,6 @@ export const useStore = create<State>((set, get) => ({
   route: "approvals",
   theme: storedTheme(),
   notify: localStorage.getItem("gatehouse.notify") === "1",
-  jcMode: localStorage.getItem("gatehouse.jcmode") === "1",
   seen: {},
   helpOpen: false,
   setHelpOpen: (helpOpen) => set({ helpOpen }),
@@ -184,10 +181,6 @@ export const useStore = create<State>((set, get) => ({
   setSetupDone: (setupDone) => {
     localStorage.setItem("gatehouse.setup", setupDone ? "done" : "")
     set({ setupDone })
-  },
-  setJcMode: (jcMode) => {
-    localStorage.setItem("gatehouse.jcmode", jcMode ? "1" : "0")
-    set({ jcMode })
   },
   addUserText: (sessionId, text) =>
     set((s) => ({

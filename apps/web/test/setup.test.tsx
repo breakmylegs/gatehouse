@@ -60,7 +60,7 @@ describe("the setup wizard", () => {
     expect(useStore.getState().route).toBe("sessions")
   })
 
-  it("can be skipped, and the choices step sets the theme and Jean-Claude mode", async () => {
+  it("can be skipped, and the choices step offers only the Jean-Claude light and dark themes", async () => {
     const user = userEvent.setup()
     useStore.setState({ health: health(true, true) })
     render(<Setup />)
@@ -68,10 +68,13 @@ describe("the setup wizard", () => {
     await user.click(screen.getByRole("button", { name: "Next" }))
     await user.click(screen.getByRole("button", { name: "Next" }))
     await user.click(screen.getByRole("button", { name: /next, or skip for now/i }))
-    await user.click(screen.getByRole("radio", { name: "Dark" }))
-    await user.click(screen.getByRole("checkbox", { name: /jean-claude mode/i }))
+    expect(screen.getAllByRole("radio").map((r) => r.closest("label")?.textContent)).toEqual([
+      "Jean-Claude light",
+      "Jean-Claude dark",
+    ])
+    expect(screen.queryByRole("checkbox", { name: /jean-claude/i })).toBeNull()
+    await user.click(screen.getByRole("radio", { name: "Jean-Claude dark" }))
     expect(useStore.getState().theme).toBe("dark")
-    expect(useStore.getState().jcMode).toBe(true)
     await user.click(screen.getByRole("button", { name: "Skip setup" }))
     expect(useStore.getState().setupDone).toBe(true)
     expect(useStore.getState().route).toBe("approvals")

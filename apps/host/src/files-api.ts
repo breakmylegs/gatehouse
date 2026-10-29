@@ -151,7 +151,8 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const buf = fs.readFileSync(where.abs, { flag: "r" }).subarray(0, MAX_TEXT)
     // Text if it decodes cleanly and has no NUL bytes.
     const text = buf.toString("utf8")
-    if (buf.includes(0) || text.includes(String.fromCharCode(0xfffd))) return { kind: "binary", size: st.size }
+    if (buf.includes(0) || text.includes(String.fromCharCode(0xfffd)))
+      return { kind: "binary", size: st.size }
     return { kind: "text", text, size: st.size, truncated: st.size > MAX_TEXT }
   })
 

@@ -31,7 +31,7 @@ if (startConnection()) {
 }
 
 // The start-up picture is in index.html so it is on screen before any script runs, in every theme and
-// whether or not Jean-Claude mode is on. Keep it up for a moment, then fade it out.
+// Keep it up for a moment, then fade it out.
 const boot = document.getElementById("boot")
 if (boot) {
   setTimeout(() => {
