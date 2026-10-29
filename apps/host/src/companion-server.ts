@@ -13,13 +13,19 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
     name: "companion",
     version: "0.0.0",
     tools: COMPANION_TOOLS.map((def) =>
-      tool(def.name, def.description, def.shape, async (args: Record<string, unknown>) => {
-        const out = await def.run(handlers, args)
-        return {
-          content: [{ type: "text" as const, text: out.text }],
-          ...(out.isError ? { isError: true } : {}),
-        }
-      }),
+      tool(
+        def.name,
+        def.description,
+        def.shape,
+        async (args: Record<string, unknown>) => {
+          const out = await def.run(handlers, args)
+          return {
+            content: [{ type: "text" as const, text: out.text }],
+            ...(out.isError ? { isError: true } : {}),
+          }
+        },
+        { annotations: def.annotations },
+      ),
     ),
   })
 }

@@ -7,7 +7,11 @@ import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 export type UiMode = "auto" | "default" | "acceptEdits" | "plan" | "extreme"
 
 export const MODE_OPTIONS: Array<{ id: UiMode; label: string; help: string }> = [
-  { id: "auto", label: "Auto", help: "Claude handles permission decisions" },
+  {
+    id: "auto",
+    label: "Auto",
+    help: "Claude Code decides routine actions; your denies and High risk still come to JCVC",
+  },
   { id: "default", label: "Manual", help: "Ask before anything the rules do not allow" },
   {
     id: "acceptEdits",

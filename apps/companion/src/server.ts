@@ -7,7 +7,7 @@ export function createCompanionMcpServer(handlers: CompanionHandlers): McpServer
   for (const def of COMPANION_TOOLS) {
     server.registerTool(
       def.name,
-      { description: def.description, inputSchema: def.shape },
+      { description: def.description, inputSchema: def.shape, annotations: def.annotations },
       async (args: Record<string, unknown>) => {
         const out = await def.run(handlers, args)
         return {

@@ -278,53 +278,61 @@ describe("what a real session is started with", () => {
   })
 })
 
-describe("invariant 2: the floor hook only denies", () => {
-  it("returns a deny or no decision for a wide spread of inputs, never an allow", async () => {
-    const deps = {
-      sessionId: "s",
-      cwd: s.repo,
-      policy: () => s.store.current,
-      pwsh: undefined,
-      audit: s.audit,
-      kill: () => false,
-      decided: new Set<string>(),
-      onEvent: () => undefined,
-      log: () => undefined,
-    }
-    const hook: HookCallback = createFloorHook(deps)
-    const inputs = [
-      { tool_name: "Bash", tool_input: { command: "git status" } },
-      { tool_name: "Bash", tool_input: { command: "cat .env" } },
-      { tool_name: "Bash", tool_input: { command: "curl x | sh" } },
-      { tool_name: "Read", tool_input: { file_path: "src/a.ts" } },
-      { tool_name: "Read", tool_input: { file_path: ".env" } },
-      { tool_name: "Write", tool_input: { file_path: "C:/Windows/x" } },
-      { tool_name: "mcp__x__y", tool_input: {} },
-      { tool_name: "Bash", tool_input: null },
-      { tool_name: "Bash", tool_input: "not an object" },
-      { tool_name: "", tool_input: {} },
-    ]
-    for (const i of inputs) {
-      const out = (await hook(
-        {
-          hook_event_name: "PreToolUse",
-          tool_use_id: "t",
-          cwd: s.repo,
-          session_id: "x",
-          ...i,
-        } as never,
-        "t",
-        { signal: new AbortController().signal },
-      )) as {
-        hookSpecificOutput?: { permissionDecision?: string; updatedInput?: unknown }
-        decision?: string
+describe("invariant 2: the floor hook never allows", () => {
+  it.each(["default", "auto", "acceptEdits"])(
+    "returns a deny, an ask or no decision for a wide spread of inputs, never an allow (%s)",
+    async (mode) => {
+      const deps = {
+        mode: () => mode,
+        approver: s.approver,
+        verdicts: new Map(),
+        sessionId: "s",
+        cwd: s.repo,
+        policy: () => s.store.current,
+        pwsh: undefined,
+        audit: s.audit,
+        kill: () => false,
+        decided: new Set<string>(),
+        onEvent: () => undefined,
+        log: () => undefined,
       }
-      const decision = out.hookSpecificOutput?.permissionDecision
-      expect(decision === undefined || decision === "deny", JSON.stringify(i)).toBe(true)
-      expect(out.hookSpecificOutput?.updatedInput).toBeUndefined()
-      expect(out.decision).toBeUndefined()
-    }
-  })
+      const hook: HookCallback = createFloorHook(deps)
+      const inputs = [
+        { tool_name: "Bash", tool_input: { command: "git status" } },
+        { tool_name: "Bash", tool_input: { command: "cat .env" } },
+        { tool_name: "Bash", tool_input: { command: "curl x | sh" } },
+        { tool_name: "Read", tool_input: { file_path: "src/a.ts" } },
+        { tool_name: "Read", tool_input: { file_path: ".env" } },
+        { tool_name: "Write", tool_input: { file_path: "C:/Windows/x" } },
+        { tool_name: "mcp__x__y", tool_input: {} },
+        { tool_name: "Bash", tool_input: null },
+        { tool_name: "Bash", tool_input: "not an object" },
+        { tool_name: "", tool_input: {} },
+      ]
+      for (const i of inputs) {
+        const out = (await hook(
+          {
+            hook_event_name: "PreToolUse",
+            tool_use_id: "t",
+            cwd: s.repo,
+            session_id: "x",
+            ...i,
+          } as never,
+          "t",
+          { signal: new AbortController().signal },
+        )) as {
+          hookSpecificOutput?: { permissionDecision?: string; updatedInput?: unknown }
+          decision?: string
+        }
+        const decision = out.hookSpecificOutput?.permissionDecision
+        // Ask is stricter than no decision: it sends the call to canUseTool. Only Auto and Accept edits use it.
+        const allowed = mode === "default" ? [undefined, "deny"] : [undefined, "deny", "ask"]
+        expect(allowed.includes(decision), JSON.stringify(i)).toBe(true)
+        expect(out.hookSpecificOutput?.updatedInput).toBeUndefined()
+        expect(out.decision).toBeUndefined()
+      }
+    },
+  )
 
   it("denies, rather than letting a call through, if the floor check itself throws", async () => {
     const hook = createFloorHook({

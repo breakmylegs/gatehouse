@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import type { Effort } from "@gatehouse/shared"
+import type { Effort, Verdict } from "@gatehouse/shared"
 import fs from "node:fs"
 import path from "node:path"
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
@@ -185,6 +185,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #deps: SessionDeps
   readonly #input = new InputQueue()
   readonly #decided = new Set<string>()
+  /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
+  readonly #verdicts = new Map<string, Verdict>()
   #q: Query | undefined
   #state: SessionState = "starting"
   #mode: SessionMode
@@ -259,6 +261,9 @@ export class Session extends EventEmitter<SessionEvents> {
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       log: d.log,
+      mode: () => this.#mode,
+      approver: d.approver,
+      verdicts: this.#verdicts,
     }
     const eventHook = createEventHook(hookDeps)
     const postHook = createPostToolHook(hookDeps)
@@ -285,6 +290,7 @@ export class Session extends EventEmitter<SessionEvents> {
         checkpoints: d.checkpoints,
         ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
         decided: this.#decided,
+        verdicts: this.#verdicts,
         extreme: () => this.#extreme,
         ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
         log: d.log,

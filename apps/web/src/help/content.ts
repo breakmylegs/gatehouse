@@ -56,9 +56,9 @@ Your phone gets the same request at the same time if one is paired. The first va
 **Modes**
 
 - **Manual**: anything the rules do not allow waits for you.
-- **Accept edits**: file edits inside the folder go ahead without asking. Commands still go through the rules.
+- **Accept edits**: file edits inside the folder go ahead without asking. Commands still go through the rules, and what your rules deny is denied.
 - **Plan**: Claude explores and proposes a plan before it changes anything. You approve the plan.
-- **Auto**: Claude Code's own checks approve routine actions.
+- **Auto**: Claude Code's own check decides routine actions, so far fewer wait for you. JCVC still denies what your rules deny, and still asks you about anything your rules rate High or Severe, or that it could not decide. Moderate and Low requests, and commands your rules do not name, are left to Claude Code's check. Turn on the rule library's packs to rate more commands.
 - **Extreme approval**: everything that would wait for you is approved straight away, written to the audit log, and your phone is told. The floor, the rules' denies and the kill switch still block.
 
 In every mode the floor (secrets, destructive commands) is checked first and every decision is audited. Bypass permissions is never offered.

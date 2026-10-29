@@ -156,7 +156,9 @@ export class FakeSdk {
         let finalInput = input
         let permission: PermissionResult | undefined
         let called = false
-        if (!o.selfApproved) {
+        // As the SDK documents: a hook's "ask" sends the call to canUseTool even where the mode would have approved
+        // it by itself.
+        if (!o.selfApproved || pre.hookSpecificOutput?.permissionDecision === "ask") {
           called = true
           permission =
             (await opts.canUseTool!(toolName, input, {

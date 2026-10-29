@@ -100,6 +100,16 @@ export interface CompanionToolDef {
   name: "notify_user" | "create_checkpoint" | "get_policy_summary"
   description: string
   shape: z.ZodRawShape
+  /**
+   * Stated, not left to defaults: Claude Code reads an unset destructiveHint as false, and in Auto mode its classifier
+   * treats these as safe to run. None of them changes your files; notify_user reaches you outside this computer.
+   */
+  annotations: {
+    readOnlyHint: boolean
+    destructiveHint: boolean
+    idempotentHint: boolean
+    openWorldHint: boolean
+  }
   run: (handlers: CompanionHandlers, args: Record<string, unknown>) => Promise<ToolText> | ToolText
 }
 
@@ -114,6 +124,12 @@ export const COMPANION_TOOLS: readonly CompanionToolDef[] = [
         .min(1)
         .max(NOTIFY_MAX_CHARS * 4),
     },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     run: (h, a) => h.notifyUser(String(a.text ?? "")),
   },
   {
@@ -121,6 +137,12 @@ export const COMPANION_TOOLS: readonly CompanionToolDef[] = [
     description:
       "Save a restorable snapshot of the working tree before a risky change. Does not touch your files or git index.",
     shape: { label: z.string().min(1).max(200) },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
     run: (h, a) => h.createCheckpoint(String(a.label ?? "")),
   },
   {
@@ -128,6 +150,12 @@ export const COMPANION_TOOLS: readonly CompanionToolDef[] = [
     description:
       "Describe what runs without approval, so you can pick commands that will not wait for the user.",
     shape: {},
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
     run: (h) => h.getPolicySummary(),
   },
 ]

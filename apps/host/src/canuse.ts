@@ -14,6 +14,8 @@ import type { ApproverClient } from "./approver-client.js"
 import type { HostAudit } from "./hostaudit.js"
 
 export interface CanUseDeps {
+  /** Verdicts the PreToolUse hook already got from the Approver (Auto and Accept edits), used instead of asking again. */
+  verdicts?: Map<string, Verdict>
   sessionId: string
   cwd: string
   projectRoot?: string
@@ -124,18 +126,22 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       if (toolName === "AskUserQuestion") return await ask(deps, input, options, "question")
       if (toolName === "ExitPlanMode") return await ask(deps, input, options, "plan")
 
-      const verdict = await deps.approver.evaluate(
-        { toolName, input },
-        {
-          cwd: deps.cwd,
-          sessionId: deps.sessionId,
-          toolUseId: toolUseID,
-          ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
-          ...(options.mcpServer?.source !== undefined
-            ? { mcpSource: options.mcpServer.source }
-            : {}),
-        },
-      )
+      const early = deps.verdicts?.get(toolUseID)
+      deps.verdicts?.delete(toolUseID)
+      const verdict =
+        early ??
+        (await deps.approver.evaluate(
+          { toolName, input },
+          {
+            cwd: deps.cwd,
+            sessionId: deps.sessionId,
+            toolUseId: toolUseID,
+            ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
+            ...(options.mcpServer?.source !== undefined
+              ? { mcpSource: options.mcpServer.source }
+              : {}),
+          },
+        ))
       if (verdict.outcome === "allow") return allow(input, toolUseID)
       if (verdict.outcome === "deny") {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)

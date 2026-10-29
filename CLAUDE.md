@@ -9,7 +9,7 @@ The authoritative specification is `docs/BUILD_SPEC.md`. Read it before starting
 Every phase must keep these true. Write an automated test for every invariant that can be tested.
 
 1. **Fail closed.** Any Approver error, timeout, malformed verdict or crash means escalate, never allow.
-2. **Deny-only floor.** The PreToolUse floor hook returns deny or no decision. It never returns allow.
+2. **The floor hook never allows.** The PreToolUse floor hook returns deny or no decision, and never allow. Owner decision, 29 Oct (Auto mode): in `acceptEdits` and `auto`, where Claude Code approves calls by itself, the hook also asks the Approver. It denies what the rules deny, and answers ask (stricter than no decision: the call goes to canUseTool and so to a person) for a High or Severe escalation or one that could not be decided. It still never returns allow.
 3. **Permission modes.**
    - Never use `bypassPermissions`, `dontAsk`, `allowDangerouslySkipPermissions` or any equivalent.
    - The allowed modes are `default` (shown as Manual), `plan`, and, by owner decision on 28 Oct 2026, `acceptEdits` and `auto`. The floor hook and the audit run in every mode. Extreme approval is a per-session flag on `default`, not an SDK mode.
