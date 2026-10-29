@@ -129,7 +129,7 @@ if (cmd === "version") {
       "For Windows 10 and 11, 64-bit. You only install once.",
       "",
       `- **[JCVC-Setup.exe](${dl("JCVC-Setup.exe")})**: the installer. It installs JCVC for you alone, in your own Programs folder, with no administrator rights.`,
-      `- **[JCVC-Setup-exe.zip](${dl("JCVC-Setup-exe.zip")})**: the same installer in a zip.`,
+      `- **[JCVC-Setup-exe.zip](${dl("JCVC-Setup-exe.zip")})**: the same installer in a zip. Use this one if your browser will not keep a .exe download; open the zip and run JCVC-Setup.exe from it.`,
       "- **Your browser will not keep either?** If you have the source, `npm run install:local` builds JCVC and installs it in the same place, with nothing downloaded. See the README.",
       "",
       "Already installed? You do not need to download anything. JCVC checks for new versions (every 30 minutes unless you change it in Settings) and offers this one. Choose Update and it switches over and restarts by itself.",

@@ -8,17 +8,24 @@ Claude asks permission before it runs a command, edits a file or uses a tool. JC
 
 ## Download
 
-**[Download JCVC-Setup.exe](https://github.com/breakmylegs/gatehouse/releases/latest/download/JCVC-Setup.exe)** for Windows 10 and 11 (64-bit).
+For Windows 10 and 11 (64-bit). Download one:
 
-1. Run it. It installs JCVC in your own Programs folder. You do not need administrator rights.
-2. Open **Jean-Claude Van Code** from the Start menu. The setup wizard signs you in to Claude and checks your organisation.
-3. Start a session on a scratch folder first, and watch what JCVC decides.
+- **[JCVC-Setup-exe.zip](https://github.com/breakmylegs/gatehouse/releases/latest/download/JCVC-Setup-exe.zip)**: the installer in a zip. Use this one if your browser will not keep a .exe download.
+- **[JCVC-Setup.exe](https://github.com/breakmylegs/gatehouse/releases/latest/download/JCVC-Setup.exe)**: the installer on its own.
+
+Then:
+
+1. If you downloaded the zip, open it and run **JCVC-Setup.exe** from inside it (or drag it out first).
+2. If Windows says it protected your PC, choose **More info**, then **Run anyway**: the installer is not code-signed yet.
+3. It installs JCVC in your own Programs folder. You do not need administrator rights.
+4. Open **Jean-Claude Van Code** from the Start menu. The setup wizard signs you in to Claude and checks your organisation.
+5. Start a session on a scratch folder first, and watch what JCVC decides.
 
 You only run the installer once. After that JCVC updates itself: see [Updates](#updates).
 
-### Your browser will not keep the installer?
+### Installing from the source
 
-Some company laptops block downloaded programs. Install from the source instead: nothing is downloaded as a program, it builds what is in your copy of this repository and installs it in the same place as the installer, with a Start menu shortcut.
+If you have this repository and Node, you can skip the installer: this builds what is in your copy and installs it in the same place as the installer, with a Start menu shortcut.
 
 ```
 git clone https://github.com/breakmylegs/gatehouse.git
