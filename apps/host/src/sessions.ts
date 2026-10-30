@@ -150,6 +150,10 @@ export interface SessionInfo {
   title?: string
   pinned?: boolean
   archived?: boolean
+  /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
+  historyFrom?: string
+  /** Brought back after JCVC restarted or updated, and whether a turn was cut off by it. */
+  restarted?: { wasRunning: boolean }
 }
 
 export interface SessionEvents {
