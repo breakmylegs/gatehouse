@@ -9,7 +9,13 @@ import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { createRequire } from "node:module"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { listSessions, query, resolveSettings } from "@anthropic-ai/claude-agent-sdk"
+import {
+  getSessionMessages,
+  listSessions,
+  query,
+  renameSession,
+  resolveSettings,
+} from "@anthropic-ai/claude-agent-sdk"
 import { PolicyEngine, PolicyStore, PwshWorker, redact, redactString } from "@gatehouse/policy"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { AuditWriter } from "@gatehouse/shared/audit"
@@ -40,6 +46,8 @@ import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
 import { SessionManager, type SessionDeps } from "./sessions.js"
 import { TerminalManager } from "./terminal.js"
+import { SessionHistory, type SessionSdk } from "./history.js"
+import { SessionMetaStore } from "./session-meta.js"
 import { localDay, UsageStore } from "./usage.js"
 import { UpdateService } from "./update/service.js"
 import { GitHubSource } from "./update/source.js"
@@ -219,8 +227,18 @@ export function createHost(opts: HostOptions = {}): Host {
     }
   }
 
+  const sessionMeta = new SessionMetaStore(path.join(gatehouseDataDir(env), "sessions.json"))
+  const history = new SessionHistory(
+    {
+      listSessions: listSessions as unknown as SessionSdk["listSessions"],
+      getSessionMessages: getSessionMessages as unknown as SessionSdk["getSessionMessages"],
+      renameSession,
+    },
+    sessionMeta,
+  )
   const deps: SessionDeps = {
     queryFn,
+    sessionMeta: (id) => sessionMeta.get(id),
     chatsDir: path.join(gatehouseDataDir(env), "chats"),
     config: () => config,
     policy: () => store.current,
@@ -446,6 +464,7 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(acct?.organization ? { organization: acct.organization } : {}),
         managedPolicy: acct?.managedPolicy ?? "unknown",
         orgOk: acct?.org.ok ?? false,
+        checked: acct !== undefined,
         ...(acct && !acct.org.ok ? { orgMessage: acct.org.message } : {}),
       },
       killSwitch: {
@@ -536,7 +555,8 @@ export function createHost(opts: HostOptions = {}): Host {
         : {}),
     },
     phone,
-    listHistory: async (d) => listSessions({ ...(d ? { dir: d } : {}), limit: 50 }),
+    listHistory: (d) => history.list(d),
+    history,
     log,
   }
 

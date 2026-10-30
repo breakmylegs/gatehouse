@@ -15,6 +15,20 @@ export function age(iso: string, now = Date.now()): string {
   return `${Math.floor(s / 86400)} d`
 }
 
+/** "14:02" today, "29 Oct, 14:02" earlier this year, "29 Oct 2025, 14:02" before that. */
+export function stamp(at: number, now: number = Date.now()): string {
+  const d = new Date(at)
+  const n = new Date(now)
+  const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
+  if (d.toDateString() === n.toDateString()) return time
+  const date = d.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    ...(d.getFullYear() === n.getFullYear() ? {} : { year: "numeric" }),
+  })
+  return `${date}, ${time}`
+}
+
 export function clock(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime())

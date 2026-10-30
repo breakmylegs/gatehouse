@@ -139,6 +139,8 @@ type AccountInfo = { email?, organization?, subscriptionType?, tokenSource?, api
 - `listSessions({ dir?, limit?, offset?, includeWorktrees? })` returns `SDKSessionInfo[]` (`sessionId`, `summary`, `lastModified`, `customTitle?`, `firstPrompt?`, `gitBranch?`).
 - `getSessionInfo(id, { dir? })`, `getSessionMessages(id, opts?)`, `forkSession(id, opts?)`, `renameSession`, `tagSession` exist.
 - Resume uses `options.resume = sessionId`, with `forkSession: true` to fork.
+- Used since 30 Oct (session management): `listSessions({ limit: 100 })` without `dir` lists sessions across all project folders, Claude Code's own included; `getSessionMessages(id, { dir?, limit })` returns `SessionMessage[]` (`type`, `message`, `parent_tool_use_id`) for search and export; `renameSession(id, title, { dir? })` appends a custom title to the session's JSONL so Claude Code shows the same title (JCVC keeps its own copy in `sessions.json` too, and a failure here only logs).
+- `Query.getContextUsage({ detail: 'summary' })` returns `totalTokens`, `maxTokens`, `percentage` and `categories` (`name`, `tokens`, `kind`: used, free, buffer or deferred) from the last response and local estimates, without the token-count calls `'full'` makes. The context meter reads it after each turn.
 
 ### Tool-shadowing warning
 

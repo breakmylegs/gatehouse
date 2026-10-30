@@ -1067,3 +1067,139 @@ main[data-rail="hidden"] {
 .term-note {
   color: var(--c-mut);
 }
+
+/* Pictures waiting to be sent, above the prompt box. */
+.pic-chip {
+  position: relative;
+}
+.pic-thumb,
+.pic-sent {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s2);
+  cursor: zoom-in;
+}
+.pic-thumb {
+  width: 64px;
+  height: 64px;
+}
+.pic-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pic-chip[data-busy] .pic-thumb img {
+  opacity: 0.45;
+}
+.pic-busy {
+  position: absolute;
+  inset: auto 0 4px;
+  font: 600 10.5px var(--font-sign);
+  text-align: center;
+  pointer-events: none;
+}
+.pic-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  font: 600 15px/1 var(--font-sign);
+  cursor: pointer;
+}
+.pic-remove:hover {
+  background: var(--c-s2);
+}
+/* Pictures in your message in the transcript. */
+.pic-sent img {
+  display: block;
+  max-width: 240px;
+  max-height: 180px;
+  object-fit: contain;
+}
+/* A picture shown large. */
+.picture-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  align-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000 72%, transparent);
+  cursor: zoom-out;
+}
+.picture-viewer img {
+  max-width: 92vw;
+  max-height: 82vh;
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--c-s1);
+  cursor: default;
+}
+
+/* The time beside each message. */
+.msg-time {
+  display: block;
+  margin-top: 2px;
+  color: var(--c-mut);
+  font: 500 11.5px var(--font-sign);
+  font-variant-numeric: tabular-nums;
+}
+
+/* How full the conversation is, under the prompt box. */
+.ctx-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-tx);
+  font: 500 13px var(--font-sign);
+  cursor: pointer;
+}
+.ctx-meter:hover,
+.ctx-meter[aria-expanded="true"] {
+  border-color: var(--c-line);
+}
+.ctx-track {
+  display: inline-block;
+  width: 44px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--c-s2);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.ctx-fill {
+  display: block;
+  height: 100%;
+  background: var(--c-acc);
+}
+.ctx-fill.ctx-high {
+  background: var(--c-sign);
+}
+.ctx-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: 300px;
+  padding: 12px;
+}

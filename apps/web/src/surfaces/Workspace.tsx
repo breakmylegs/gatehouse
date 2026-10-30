@@ -12,11 +12,14 @@ import { groupItems, summarise } from "../lib/groups"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
-import { money } from "../lib/format"
+import { money, stamp } from "../lib/format"
 import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
+import { PictureViewer } from "../components/PictureViewer"
+import { RenameDialog } from "../components/RenameDialog"
+import { archiveSession, exportOpenSession, setSessionMeta, titleOf } from "../lib/sessionActions"
 import { ChangesPane } from "../components/ChangesPane"
 import { TerminalPane } from "../components/TerminalPane"
 import { FilesPanel, Viewer, type Opened } from "../components/FilesPanel"
@@ -172,6 +175,7 @@ function SessionPane({
   const session = selected ? sessions[selected] : undefined
   const [opened, setOpened] = useState<Opened>()
   const [side, setSide] = useState<Side | null>(null)
+  const [renaming, setRenaming] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -216,12 +220,25 @@ function SessionPane({
       disabled: !running,
       onSelect: () => void send({ type: "interrupt", sessionId: session.id }),
     },
+    { label: "Rename...", onSelect: () => setRenaming(true) },
+    {
+      label: session.pinned ? "Unpin" : "Pin to the top",
+      onSelect: () =>
+        void setSessionMeta(
+          session,
+          { pinned: !session.pinned },
+          session.pinned ? `Unpinned ${titleOf(session)}.` : `Pinned ${titleOf(session)}.`,
+        ),
+    },
+    { label: "Export as Markdown", onSelect: () => exportOpenSession(session) },
+    { kind: "separator" },
     {
       label: "Close session",
       danger: true,
       disabled: session.state === "ended",
       onSelect: () => void send({ type: "close_session", sessionId: session.id }),
     },
+    { label: "Archive", danger: true, onSelect: () => void archiveSession(session) },
   ]
 
   return (
@@ -237,11 +254,11 @@ function SessionPane({
         {/* Never narrower than the name and its state: the side panel buttons wrap below instead. */}
         <span className="grid min-w-[11rem] flex-1">
           <Menu
-            label={`${session.project}: switch, open beside, interrupt or close`}
+            label={`${titleOf(session)}: switch, open beside, rename, interrupt or close`}
             className="pane-title"
             button={
               <>
-                <span className="min-w-[6ch] truncate">{session.project}</span>
+                <span className="min-w-[6ch] truncate">{titleOf(session)}</span>
                 <span className="shrink-0 text-[12.5px] font-normal text-mut">
                   {STATE_WORDS[session.state]}
                 </span>
@@ -293,6 +310,20 @@ function SessionPane({
           </span>
         )}
       </header>
+      {renaming ? (
+        <RenameDialog
+          current={session.title}
+          fallback={session.project}
+          onClose={() => setRenaming(false)}
+          onSave={(title) =>
+            void setSessionMeta(
+              session,
+              { title },
+              title ? `Renamed to ${title}.` : `${session.project} has its own name again.`,
+            )
+          }
+        />
+      ) : null}
 
       <div className="pane-body min-h-0">
         <section aria-label="Transcript" className="pane-transcript min-h-0">
@@ -385,6 +416,7 @@ function SessionPane({
         <Composer sessionId={session.id} disabled={ended} />
         {/* What the session runs on, under the prompt box where you look when you send. */}
         <div className="composer-bar" role="group" aria-label="Model, effort and mode">
+          <ContextMeter sessionId={session.id} state={session.state} />
           <label className="composer-pick">
             <span className="text-mut">Model</span>
             <select
@@ -502,6 +534,78 @@ function SessionRequest({
 }
 
 /** What the session is doing while a turn runs: thinking, writing a file, running a command. */
+interface ContextUsage {
+  percentage: number
+  totalTokens: number
+  maxTokens: number
+  categories: Array<{ name: string; tokens: number; kind?: string }>
+}
+
+const tokens = (n: number) => (n < 1000 ? `${n}` : `${Math.round(n / 1000)}k`)
+
+/**
+ * How full the conversation is: what Claude holds in mind for this session, as a share of what it can. Read after
+ * each turn, from the last response and local estimates (no extra calls to count tokens). Opens to what fills it.
+ */
+function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionInfo["state"] }) {
+  const [u, setU] = useState<ContextUsage>()
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (state !== "idle") return
+    let gone = false
+    void send({ type: "context_usage", sessionId }).then((r) => {
+      if (!gone && r.ok && r.data) setU(r.data as ContextUsage)
+    })
+    return () => {
+      gone = true
+    }
+  }, [sessionId, state])
+  if (!u) return null
+  const pct = Math.max(0, Math.round(u.percentage))
+  const used = u.categories
+    .filter((c) => (c.kind ?? "used") === "used" && c.tokens > 0)
+    .sort((a, b) => b.tokens - a.tokens)
+    .slice(0, 6)
+  return (
+    <span className="relative">
+      <button
+        type="button"
+        className="ctx-meter"
+        aria-expanded={open}
+        aria-label={`Context ${pct}% used, ${tokens(u.totalTokens)} of ${tokens(u.maxTokens)} tokens`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-mut">Context</span> {pct}%
+        <span className="ctx-track" aria-hidden="true">
+          <span
+            className={clsx("ctx-fill", pct >= 80 && "ctx-high")}
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </span>
+      </button>
+      {open ? (
+        <div role="group" aria-label="What fills the context" className="ctx-panel panel">
+          <p className="m-0 font-semibold">
+            {tokens(u.totalTokens)} of {tokens(u.maxTokens)} tokens
+          </p>
+          <ul className="m-0 grid list-none gap-0.5 p-0 text-[13px]">
+            {used.map((c) => (
+              <li key={c.name} className="flex justify-between gap-4">
+                <span>{c.name}</span>
+                <span className="tabular-nums text-mut">{tokens(c.tokens)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 text-[12.5px] text-mut">
+            How much of what Claude can hold in mind this conversation uses. When it is nearly full,
+            Claude Code summarises the older parts by itself and the conversation carries on.
+          </p>
+        </div>
+      ) : null}
+    </span>
+  )
+}
+
 function ActivityLine({ sessionId, cwd }: { sessionId: string; cwd: string }) {
   const activity = useStore((s) => s.activity[sessionId])
   const pulse = useStore((s) => s.pulse[sessionId])
@@ -537,6 +641,15 @@ function ActivityLine({ sessionId, cwd }: { sessionId: string; cwd: string }) {
   )
 }
 
+interface Picture {
+  id: string
+  name: string
+  url: string
+  /** Where it was saved in the session's folder; absent while it is being attached. */
+  rel?: string
+}
+let pictureSeq = 0
+
 function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolean }) {
   // One composer per pane in split view, so its id must be its own.
   const composerId = useId()
@@ -549,25 +662,61 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
     setText((t) => (t && !/\s$/.test(t) ? t + " " : t) + more)
     area.current?.focus()
   }
+  // Pictures you paste, drop or add: shown as thumbnails, saved into the session's folder, and sent as references
+  // with your message, so the prompt box keeps only what you typed (owner, 30 Oct).
+  const [pictures, setPictures] = useState<Picture[]>([])
+  const [viewing, setViewing] = useState<{ url: string; name: string }>()
   async function attachPictures(files: File[]): Promise<boolean> {
-    const pictures = files.filter((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type))
-    if (pictures.length === 0) return false
-    for (const f of pictures) {
-      const data = await new Promise<string>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "")
-        reader.readAsDataURL(f)
-      })
-      const r = await api<{ rel: string }>("POST", "/api/files/attach-data", {
-        session: sessionId,
-        name: f.name,
-        type: f.type,
-        data,
-      })
-      if (r.ok && r.data) insert(`@${r.data.rel} `)
-      else toast.error(r.error ?? "The picture was not attached")
-    }
+    const chosen = files.filter((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type))
+    if (chosen.length === 0) return false
+    await Promise.all(
+      chosen.map(async (f) => {
+        const id = `p${++pictureSeq}`
+        const url = URL.createObjectURL(f)
+        const name = f.name && f.name !== "image.png" ? f.name : "Pasted picture"
+        setPictures((p) => [...p, { id, name, url }])
+        const data = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "")
+          reader.readAsDataURL(f)
+        })
+        const r = await api<{ rel: string }>("POST", "/api/files/attach-data", {
+          session: sessionId,
+          name: f.name,
+          type: f.type,
+          data,
+        })
+        if (r.ok && r.data) {
+          const rel = r.data.rel
+          setPictures((p) => p.map((x) => (x.id === id ? { ...x, rel } : x)))
+        } else {
+          setPictures((p) => p.filter((x) => x.id !== id))
+          URL.revokeObjectURL(url)
+          toast.error(r.error ?? "The picture was not attached")
+        }
+      }),
+    )
+    area.current?.focus()
     return true
+  }
+  /** Pictures the + menu already saved into the folder: shown through the session's preview address. */
+  async function addSavedPictures(rels: string[]) {
+    const r = await api<{ base: string }>("POST", "/api/files/preview", { session: sessionId })
+    const base = r.ok && r.data ? r.data.base : undefined
+    if (!base) {
+      insert(rels.map((rel) => `@${rel}`).join(" ") + " ")
+      return
+    }
+    setPictures((p) => [
+      ...p,
+      ...rels.map((rel) => ({
+        id: `p${++pictureSeq}`,
+        name: rel.split("/").at(-1) ?? rel,
+        url: base + rel.split("/").map(encodeURIComponent).join("/"),
+        rel,
+      })),
+    ])
+    area.current?.focus()
   }
 
   const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
@@ -575,7 +724,7 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
 
   async function submit() {
     const t = text.trim()
-    if (!t) return
+    if (!t && pictures.length === 0) return
     if (t.startsWith("/")) {
       const [cmd, ...rest] = t.split(/\s+/)
       const arg = rest.join(" ")
@@ -623,9 +772,20 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
       setText("")
       return
     }
-    addUserText(sessionId, t)
+    if (pictures.some((p) => !p.rel)) {
+      toast("A picture is still being attached. Send again in a moment.")
+      return
+    }
+    // What Claude gets: your words, then a reference to each picture, which it opens.
+    const full = [t, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
+    addUserText(
+      sessionId,
+      t,
+      pictures.map((p) => ({ url: p.url, name: p.name })),
+    )
     setText("")
-    const r = await send({ type: "prompt", sessionId, text: t })
+    setPictures([])
+    const r = await send({ type: "prompt", sessionId, text: full })
     if (!r.ok) toast.error(r.error?.message ?? "The prompt was not sent")
   }
 
@@ -660,8 +820,49 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
       <label htmlFor={composerId} className="sr-only">
         Prompt
       </label>
+      {pictures.length ? (
+        <ul className="m-0 flex list-none flex-wrap gap-2 p-0 pl-12" aria-label="Pictures to send">
+          {pictures.map((p) => (
+            <li key={p.id} className="pic-chip" data-busy={p.rel ? undefined : ""}>
+              <button
+                type="button"
+                className="pic-thumb"
+                aria-label={`Show ${p.name}`}
+                onClick={() => setViewing({ url: p.url, name: p.name })}
+              >
+                <img src={p.url} alt="" />
+              </button>
+              {p.rel ? null : <span className="pic-busy">Attaching</span>}
+              <button
+                type="button"
+                className="pic-remove"
+                aria-label={`Remove ${p.name}`}
+                onClick={() => {
+                  setPictures((all) => all.filter((x) => x.id !== p.id))
+                  area.current?.focus()
+                }}
+              >
+                <span aria-hidden="true">&times;</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {viewing ? (
+        <PictureViewer
+          url={viewing.url}
+          name={viewing.name}
+          onClose={() => setViewing(undefined)}
+        />
+      ) : null}
       <div className="flex items-end gap-2">
-        <PlusMenu sessionId={sessionId} meta={meta} onInsert={insert} disabled={disabled} />
+        <PlusMenu
+          sessionId={sessionId}
+          meta={meta}
+          onInsert={insert}
+          onPictures={(rels) => void addSavedPictures(rels)}
+          disabled={disabled}
+        />
         <textarea
           id={composerId}
           ref={area}
@@ -788,14 +989,71 @@ const ToolGroup = memo(function ToolGroup({
   )
 })
 
+/** When a message arrived, small and quiet; the full date and time for a screen reader. */
+function Stamp({ at, end }: { at?: number; end?: boolean }) {
+  if (!at) return null
+  return (
+    <time
+      dateTime={new Date(at).toISOString()}
+      className={clsx("msg-time", end && "text-right")}
+      aria-label={new Date(at).toLocaleString("en-GB", { dateStyle: "long", timeStyle: "short" })}
+    >
+      {stamp(at)}
+    </time>
+  )
+}
+
+/** What you sent, with the pictures you attached, each opening large. */
+function UserMessage({
+  text,
+  images,
+}: {
+  text: string
+  images?: Array<{ url: string; name: string }>
+}) {
+  const [viewing, setViewing] = useState<{ url: string; name: string }>()
+  return (
+    <div className="ml-auto grid max-w-[80%] justify-items-end gap-1.5">
+      {images?.length ? (
+        <div className="flex flex-wrap justify-end gap-1.5">
+          {images.map((im, i) => (
+            <button
+              key={i}
+              type="button"
+              className="pic-sent"
+              aria-label={`Show ${im.name}`}
+              onClick={() => setViewing(im)}
+            >
+              <img src={im.url} alt={im.name} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {text ? (
+        <div className="whitespace-pre-wrap rounded-md border border-line bg-s2 px-3 py-2 [overflow-wrap:anywhere]">
+          <span className="sr-only">You: </span>
+          {text}
+        </div>
+      ) : null}
+      {viewing ? (
+        <PictureViewer
+          url={viewing.url}
+          name={viewing.name}
+          onClose={() => setViewing(undefined)}
+        />
+      ) : null}
+    </div>
+  )
+}
+
 export const ItemView = memo(function ItemView({ item }: { item: Item }) {
   switch (item.kind) {
     case "user":
       return (
-        <div className="ml-auto max-w-[80%] whitespace-pre-wrap rounded-md border border-line bg-s2 px-3 py-2 [overflow-wrap:anywhere]">
-          <span className="sr-only">You: </span>
-          {item.text}
-        </div>
+        <>
+          <UserMessage text={item.text} images={item.images} />
+          <Stamp at={item.at} end />
+        </>
       )
     case "text":
       return (
@@ -806,6 +1064,7 @@ export const ItemView = memo(function ItemView({ item }: { item: Item }) {
           )}
         >
           <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown>
+          <Stamp at={item.at} />
         </div>
       )
     case "thinking":

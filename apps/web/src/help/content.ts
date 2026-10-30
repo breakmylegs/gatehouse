@@ -70,7 +70,11 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 **The list**
 
-Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.`,
+Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.
+
+**Earlier sessions**
+
+Sessions from before JCVC last started, and Claude Code sessions from elsewhere on this computer. **Resume** carries one on where it stopped; **Fork** starts a copy and leaves the original as it was. Its ... menu renames, pins, exports or archives it. **Search what was said** looks inside past conversations (your words and Claude's, not tool output); it reads up to 100 sessions and stops after 20 seconds, and says so if it stopped early. Archived sessions are left out unless you tick Show archived.`,
   },
   chat: {
     id: "chat",
@@ -93,7 +97,8 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 
 **At the top of a session**
 
-- Its name opens a menu: show another session here, open one beside it, close the pane, interrupt, or close the session.
+- Its name opens a menu: show another session here, open one beside it, rename it, pin it to the top of the sidebar, export it as Markdown, close the pane, interrupt, close the session, or archive it (it stops and leaves the sidebar; Earlier sessions keeps it).
+- Each message shows the time it arrived, and the date when it was not today.
 - **Plan**, **Files**, **Changes**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
 
 **Under the prompt box**
@@ -125,7 +130,9 @@ Your own PowerShell commands in the session's folder, one at a time, with Up and
 
 **The composer**
 
-- The plus button adds files or photos (from anywhere; files outside the folder are copied into .jcvc/attachments in it, secrets never), mentions a folder, and lists the session's slash commands and skills, connectors and plugins. You can also paste or drop a picture into the prompt.
+- The plus button adds files or photos (from anywhere; files outside the folder are copied into .jcvc/attachments in it, secrets never), mentions a folder, and lists the session's slash commands and skills, connectors and plugins.
+- Paste or drop a picture and it shows as a thumbnail above the prompt box; choose it to see it large, or its cross to take it off. It is sent with your words, and your message shows it.
+- **Context**, under the prompt box, says how full the conversation is; choose it to see what fills it. When it is nearly full, Claude Code summarises the older parts by itself.
 - Enter sends. Shift+Enter adds a line.
 - Type / for commands: /plan, /default, /accept-edits, /auto, /extreme, /effort high, /model, /stop and /close.
 - When a request from this session is waiting, it appears above the composer with **Deny** and **Allow once** (Esc and Ctrl+Enter work while focus is inside it). More options opens the full card. A question or a plan shows in full there.

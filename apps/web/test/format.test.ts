@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { age, clock, commandText, money, riskBand } from "../src/lib/format"
+import { age, clock, commandText, money, riskBand, stamp } from "../src/lib/format"
 
 describe("format", () => {
   it("bands risk at 40, 70 and 85", () => {
@@ -34,5 +34,14 @@ describe("format", () => {
       JSON.stringify({ file_path: "a", content: "b" }, null, 2),
     )
     expect(commandText("Bash", { nope: 1 })).toContain("nope")
+  })
+})
+
+describe("the time beside a message", () => {
+  const now = new Date(2026, 9, 30, 15, 30).getTime()
+  it("is the time today, the day and month earlier this year, and the year before that", () => {
+    expect(stamp(new Date(2026, 9, 30, 14, 2).getTime(), now)).toBe("14:02")
+    expect(stamp(new Date(2026, 9, 29, 9, 5).getTime(), now)).toBe("29 Oct, 09:05")
+    expect(stamp(new Date(2025, 11, 31, 23, 59).getTime(), now)).toBe("31 Dec 2025, 23:59")
   })
 })

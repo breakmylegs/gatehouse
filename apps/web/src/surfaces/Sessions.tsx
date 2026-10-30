@@ -17,6 +17,8 @@ import {
 } from "../lib/modes"
 import { send, useSessionList, useStore } from "../store"
 import { UsageView } from "./UsageView"
+import { EarlierSessions } from "../components/EarlierSessions"
+import { titleOf } from "../lib/sessionActions"
 import { SessionCode } from "../components/SessionCode"
 import clsx from "clsx"
 
@@ -343,7 +345,7 @@ export function Sessions() {
                   <StateMark state={s.state} />
                 </td>
                 <td className="py-2.5 pr-3 align-top">
-                  <span className="sign block text-[15px] font-semibold">{s.project}</span>
+                  <span className="sign block text-[15px] font-semibold">{titleOf(s)}</span>
                   <span className="mono block text-xs text-mut [overflow-wrap:anywhere]">
                     {s.cwd}
                   </span>
@@ -389,6 +391,7 @@ export function Sessions() {
           </tbody>
         </table>
       )}
+      <EarlierSessions />
       <UsageView />
     </div>
   )

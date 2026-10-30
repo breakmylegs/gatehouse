@@ -74,6 +74,7 @@ export function App() {
     if (
       health &&
       setupDone &&
+      health.signin.checked !== false &&
       (!health.signin.signedIn || !health.signin.orgOk) &&
       route === "approvals"
     )

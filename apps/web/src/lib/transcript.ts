@@ -3,20 +3,35 @@
  * defensively: anything unexpected becomes a plain "system" line rather than an exception.
  */
 export type Item =
-  | { id: string; kind: "user"; text: string }
-  | { id: string; kind: "text"; text: string; subagent?: string }
-  | { id: string; kind: "thinking"; text: string }
+  | {
+      id: string
+      kind: "user"
+      at?: number
+      text: string
+      images?: Array<{ url: string; name: string }>
+    }
+  | { id: string; kind: "text"; at?: number; text: string; subagent?: string }
+  | { id: string; kind: "thinking"; at?: number; text: string }
   | {
       id: string
       kind: "tool"
+      at?: number
       toolUseId: string
       name: string
       input: Record<string, unknown>
       result?: { text: string; isError: boolean }
       subagent?: string
     }
-  | { id: string; kind: "result"; text: string; isError: boolean; costUsd?: number; turns?: number }
-  | { id: string; kind: "system"; text: string }
+  | {
+      id: string
+      kind: "result"
+      at?: number
+      text: string
+      isError: boolean
+      costUsd?: number
+      turns?: number
+    }
+  | { id: string; kind: "system"; at?: number; text: string }
 
 export interface Todo {
   content: string
@@ -48,12 +63,17 @@ function resultText(content: unknown): string {
   return ""
 }
 
-export function addUser(t: Transcript, text: string): Transcript {
-  return push(t, [{ id: `u${t.seq}`, kind: "user", text }])
+export function addUser(
+  t: Transcript,
+  text: string,
+  images?: Array<{ url: string; name: string }>,
+): Transcript {
+  return push(t, [{ id: `u${t.seq}`, kind: "user", text, ...(images?.length ? { images } : {}) }])
 }
 
-function push(t: Transcript, add: Item[], todos?: Todo[]): Transcript {
-  let items = add.length ? [...t.items, ...add] : t.items
+/** Each item notes when it arrived, for the time shown beside it. */
+function push(t: Transcript, add: Item[], todos?: Todo[], at: number = Date.now()): Transcript {
+  let items = add.length ? [...t.items, ...add.map((i) => (i.at ? i : { ...i, at }))] : t.items
   if (items.length > MAX_ITEMS) items = items.slice(items.length - MAX_ITEMS)
   return { items, todos: todos ?? t.todos, seq: t.seq + 1 }
 }

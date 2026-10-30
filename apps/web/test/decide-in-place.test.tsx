@@ -229,7 +229,9 @@ describe("starting a session", () => {
         : Promise.resolve({ ok: true })
     useStore.setState({ sessions: {} })
     render(<Sessions />)
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "C:\\dev\\Test" } })
+    fireEvent.change(screen.getByRole("textbox", { name: /^Folder/ }), {
+      target: { value: "C:\\dev\\Test" },
+    })
     fireEvent.click(screen.getByRole("button", { name: "Start" }))
     expect(await screen.findByText("Starting Claude Code and checking your account")).toBeTruthy()
     expect(screen.getByText("0 s")).toBeTruthy()

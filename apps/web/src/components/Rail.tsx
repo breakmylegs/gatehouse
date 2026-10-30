@@ -6,6 +6,9 @@ import { type Route, send, usePendingCount, useSessionList, useStore } from "../
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
 import { UpdateNotice } from "./UpdateNotice"
+import { RenameDialog } from "./RenameDialog"
+import { archiveSession, exportOpenSession, setSessionMeta, titleOf } from "../lib/sessionActions"
+import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 
 /** Opens the Ctrl+K palette from a button. */
 export const openPalette = () => window.dispatchEvent(new Event("jcvc:palette"))
@@ -36,6 +39,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [pinned, setPinned] = useState<Route[]>(readRailPages)
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>({})
+  const [renaming, setRenaming] = useState<SessionInfo>()
 
   const go = (r: Route) => setRoute(r)
   const open = (id: string) => {
@@ -204,7 +208,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           <SessionCode session={s} className="!text-[12.5px]" />
-                          <span className="truncate">{s.project}</span>
+                          <span className="truncate">{titleOf(s)}</span>
                         </span>
                         {mark ? (
                           <span className={clsx("shrink-0 text-[12px]", mark.className)}>
@@ -214,7 +218,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
                       </button>
                       <span className="rail-session-menu">
                         <Menu
-                          label={`Actions for ${s.project}`}
+                          label={`Actions for ${titleOf(s)}`}
                           className="rail-icon"
                           placement="right"
                           tone="shell"
@@ -230,11 +234,28 @@ export function Rail({ onHide }: { onHide: () => void }) {
                               },
                             },
                             { kind: "separator" },
+                            { label: "Rename...", onSelect: () => setRenaming(s) },
+                            {
+                              label: s.pinned ? "Unpin" : "Pin to the top",
+                              onSelect: () =>
+                                void setSessionMeta(
+                                  s,
+                                  { pinned: !s.pinned },
+                                  s.pinned ? `Unpinned ${titleOf(s)}.` : `Pinned ${titleOf(s)}.`,
+                                ),
+                            },
+                            { label: "Export as Markdown", onSelect: () => exportOpenSession(s) },
+                            { kind: "separator" },
                             {
                               label: "Close session",
                               danger: true,
                               disabled: s.state === "ended",
                               onSelect: () => void send({ type: "close_session", sessionId: s.id }),
+                            },
+                            {
+                              label: "Archive",
+                              danger: true,
+                              onSelect: () => void archiveSession(s),
                             },
                           ]}
                         />
@@ -249,6 +270,20 @@ export function Rail({ onHide }: { onHide: () => void }) {
       </div>
 
       <RailFoot />
+      {renaming ? (
+        <RenameDialog
+          current={renaming.title}
+          fallback={renaming.project}
+          onClose={() => setRenaming(undefined)}
+          onSave={(title) =>
+            void setSessionMeta(
+              renaming,
+              { title },
+              title ? `Renamed to ${title}.` : `${renaming.project} has its own name again.`,
+            )
+          }
+        />
+      ) : null}
     </nav>
   )
 }
@@ -348,6 +383,12 @@ function RailFoot() {
         />
         {health ? (
           <>
+            {health.signin.checked === false ? (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="activity-dot !h-2 !w-2" aria-hidden="true" />
+                Checking sign-in
+              </span>
+            ) : null}
             <Dot
               ok={health.approver.state === "up"}
               label={

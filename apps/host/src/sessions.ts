@@ -146,6 +146,10 @@ export interface SessionInfo {
   pendingApprovals: number
   createdAt: string
   error?: string
+  /** Yours: a title, a pin, archived. */
+  title?: string
+  pinned?: boolean
+  archived?: boolean
 }
 
 export interface SessionEvents {
@@ -161,6 +165,12 @@ export interface SessionEvents {
 
 export interface SessionDeps {
   queryFn: QueryFn
+  /** Your title, pin and archive for a Claude Code session id. Absent where they are not kept. */
+  sessionMeta?: (sdkSessionId: string | undefined) => {
+    title?: string
+    pinned?: boolean
+    archived?: boolean
+  }
   /** Where chats get their folders: %LOCALAPPDATA%\Gatehouse\chats. Absent where chats are not offered. */
   chatsDir?: string
   config: () => GatehouseConfig
@@ -295,6 +305,7 @@ export class Session extends EventEmitter<SessionEvents> {
       pendingApprovals: this.#deps.broker.countFor(this.id),
       createdAt: this.createdAt,
       ...(this.#error !== undefined ? { error: this.#error } : {}),
+      ...this.#deps.sessionMeta?.(this.#sdkSessionId),
     }
   }
 
@@ -463,6 +474,16 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#input.push(text)
   }
 
+  /** How full the conversation is, from the last response and local estimates (no extra token counting). */
+  async contextUsage(): Promise<unknown> {
+    if (!this.#q) throw new Error("The session has not started")
+    const q = this.#q as unknown as {
+      getContextUsage?: (o: { detail: "summary" }) => Promise<unknown>
+    }
+    if (!q.getContextUsage) throw new Error("This version of Claude Code cannot report its context")
+    return await q.getContextUsage({ detail: "summary" })
+  }
+
   async interrupt(): Promise<void> {
     this.#deps.broker.cancelSession(this.id)
     await this.#q?.interrupt()
@@ -618,6 +639,14 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
 
   list(): SessionInfo[] {
     return [...this.#sessions.values()].map((s) => s.info())
+  }
+
+  /** Tells the window again about every open session with this Claude Code id, after its title or pin changed. */
+  announce(sdkSessionId: string): void {
+    for (const s of this.#sessions.values()) {
+      const info = s.info()
+      if (info.sdkSessionId === sdkSessionId) this.emit("session", info)
+    }
   }
 
   async interruptAll(): Promise<void> {

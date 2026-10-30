@@ -99,6 +99,26 @@ export const ClientCommand = z.discriminatedUnion("type", [
     confirm: z.boolean(),
   }),
   z.object({ type: z.literal("list_history"), dir: z.string().min(1).max(4096).optional() }),
+  /** Your title (null removes it), pin or archive for a session, by its Claude Code id. */
+  z.object({
+    type: z.literal("session_meta"),
+    sdkSessionId: z.string().min(1).max(200),
+    title: z.string().max(120).nullable().optional(),
+    pinned: z.boolean().optional(),
+    archived: z.boolean().optional(),
+    /** Its folder, for a past session, so the title can be written into its transcript. */
+    cwd: z.string().min(1).max(4096).optional(),
+  }),
+  /** What was said in a past session, for export. */
+  z.object({
+    type: z.literal("history_messages"),
+    sdkSessionId: z.string().min(1).max(200),
+    cwd: z.string().min(1).max(4096).optional(),
+  }),
+  /** Past sessions whose words contain the query. */
+  z.object({ type: z.literal("search_history"), query: z.string().min(2).max(200) }),
+  /** How full a session's context is. */
+  z.object({ type: z.literal("context_usage"), sessionId: Id }),
   z.object({ type: z.literal("refresh_account") }),
   z.object({ type: z.literal("signin_start"), method: z.enum(["claudeai", "sso"]) }),
   z.object({ type: z.literal("signin_status") }),
@@ -125,6 +145,10 @@ export const SessionInfo = z.object({
   pendingApprovals: z.number().int(),
   createdAt: z.string(),
   error: z.string().optional(),
+  /** Yours: a title, a pin, archived. */
+  title: z.string().optional(),
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
 })
 export type SessionInfo = z.infer<typeof SessionInfo>
 
@@ -166,6 +190,11 @@ export const Health = z.object({
     managedPolicy: z.enum(["detected", "not-detected", "unknown"]),
     orgOk: z.boolean(),
     orgMessage: z.string().optional(),
+    /**
+     * False while the first sign-in check since JCVC started is still running (about 20 seconds: it starts Claude
+     * Code to ask). signedIn and orgOk mean nothing until it is true. Absent from older Hosts.
+     */
+    checked: z.boolean().optional(),
   }),
   killSwitch: z.object({
     engaged: z.boolean(),

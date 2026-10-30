@@ -46,9 +46,15 @@ describe("starting a new project from what you want to build", () => {
     })
     expect(screen.getByText("C:\\dev\\html-excel")).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Start the project" }))
-    await waitFor(() => expect(sent.map((c) => c.type)).toEqual(["create_session", "prompt"]))
-    expect(sent[0]).toMatchObject({ cwd: "C:\\dev\\html-excel", freshFolder: true })
-    expect(sent[1]).toEqual({
+    await waitFor(() =>
+      expect(sent.map((c) => c.type).filter((t) => t !== "list_history")).toEqual([
+        "create_session",
+        "prompt",
+      ]),
+    )
+    const made = sent.filter((c) => c.type !== "list_history")
+    expect(made[0]).toMatchObject({ cwd: "C:\\dev\\html-excel", freshFolder: true })
+    expect(made[1]).toEqual({
       type: "prompt",
       sessionId: "s9",
       text: "Build me an HTML page that acts like a simple version of excel",
@@ -84,7 +90,8 @@ describe("starting a new project from what you want to build", () => {
     })
     expect(screen.queryByRole("textbox", { name: "What do you want to build?" })).toBeNull()
     fireEvent.click(screen.getByRole("button", { name: "Start" }))
-    await waitFor(() => expect(sent[0]).toMatchObject({ cwd: "C:\\dev\\existing" }))
-    expect(sent[0]?.freshFolder).toBeUndefined()
+    const made = () => sent.filter((c) => c.type === "create_session")
+    await waitFor(() => expect(made()[0]).toMatchObject({ cwd: "C:\\dev\\existing" }))
+    expect(made()[0]?.freshFolder).toBeUndefined()
   })
 })

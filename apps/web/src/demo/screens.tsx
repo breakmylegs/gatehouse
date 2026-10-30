@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client"
 import { App } from "../App"
 import "../styles.css"
 import type { UpdateStatus } from "../lib/update"
-import { useStore } from "../store"
+import { startConnection, useStore } from "../store"
 
 const params = new URLSearchParams(location.search)
 const view = params.get("view") ?? "approvals"
@@ -140,6 +140,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (p === "/api/jcvc/pictures")
     return json({ names: [], folder: "%LOCALAPPDATA%\\Gatehouse\\jcvc" })
   if (p === "/api/push") return json({ ntfy: { enabled: false, listening: false, sent: 0 } })
+  if (p === "/api/files/attach-data") return json({ rel: ".jcvc/attachments/demo-shot.png" })
   if (p === "/api/library" && init?.method === "PUT") {
     userRules = JSON.parse(String(init.body)) as Record<string, unknown>
     return json({ changed: [] })
@@ -189,6 +190,8 @@ const sessions: SessionInfo[] = [
     state: "idle",
     pendingApprovals: 0,
     createdAt: iso(-3 * 3_600_000),
+    title: "Plan the move to the new backup host",
+    pinned: true,
   },
 ] as SessionInfo[]
 
@@ -443,6 +446,79 @@ useStore.getState().handleEvent({
 })
 transcript()
 useStore.getState().setUpdate(UPDATE)
+
+// The stand-in for the Host's WebSocket: answers the commands screens send by themselves (earlier sessions, search,
+// the context meter). Events still come from handleEvent above.
+const HISTORY = [
+  {
+    sessionId: "h1",
+    title: "Move the invoice emails to the new template",
+    cwd: "C:/dev/billing-service",
+    lastModified: now - 26 * 3_600_000,
+    meta: { pinned: true },
+  },
+  {
+    sessionId: "h2",
+    title: "Why does the docs build take four minutes?",
+    cwd: "C:/dev/docs-site",
+    lastModified: now - 3 * 86_400_000,
+    meta: {},
+  },
+  {
+    sessionId: "h3",
+    title: "Add a dry run to the backup script",
+    cwd: "C:/dev/infra-scripts",
+    lastModified: now - 9 * 86_400_000,
+    meta: {},
+  },
+]
+const CONTEXT = {
+  totalTokens: 61_400,
+  maxTokens: 200_000,
+  percentage: 30.7,
+  categories: [
+    { name: "Messages", tokens: 38_900, kind: "used" },
+    { name: "System tools", tokens: 12_100, kind: "used" },
+    { name: "System prompt", tokens: 6_200, kind: "used" },
+    { name: "Memory files", tokens: 4_200, kind: "used" },
+    { name: "Free space", tokens: 138_600, kind: "free" },
+  ],
+}
+function answer(command: { type: string; query?: string }): unknown {
+  if (command.type === "list_history") return HISTORY
+  if (command.type === "context_usage") return CONTEXT
+  if (command.type === "search_history")
+    return {
+      complete: true,
+      hits: HISTORY.slice(0, 1).map((h) => ({
+        ...h,
+        snippets: [`... send the ${command.query ?? ""} with the new template ...`],
+      })),
+    }
+  return {}
+}
+class DemoSocket {
+  static readonly OPEN = 1
+  readyState = 1
+  onopen?: () => void
+  onmessage?: (m: { data: string }) => void
+  onclose?: () => void
+  constructor() {
+    setTimeout(() => this.onopen?.(), 0)
+  }
+  send(raw: string) {
+    const { cmdId, command } = JSON.parse(raw) as { cmdId: string; command: { type: string } }
+    const data = answer(command)
+    setTimeout(
+      () => this.onmessage?.({ data: JSON.stringify({ type: "reply", cmdId, ok: true, data }) }),
+      120,
+    )
+  }
+  close() {}
+}
+window.WebSocket = DemoSocket as unknown as typeof WebSocket
+sessionStorage.setItem("gatehouse.token", "demo")
+startConnection()
 if (view === "workspace")
   useStore.setState({ route: "workspace", selectedSession: "s1", panes: ["s1", "s2"] })
 else if (view === "settings") useStore.setState({ route: "settings" })

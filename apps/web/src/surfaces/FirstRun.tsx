@@ -1,19 +1,36 @@
 import { useState } from "react"
 import { OrgForm, SignInPanel } from "../components/SetupParts"
+import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 
 export function Check({
   ok,
   title,
   info,
+  pending,
   children,
 }: {
   ok: boolean | undefined
   title: string
   /** Information only: never shown as a failure. */
   info?: boolean
+  /** Still being checked: neither passed nor failed. */
+  pending?: boolean
   children?: React.ReactNode
 }) {
+  if (pending)
+    return (
+      <li className="grid grid-cols-[22px_1fr] gap-2 py-2">
+        <span className="activity-dot mt-1.5" aria-hidden="true" />
+        <div>
+          <strong>
+            {title}
+            <span className="sr-only">, still being checked</span>
+          </strong>
+          {children ? <div className="text-mut">{children}</div> : null}
+        </div>
+      </li>
+    )
   return (
     <li className="grid grid-cols-[22px_1fr] gap-2 py-2">
       <svg
@@ -58,6 +75,21 @@ export function Check({
   )
 }
 
+/** The seconds the first sign-in check has taken, so a slow one never looks stuck. */
+function CheckingLine() {
+  const [since] = useState(() => Date.now())
+  const now = useNow(1000)
+  return (
+    <div className="activity !mb-0">
+      <span className="activity-dot" aria-hidden="true" />
+      <span role="status" className="font-semibold">
+        Checking your sign-in
+      </span>
+      <span className="tabular-nums text-mut">{Math.round((now - since) / 1000)} s</span>
+    </div>
+  )
+}
+
 export function FirstRun() {
   const health = useStore((s) => s.health)
   const setRoute = useStore((s) => s.setRoute)
@@ -66,7 +98,9 @@ export function FirstRun() {
 
   if (!health) return <p className="p-6 text-mut">Waiting for the Host…</p>
   const s = health.signin
-  const all = s.signedIn && s.orgOk
+  // The first check after a start takes a while: until it answers, nothing has failed.
+  const pending = s.checked === false
+  const all = !pending && s.signedIn && s.orgOk
 
   async function checkAgain() {
     setChecking(true)
@@ -88,16 +122,20 @@ export function FirstRun() {
         className="m-0 list-none divide-y divide-line border-y border-line p-0"
         aria-label="Checks"
       >
-        <Check ok={s.signedIn} title="Signed in to Claude">
-          {s.signedIn
-            ? `Signed in as ${s.email ?? "your account"}.`
-            : "Use the sign-in buttons below. JCVC never handles your sign-in."}
+        <Check ok={s.signedIn} pending={pending} title="Signed in to Claude">
+          {pending
+            ? "Checking. JCVC starts Claude Code to ask, which takes up to half a minute after it starts."
+            : s.signedIn
+              ? `Signed in as ${s.email ?? "your account"}.`
+              : "Use the sign-in buttons below. JCVC never handles your sign-in."}
         </Check>
-        <Check ok={s.orgOk} title="Organisation matches">
-          {s.orgMessage ??
-            (s.orgOk
-              ? `Organisation: ${s.organization ?? "unknown"}.`
-              : "Set the organisation your account must belong to.")}
+        <Check ok={s.orgOk} pending={pending} title="Organisation matches">
+          {pending
+            ? "Checked with your sign-in."
+            : (s.orgMessage ??
+              (s.orgOk
+                ? `Organisation: ${s.organization ?? "unknown"}.`
+                : "Set the organisation your account must belong to."))}
         </Check>
         <Check ok={s.managedPolicy === "detected"} info title="Managed policy">
           {s.managedPolicy === "detected"
@@ -113,8 +151,9 @@ export function FirstRun() {
         </Check>
       </ul>
 
-      {!s.signedIn ? <SignInPanel /> : null}
-      {!s.orgOk && s.signedIn ? <OrgForm /> : null}
+      {pending ? <CheckingLine /> : null}
+      {!pending && !s.signedIn ? <SignInPanel /> : null}
+      {!pending && !s.orgOk && s.signedIn ? <OrgForm /> : null}
 
       <div className="flex gap-2">
         <button className="btn" disabled={checking} onClick={() => void checkAgain()}>

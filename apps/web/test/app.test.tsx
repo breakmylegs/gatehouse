@@ -101,3 +101,38 @@ describe("kill switch", () => {
     expect(sent).toEqual([{ type: "rearm" }])
   })
 })
+
+describe("the first sign-in check after a start", () => {
+  it("is shown as checking, not as failures, and sends you nowhere until it answers", () => {
+    useStore.setState({ route: "approvals", setupDone: true })
+    const checking = {
+      ...health,
+      signin: { ...health.signin, signedIn: false, orgOk: false, checked: false },
+    }
+    useStore
+      .getState()
+      .handleEvent({ type: "hello", sessions: [], pending: [], health: checking, usage: {} })
+    render(<App />)
+    expect(useStore.getState().route).toBe("approvals")
+    expect(screen.getAllByText("Checking sign-in").length).toBeGreaterThan(0)
+    cleanup()
+    useStore.setState({ route: "first-run" })
+    render(<App />)
+    expect(screen.getByText(/Signed in to Claude/).textContent).toContain("still being checked")
+    expect(screen.getByText("Checking your sign-in")).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /Sign in with my Claude account/ })).toBeNull()
+  })
+
+  it("sends you to Before you start once it has answered that you are not signed in", () => {
+    useStore.setState({ route: "approvals", setupDone: true })
+    const failed = {
+      ...health,
+      signin: { ...health.signin, signedIn: false, orgOk: false, checked: true },
+    }
+    useStore
+      .getState()
+      .handleEvent({ type: "hello", sessions: [], pending: [], health: failed, usage: {} })
+    render(<App />)
+    expect(useStore.getState().route).toBe("first-run")
+  })
+})

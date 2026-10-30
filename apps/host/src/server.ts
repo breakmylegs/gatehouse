@@ -30,6 +30,7 @@ import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
 import { SafetyError } from "./safety.js"
 import { TerminalError, type TerminalManager } from "./terminal.js"
+import type { SessionHistory } from "./history.js"
 import { checkHostRequest } from "./server-guard.js"
 import {
   KillSwitchEngagedError,
@@ -65,6 +66,8 @@ export interface HostApp {
   phone?: PhoneService
   /** Restarts JCVC through the window app. Absent where nothing can restart it (the console launcher, tests). */
   restart?: () => void
+  /** Past sessions, your titles, pins and archives, and search. Absent in tests that do not need them. */
+  history?: SessionHistory
   /** Past sessions from the SDK. */
   listHistory: (dir?: string) => Promise<unknown>
   log: (line: string) => void
@@ -344,6 +347,12 @@ export class HostServer {
     return s
   }
 
+  #history(): SessionHistory {
+    const h = this.#opts.app.history
+    if (!h) throw new CommandError("unavailable", "Past sessions are not available here")
+    return h
+  }
+
   #knownCwd(cwd: string): void {
     const known = this.#opts.app.manager
       .list()
@@ -479,6 +488,28 @@ export class HostServer {
         return await a.checkpoints.restore(cmd.cwd, cmd.ref, cmd.sessionId, true)
       case "list_history":
         return await a.listHistory(cmd.dir)
+      case "session_meta": {
+        const h = this.#history()
+        const live = a.manager.list().find((s) => s.sdkSessionId === cmd.sdkSessionId)
+        const meta = await h.setMeta(
+          cmd.sdkSessionId,
+          {
+            ...(cmd.title !== undefined ? { title: cmd.title } : {}),
+            ...(cmd.pinned !== undefined ? { pinned: cmd.pinned } : {}),
+            ...(cmd.archived !== undefined ? { archived: cmd.archived } : {}),
+          },
+          live?.cwd ?? cmd.cwd,
+          a.log,
+        )
+        a.manager.announce(cmd.sdkSessionId)
+        return meta
+      }
+      case "history_messages":
+        return await this.#history().messages(cmd.sdkSessionId, cmd.cwd)
+      case "search_history":
+        return await this.#history().search(cmd.query)
+      case "context_usage":
+        return await this.#session(cmd.sessionId).contextUsage()
       case "signin_start":
         return this.#signIn().start(cmd.method)
       case "signin_status":

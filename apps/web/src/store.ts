@@ -103,7 +103,11 @@ export interface State {
   setNotify: (on: boolean) => void
   setSetupDone: (done: boolean) => void
   setJcPic: (pic: string) => void
-  addUserText: (sessionId: string, text: string) => void
+  addUserText: (
+    sessionId: string,
+    text: string,
+    images?: Array<{ url: string; name: string }>,
+  ) => void
   termAppend: (sessionId: string, chunk: TermChunk) => void
   termStarted: (sessionId: string, runId: string) => void
   termClear: (sessionId: string) => void
@@ -229,11 +233,11 @@ export const useStore = create<State>((set, get) => ({
     set((s) => ({
       term: { ...s.term, [sessionId]: { ...s.term[sessionId], chunks: [] } },
     })),
-  addUserText: (sessionId, text) =>
+  addUserText: (sessionId, text, images) =>
     set((s) => ({
       transcripts: {
         ...s.transcripts,
-        [sessionId]: addUser(s.transcripts[sessionId] ?? emptyTranscript(), text),
+        [sessionId]: addUser(s.transcripts[sessionId] ?? emptyTranscript(), text, images),
       },
       activity: { ...s.activity, [sessionId]: { phase: "sent", since: Date.now() } },
       pulse: { ...s.pulse, [sessionId]: { last: Date.now(), done: 0, now: 0 } },

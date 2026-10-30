@@ -17,12 +17,21 @@ const RANK: Record<SessionInfo["state"], number> = {
   ended: 4,
 }
 
-/** Chats sit in a group of their own, after your projects. */
+/** Chats sit in a group of their own, after your projects; pinned sessions in one before them all. */
 const CHATS = "chats:"
+const PINNED = "pinned:"
 
 export function groupByFolder(list: SessionInfo[]): FolderGroup[] {
   const groups = new Map<string, FolderGroup>()
   for (const s of list) {
+    // Archived sessions leave the sidebar; Earlier sessions on Sessions still shows them.
+    if (s.archived) continue
+    if (s.pinned) {
+      const g = groups.get(PINNED) ?? { folder: PINNED, label: "Pinned", sessions: [] }
+      g.sessions.push(s)
+      groups.set(PINNED, g)
+      continue
+    }
     if (s.kind === "chat") {
       const g = groups.get(CHATS) ?? { folder: CHATS, label: "Chats", sessions: [] }
       g.sessions.push(s)
@@ -42,7 +51,9 @@ export function groupByFolder(list: SessionInfo[]): FolderGroup[] {
     )
   return [...groups.values()].sort(
     (a, b) =>
-      Number(a.folder === CHATS) - Number(b.folder === CHATS) || a.label.localeCompare(b.label),
+      Number(b.folder === PINNED) - Number(a.folder === PINNED) ||
+      Number(a.folder === CHATS) - Number(b.folder === CHATS) ||
+      a.label.localeCompare(b.label),
   )
 }
 
