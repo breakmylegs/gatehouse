@@ -28,19 +28,20 @@ export function PlusMenu({
   const [busy, setBusy] = useState(false)
   const root = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (root.current && !root.current.contains(e.target as Node)) setOpen(false)
-    }
-    window.addEventListener("mousedown", onDown)
-    return () => window.removeEventListener("mousedown", onDown)
-  }, [open])
-
   const close = () => {
     setOpen(false)
     setPanel("none")
   }
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      // Every way of closing goes back to the top of the menu, so it opens there next time.
+      if (root.current && !root.current.contains(e.target as Node)) close()
+    }
+    window.addEventListener("mousedown", onDown)
+    return () => window.removeEventListener("mousedown", onDown)
+  }, [open])
 
   async function addFiles() {
     close()
@@ -96,7 +97,7 @@ export function PlusMenu({
         aria-expanded={open}
         aria-haspopup="menu"
         disabled={disabled || busy}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => (open ? close() : setOpen(true))}
       >
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
           <path
@@ -149,10 +150,10 @@ export function PlusMenu({
             <>
               <button
                 type="button"
-                className="sign flex items-center gap-1 rounded border-0 bg-transparent px-2 py-1 text-left text-[13px] text-mut hover:bg-s2"
+                className="btn !min-h-7 w-fit gap-1.5 !px-2.5 !text-[13px]"
                 onClick={() => setPanel("none")}
               >
-                Back
+                <span aria-hidden="true">&lsaquo;</span> Back
               </button>
               <div className="max-h-72 overflow-auto">
                 {panel === "commands" ? (

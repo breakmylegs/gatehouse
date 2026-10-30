@@ -91,4 +91,21 @@ describe("the plus menu", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /plugins/i }))
     expect(screen.getByText("impeccable")).toBeTruthy()
   })
+
+  it("opens at the top again however it was closed", () => {
+    render(<PlusMenu sessionId="s1" meta={readInit(init)} onInsert={() => undefined} />)
+    const plus = screen.getByRole("button", { name: /add files, a folder/i })
+    const top = () => screen.queryByRole("menuitem", { name: /add files or photos/i })
+    // Clicking away.
+    fireEvent.click(plus)
+    fireEvent.click(screen.getByRole("menuitem", { name: /plugins/i }))
+    fireEvent.mouseDown(document.body)
+    fireEvent.click(plus)
+    expect(top()).toBeTruthy()
+    // Pressing + again.
+    fireEvent.click(screen.getByRole("menuitem", { name: /plugins/i }))
+    fireEvent.click(plus)
+    fireEvent.click(plus)
+    expect(top()).toBeTruthy()
+  })
 })
