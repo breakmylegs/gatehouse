@@ -1,3 +1,4 @@
+import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
   checkRemember,
@@ -405,6 +406,36 @@ async function ask(
     risk: 0,
     decidedBy: "rules",
     policyHash: deps.policy()?.hash ?? "none",
+  }
+  // Extreme approval never waits on you (owner, 30 Oct): the recommended answer, or the plan approved, recorded first.
+  const answers = kind === "question" ? recommendedAnswers(input) : {}
+  if (deps.extreme?.() === true && answers) {
+    const written = await deps.audit.record({
+      session: deps.sessionId,
+      event: kind === "question" ? "question_answered" : "plan_decision",
+      channel: "host",
+      tool: toolName,
+      toolUseId: toolUseID,
+      cwd: deps.cwd,
+      project: deps.project,
+      input: kind === "question" ? { ...input, answers } : input,
+      verdict: {
+        ...verdict,
+        outcome: "allow",
+        decidedBy: "extreme-mode",
+        reason:
+          kind === "question"
+            ? "Answered with the recommended option, because Extreme approval is on."
+            : "Plan approved, because Extreme approval is on.",
+      },
+      latencyMs: 0,
+    })
+    if (!written)
+      return deny(
+        "The decision could not be recorded in the audit log, so it was not applied.",
+        toolUseID,
+      )
+    return allow(kind === "question" ? { ...input, answers } : input, toolUseID)
   }
   const resolution = await deps.broker.request({
     kind,

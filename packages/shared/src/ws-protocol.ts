@@ -159,6 +159,16 @@ export const SessionInfo = z.object({
   restarted: z.object({ wasRunning: z.boolean(), forced: z.boolean().optional() }).optional(),
   /** What is still working in the background after the turn ended (subagents, shell commands), by description. */
   background: z.array(z.string()).optional(),
+  /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
+  carryOn: z
+    .object({
+      turns: z.number(),
+      maxTurns: z.number(),
+      spentUsd: z.number(),
+      maxUsd: z.number(),
+      ended: z.enum(["done", "turns", "spend", "stopped", "error"]).optional(),
+    })
+    .optional(),
 })
 export type SessionInfo = z.infer<typeof SessionInfo>
 

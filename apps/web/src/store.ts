@@ -542,6 +542,20 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       return `Subagent started${str(data.agent_type) ? `: ${str(data.agent_type)}` : ""}`
     case "subagent_stop":
       return "Subagent finished"
+    case "carry_on":
+      return data.restart === true
+        ? "JCVC restarted mid-run, so the session carries on with its build queue by itself."
+        : `Extreme approval: carrying on by itself, turn ${String(data.turn)} of ${String(data.of)}.`
+    case "carry_on_end": {
+      const why: Record<string, string> = {
+        done: "the build queue is empty",
+        turns: `it took ${String(data.turns)} turns by itself, the most allowed after one message`,
+        spend: `it spent $${Number(data.spentUsd ?? 0).toFixed(2)} since your last message, the most allowed`,
+        stopped: "you stopped it",
+        error: "a turn ended with an error",
+      }
+      return `Stopped carrying on: ${why[String(data.why)] ?? "it was told to"}.`
+    }
     default:
       return undefined
   }

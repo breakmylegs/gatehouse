@@ -75,6 +75,7 @@ export class FakeSdk {
     let wake: (() => void) | undefined
     let ended = false
     let turns = 0
+    let lastSaid = ""
     let currentAbort: AbortController | undefined
     const handle: FakeQueryHandle = {
       options: opts,
@@ -141,11 +142,13 @@ export class FakeSdk {
     const makeApi = (signal: AbortSignal): TurnApi => ({
       sessionId,
       signal,
-      say: (text) =>
+      say: (text) => {
+        lastSaid = text
         push({
           type: "assistant",
           message: { role: "assistant", content: [{ type: "text", text }] },
-        }),
+        })
+      },
       system: (m) => push({ type: "system", ...m }),
       callTool: async (toolName, input, o = {}) => {
         const id = o.toolUseId ?? `toolu_${++this.#toolCounter}`
@@ -210,6 +213,7 @@ export class FakeSdk {
               ? msg.message.content
               : JSON.stringify(msg.message.content)
           handle.prompts.push(text)
+          lastSaid = ""
           currentAbort = new AbortController()
           try {
             await this.turn(makeApi(currentAbort.signal), text)
@@ -230,6 +234,7 @@ export class FakeSdk {
             is_error: false,
             duration_ms: 5,
             num_turns: 1,
+            result: lastSaid,
             total_cost_usd: this.costPerTurn * turns,
             usage: {
               input_tokens: 100,

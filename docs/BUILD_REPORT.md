@@ -571,3 +571,17 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 
   14 breaks, 14 caught.
 - **The context meter always shows** (owner): it was read only when a session went idle, so a pane opened mid-turn showed none. It is now read when the pane opens and after every turn. **Compact now** in its panel sends `/compact` between turns; the meter says Compact from 60% and its fill turns yellow from 80%; the transcript says when you asked and when Claude Code summarised (`compact_boundary`). Tests: `apps/web/test/context-meter.test.tsx`, 7 breaks, 7 caught.
+
+## Phase 36: Extreme approval carries on until the build queue is empty (30 Oct)
+
+- **Owner decision** (CLAUDE.md, invariant 3): in Extreme approval a session does not wait on you. A turn ended with "Still to do" and sat there.
+- **Questions and plans** (`apps/host/src/carry-on.ts`, `canuse.ts`): a question gets the option marked Recommended, or else the first (every recommended one where several may be chosen). A question with no options still waits for you. A plan is approved. Each is audited first with `decidedBy: extreme-mode`, and not given if it cannot be recorded.
+- **Carrying on**: after each turn the Host sends a carry-on message ("carry on with the next item in your build queue... end your reply with the line QUEUE EMPTY") until Claude ends a reply with QUEUE EMPTY. It stops after 25 automatic turns or $25 spent since your last message (`extremeCarryOn` in the settings file, read tolerantly), on a failed turn, on Stop and on the kill switch. Your next message starts a new run. Each carry-on is audited first (`extreme_carry_on`); the transcript says each turn and why it stopped.
+- **After a restart**, a session that was working in Extreme approval carries on by itself. After Force stop it does not.
+- Not yet: the limits have no place in Settings; they are in the settings file.
+- Tests (threat model T31):
+  - `apps/host/test/carry-on.test.ts`
+  - `apps/host/test/extreme-carry.test.ts` (the fake SDK's result now carries the turn's last words, as the real one does)
+  - the lines in `apps/web/test/store.test.ts`
+
+  17 breaks, 17 caught.

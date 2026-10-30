@@ -165,6 +165,19 @@ describe("store events", () => {
     expect(describeEvent("subagent_stop", {})).toBe("Subagent finished")
   })
 
+  it("says when Extreme approval carries on by itself, and why it stopped", () => {
+    expect(describeEvent("carry_on", { turn: 2, of: 25 })).toBe(
+      "Extreme approval: carrying on by itself, turn 2 of 25.",
+    )
+    expect(describeEvent("carry_on", { restart: true })).toMatch(/JCVC restarted mid-run/)
+    expect(describeEvent("carry_on_end", { why: "done" })).toBe(
+      "Stopped carrying on: the build queue is empty.",
+    )
+    expect(describeEvent("carry_on_end", { why: "spend", spentUsd: 25.4 })).toBe(
+      "Stopped carrying on: it spent $25.40 since your last message, the most allowed.",
+    )
+  })
+
   it("reads the result after Interrupt as stopped by you, not as an error", () => {
     const h = useStore.getState().handleEvent
     h({ type: "session_event", sessionId: "s1", event: "interrupted", data: { by: "you" } })

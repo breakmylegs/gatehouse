@@ -28,6 +28,7 @@ import {
   type SessionMode,
 } from "./safety.js"
 import type { UsageStore } from "./usage.js"
+import { CARRY_ON_DEFAULTS, CARRY_ON_PROMPT, CarryOn, type CarryOnStatus } from "./carry-on.js"
 
 export class OrgGuardError extends Error {
   constructor(
@@ -156,6 +157,8 @@ export interface SessionInfo {
   restarted?: { wasRunning: boolean; forced?: boolean }
   /** What is still working in the background after the turn ended, by description. */
   background?: string[]
+  /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
+  carryOn?: CarryOnStatus
 }
 
 export interface SessionEvents {
@@ -164,7 +167,14 @@ export interface SessionEvents {
   event: [
     {
       type:
-        "notification" | "stop" | "subagent_start" | "subagent_stop" | "decision" | "interrupted"
+        | "notification"
+        | "stop"
+        | "subagent_start"
+        | "subagent_stop"
+        | "decision"
+        | "interrupted"
+        | "carry_on"
+        | "carry_on_end"
       data: Record<string, unknown>
     },
   ]
@@ -277,6 +287,10 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
   readonly #background = new Map<string, string>()
+  /** Extreme approval's run of automatic turns since your last message. */
+  readonly #carry = new CarryOn(() => this.#deps.config().extremeCarryOn ?? CARRY_ON_DEFAULTS)
+  /** The session's total cost after its last turn, so a run counts only what it spends. */
+  #lastCost = 0
   /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
   readonly #tellDecision = (toolUseId: string, v: Verdict) => {
     try {
@@ -351,6 +365,9 @@ export class Session extends EventEmitter<SessionEvents> {
           }
         : {}),
       ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
+      ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
+        ? { carryOn: this.#carry.status() }
+        : {}),
       ...this.#deps.sessionMeta?.(this.#sdkSessionId),
     }
   }
@@ -466,6 +483,11 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     this.#setState("idle")
     void this.#pump()
+    // Brought back mid-run in Extreme approval: it carries on where it was, as you asked it to.
+    if (this.#opts.restore?.wasRunning && !this.#opts.restore.forced && this.#extreme) {
+      this.#carry.started()
+      void this.#carryOnNow({ restart: true })
+    }
   }
 
   async #pump(): Promise<void> {
@@ -501,6 +523,8 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#deps.usage.record(this.id, this.project, m)
       this.#running = false
       this.#setState("idle")
+      if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      if (this.#extreme) void this.#afterTurn(m)
     }
   }
 
@@ -533,8 +557,13 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#input.end()
   }
 
-  /** Sends the next user message. Messages sent while a turn runs are queued by the SDK. */
+  /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
   prompt(text: string): void {
+    this.#send(text)
+    this.#carry.started(this.#lastCost)
+  }
+
+  #send(text: string): void {
     if (this.#state === "error" || this.#state === "ended")
       throw new Error(`The session has ${this.#state}`)
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
@@ -555,6 +584,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Stops the running turn. The screen hears first, so the result that follows reads as stopped, not failed. */
   async interrupt(by: "you" | "kill-switch" = "you"): Promise<void> {
+    // Stopping a turn stops Extreme carrying on, until your next message.
+    this.#carry.stopped()
     if (this.#running) this.emit("event", { type: "interrupted", data: { by } })
     this.#deps.broker.cancelSession(this.id)
     await this.#q?.interrupt()
@@ -562,6 +593,59 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#running = false
       this.#setState("idle")
     }
+  }
+
+  /**
+   * Extreme approval: after a turn, carry on by itself until Claude says the build queue is empty, a limit is
+   * reached, a turn fails or you stop it (CLAUDE.md invariant 3, owner 30 Oct).
+   */
+  async #afterTurn(m: Record<string, unknown>): Promise<void> {
+    const step = this.#carry.next({
+      text: typeof m.result === "string" ? m.result : "",
+      isError: m.is_error === true || String(m.subtype ?? "").startsWith("error"),
+      ...(typeof m.total_cost_usd === "number" ? { costUsd: m.total_cost_usd } : {}),
+    })
+    if (!step) return
+    if (!step.go) {
+      this.emit("event", {
+        type: "carry_on_end",
+        data: { why: step.why, turns: step.turns, spentUsd: step.spentUsd },
+      })
+      this.emit("state", this.info())
+      return
+    }
+    await this.#carryOnNow({ turn: step.turn, of: step.of })
+  }
+
+  /** Sends the carry-on message, once it is in the audit log. Nothing carries on that cannot be recorded. */
+  async #carryOnNow(data: Record<string, unknown>): Promise<void> {
+    if (this.#deps.kill.isEngaged() || this.#running) return
+    if (this.#state === "error" || this.#state === "ended") return
+    const written = await this.#deps.audit.record({
+      session: this.id,
+      event: "extreme_carry_on",
+      channel: "host",
+      tool: "session",
+      cwd: this.cwd,
+      project: this.project,
+      input: data,
+      verdict: {
+        outcome: "allow",
+        ruleId: "extreme-carry-on",
+        reason: "Extreme approval is on, so the session carried on with its build queue by itself.",
+        risk: 0,
+        decidedBy: "extreme-mode",
+        policyHash: this.#deps.policy()?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!written) {
+      this.#carry.stopped()
+      return
+    }
+    this.emit("event", { type: "carry_on", data })
+    this.#send(CARRY_ON_PROMPT)
+    this.emit("state", this.info())
   }
 
   /** Stops everything now: the running turn and every background task. */
