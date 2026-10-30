@@ -13,6 +13,7 @@ Every phase must keep these true. Write an automated test for every invariant th
 3. **Permission modes.**
    - Never use `bypassPermissions`, `dontAsk`, `allowDangerouslySkipPermissions` or any equivalent.
    - The allowed modes are `default` (shown as Manual), `plan`, and, by owner decision on 28 Oct 2026, `acceptEdits` and `auto`. The floor hook and the audit run in every mode. Extreme approval is a per-session flag on `default`, not an SDK mode.
+   - Owner decision, 30 Oct (Extreme carries on): in Extreme approval a session does not wait on you. A question gets its recommended answer and a plan is approved. After each turn the Host carries on by itself until Claude says the build queue is empty, within a spending limit and a number of automatic turns, and always stops on Stop. Floor denies and failure escalations still stop and wait. Every automatic answer and carry-on is audited.
    - Set the mode explicitly on every session.
 4. **No bare tool names in `allowedTools`.** Treat the SDK warning `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`, or any equivalent, as a fatal startup error.
 5. **No `updatedPermissions`.** Never return it from `canUseTool`. "Remember" writes to the Gatehouse policy overlay instead, so the Approver stays the single decider and every decision keeps a rule id.
@@ -36,9 +37,13 @@ Every phase must keep these true. Write an automated test for every invariant th
 9. **Push payloads.** Payloads routed through the Relay carry no plaintext command text, paths, file names or project names. Detail is end-to-end encrypted and only decrypted on the phone. Owner decision, 28 Oct: outbound push channels (ntfy, Slack) may carry the project, the tool, the risk and a short summary of the command, redacted first (invariant 12), so a decision can be made from the notification.
 10. **Edited input is re-evaluated.** If the user edits a tool input before allowing it, the edited input passes through the floor and the full policy again. A deny result blocks the allow.
 11. **Phone scope.** The phone can allow, deny, answer questions and trigger the kill switch. It cannot edit inputs, change policy or create remember rules.
+
+    Owner decision, 30 Oct (sessions on the phone): through the passkey phone app only, the phone may also see sessions and their transcripts (end to end encrypted, invariant 9) and send prompts and Interrupt. Each one is signed with the pinned passkey like a decision and audited. Push channels (ntfy, Slack) get none of this.
 12. **Redaction first.** Redact before persisting or transmitting anything: audit log, Relay payloads and logs.
 13. **Audit everything.** Every decision goes into the hash-chained audit log. That includes automatic allows and the deciding channel.
 14. **Org guard.** Sessions refuse to start unless the signed-in account belongs to the expected organisation in Gatehouse settings.
+
+    Owner decision, 30 Oct (several accounts): each signed-in account has its own expected organisation, set when it is added. A session starts only if its account matches its own. An added account signs in through Anthropic's flow in a private browser window.
 15. **Judge limits.** The LLM judge (Phase 7) never sees transcripts, file contents or web content. It may only return allow for whitelisted categories.
 16. **Branding.**
     - Do not name or style the product as Claude Code or claude.ai, and do not imitate their visual design.
