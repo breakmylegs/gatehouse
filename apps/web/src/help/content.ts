@@ -97,14 +97,15 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 
 **At the top of a session**
 
-- Its name opens a menu: show another session here, open one beside it, rename it, pin it to the top of the sidebar, export it as Markdown, close the pane, interrupt, close the session, or archive it (it stops and leaves the sidebar; Earlier sessions keeps it).
+- Its name opens a menu: show another session here, open one beside it, rename it, pin it to the top of the sidebar, export it as Markdown, close the pane, stop, close the session, or archive it (it stops and leaves the sidebar; Earlier sessions keeps it).
 - Each message shows the time it arrived, and the date when it was not today.
 - **Plan**, **Files**, **Changes**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
 
 **Under the prompt box**
 
 - **Model**, **Effort** and **Mode** change for this session at once.
-- **Interrupt** stops the current turn.
+- **Stop** stops the session there and then: the turn, and any subagents or commands still working in the background. If it is still working a few seconds later, **Force stop** ends its Claude process and starts it again on the same conversation, in the same pane.
+- When a turn has ended but subagents or commands are still working, the session says **Working in the background** and lists them.
 
 **The transcript**
 

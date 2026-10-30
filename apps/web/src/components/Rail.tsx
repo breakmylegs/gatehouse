@@ -200,7 +200,11 @@ export function Rail({ onHide }: { onHide: () => void }) {
             {folded[g.folder] ? null : (
               <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-0.5 p-0">
                 {g.sessions.map((s) => {
-                  const mark = STATE_MARK[s.state]
+                  // Subagents or commands still working after the turn ended count as working.
+                  const mark =
+                    s.state === "idle" && s.background?.length
+                      ? STATE_MARK.running
+                      : STATE_MARK[s.state]
                   return (
                     <li key={s.id} className="rail-session" data-state={s.state}>
                       <button

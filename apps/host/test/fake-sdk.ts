@@ -48,6 +48,10 @@ export interface FakeQueryHandle {
   flags: Record<string, unknown>[]
   prompts: string[]
   permissionResults: PermissionResult[]
+  /** Background tasks stopped through stopTask. */
+  stopped: string[]
+  /** Sends a message on the stream at any time, between turns too. */
+  emit(m: Record<string, unknown>): void
   initializationResult(): Promise<{ account: AccountInfo }>
 }
 
@@ -81,6 +85,8 @@ export class FakeSdk {
       flags: [],
       prompts: [],
       permissionResults: [],
+      stopped: [],
+      emit: () => undefined,
       initializationResult: async () => ({ account: this.account as AccountInfo }),
     }
     this.queries.push(handle)
@@ -90,6 +96,7 @@ export class FakeSdk {
       out.push({ session_id: sessionId, ...m } as unknown as SDKMessage)
       wake?.()
     }
+    handle.emit = push
     push({
       type: "system",
       subtype: "init",
@@ -271,6 +278,10 @@ export class FakeSdk {
         handle.interrupts++
         currentAbort?.abort()
         return undefined
+      },
+      async stopTask(taskId: string) {
+        handle.stopped.push(taskId)
+        push({ type: "system", subtype: "task_notification", task_id: taskId, status: "stopped" })
       },
       async setPermissionMode(mode: string) {
         handle.modes.push(mode)

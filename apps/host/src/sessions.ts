@@ -152,8 +152,10 @@ export interface SessionInfo {
   archived?: boolean
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
   historyFrom?: string
-  /** Brought back after JCVC restarted or updated, and whether a turn was cut off by it. */
-  restarted?: { wasRunning: boolean }
+  /** Brought back after JCVC restarted or updated, or after you force-stopped it, and whether a turn was cut off. */
+  restarted?: { wasRunning: boolean; forced?: boolean }
+  /** What is still working in the background after the turn ended, by description. */
+  background?: string[]
 }
 
 export interface SessionEvents {
@@ -216,7 +218,7 @@ export interface StartSessionOptions {
    * Brought back after JCVC restarted: the same id, so the screen finds its panes again, and its original start
    * time. A chat keeps its folder.
    */
-  restore?: { id: string; createdAt: string; wasRunning: boolean }
+  restore?: { id: string; createdAt: string; wasRunning: boolean; forced?: boolean }
 }
 
 /**
@@ -273,6 +275,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #decided = new Set<string>()
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
+  /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
+  readonly #background = new Map<string, string>()
   /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
   readonly #tellDecision = (toolUseId: string, v: Verdict) => {
     try {
@@ -338,7 +342,15 @@ export class Session extends EventEmitter<SessionEvents> {
       createdAt: this.createdAt,
       ...(this.#error !== undefined ? { error: this.#error } : {}),
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
-      ...(this.#opts.restore ? { restarted: { wasRunning: this.#opts.restore.wasRunning } } : {}),
+      ...(this.#opts.restore
+        ? {
+            restarted: {
+              wasRunning: this.#opts.restore.wasRunning,
+              ...(this.#opts.restore.forced ? { forced: true } : {}),
+            },
+          }
+        : {}),
+      ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
       ...this.#deps.sessionMeta?.(this.#sdkSessionId),
     }
   }
@@ -483,12 +495,33 @@ export class Session extends EventEmitter<SessionEvents> {
       if (isShadowWarning(JSON.stringify(m)))
         this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
       if ((m.subtype as string) === "init" && typeof m.model === "string") this.#model = m.model
+      this.#noteBackground(m)
     }
     if (msg.type === "result") {
       this.#deps.usage.record(this.id, this.project, m)
       this.#running = false
       this.#setState("idle")
     }
+  }
+
+  /**
+   * Work that carries on after a turn ends. Claude Code sends the whole list when it changes; a task that ends also
+   * says so on its own. Watchers it marks ambient are not work, so they do not count.
+   */
+  #noteBackground(m: Record<string, unknown>): void {
+    const sub = m.subtype as string
+    if (sub === "background_tasks_changed" && Array.isArray(m.tasks)) {
+      this.#background.clear()
+      for (const t of m.tasks as Array<Record<string, unknown>>)
+        if (typeof t.task_id === "string" && t.ambient !== true)
+          this.#background.set(t.task_id, typeof t.description === "string" ? t.description : "")
+      this.emit("state", this.info())
+    } else if (
+      sub === "task_notification" &&
+      typeof m.task_id === "string" &&
+      this.#background.delete(m.task_id)
+    )
+      this.emit("state", this.info())
   }
 
   #fatal(e: Error): void {
@@ -528,6 +561,26 @@ export class Session extends EventEmitter<SessionEvents> {
     if (this.#state === "running" || this.#state === "waiting") {
       this.#running = false
       this.#setState("idle")
+    }
+  }
+
+  /** Stops everything now: the running turn and every background task. */
+  async stop(by: "you" | "kill-switch" = "you"): Promise<void> {
+    await this.interrupt(by)
+    const q = this.#q as unknown as { stopTask?: (id: string) => Promise<void> } | undefined
+    await Promise.allSettled([...this.#background.keys()].map((id) => q?.stopTask?.(id)))
+  }
+
+  /** What it takes to start this session again on the same conversation. */
+  restartOptions(): StartSessionOptions {
+    return {
+      cwd: this.cwd,
+      ...(this.#opts.kind ? { kind: this.#opts.kind } : {}),
+      mode: this.#mode,
+      ...(this.#model !== undefined ? { model: this.#model } : {}),
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
+      extreme: this.#extreme,
+      ...(this.#sdkSessionId !== undefined ? { resume: this.#sdkSessionId } : {}),
     }
   }
 
@@ -693,8 +746,24 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     }
   }
 
+  /** The kill switch: every turn and every background task stops. */
   async interruptAll(): Promise<void> {
-    await Promise.allSettled([...this.#sessions.values()].map((s) => s.interrupt("kill-switch")))
+    await Promise.allSettled([...this.#sessions.values()].map((s) => s.stop("kill-switch")))
+  }
+
+  /**
+   * Ends a session's Claude Code process at once, for a session that does not stop when asked, and starts it again
+   * on the same conversation under the same id, so its pane and transcript stay.
+   */
+  async forceStop(id: string): Promise<Session> {
+    const s = this.#sessions.get(id)
+    if (!s) throw new Error("That session is not open")
+    const again = s.restartOptions()
+    const wasRunning = s.running
+    const createdAt = s.createdAt
+    await s.close()
+    this.#sessions.delete(id)
+    return await this.start({ ...again, restore: { id, createdAt, wasRunning, forced: true } })
   }
 
   async closeAll(): Promise<void> {

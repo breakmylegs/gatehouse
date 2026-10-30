@@ -557,3 +557,16 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
   - the foot in `apps/web/test/rail.test.tsx`
 
   49 breaks, 46 caught on the first run. For the other three, two tests were tightened and caught their break on a second run, and one check was redundant, so the code was made simpler.
+
+## Phase 35: background work, Stop and Force stop (30 Oct)
+
+- **Owner report:** a Proscenia session's turn ended while its background subagents kept working. The header said Ready, the sidebar had no Working, and there was nothing to press to stop it.
+- **Working in the background.** The Host keeps the live background tasks from Claude Code's own list (`background_tasks_changed`, leaving out watchers it marks ambient) and drops each as it ends (`task_notification`). `SessionInfo.background` names them. While any run, the header says Working in the background, the sidebar says Working, and a line lists them.
+- **Stop** replaces Interrupt, in the session bar, the title menu and `/stop`. It interrupts the turn and stops every background task (`stopTask`). The kill switch now does the same, so background agents stop with it too.
+- **Force stop**, offered when a session is still working five seconds after Stop, closes its Claude process and starts it again on the same conversation under the same id (the restore path of Phase 34). The pane keeps its transcript and adds a line saying you force-stopped it.
+- Release 1.0.95 went out with Phases 33 and 34 after one rerun: the first attempt's gate lost a test worker under load (exit 3221226505 in `server.test.ts`). The file passed alone, 28 of 28.
+- Tests:
+  - `apps/host/test/background.test.ts` (the fake SDK gained `stopTask` and a way to send a message between turns)
+  - `apps/web/test/stop.test.tsx`
+
+  14 breaks, 14 caught.

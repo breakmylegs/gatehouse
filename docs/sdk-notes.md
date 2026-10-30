@@ -142,6 +142,15 @@ type AccountInfo = { email?, organization?, subscriptionType?, tokenSource?, api
 - Used since 30 Oct (session management): `listSessions({ limit: 100 })` without `dir` lists sessions across all project folders, Claude Code's own included; `getSessionMessages(id, { dir?, limit })` returns `SessionMessage[]` (`type`, `message`, `parent_tool_use_id`) for search and export; `renameSession(id, title, { dir? })` appends a custom title to the session's JSONL so Claude Code shows the same title (JCVC keeps its own copy in `sessions.json` too, and a failure here only logs).
 - `Query.getContextUsage({ detail: 'summary' })` returns `totalTokens`, `maxTokens`, `percentage` and `categories` (`name`, `tokens`, `kind`: used, free, buffer or deferred) from the last response and local estimates, without the token-count calls `'full'` makes. The context meter reads it after each turn.
 
+### Background work and stopping (read 30 Oct, used since Phase 35)
+
+- `system/background_tasks_changed` carries every live background task after a change (`task_id`, `task_type`, `description`, `subagent_type?`, `ambient?`), with REPLACE semantics. `ambient: true` marks watchers that are not work; hosts leave them out of activity. JCVC counts the rest as working after the turn's `result`.
+- `system/task_notification` (`task_id`, `status: completed | failed | stopped`) says one task ended. `task_started` (`is_backgrounded?`) and `task_updated` (`patch.status`) exist and are not used yet.
+- `Query.stopTask(taskId)` stops one task and emits its `task_notification` with `stopped`. Stop calls it for each background task after `interrupt()`.
+- `Query.interrupt()` resolves to a receipt on CLIs with `interrupt_receipt_v1`: `still_queued` lists queued user messages that will still run. Dropping one is a control request (`cancel_async_message`) with no public Query method, so JCVC cannot take a queued message back.
+- `SDKUserMessage.priority` (`now | next | later`): the SDK's own docs send composed messages at `later` "so a running turn cannot reorder them". With none, a message sent mid-turn is taken at Claude's next step.
+- Force stop is `close()` on the query, then a new query with `resume` on the same conversation.
+
 ### Tool-shadowing warning
 
 The string `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` does not appear in the installed package. UNVERIFIED. Gatehouse enforces invariant 4 itself: startup refuses any `allowedTools` entry that is a bare tool name, and any `permissionMode` outside `default` and `plan`. Revisit if the SDK emits a warning at runtime during the spike.

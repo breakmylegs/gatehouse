@@ -34,6 +34,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
   z.object({ type: z.literal("interrupt"), sessionId: Id }),
+  /** Stops the turn and every background task now. */
+  z.object({ type: z.literal("stop_session"), sessionId: Id }),
+  /** Ends the Claude process at once and starts it again on the same conversation, under the same id. */
+  z.object({ type: z.literal("force_stop"), sessionId: Id }),
   z.object({ type: z.literal("set_mode"), sessionId: Id, mode: Mode }),
   z.object({ type: z.literal("set_effort"), sessionId: Id, effort: Effort }),
   z.object({ type: z.literal("set_extreme"), sessionId: Id, on: z.boolean() }),
@@ -151,8 +155,10 @@ export const SessionInfo = z.object({
   archived: z.boolean().optional(),
   /** The Claude Code conversation this one carries on from (Resume, Fork, or after a restart): the screen shows what was said there. */
   historyFrom: z.string().optional(),
-  /** Brought back after JCVC restarted or updated, and whether a turn was cut off by it. */
-  restarted: z.object({ wasRunning: z.boolean() }).optional(),
+  /** Brought back after JCVC restarted or updated, or after you force-stopped it, and whether a turn was cut off. */
+  restarted: z.object({ wasRunning: z.boolean(), forced: z.boolean().optional() }).optional(),
+  /** What is still working in the background after the turn ended (subagents, shell commands), by description. */
+  background: z.array(z.string()).optional(),
 })
 export type SessionInfo = z.infer<typeof SessionInfo>
 

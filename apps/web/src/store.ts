@@ -498,6 +498,15 @@ const historyAsked = new Set<string>()
 function loadHistory(info: SessionInfo): void {
   if (!info.historyFrom || historyAsked.has(info.id)) return
   historyAsked.add(info.id)
+  // Started again under the same id while this window was open (Force stop): what was said is on screen already.
+  const shown = useStore.getState().transcripts[info.id]
+  if (shown?.items.length) {
+    if (info.restarted)
+      useStore.setState((s) => ({
+        transcripts: { ...s.transcripts, [info.id]: addSystem(shown, restartLine(info)) },
+      }))
+    return
+  }
   void send(
     { type: "history_messages", sdkSessionId: info.historyFrom, cwd: info.cwd },
     60_000,
@@ -505,17 +514,20 @@ function loadHistory(info: SessionInfo): void {
     if (!r.ok || !Array.isArray(r.data)) return
     let past = emptyTranscript()
     for (const m of r.data as unknown[]) past = reduceHistory(past, m)
-    if (info.restarted)
-      past = addSystem(
-        past,
-        info.restarted.wasRunning
-          ? "JCVC restarted while Claude was working, so that turn stopped. Send a message to carry on."
-          : "JCVC restarted. This session carries on from here.",
-      )
+    if (info.restarted) past = addSystem(past, restartLine(info))
     useStore.setState((s) => ({
       transcripts: { ...s.transcripts, [info.id]: withHistory(s.transcripts[info.id], past) },
     }))
   })
+}
+
+/** Why a session started again under its own id, for the line in its transcript. */
+function restartLine(info: SessionInfo): string {
+  if (info.restarted?.forced)
+    return "You force-stopped this session. It started again on the same conversation: send a message to carry on."
+  return info.restarted?.wasRunning
+    ? "JCVC restarted while Claude was working, so that turn stopped. Send a message to carry on."
+    : "JCVC restarted. This session carries on from here."
 }
 
 /** A plain line for the transcript, or nothing for events that are only noise. */

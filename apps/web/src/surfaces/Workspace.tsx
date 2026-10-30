@@ -44,7 +44,7 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/extreme", help: "Turn Extreme approval on or off for this session" },
   { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
-  { cmd: "/stop", help: "Interrupt the current turn" },
+  { cmd: "/stop", help: "Stop the turn and anything in the background" },
   { cmd: "/close", help: "End this session" },
 ]
 
@@ -198,6 +198,9 @@ function SessionPane({
   if (!session) return null
 
   const running = session.state === "running" || session.state === "waiting"
+  // A turn that ended can leave subagents or commands working; the session is busy until they finish.
+  const background = session.background ?? []
+  const busy = running || background.length > 0
   const ended = session.state === "ended" || session.state === "error"
   const chat = session.kind === "chat"
   const others = list.filter((s) => !panes.includes(s.id))
@@ -218,9 +221,9 @@ function SessionPane({
     { kind: "separator" },
     ...(panes.length > 1 ? [{ label: "Close this pane", onSelect: () => closePane(index) }] : []),
     {
-      label: "Interrupt",
-      disabled: !running,
-      onSelect: () => void send({ type: "interrupt", sessionId: session.id }),
+      label: "Stop",
+      disabled: !busy,
+      onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
     {
@@ -262,7 +265,9 @@ function SessionPane({
               <>
                 <span className="min-w-[6ch] truncate">{titleOf(session)}</span>
                 <span className="shrink-0 text-[12.5px] font-normal text-mut">
-                  {STATE_WORDS[session.state]}
+                  {session.state === "idle" && background.length
+                    ? "Working in the background"
+                    : STATE_WORDS[session.state]}
                 </span>
                 <span aria-hidden="true" className="text-[12px]">
                   &#9662;
@@ -414,6 +419,8 @@ function SessionPane({
           />
         ) : running ? (
           <ActivityLine sessionId={session.id} cwd={session.cwd} />
+        ) : background.length ? (
+          <BackgroundLine tasks={background} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} />
         {/* What the session runs on, under the prompt box where you look when you send. */}
@@ -486,15 +493,7 @@ function SessionPane({
               </select>
             </label>
           )}
-          {running ? (
-            <button
-              type="button"
-              className="btn btn-deny ml-auto !min-h-7"
-              onClick={() => void send({ type: "interrupt", sessionId: session.id })}
-            >
-              Interrupt
-            </button>
-          ) : null}
+          <StopButton sessionId={session.id} busy={busy} />
         </div>
       </footer>
     </div>
@@ -604,6 +603,64 @@ function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionI
           </p>
         </div>
       ) : null}
+    </span>
+  )
+}
+
+/** What is still working after the turn ended: subagents and commands Claude left running. */
+function BackgroundLine({ tasks }: { tasks: string[] }) {
+  const named = tasks.filter(Boolean)
+  return (
+    <div className="activity">
+      <span className="activity-dot" aria-hidden="true" />
+      <span role="status" className="font-semibold">
+        {tasks.length === 1 ? "1 task" : `${tasks.length} tasks`} working in the background
+      </span>
+      {named.length ? <span className="text-mut">{named.join(", ")}</span> : null}
+    </div>
+  )
+}
+
+/** Seconds after Stop before Force stop is offered, for a session that does not stop when asked. */
+export const FORCE_AFTER_MS = 5000
+
+/**
+ * Stops the session there and then: the turn and everything in the background. If it is still working a few
+ * seconds later, Force stop ends its Claude process and starts it again on the same conversation.
+ */
+function StopButton({ sessionId, busy }: { sessionId: string; busy: boolean }) {
+  const [askedAt, setAskedAt] = useState<number>()
+  const now = useNow(1000)
+  useEffect(() => {
+    if (!busy) setAskedAt(undefined)
+  }, [busy])
+  if (!busy) return null
+  const stuck = askedAt !== undefined && now - askedAt >= FORCE_AFTER_MS
+  return (
+    <span className="ml-auto flex gap-2">
+      {stuck ? (
+        <button
+          type="button"
+          className="btn btn-deny !min-h-7 font-semibold"
+          onClick={() =>
+            void send({ type: "force_stop", sessionId }, 60_000).then((r) => {
+              if (!r.ok) toast.error(r.error?.message ?? "It could not be force-stopped")
+            })
+          }
+        >
+          Force stop
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="btn btn-deny !min-h-7"
+        onClick={() => {
+          setAskedAt(Date.now())
+          void send({ type: "stop_session", sessionId })
+        }}
+      >
+        {askedAt !== undefined && !stuck ? "Stopping" : "Stop"}
+      </button>
     </span>
   )
 }
@@ -770,7 +827,7 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
           r = await send({ type: "set_model", sessionId, ...(arg ? { model: arg } : {}) })
           break
         case "/stop":
-          r = await send({ type: "interrupt", sessionId })
+          r = await send({ type: "stop_session", sessionId })
           break
         case "/close":
           r = await send({ type: "close_session", sessionId })

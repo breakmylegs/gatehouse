@@ -401,6 +401,11 @@ export class HostServer {
       case "interrupt":
         await this.#session(cmd.sessionId).interrupt()
         return undefined
+      case "stop_session":
+        await this.#session(cmd.sessionId).stop()
+        return undefined
+      case "force_stop":
+        return { info: (await a.manager.forceStop(cmd.sessionId)).info() }
       case "set_mode":
         await this.#session(cmd.sessionId).setMode(cmd.mode)
         return undefined
