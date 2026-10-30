@@ -8,10 +8,10 @@ import { Setup } from "./surfaces/Setup"
 import { JcvcBackdrop } from "./components/JcvcBackdrop"
 import { HelpPane } from "./components/HelpPane"
 import { Rail } from "./components/Rail"
-import { UpdateResult } from "./components/UpdateNotice"
+import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
 import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
-import { usePendingCount, useStore } from "./store"
+import { START_ROUTE, usePendingCount, useStore } from "./store"
 
 const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
 const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.Policy })))
@@ -66,7 +66,7 @@ export function App() {
 
   // First launch: the setup wizard, once. It can be run again from Settings.
   useEffect(() => {
-    if (!setupDone && route === "approvals") setRoute("setup")
+    if (!setupDone && (route === "approvals" || route === START_ROUTE)) setRoute("setup")
   }, [setupDone, route, setRoute])
 
   // First run: show the checks until the account and organisation are fine.
@@ -76,7 +76,7 @@ export function App() {
       setupDone &&
       health.signin.checked !== false &&
       (!health.signin.signedIn || !health.signin.orgOk) &&
-      route === "approvals"
+      (route === "approvals" || route === START_ROUTE)
     )
       setRoute("first-run")
   }, [health, route, setRoute])
@@ -85,76 +85,80 @@ export function App() {
 
   return (
     <>
-      <div className="app-shell" data-rail={railHidden ? "hidden" : undefined}>
-        <a
-          href="#main"
-          onClick={(e) => {
-            e.preventDefault()
-            document.getElementById("main")?.focus()
-          }}
-          className="absolute left-2 top-2 z-50 -translate-y-16 rounded bg-sign px-3 py-1.5 text-sign-tx focus:translate-y-0"
-        >
-          Skip to content
-        </a>
-        {railHidden ? (
-          <button type="button" className="btn show-rail" onClick={() => hideRail(false)}>
-            <span aria-hidden="true">&raquo;</span> Sidebar
-            {pendingCount > 0 ? (
-              <span className="font-semibold">, {pendingCount} need you</span>
-            ) : null}
-          </button>
-        ) : (
-          <Rail onHide={() => hideRail(true)} />
-        )}
-        <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
-          {conn !== "open" ? (
-            <div
-              role="alert"
-              className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
-            >
-              Not connected to the Host. Decisions are paused, and requests keep waiting.
-              Reconnecting automatically.
-            </div>
-          ) : killed ? (
-            <div
-              role="alert"
-              className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
-            >
-              Kill switch engaged. Every request is denied and no session can start until you
-              re-arm.
-            </div>
+      {/* A newer version: one thin bar across the top, above the sidebar and the page. */}
+      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
+        <UpdateNotice />
+        <div className="app-shell" data-rail={railHidden ? "hidden" : undefined}>
+          <a
+            href="#main"
+            onClick={(e) => {
+              e.preventDefault()
+              document.getElementById("main")?.focus()
+            }}
+            className="fixed left-2 top-2 z-50 -translate-y-16 rounded bg-sign px-3 py-1.5 text-sign-tx focus:translate-y-0"
+          >
+            Skip to content
+          </a>
+          {railHidden ? (
+            <button type="button" className="btn show-rail" onClick={() => hideRail(false)}>
+              <span aria-hidden="true">&raquo;</span> Sidebar
+              {pendingCount > 0 ? (
+                <span className="font-semibold">, {pendingCount} need you</span>
+              ) : null}
+            </button>
           ) : (
-            <div />
+            <Rail onHide={() => hideRail(true)} />
           )}
-          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto]">
-            <main
-              id="main"
-              tabIndex={-1}
-              // The workspace fills the window and scrolls only its transcript, so the prompt box always shows.
-              className={
-                route === "workspace"
-                  ? "flex min-h-0 flex-col overflow-hidden outline-none"
-                  : "min-h-0 overflow-auto outline-none"
-              }
-              data-rail={railHidden ? "hidden" : undefined}
-            >
-              <UpdateResult />
-              <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
-                {route === "approvals" && <Approvals />}
-                {route === "sessions" && <Sessions />}
-                {route === "workspace" && <Workspace />}
-                {route === "policy" && <Policy />}
-                {route === "audit" && <Audit />}
-                {route === "devices" && <Devices />}
-                {route === "settings" && <Settings />}
-                {route === "first-run" && <FirstRun />}
-                {route === "setup" && <Setup />}
-                {route === "guide" && <Guide />}
-                {route === "approver" && <Approver />}
-                {route === "chat" && <NewChat />}
-              </Suspense>
-            </main>
-            <HelpPane />
+          <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+            {conn !== "open" ? (
+              <div
+                role="alert"
+                className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
+              >
+                Not connected to the Host. Decisions are paused, and requests keep waiting.
+                Reconnecting automatically.
+              </div>
+            ) : killed ? (
+              <div
+                role="alert"
+                className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
+              >
+                Kill switch engaged. Every request is denied and no session can start until you
+                re-arm.
+              </div>
+            ) : (
+              <div />
+            )}
+            <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto]">
+              <main
+                id="main"
+                tabIndex={-1}
+                // The workspace fills the window and scrolls only its transcript, so the prompt box always shows.
+                className={
+                  route === "workspace"
+                    ? "flex min-h-0 flex-col overflow-hidden outline-none"
+                    : "min-h-0 overflow-auto outline-none"
+                }
+                data-rail={railHidden ? "hidden" : undefined}
+              >
+                <UpdateResult />
+                <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
+                  {route === "approvals" && <Approvals />}
+                  {route === "sessions" && <Sessions />}
+                  {route === "workspace" && <Workspace />}
+                  {route === "policy" && <Policy />}
+                  {route === "audit" && <Audit />}
+                  {route === "devices" && <Devices />}
+                  {route === "settings" && <Settings />}
+                  {route === "first-run" && <FirstRun />}
+                  {route === "setup" && <Setup />}
+                  {route === "guide" && <Guide />}
+                  {route === "approver" && <Approver />}
+                  {route === "chat" && <NewChat />}
+                </Suspense>
+              </main>
+              <HelpPane />
+            </div>
           </div>
         </div>
       </div>

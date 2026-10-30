@@ -523,9 +523,9 @@ function RestartPrompt({
       </p>
       {!state.busy && open > 0 ? (
         <p className="m-0 text-[13.5px]">
-          {open} session{open === 1 ? " is" : "s are"} open. Restarting stops{" "}
-          {open === 1 ? "it" : "them"}; you can resume {open === 1 ? "it" : "them"} from Sessions
-          afterwards.
+          {open} session{open === 1 ? " is" : "s are"} open. {open === 1 ? "It comes" : "They come"}{" "}
+          back by {open === 1 ? "itself" : "themselves"} after the restart; a turn that is running
+          stops.
         </p>
       ) : null}
       {state.error ? (

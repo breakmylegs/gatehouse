@@ -340,7 +340,7 @@ If anything goes wrong while deciding, the request waits for you or is denied. I
 1. Every 30 minutes (change it in Settings, Updates) JCVC looks for a new version on GitHub.
 2. When there is one, an **Update to** button appears at the foot of the sidebar. It lists what is new.
 3. Choose **Update now**. JCVC downloads only the parts that changed, checks them against its release signature, and builds the new version beside the one you are using. You can keep working while it does.
-4. JCVC then closes, switches to the new version and opens again by itself, usually within a minute. Open sessions stop when it closes; resume them from Sessions.
+4. JCVC then closes, switches to the new version and opens again by itself, usually within a minute. Open sessions come back by themselves, in the same panes, with what was said in them and the settings they had. A turn that was running stops: send a message to carry on.
 
 With **Download a new version as soon as it is found** on (it is, unless you turn it off), step 3 has already happened by the time you see the button, so Update is quick. Nothing changes until you choose Update.
 

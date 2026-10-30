@@ -5,7 +5,6 @@ import { groupByFolder, notifyLine, RAIL_PAGES, readRailPages, saveRailPages } f
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
-import { UpdateNotice } from "./UpdateNotice"
 import { RenameDialog } from "./RenameDialog"
 import { archiveSession, exportOpenSession, setSessionMeta, titleOf } from "../lib/sessionActions"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
@@ -402,7 +401,6 @@ function RailFoot() {
           </>
         ) : null}
       </div>
-      <UpdateNotice />
       {killed ? (
         <button
           className="btn btn-primary justify-center"

@@ -3,31 +3,71 @@ import { createPortal } from "react-dom"
 import { useStore } from "../store"
 import { noteLines, updateCall, type UpdateStatus } from "../lib/update"
 
+/** The version you chose Later for. It shows again when JCVC next opens. */
+let laterFor = ""
+
 /**
- * The header button when a newer version is out, the update dialog it opens, and the line that says how the last
- * update went. Updating is one choice: JCVC downloads only what changed, closes, switches and opens again.
+ * A thin bar across the top of the window while a newer version is out, with Update now on it (owner, 30 Oct). Your
+ * sessions come back by themselves after the switch. What is new opens the details, and Later hides the bar until
+ * JCVC next opens. Updating is one choice: JCVC downloads only what changed, closes, switches and opens again.
  */
 export function UpdateNotice() {
   const update = useStore((s) => s.update)
   const conn = useStore((s) => s.conn)
   const [open, setOpen] = useState(false)
+  const [later, setLater] = useState(laterFor)
 
   useEffect(() => {
     if (conn === "open") void updateCall("GET", "/api/update")
   }, [conn])
 
-  if (!update) return null
-  const target = update.latest?.version
-  const showButton = update.available && update.canInstall && target !== undefined
+  const target = update?.latest?.version
+  if (!update || !update.available || !update.canInstall || target === undefined) return null
+  // The Host keeps "Update now": it switches as soon as the version is ready.
+  const wanted = update.applyWhenReady === target
+  const busy = update.phase === "applying" || wanted
+  if (later === target && !busy && !open) return null
+  const p = update.progress
+  const pct = p && p.total > 0 ? Math.min(100, Math.round((p.done / p.total) * 100)) : undefined
+  const text =
+    update.phase === "applying"
+      ? `JCVC is switching to ${target}. It opens again by itself in a moment.`
+      : wanted
+        ? `Getting JCVC ${target} ready${pct !== undefined ? `, ${pct}%` : ""}. It switches by itself when it is ready.`
+        : update.phase === "failed" && update.error
+          ? update.error
+          : `JCVC ${target} is ${update.phase === "ready" ? "ready" : "out"}. Your sessions come back after it restarts.`
   return (
     <>
-      {showButton ? (
-        <button className="btn btn-primary" onClick={() => setOpen(true)} aria-haspopup="dialog">
-          {update.phase === "ready" ? `Update ready: ${target}` : `Update to ${target}`}
-        </button>
-      ) : null}
-      {/* Outside the header, so it does not take on the header's colours and button styles. */}
-      {open && target
+      <div role="region" aria-label="New version of JCVC" className="update-bar shell">
+        <span aria-live="polite" className="min-w-0">
+          {text}
+        </span>
+        <span className="ml-auto flex flex-wrap gap-2">
+          <button
+            className="btn btn-primary"
+            disabled={busy}
+            onClick={() => void updateCall("POST", "/api/update/install", { version: target })}
+          >
+            {update.phase === "failed" ? "Try again" : busy ? "Updating" : "Update now"}
+          </button>
+          <button className="btn" onClick={() => setOpen(true)} aria-haspopup="dialog">
+            What is new
+          </button>
+          {busy ? null : (
+            <button
+              className="btn"
+              onClick={() => {
+                laterFor = target
+                setLater(target)
+              }}
+            >
+              Later
+            </button>
+          )}
+        </span>
+      </div>
+      {open
         ? createPortal(
             <UpdateDialog update={update} onClose={() => setOpen(false)} />,
             document.body,
@@ -108,8 +148,9 @@ function UpdateDialog({ update, onClose }: { update: UpdateStatus; onClose: () =
         ) : null}
         {running > 0 ? (
           <p className="m-0 text-sm">
-            {running === 1 ? "1 session is" : `${running} sessions are`} open. Updating closes JCVC,
-            which stops them; you can resume them from Sessions afterwards.
+            {running === 1 ? "1 session is" : `${running} sessions are`} open. They come back by
+            themselves when JCVC opens again, with what was said in them. A turn that is running
+            stops, so update when Claude is not in the middle of something.
           </p>
         ) : null}
         {update.phase === "preparing" && p ? (

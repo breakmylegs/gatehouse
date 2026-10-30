@@ -2,6 +2,7 @@ import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
+import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { pickFolderWithWindows } from "./folder-picker.js"
@@ -72,6 +73,8 @@ export interface HostOptions {
   onHealthChanged?: () => void
   /** Each step of the start, in words, for the start-up picture. */
   onProgress?: (text: string) => void
+  /** Keeps the open sessions and brings them back at the next start. The desktop Host does; the CLI does not. */
+  keepOpenSessions?: boolean
 }
 
 export interface Host {
@@ -283,6 +286,11 @@ export function createHost(opts: HostOptions = {}): Host {
   }
   deps.approver = approverProxy as unknown as ApproverClient
   manager = new SessionManager(deps)
+  // The sessions open now, so a restart or an update brings them back (owner, 30 Oct: nothing lost).
+  const openSessions = opts.keepOpenSessions
+    ? new OpenSessionsStore(path.join(gatehouseDataDir(env), "open-sessions.json"))
+    : undefined
+  if (openSessions) manager.on("session", (info) => openSessions.note(info))
 
   const phoneStore = new PhoneStore(
     path.join(gatehouseDataDir(env), "phone.json"),
@@ -644,8 +652,41 @@ export function createHost(opts: HostOptions = {}): Host {
               ? log(`relay inside JCVC did not start: ${st.message ?? ""}`)
               : undefined,
           )
+      // In the background: the window opens at once and each session appears as it comes back.
+      if (openSessions)
+        void restoreOpenSessions(openSessions, {
+          start: (o) => manager.start(o),
+          killed: () => kill.isEngaged(),
+          log,
+          audit: (o) =>
+            audit.record({
+              session: o.id,
+              event: "session_restored",
+              channel: "host",
+              tool: "session",
+              cwd: o.cwd,
+              input: {
+                mode: o.mode,
+                extreme: o.extreme,
+                resumed: o.sdkSessionId !== undefined,
+                wasRunning: o.running,
+              },
+              verdict: {
+                outcome: "allow",
+                ruleId: "session-restored",
+                reason:
+                  "JCVC brought this session back after it restarted, with the settings it had.",
+                risk: 0,
+                decidedBy: "rules",
+                policyHash: store.current?.hash ?? "",
+              },
+              latencyMs: 0,
+            }),
+        }).then((n) => (n ? log(`brought back ${n} open session(s)`) : undefined))
     },
     async stop() {
+      // First, so the sessions closed below come back next time.
+      await openSessions?.freeze()
       ntfy.stop()
       updates.stop()
       slack.stop()

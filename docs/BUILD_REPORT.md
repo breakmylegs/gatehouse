@@ -517,3 +517,43 @@ The owner chose stage 3 of the new shell (terminal and chat), and queued a resta
 - A refused topic says why under its box, and Cancel clears it.
 - The panel's five-second status check no longer puts the server and risk boxes back while you edit them.
 - Tests: `apps/web/test/push-panel.test.tsx`, and the typed-topic case in `apps/host/test/api.test.ts`. 9 breaks, 9 caught.
+
+## Phase 34: nothing lost on a restart, the update bar, and fixes the owner met (30 Oct)
+
+The owner now builds JCVC from a session inside JCVC, so every update used to end that session.
+
+- **Nothing lost on a restart or update** (owner, "one major thing").
+
+  The Host keeps the open sessions in `%LOCALAPPDATA%\Gatehouse\open-sessions.json` (`apps/host/src/open-sessions.ts`): each one's id, folder, Claude Code conversation, mode, model, effort, Extreme approval, and whether a turn was running. It is written a quarter of a second after each change, so a crash or a forced close leaves it current. When JCVC closes it stops writing first, so the sessions it then closes come back.
+
+  At the next start each one is resumed in turn, under the same id, with the settings it had. The restore is audited (`session_restored`). Only the allowed modes come back (invariant 3); anything else starts in Manual. A chat keeps its own folder, and only a folder JCVC made for chats. With the kill switch engaged nothing starts and the list waits. One that cannot come back is dropped; it is still under Earlier sessions. The file is read tolerantly and keeps what a newer version wrote.
+
+  The window remembers its page, its panes and what you had typed but not sent. A resumed session (after a restart, or Resume or Fork) now shows its earlier conversation, read from Claude Code's transcript through the Host. Before this, Resume opened an empty pane. If a restart cut a turn off, a line says so.
+
+  Only the desktop Host keeps sessions (`keepOpenSessions`); the CLI does not.
+
+  Not covered: the first update from a version without this file brings nothing back, because that version never wrote the file. Resume from Sessions that once.
+- **An update bar** across the top of the window when a newer version is out: Update now, What is new (the dialog) and Later (until JCVC next opens). It replaces the sidebar's update button. It shows the download and the switch as they happen. The Sidebar button and the skip link now sit inside the shell, so the bar never covers them.
+- **The prompt box always shows.** The update banner, or the space over a hidden sidebar, pushed the prompt box and its Model, Effort and Mode bar below the window. The workspace now fills what is left; only the transcript scrolls; a long request card scrolls inside itself. The sidebar also scrolled sideways on a long session name.
+
+  Checked in headless Edge at 1280 x 720 with the banner and the bar: the settings bar's bottom went from 757 px (off screen) to 708 px, and the sideways scroll from 315 px to 0.
+- **Interrupt** read "Turn ended with an error: The turn ended with an error". The Host now says it is stopping the turn before it does, and the result reads "You stopped this turn." (or the kill switch did). A real failure with no text says why where the SDK says.
+- **ntfy topics** are all lower case with none of 0 o 1 l i (owner). ntfy treats O, o and 0 as different topics. A typed topic with capitals is refused with the reason.
+
+  The owner's saved topic is from before 29 Oct and their phone works on it. So it is never replaced by itself: the panel offers a new one.
+- **The sidebar foot** said "No phone" with ntfy on. It now names each way a request reaches you, "Notifying on ntfy", green while one works, and updates when ntfy or Slack connects or drops.
+
+  Slack's change callback follows ntfy's but has no test of its own.
+- **Each tool call's decision** (F2, first half): the Host sends a `decision` session event for every verdict, never the input. The screen does not show it yet.
+- Tests:
+  - `apps/host/test/open-sessions.test.ts` (threat model T30)
+  - `apps/web/test/restore.test.tsx`
+  - the bar in `apps/web/test/update.test.tsx`
+  - the stopped turn in `apps/web/test/transcript.test.ts` and `store.test.ts`
+  - the interrupt cases in `apps/host/test/scripted-run.test.ts`
+  - `apps/host/test/decision-events.test.ts`
+  - the topic cases in `apps/host/test/ntfy.test.ts` and `api.test.ts`
+  - `apps/web/test/push-panel.test.tsx`
+  - the foot in `apps/web/test/rail.test.tsx`
+
+  49 breaks, 46 caught on the first run. For the other three, two tests were tightened and caught their break on a second run, and one check was redundant, so the code was made simpler.

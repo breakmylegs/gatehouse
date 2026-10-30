@@ -18,6 +18,8 @@ import {
   emptyTranscript,
   markStopping,
   reduce,
+  reduceHistory,
+  withHistory,
   type Transcript,
 } from "./lib/transcript"
 import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
@@ -133,6 +135,46 @@ export const send = (command: ClientCommand, timeoutMs?: number): Promise<Reply>
 const MAX_AUDIT = 500
 const MAX_RESOLVED = 100
 
+/**
+ * The page and the panes on screen, kept so the window comes back the same after JCVC restarts or updates (owner,
+ * 30 Oct: nothing lost). Session ids survive a restart, because the Host brings each session back under its own.
+ */
+const VIEW = "gatehouse.view"
+const KEPT_ROUTES: Route[] = [
+  "approvals",
+  "sessions",
+  "workspace",
+  "policy",
+  "audit",
+  "devices",
+  "settings",
+  "guide",
+  "approver",
+]
+function readView(): { route: Route; panes: string[]; selectedSession?: string } {
+  try {
+    if (localStorage.getItem("gatehouse.setup") === "done") {
+      const v = JSON.parse(localStorage.getItem(VIEW) ?? "null") as Record<string, unknown> | null
+      if (v && typeof v === "object") {
+        const panes = Array.isArray(v.panes)
+          ? v.panes.filter((p): p is string => typeof p === "string").slice(0, 3)
+          : []
+        return {
+          route: KEPT_ROUTES.includes(v.route as Route) ? (v.route as Route) : "approvals",
+          panes,
+          ...(typeof v.selectedSession === "string" ? { selectedSession: v.selectedSession } : {}),
+        }
+      }
+    }
+  } catch {
+    // a value from another version, or none
+  }
+  return { route: "approvals", panes: [] }
+}
+const startView = readView()
+/** The page the window opened on: the first-run checks take over from it, as they did from Approvals. */
+export const START_ROUTE: Route = startView.route
+
 const storedTheme = (): "light" | "dark" => {
   const s = localStorage.getItem("gatehouse.theme")
   if (s === "light" || s === "dark") return s
@@ -171,7 +213,8 @@ export const useStore = create<State>((set, get) => ({
   pulse: {},
   term: {},
   audit: [],
-  route: "approvals",
+  route: startView.route,
+  ...(startView.selectedSession ? { selectedSession: startView.selectedSession } : {}),
   theme: storedTheme(),
   notify: localStorage.getItem("gatehouse.notify") === "1",
   seen: {},
@@ -191,7 +234,7 @@ export const useStore = create<State>((set, get) => ({
           ? s.panes
           : [selectedSession, ...s.panes.slice(1)],
     })),
-  panes: [],
+  panes: startView.panes,
   meta: {},
   setPane: (index, id) =>
     set((s) => {
@@ -257,6 +300,7 @@ export const useStore = create<State>((set, get) => ({
         for (const p of e.pending) pending[p.request.id] = p
         const sessions: Record<string, SessionInfo> = {}
         for (const i of e.sessions) sessions[i.id] = i
+        for (const i of e.sessions) loadHistory(i)
         set((s) => ({
           sessions,
           pending,
@@ -271,6 +315,7 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       case "session":
+        loadHistory(e.info)
         set((s) => {
           const sessions = { ...s.sessions, [e.info.id]: e.info }
           // A turn that ended, by finishing, an interrupt or an error, is doing nothing any more.
@@ -423,6 +468,55 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 }))
+
+useStore.subscribe((s, prev) => {
+  if (
+    s.route === prev.route &&
+    s.panes === prev.panes &&
+    s.selectedSession === prev.selectedSession
+  )
+    return
+  try {
+    localStorage.setItem(
+      VIEW,
+      JSON.stringify({
+        route: s.route,
+        panes: s.panes,
+        ...(s.selectedSession ? { selectedSession: s.selectedSession } : {}),
+      }),
+    )
+  } catch {
+    // storage full or blocked: the view is only a convenience
+  }
+})
+
+const historyAsked = new Set<string>()
+/**
+ * A session that carries on an earlier conversation (Resume, Fork, or after a restart) shows what was said there,
+ * read once through the Host, with a line when a restart cut a turn off.
+ */
+function loadHistory(info: SessionInfo): void {
+  if (!info.historyFrom || historyAsked.has(info.id)) return
+  historyAsked.add(info.id)
+  void send(
+    { type: "history_messages", sdkSessionId: info.historyFrom, cwd: info.cwd },
+    60_000,
+  ).then((r) => {
+    if (!r.ok || !Array.isArray(r.data)) return
+    let past = emptyTranscript()
+    for (const m of r.data as unknown[]) past = reduceHistory(past, m)
+    if (info.restarted)
+      past = addSystem(
+        past,
+        info.restarted.wasRunning
+          ? "JCVC restarted while Claude was working, so that turn stopped. Send a message to carry on."
+          : "JCVC restarted. This session carries on from here.",
+      )
+    useStore.setState((s) => ({
+      transcripts: { ...s.transcripts, [info.id]: withHistory(s.transcripts[info.id], past) },
+    }))
+  })
+}
 
 /** A plain line for the transcript, or nothing for events that are only noise. */
 export function describeEvent(event: string, data: Record<string, unknown>): string | undefined {

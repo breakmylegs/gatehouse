@@ -177,6 +177,45 @@ export function reduce(t: Transcript, message: unknown): Transcript {
   return t
 }
 
+/**
+ * One message of an earlier conversation, read back from Claude Code's transcript. What you typed comes back too
+ * (the live stream only echoes tool results); Claude Code's own wrappers, which start with "<", are left out.
+ */
+export function reduceHistory(t: Transcript, message: unknown): Transcript {
+  const m = obj(message)
+  if (str(m.type) === "user" && !m.parent_tool_use_id) {
+    const content = obj(m.message).content
+    const text =
+      typeof content === "string"
+        ? content
+        : Array.isArray(content) && !content.some((c) => obj(c).type === "tool_result")
+          ? content
+              .filter((c) => obj(c).type === "text")
+              .map((c) => str(obj(c).text))
+              .join("\n")
+          : undefined
+    if (text !== undefined) {
+      const said = text.trim()
+      if (!said || said.startsWith("<")) return t
+      if (said.startsWith("[Request interrupted")) return addSystem(t, "You stopped this turn.")
+      return addUser(t, said)
+    }
+  }
+  return reduce(t, message)
+}
+
+/**
+ * An earlier conversation put before what this session has shown so far. Its items carry no time, because JCVC did
+ * not see them arrive.
+ */
+export function withHistory(t: Transcript | undefined, past: Transcript): Transcript {
+  const now = t ?? emptyTranscript()
+  const earlier = past.items.map(({ at: _at, ...i }) => ({ ...i, id: "h" + i.id }) as Item)
+  let items = [...earlier, ...now.items]
+  if (items.length > MAX_ITEMS) items = items.slice(items.length - MAX_ITEMS)
+  return { ...now, items, todos: now.todos.length ? now.todos : past.todos, seq: now.seq + 1 }
+}
+
 export function addSystem(t: Transcript, text: string): Transcript {
   return push(t, [{ id: `s${t.seq}`, kind: "system", text }])
 }

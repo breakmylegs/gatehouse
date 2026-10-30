@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { UpdateNotice, UpdateResult } from "../src/components/UpdateNotice"
 import { UpdatesPanel } from "../src/components/UpdatesPanel"
@@ -36,61 +36,77 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe("the update button and dialog", () => {
+describe("the update bar and dialog", () => {
   it("shows nothing when there is no newer version, or when it cannot install", () => {
     useStore.setState({ update: base({ available: false }) })
     const { rerender } = render(<UpdateNotice />)
-    expect(screen.queryByRole("button", { name: /update/i })).toBeNull()
+    expect(screen.queryByRole("region", { name: "New version of JCVC" })).toBeNull()
     useStore.setState({ update: base({ canInstall: false }) })
     rerender(<UpdateNotice />)
-    expect(screen.queryByRole("button", { name: /update/i })).toBeNull()
+    expect(screen.queryByRole("region", { name: "New version of JCVC" })).toBeNull()
   })
 
-  it("offers the new version with its notes, and warns that open sessions stop", () => {
+  it("puts Update now on a bar, and says your sessions come back", async () => {
+    render(<UpdateNotice />)
+    const bar = screen.getByRole("region", { name: "New version of JCVC" })
+    expect(bar.textContent).toContain(
+      "JCVC 1.0.6 is out. Your sessions come back after it restarts.",
+    )
+    fireEvent.click(within(bar).getByRole("button", { name: "Update now" }))
+    await waitFor(() => expect(calls).toHaveLength(1))
+    expect(calls[0]).toMatchObject({ url: "/api/update/install", body: { version: "1.0.6" } })
+    // The Host keeps it: the bar says it switches by itself and offers nothing to click twice.
+    act(() =>
+      useStore.setState({
+        update: base({
+          phase: "preparing",
+          applyWhenReady: "1.0.6",
+          progress: { step: "download", done: 1, total: 4, label: "Downloading" },
+        }),
+      }),
+    )
+    expect(bar.textContent).toContain("Getting JCVC 1.0.6 ready, 25%. It switches by itself")
+    expect(
+      (within(bar).getByRole("button", { name: "Updating" }) as HTMLButtonElement).disabled,
+    ).toBe(true)
+    expect(within(bar).queryByRole("button", { name: "Later" })).toBeNull()
+  })
+
+  it("opens the notes from the bar, and Later hides it until JCVC next opens", () => {
     useStore.setState({
       sessions: { s1: { state: "running" }, s2: { state: "ended" } } as never,
     })
-    render(<UpdateNotice />)
-    fireEvent.click(screen.getByRole("button", { name: "Update to 1.0.6" }))
+    const first = render(<UpdateNotice />)
+    fireEvent.click(screen.getByRole("button", { name: "What is new" }))
     const d = screen.getByRole("dialog", { name: "JCVC 1.0.6 is available" })
     expect(d.textContent).toContain("You have 1.0.5.")
     expect(screen.getByText("Faster start")).toBeTruthy()
-    expect(d.textContent).toContain("1 session is open")
-  })
-
-  it("hands Update now to the Host, which keeps it even if the dialog is closed", async () => {
-    render(<UpdateNotice />)
-    fireEvent.click(screen.getByRole("button", { name: "Update to 1.0.6" }))
-    fireEvent.click(screen.getByRole("button", { name: "Update now" }))
-    await waitFor(() => expect(calls).toHaveLength(1))
-    expect(calls[0]).toMatchObject({ url: "/api/update/install", body: { version: "1.0.6" } })
-    // The Host now says it will switch when ready: the dialog says so and offers nothing to click twice.
-    act(() => useStore.setState({ update: base({ phase: "preparing", applyWhenReady: "1.0.6" }) }))
-    expect(screen.getByRole("dialog").textContent).toContain(
-      "switches to 1.0.6 as soon as it is ready",
-    )
-    expect((screen.getByRole("button", { name: "Updating" }) as HTMLButtonElement).disabled).toBe(
-      true,
-    )
+    expect(d.textContent).toContain("1 session is open. They come back by themselves")
+    fireEvent.click(within(d).getByRole("button", { name: "Later" }))
     fireEvent.click(screen.getByRole("button", { name: "Later" }))
-    expect(screen.queryByRole("dialog")).toBeNull()
-    expect(calls).toHaveLength(1)
+    expect(screen.queryByRole("region", { name: "New version of JCVC" })).toBeNull()
+    // Still hidden after the page draws it again, until a newer version comes out.
+    first.unmount()
+    render(<UpdateNotice />)
+    expect(screen.queryByRole("region", { name: "New version of JCVC" })).toBeNull()
+    act(() => useStore.setState({ update: base({ latest: { version: "1.0.7", notes: "" } }) }))
+    expect(screen.getByRole("region", { name: "New version of JCVC" }).textContent).toContain(
+      "1.0.7",
+    )
   })
 
   it("switches at once when the version is already downloaded, and can skip it instead", async () => {
-    reply = base({ phase: "ready", ready: "1.0.6" })
+    reply = base({ phase: "ready", ready: "1.0.6", latest: { version: "1.0.8", notes: "" } })
     useStore.setState({ update: reply })
     render(<UpdateNotice />)
-    fireEvent.click(screen.getByRole("button", { name: "Update ready: 1.0.6" }))
+    expect(screen.getByRole("region").textContent).toContain("JCVC 1.0.8 is ready.")
     fireEvent.click(screen.getByRole("button", { name: "Update now" }))
     await waitFor(() => expect(calls.map((c) => c.url)).toEqual(["/api/update/install"]))
-    cleanup()
     calls.length = 0
-    render(<UpdateNotice />)
-    fireEvent.click(screen.getByRole("button", { name: "Update ready: 1.0.6" }))
+    fireEvent.click(screen.getByRole("button", { name: "What is new" }))
     fireEvent.click(screen.getByRole("button", { name: "Skip this version" }))
     await waitFor(() =>
-      expect(calls[0]).toMatchObject({ url: "/api/update/skip", body: { version: "1.0.6" } }),
+      expect(calls[0]).toMatchObject({ url: "/api/update/skip", body: { version: "1.0.8" } }),
     )
     expect(screen.queryByRole("dialog")).toBeNull()
   })

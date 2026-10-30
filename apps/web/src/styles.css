@@ -762,6 +762,7 @@ mark.seg {
  * in JCVC's own colours and type). Ctrl+B hides the rail.
  */
 .app-shell {
+  position: relative;
   display: grid;
   grid-template-columns: 272px minmax(0, 1fr);
   height: 100%;
@@ -834,8 +835,9 @@ mark.seg {
   background: var(--c-shell-2);
   border-color: var(--c-shell-line);
 }
+/* In the shell, not the window, so the update bar above never covers it. */
 .show-rail {
-  position: fixed;
+  position: absolute;
   top: 8px;
   left: 8px;
   z-index: 20;
@@ -1000,6 +1002,29 @@ mark.seg {
 }
 main[data-rail="hidden"] {
   padding-top: 44px;
+}
+
+/* A newer version is out: one thin bar across the top of the window. */
+.update-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 36px;
+  padding: 3px 12px;
+  border-bottom: 1px solid var(--c-shell-line);
+  font: 500 13.5px var(--font-sign);
+}
+.update-bar .btn {
+  min-height: 26px;
+  padding: 1px 10px;
+  font-size: 13px;
+}
+/* After .shell .btn, which would otherwise empty the main button. */
+.update-bar .btn-primary {
+  border-color: var(--c-acc);
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
 }
 
 /* A run of tool calls folded into one line. */

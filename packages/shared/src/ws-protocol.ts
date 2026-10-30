@@ -149,6 +149,10 @@ export const SessionInfo = z.object({
   title: z.string().optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /** The Claude Code conversation this one carries on from (Resume, Fork, or after a restart): the screen shows what was said there. */
+  historyFrom: z.string().optional(),
+  /** Brought back after JCVC restarted or updated, and whether a turn was cut off by it. */
+  restarted: z.object({ wasRunning: z.boolean() }).optional(),
 })
 export type SessionInfo = z.infer<typeof SessionInfo>
 

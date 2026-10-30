@@ -208,6 +208,11 @@ export interface StartSessionOptions {
   kind?: "code" | "chat"
   /** The first thing said in a chat, which names its folder. */
   title?: string
+  /**
+   * Brought back after JCVC restarted: the same id, so the screen finds its panes again, and its original start
+   * time. A chat keeps its folder.
+   */
+  restore?: { id: string; createdAt: string; wasRunning: boolean }
 }
 
 /**
@@ -255,10 +260,10 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
 }
 
 export class Session extends EventEmitter<SessionEvents> {
-  readonly id = uuidv7()
+  readonly id: string
   readonly cwd: string
   readonly project: string
-  readonly createdAt = new Date().toISOString()
+  readonly createdAt: string
   readonly #deps: SessionDeps
   readonly #input = new InputQueue()
   readonly #decided = new Set<string>()
@@ -298,6 +303,10 @@ export class Session extends EventEmitter<SessionEvents> {
     super()
     this.#deps = deps
     this.#opts = opts
+    this.id = opts.restore?.id ?? uuidv7()
+    this.createdAt = opts.restore?.createdAt ?? new Date().toISOString()
+    // Resuming carries on in the same conversation, unless it forks; the first message says for certain.
+    this.#sdkSessionId = opts.resume !== undefined && opts.fork !== true ? opts.resume : undefined
     this.cwd = opts.cwd
     this.project = path.basename(findProjectRoot(opts.cwd))
     this.#mode = opts.mode ?? "default"
@@ -324,6 +333,8 @@ export class Session extends EventEmitter<SessionEvents> {
       pendingApprovals: this.#deps.broker.countFor(this.id),
       createdAt: this.createdAt,
       ...(this.#error !== undefined ? { error: this.#error } : {}),
+      ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
+      ...(this.#opts.restore ? { restarted: { wasRunning: this.#opts.restore.wasRunning } } : {}),
       ...this.#deps.sessionMeta?.(this.#sdkSessionId),
     }
   }
@@ -460,7 +471,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   #onMessage(msg: SDKMessage): void {
     const m = msg as unknown as Record<string, unknown>
-    if (typeof m.session_id === "string" && this.#sdkSessionId === undefined) {
+    if (typeof m.session_id === "string" && m.session_id !== this.#sdkSessionId) {
       this.#sdkSessionId = m.session_id
       this.emit("state", this.info())
     }
@@ -613,7 +624,13 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     if (!early.ok && early.code === "no-expected-org")
       throw new OrgGuardError(early.code, early.message)
     // After the checks above, so a refused start leaves nothing behind.
-    if (opts.kind === "chat") {
+    if (opts.kind === "chat" && opts.restore) {
+      // A chat brought back keeps its own folder, and only a folder JCVC made for chats.
+      const dir = this.#deps.chatsDir
+      if (!dir || !sameFolder(path.dirname(path.resolve(opts.cwd)), dir))
+        throw new SessionFolderError("That chat's folder is not one JCVC made for chats.")
+      opts = { ...opts, mode: "plan", extreme: false, freshFolder: false }
+    } else if (opts.kind === "chat") {
       // The folder the screen sent is ignored: a chat always gets a new one of its own.
       const dir = this.#deps.chatsDir
       if (!dir) throw new SessionFolderError("Chats are not available here.")

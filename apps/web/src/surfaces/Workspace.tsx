@@ -655,7 +655,16 @@ let pictureSeq = 0
 function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolean }) {
   // One composer per pane in split view, so its id must be its own.
   const composerId = useId()
-  const [text, setText] = useState("")
+  // What you typed and had not sent comes back after JCVC restarts.
+  const draftKey = `gatehouse.draft.${sessionId}`
+  const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? "")
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (text) localStorage.setItem(draftKey, text)
+      else localStorage.removeItem(draftKey)
+    }, 300)
+    return () => clearTimeout(t)
+  }, [text, draftKey])
   const [active, setActive] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)
   const addUserText = useStore((s) => s.addUserText)
