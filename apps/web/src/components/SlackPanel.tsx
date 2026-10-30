@@ -78,7 +78,7 @@ export function SlackPanel() {
     }
     setBotToken("")
     setAppToken("")
-    toast("Slack is on")
+    toast(st?.enabled ? "Slack settings saved" : "Slack is on", { id: "settings" })
     await load()
   }
   async function test() {
@@ -90,8 +90,13 @@ export function SlackPanel() {
   }
   async function off(forgetTokens: boolean) {
     setBusy(true)
-    await api("POST", "/api/push/slack/disable", { forgetTokens })
+    const r = await api("POST", "/api/push/slack/disable", { forgetTokens })
     setBusy(false)
+    if (r.ok)
+      toast(forgetTokens ? "Slack is off and its tokens are forgotten" : "Slack is off", {
+        id: "settings",
+      })
+    else setError(r.error ?? "Slack could not be switched off")
     await load()
   }
 

@@ -1,4 +1,5 @@
 import { useId, useState } from "react"
+import { toast } from "sonner"
 import { useStore } from "../store"
 import { INTERVALS, noteLines, updateCall, when } from "../lib/update"
 
@@ -73,11 +74,16 @@ export function UpdatesPanel() {
           id={intervalId}
           className="field"
           value={u.settings.checkEveryMinutes}
-          onChange={(e) =>
-            void updateCall("PUT", "/api/update/settings", {
-              checkEveryMinutes: Number(e.target.value),
-            })
-          }
+          onChange={async (e) => {
+            const minutes = Number(e.target.value)
+            if (await updateCall("PUT", "/api/update/settings", { checkEveryMinutes: minutes }))
+              toast(
+                `Saved: look for updates ${INTERVALS.find((i) => i.value === minutes)?.label.toLowerCase() ?? "as chosen"}`,
+                {
+                  id: "settings",
+                },
+              )
+          }}
         >
           {INTERVALS.map((i) => (
             <option key={i.value} value={i.value}>
@@ -90,11 +96,18 @@ export function UpdatesPanel() {
         <input
           type="checkbox"
           checked={u.settings.downloadInBackground}
-          onChange={(e) =>
-            void updateCall("PUT", "/api/update/settings", {
-              downloadInBackground: e.target.checked,
-            })
-          }
+          onChange={async (e) => {
+            const on = e.target.checked
+            if (await updateCall("PUT", "/api/update/settings", { downloadInBackground: on }))
+              toast(
+                on
+                  ? "Saved: new versions download in the background"
+                  : "Saved: new versions download when you choose Update",
+                {
+                  id: "settings",
+                },
+              )
+          }}
         />
         Download a new version as soon as it is found, so Update is quick. Nothing changes until you
         choose Update.

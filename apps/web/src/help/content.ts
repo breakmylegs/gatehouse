@@ -188,7 +188,7 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
   settings: {
     id: "settings",
     title: "Settings",
-    body: `Settings are saved on this computer.
+    body: `Settings are saved on this computer, as you change them: a switch or a choice at once, a typed box when you leave it or press Enter. A short message confirms each save, or says what was wrong.
 
 - **Expected organisation**: sessions only start when your Claude account belongs to it. This stops a personal account being used by mistake.
 - **Workspace roots**: the folders Claude may work in without extra checks.

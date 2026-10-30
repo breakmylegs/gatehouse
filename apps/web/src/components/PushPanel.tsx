@@ -51,12 +51,15 @@ export function PushPanel() {
     setBusy(false)
     if (!r.ok) setError(r.error ?? "ntfy could not be switched on")
     else if (newTopics) toast("New topics made. Subscribe to the new one on your phone.")
+    else toast(st?.enabled ? "ntfy settings saved" : "ntfy is on", { id: "settings" })
     await load()
   }
   async function disable() {
     setBusy(true)
-    await api("POST", "/api/push/ntfy/disable")
+    const r = await api("POST", "/api/push/ntfy/disable")
     setBusy(false)
+    if (r.ok) toast("ntfy is off", { id: "settings" })
+    else setError(r.error ?? "ntfy could not be switched off")
     await load()
   }
   async function test() {

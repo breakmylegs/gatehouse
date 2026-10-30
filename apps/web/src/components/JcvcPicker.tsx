@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { toast } from "sonner"
 import { api } from "../lib/api"
 import { BUILTIN_PICTURES, loadUserPicture, USER_PREFIX } from "../lib/jcvc"
 import { useStore } from "../store"
@@ -34,7 +35,11 @@ function Thumb({ choice, label }: { choice: string; label: string }) {
 /** Choose which picture sits behind the screens: automatic (it changes by screen), one of ours, or one of yours. */
 export function JcvcPicker() {
   const choice = useStore((s) => s.jcPic)
-  const setChoice = useStore((s) => s.setJcPic)
+  const setPic = useStore((s) => s.setJcPic)
+  const setChoice = (pic: string) => {
+    setPic(pic)
+    toast("Background picture saved", { id: "settings" })
+  }
   const [mine, setMine] = useState<string[]>([])
   const [folder, setFolder] = useState<string>()
 
