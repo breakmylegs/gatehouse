@@ -25,6 +25,7 @@ import { TerminalPane } from "../components/TerminalPane"
 import { FilesPanel, Viewer, type Opened } from "../components/FilesPanel"
 import { PlusMenu } from "../components/PlusMenu"
 import { api } from "../lib/api"
+import { describeDecision, fromRecord } from "../lib/decision"
 import { sessionCode } from "../lib/codes"
 import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
 
@@ -181,6 +182,23 @@ function SessionPane({
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
+  // How this session's tool calls were decided, read back from the audit log, so the lines show after a reload.
+  const addDecisions = useStore((s) => s.addDecisions)
+  useEffect(() => {
+    let gone = false
+    void api<{ records: unknown[] }>(
+      "GET",
+      `/api/audit?session=${encodeURIComponent(sessionId)}&limit=500`,
+    ).then((r) => {
+      if (gone || !r.ok || !Array.isArray(r.data?.records)) return
+      addDecisions(
+        r.data.records.map(fromRecord).filter((x): x is NonNullable<typeof x> => x !== undefined),
+      )
+    })
+    return () => {
+      gone = true
+    }
+  }, [sessionId, addDecisions])
   useEffect(() => {
     if (opened?.kind === "browser") setLastUrl(opened.url)
   }, [opened])
@@ -1103,6 +1121,9 @@ const ToolGroup = memo(function ToolGroup({
         !t.result && Object.values(st.pending).some((p) => p.request.toolUseId === t.toolUseId),
     ),
   )
+  const blocked = useStore(
+    (st) => tools.filter((t) => st.decisions[t.toolUseId]?.outcome === "deny").length,
+  )
   return (
     <div className={clsx(tools[0]?.subagent && "ml-5")}>
       <button
@@ -1113,6 +1134,7 @@ const ToolGroup = memo(function ToolGroup({
       >
         <span>{summarise(tools)}</span>
         {waiting ? <span className="font-semibold text-tx">Waiting for you</span> : null}
+        {blocked ? <span className="font-semibold text-sev">{blocked} blocked</span> : null}
         <span aria-hidden="true">{open ? "▾" : "▸"}</span>
       </button>
       {open ? (
@@ -1261,6 +1283,16 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
     (st) =>
       !item.result && Object.values(st.pending).some((p) => p.request.toolUseId === item.toolUseId),
   )
+  // Why it was allowed, asked or stopped (F2). Your rules' allows stay quiet: most calls are those.
+  const decision = useStore((st) => st.decisions[item.toolUseId])
+  const said = decision ? describeDecision(decision) : undefined
+  const setRoute = useStore((st) => st.setRoute)
+  const changeable =
+    decision !== undefined &&
+    (decision.decidedBy === "rules" || decision.decidedBy === "judge") &&
+    decision.ruleId !== "claude-code-auto" &&
+    decision.ruleId !== "ask-user-question" &&
+    decision.ruleId !== "exit-plan-mode"
   return (
     <details className={clsx("panel", item.subagent && "ml-5")} open={edit || undefined}>
       <summary className="flex cursor-pointer flex-wrap items-baseline gap-2 px-3 py-1.5">
@@ -1270,6 +1302,11 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
             ? s("command")?.split("\n")[0]
             : (path ?? s("pattern") ?? s("description") ?? "")}
         </span>
+        {said?.mark ? (
+          <span className={clsx("text-xs font-semibold", said.stopped ? "text-sev" : "text-tx")}>
+            {said.mark}
+          </span>
+        ) : null}
         {item.result ? (
           <span
             className={clsx("text-xs", item.result.isError ? "font-semibold text-sev" : "text-mut")}
@@ -1283,6 +1320,20 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
         )}
       </summary>
       <div className="grid gap-2 border-t border-line p-3">
+        {said ? (
+          <p className="m-0 flex flex-wrap items-center gap-2 text-xs text-mut">
+            <span className="[overflow-wrap:anywhere]">{said.line}</span>
+            {changeable ? (
+              <button
+                type="button"
+                className="btn !min-h-6 !text-[12px]"
+                onClick={() => setRoute("policy")}
+              >
+                Change what Claude may do
+              </button>
+            ) : null}
+          </p>
+        ) : null}
         {isShell ? (
           <pre className="cmd">{s("command")}</pre>
         ) : edit ? (

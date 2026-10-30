@@ -112,6 +112,8 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 
 Claude's replies appear in order. A run of tool calls folds into one line, such as "Ran 2 commands, read schema.ts"; choose it to see each call, what ran and its output.
 
+Each call says why it ran or did not, for example "Allowed by your rules: Reading files inside this project." A call that asked you or was stopped also says so on its top line (You allowed, Blocked, Not answered), and a folded run says how many were blocked. Change what Claude may do, under a call your rules or the judge decided, opens the rules.
+
 While a turn runs, a line above the composer says what Claude is doing and for how long: thinking, writing a reply, writing a file (with the characters so far) or running a command, with the tokens written and how long since anything last arrived. A large file takes a while, because Claude writes all of it before JCVC can check it. After two minutes with nothing arriving and nothing waiting for you, it says the turn is possibly stuck; Interrupt stops it and keeps what was done.
 
 **Side by side**

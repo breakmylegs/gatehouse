@@ -592,3 +592,10 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - A live probe (`docs/sdk-notes.md`) showed Claude takes such a message between tool calls and says nothing when it does. The transcript marks it **Queued: Claude reads it at its next step** until a tool result has come back after it and Claude has answered again (a subagent's steps do not count), or the turn ends.
 - **Interrupt now** beside it is Stop: the turn and its background tasks end, and Claude Code then runs the queued message, which the interrupt receipt confirms it keeps.
 - Tests: `apps/web/test/queue.test.tsx`. 7 breaks, 7 caught; one survived the first run and the test was tightened.
+
+## Phase 38: why each tool call ran (F2, 30 Oct)
+
+- Research item F2. Each tool call in the transcript now says why it was allowed, asked or stopped, in words chosen by who decided: your rules, the judge, the floor (Always blocked), you on this computer, your phone or a notification, a time-out (Not answered), Extreme approval, the kill switch, or Claude Code itself after the floor. Your rules' allows stay quiet, as most calls are those; anything that asked you or was stopped also has a mark on the card's top line, and a folded run says how many were blocked. Change what Claude may do opens the rules for a decision your rules or the judge made.
+- The Host sends each verdict as a `decision` session event (never the input; Phase 34); a person's answer, a floor block and Extreme approval arrive as their audit records. When a pane opens it reads its session's decisions back from the audit log, so the lines are there after a reload or a restart. An answer beats the question that led to it, then the later one wins.
+- Not built: the safer alternative the research suggested.
+- Tests: `apps/web/test/decision-line.test.tsx` (and `apps/host/test/decision-events.test.ts` from Phase 34). 10 breaks, 10 caught.

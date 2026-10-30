@@ -23,6 +23,7 @@ import {
   type Transcript,
 } from "./lib/transcript"
 import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
+import { fromRecord, laterDecision, type Decision } from "./lib/decision"
 
 export type Route =
   | "approvals"
@@ -83,6 +84,9 @@ export interface State {
   /** Each session's terminal pane: what it printed, and whether a command is running. */
   term: Record<string, TermState>
   audit: unknown[]
+  /** How each tool call was decided, by its id (unique across sessions), for the line on its card. */
+  decisions: Record<string, Decision>
+  addDecisions: (items: Array<{ toolUseId: string; d: Decision }>) => void
   route: Route
   selectedSession?: string
   selectedRequest?: string
@@ -215,6 +219,15 @@ export const useStore = create<State>((set, get) => ({
   pulse: {},
   term: {},
   audit: [],
+  decisions: {},
+  addDecisions: (items) =>
+    set((s) => {
+      if (items.length === 0) return s
+      const decisions = { ...s.decisions }
+      for (const { toolUseId, d } of items)
+        decisions[toolUseId] = laterDecision(decisions[toolUseId], d)
+      return { decisions }
+    }),
   route: startView.route,
   ...(startView.selectedSession ? { selectedSession: startView.selectedSession } : {}),
   theme: storedTheme(),
@@ -366,6 +379,11 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       case "session_event": {
+        if (e.event === "decision") {
+          const d = decisionOf(e.data)
+          if (d) get().addDecisions([d])
+          return
+        }
         if (e.event === "interrupted") {
           const by = e.data.by === "kill-switch" ? "kill-switch" : "you"
           set((s) => ({
@@ -455,9 +473,12 @@ export const useStore = create<State>((set, get) => ({
           return { term: { ...s.term, [e.sessionId]: { chunks: next.chunks } } }
         })
         return
-      case "audit":
+      case "audit": {
         set((s) => ({ audit: [e.record, ...s.audit].slice(0, MAX_AUDIT) }))
+        const d = fromRecord(e.record)
+        if (d) get().addDecisions([d])
         return
+      }
       case "usage":
         set({ usage: e.usage as Usage })
         return
@@ -535,6 +556,24 @@ function restartLine(info: SessionInfo): string {
   return info.restarted?.wasRunning
     ? "JCVC restarted while Claude was working, so that turn stopped. Send a message to carry on."
     : "JCVC restarted. This session carries on from here."
+}
+
+/** A decision event from the Host: the verdict, never the input. */
+function decisionOf(data: Record<string, unknown>): { toolUseId: string; d: Decision } | undefined {
+  if (typeof data.toolUseId !== "string" || typeof data.outcome !== "string") return undefined
+  return {
+    toolUseId: data.toolUseId,
+    d: {
+      outcome: data.outcome as Decision["outcome"],
+      decidedBy: (typeof data.decidedBy === "string"
+        ? data.decidedBy
+        : "rules") as Decision["decidedBy"],
+      ruleId: typeof data.ruleId === "string" ? data.ruleId : "",
+      reason: typeof data.reason === "string" ? data.reason : "",
+      risk: typeof data.risk === "number" ? data.risk : 0,
+      at: Date.now(),
+    },
+  }
 }
 
 /** A plain line for the transcript, or nothing for events that are only noise. */
