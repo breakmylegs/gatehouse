@@ -37,6 +37,8 @@ export interface CanUseDeps {
   extreme?: () => boolean
   /** Tells the phone that a request was approved by Extreme approval mode. Never given the input. */
   notifyAutoApproved?: (toolName: string, project: string) => void
+  /** Each tool call's verdict, for the line under it in the transcript. A person's answer comes as its audit record. */
+  onDecision?: (toolUseId: string, verdict: Verdict) => void
   log: (line: string) => void
 }
 
@@ -142,6 +144,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
               : {}),
           },
         ))
+      if (!early) deps.onDecision?.(toolUseID, verdict)
       if (verdict.outcome === "allow") return allow(input, toolUseID)
       if (verdict.outcome === "deny") {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)

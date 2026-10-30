@@ -80,6 +80,8 @@ export interface SessionHookDeps {
     type: "notification" | "stop" | "subagent_start" | "subagent_stop",
     data: Record<string, unknown>,
   ) => void
+  /** Each tool call's verdict, for the line under it in the transcript. */
+  onDecision?: (toolUseId: string, verdict: Verdict) => void
   log: (line: string) => void
 }
 
@@ -147,6 +149,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           },
         )
         deps.verdicts?.set(input.tool_use_id, verdict)
+        deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
         if (

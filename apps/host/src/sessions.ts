@@ -157,7 +157,7 @@ export interface SessionEvents {
   state: [SessionInfo]
   event: [
     {
-      type: "notification" | "stop" | "subagent_start" | "subagent_stop"
+      type: "notification" | "stop" | "subagent_start" | "subagent_stop" | "decision"
       data: Record<string, unknown>
     },
   ]
@@ -263,6 +263,24 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #decided = new Set<string>()
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
+  /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
+  readonly #tellDecision = (toolUseId: string, v: Verdict) => {
+    try {
+      this.emit("event", {
+        type: "decision",
+        data: {
+          toolUseId,
+          outcome: v.outcome,
+          decidedBy: v.decidedBy,
+          ruleId: v.ruleId,
+          reason: v.reason,
+          risk: v.risk,
+        },
+      })
+    } catch {
+      // A problem showing the decision never changes it.
+    }
+  }
   #q: Query | undefined
   #state: SessionState = "starting"
   #mode: SessionMode
@@ -338,6 +356,7 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
+      onDecision: this.#tellDecision,
       log: d.log,
       mode: () => this.#mode,
       approver: d.approver,
@@ -376,6 +395,7 @@ export class Session extends EventEmitter<SessionEvents> {
         verdicts: this.#verdicts,
         extreme: () => this.#extreme,
         ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
+        onDecision: this.#tellDecision,
         log: d.log,
       }),
       hooks: {
