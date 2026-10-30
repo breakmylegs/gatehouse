@@ -205,7 +205,7 @@ The log lives in your JCVC data folder and never leaves this computer.`,
     title: "Devices",
     body: `Get requests on your phone away from your desk, in one of two ways.
 
-**Push notifications with ntfy** (works behind firewalls): switch it on, install the free ntfy app, and subscribe to the topic JCVC shows. Each request arrives with Approve and Deny buttons. Everything goes out from this computer and your answer comes back over a connection JCVC opens, so nothing has to reach in. A notification shows only the project, tool, risk and a short redacted summary. Each button works once, for that request, and Severe requests always need you at the desk.
+**Push notifications with ntfy** (works behind firewalls): switch it on, install the free ntfy app, and subscribe to the topic JCVC shows. Each request arrives with Approve and Deny buttons. Everything goes out from this computer and your answer comes back over a connection JCVC opens, so nothing has to reach in. A notification shows only the project, tool, risk and a short redacted summary. Each button works once, for that request, and Severe requests always need you at the desk. If your phone is subscribed to a different topic, choose **My phone has a different topic** and paste the one it has: JCVC takes only a topic it made. **Make new topics** asks first, because your phone stops getting requests until you subscribe to the new one.
 
 **Push notifications with Slack** (also works behind firewalls): create a small Slack app from the manifest JCVC shows, give its two tokens and your member id, and requests arrive as messages with Approve and Deny buttons. Only your own taps count, and the tokens are kept encrypted on this computer.
 

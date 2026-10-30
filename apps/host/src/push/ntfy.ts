@@ -62,6 +62,18 @@ export function randomTopic(): string {
   return `jcvc-${Array.from({ length: 5 }, group).join("-")}`
 }
 
+/** Topics JCVC made: five groups of four now, 20 to 24 letters and digits before 29 Oct. */
+const OWN_TOPIC = /^jcvc-(?:[A-Za-z0-9]{20,24}|[a-z2-9]{4}(?:-[a-z2-9]{4}){4})$/
+
+/**
+ * A topic typed back in, so a phone already subscribed keeps working: the name, or its address. Only a topic JCVC
+ * made is taken, because whoever reads the topic sees the Approve buttons; anything else gives undefined.
+ */
+export function ownTopic(typed: string): string | undefined {
+  const name = typed.trim().split("/").filter(Boolean).at(-1) ?? ""
+  return OWN_TOPIC.test(name) ? name : undefined
+}
+
 export class NtfyChannel {
   readonly #d: NtfyDeps
   readonly #codes: PushCodes

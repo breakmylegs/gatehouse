@@ -502,3 +502,18 @@ The owner chose stage 3 of the new shell (terminal and chat), and queued a resta
 - **Checking, not failing**: after a start or an update the first sign-in check takes about 20 seconds, and Before you start showed red failures until it answered. Health now says whether that check has finished (`signin.checked`); until it has, nothing sends you to Before you start, the page says Checking with the seconds, and the sidebar says Checking sign-in.
 - **Session management**: titles, pins and archives, kept by Claude Code session id in `%LOCALAPPDATA%\Gatehouse\sessions.json` (read tolerantly, unknown keys kept, a broken file starts empty) so they hold across restarts and resumes; a title is also written into the session's own transcript through the SDK. The sidebar shows Pinned first and leaves archived sessions out; Archive stops a session first. **Earlier sessions** on Sessions lists past sessions (Claude Code's own from elsewhere on this computer too) with Resume and Fork, which were missing: three places told you to resume from Sessions and there was no way to. **Search what was said** reads up to 100 past sessions within 20 seconds, your words and Claude's but not tool output or subagents, and says when it stopped early. **Export as Markdown** saves what was said and the commands that ran, never tool output, to Downloads. A **context meter** under the prompt box shows how full the conversation is after each turn, and what fills it.
 - Tests: `apps/web/test/pictures.test.tsx`, `apps/web/test/sessions-manage.test.tsx`, `apps/host/test/history.test.ts`, the time in `apps/web/test/format.test.ts`, the checking state in `apps/web/test/app.test.tsx`. 11 breaks, 11 caught (one more was equivalent to the code and proved nothing, so a stronger one replaced it).
+
+## Phase 33: keep the ntfy topic your phone has (30 Oct)
+
+- **Owner report:** the topic in Settings was not the one the phone was subscribed to.
+
+  The audit log shows what happened. Topics were made at 15:41 on 29 Oct, and again by **Make new topics** at 15:44. The 15:44 topic is the one still saved, and no update since has changed it. Only that button asks for new topics, and it sat next to Save changes and acted at once.
+- **Your phone's topic, typed back in.** Choose **My phone has a different topic** and paste what the ntfy app shows (the name or its address). The phone needs no new subscription.
+
+  Only a topic JCVC made is taken: five groups of four, or the 20 to 24 letters and digits of before 29 Oct. Whoever reads the topic sees the Approve buttons, so a name someone could guess is refused.
+
+  The reply topic is kept. The audit records that a topic was typed, never the topic itself.
+- **Make new topics asks first.** It says your phone stops getting requests until you subscribe again. Keep this topic is the default.
+- A refused topic says why under its box, and Cancel clears it.
+- The panel's five-second status check no longer puts the server and risk boxes back while you edit them.
+- Tests: `apps/web/test/push-panel.test.tsx`, and the typed-topic case in `apps/host/test/api.test.ts`. 9 breaks, 9 caught.

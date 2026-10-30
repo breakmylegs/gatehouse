@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
 import { registerFilesRoutes } from "./files-api.js"
 import type { SlackSecrets, SlackStatus } from "./push/slack.js"
-import { randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
+import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
@@ -626,7 +626,20 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   })
   app.post("/api/push/ntfy/enable", async (req, reply) => {
     if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")
-    const b = (req.body ?? {}) as { server?: unknown; maxRisk?: unknown; newTopics?: unknown }
+    const b = (req.body ?? {}) as {
+      server?: unknown
+      maxRisk?: unknown
+      newTopics?: unknown
+      topic?: unknown
+    }
+    // The topic the phone already has, typed back in. Only one JCVC made, so it cannot be guessed.
+    const typed = typeof b.topic === "string" ? ownTopic(b.topic) : undefined
+    if (b.topic !== undefined && !typed)
+      return bad(
+        reply,
+        400,
+        "That is not a topic JCVC made. Copy the topic name from the ntfy app on your phone: it starts with jcvc-.",
+      )
     const server =
       typeof b.server === "string" && b.server.trim()
         ? b.server.trim().replace(/\/$/, "")
@@ -641,18 +654,23 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const maxRisk =
       typeof b.maxRisk === "number" ? Math.max(0, Math.min(84, Math.round(b.maxRisk))) : 69
     const old = ctx.config().push?.ntfy
-    const fresh = b.newTopics === true || !old
+    const fresh = !old || (b.newTopics === true && !typed)
     const ntfy: NtfySettings = {
       enabled: true,
       server: u.origin,
-      topic: fresh ? randomTopic() : old.topic,
+      topic: typed ?? (fresh ? randomTopic() : old.topic),
       replyTopic: fresh ? randomTopic() : old.replyTopic,
       maxRisk,
     }
     await savePush(ntfy)
     ctx.ntfy.stop()
     ctx.ntfy.start()
-    await auditPush("push_ntfy_enabled", { server: ntfy.server, maxRisk, newTopics: fresh })
+    await auditPush("push_ntfy_enabled", {
+      server: ntfy.server,
+      maxRisk,
+      newTopics: fresh,
+      ...(typed ? { typedTopic: true } : {}),
+    })
     return ctx.ntfy.status()
   })
   app.post("/api/push/ntfy/disable", async (_req, reply) => {

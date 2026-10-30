@@ -710,6 +710,62 @@ describe("insights endpoints", () => {
     }
   })
 
+  it("takes back a topic JCVC made, even pasted as an address, and refuses one that could be guessed", async () => {
+    ctx.ntfy = {
+      status: () => ({ enabled: true, listening: true, sent: 0 }),
+      start: () => undefined,
+      stop: () => undefined,
+      test: async () => ({ ok: true }),
+    }
+    try {
+      await app.inject({ method: "POST", url: "/api/push/ntfy/enable", payload: {} })
+      const before = runningConfig.push?.ntfy
+      // The older kind (22 letters and digits) and the newer (five groups of four), as the phone shows them.
+      const typed = await app.inject({
+        method: "POST",
+        url: "/api/push/ntfy/enable",
+        payload: { topic: " https://ntfy.sh/jcvc-t6YdOCy5dH5TBqoPnEXrLC ", maxRisk: 39 },
+      })
+      expect(typed.statusCode).toBe(200)
+      expect(runningConfig.push?.ntfy).toMatchObject({
+        topic: "jcvc-t6YdOCy5dH5TBqoPnEXrLC",
+        replyTopic: before?.replyTopic,
+        maxRisk: 39,
+      })
+      await app.inject({
+        method: "POST",
+        url: "/api/push/ntfy/enable",
+        payload: { topic: "jcvc-abcd-efgh-jkmn-pqrs-tuvw", newTopics: true },
+      })
+      expect(runningConfig.push?.ntfy).toMatchObject({
+        topic: "jcvc-abcd-efgh-jkmn-pqrs-tuvw",
+        replyTopic: before?.replyTopic,
+      })
+      // Whoever reads the topic can tap Approve, so a name someone could guess is refused and nothing changes.
+      for (const topic of [
+        "alerts",
+        "jcvc-abc",
+        "jcvc-abcd-efgh",
+        "my-phone-topic-2026-abcdef",
+        42,
+      ]) {
+        const r = await app.inject({
+          method: "POST",
+          url: "/api/push/ntfy/enable",
+          payload: { topic },
+        })
+        expect(r.statusCode).toBe(400)
+        expect(r.json().error).toMatch(/JCVC made/)
+      }
+      expect(runningConfig.push?.ntfy?.topic).toBe("jcvc-abcd-efgh-jkmn-pqrs-tuvw")
+      const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+      expect(log.body).toContain("typedTopic")
+      expect(log.body).not.toContain("t6YdOCy5dH5TBqoPnEXrLC")
+    } finally {
+      delete ctx.ntfy
+    }
+  })
+
   it("switches Slack on with both tokens sealed away, never in the settings file, and audits it", async () => {
     let sealed: unknown
     let hasTokens = false
