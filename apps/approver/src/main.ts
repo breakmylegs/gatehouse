@@ -33,6 +33,7 @@ try {
       libraryDir: env.GATEHOUSE_LIBRARY_DIR ?? path.join(rulesDir, "library"),
       userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
       ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
+      ...(config.projectsFolder ? { extraWorkspaceRoots: [config.projectsFolder] } : {}),
     },
     auditDir: auditDir(env),
     redactTerms: config.redactTerms,

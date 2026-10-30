@@ -27,6 +27,8 @@ export interface LoadOptions {
   userRulesPath?: string
   /** Replaces workspaceRoots (tests and settings). */
   workspaceRootsOverride?: string[]
+  /** Added to the workspace roots: the projects folder from the settings. */
+  extraWorkspaceRoots?: string[]
   /** Replaces `<you>` in workspace roots. Defaults to the current user name. */
   user?: string
 }
@@ -112,7 +114,12 @@ export function loadPolicy(opts: LoadOptions): Policy {
   if (!base) throw new PolicyLoadError(errors)
 
   const user = opts.user ?? os.userInfo().username
-  const roots = (opts.workspaceRootsOverride ?? base.workspaceRoots).map((r) => r.replace(/<you>/g, user))
+  const roots = [
+    ...(opts.workspaceRootsOverride ?? base.workspaceRoots),
+    ...(opts.extraWorkspaceRoots ?? []).map((r) => r.replace(/\\/g, "/")),
+  ]
+    .map((r) => r.replace(/<you>/g, user))
+    .filter((r, i, all) => all.findIndex((x) => x.toLowerCase() === r.toLowerCase()) === i)
   const packs = loadLibrary(opts.libraryDir, errors)
   const userRules = readUserRules(opts.userRulesPath, errors)
   const merged = mergeRules({ ...base, workspaceRoots: roots }, packs, userRules, errors)

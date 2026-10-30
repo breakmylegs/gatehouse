@@ -1,6 +1,6 @@
 // The pictures in the README: the real interface with realistic sample data and a stand-in for the Host, so nothing
 // personal or from a real project appears. Served by the dev server only (screens.html), never packaged.
-//   screens.html?view=approvals|workspace|update|settings&theme=light|dark
+//   screens.html?view=approvals|workspace|update|settings|policy|sessions&theme=light|dark
 // scripts/screenshots.ts opens each view in Edge and saves the picture into docs/images.
 import type { PendingView, SessionInfo } from "@gatehouse/shared"
 import { StrictMode } from "react"
@@ -42,7 +42,12 @@ const UPDATE: UpdateStatus = {
 
 const SETTINGS = {
   path: "%LOCALAPPDATA%\\Gatehouse\\config.json",
-  saved: { expectedOrg: "Example Ltd", redactTerms: ["Northwind"], workspaceRoots: ["C:/dev"] },
+  saved: {
+    expectedOrg: "Example Ltd",
+    redactTerms: ["Northwind"],
+    workspaceRoots: ["C:/dev"],
+    projectsFolder: "C:\\dev",
+  },
   running: {
     expectedOrg: "Example Ltd",
     redactTerms: ["Northwind"],
@@ -63,6 +68,62 @@ const FILES = [
   { name: "README.md", rel: "README.md", kind: "file", size: 3100, mtime: iso(-86_400_000) },
 ]
 
+// The Policy page: the packs behind its choices, your rules (kept as you change them), suggestions and Try it.
+const PACKS = [
+  "build-tools",
+  "cloud-read",
+  "containers",
+  "dotnet-dev",
+  "edit-workspace",
+  "git-local",
+  "git-read",
+  "node-dev",
+  "packages",
+  "python-dev",
+  "run-app",
+  "web-read",
+  "windows-safety",
+].map((id) => ({
+  id,
+  title: id,
+  description: "",
+  on: false,
+  rules: [{ id: `${id}-rule` }],
+  cases: [],
+}))
+let userRules: Record<string, unknown> = {
+  version: 1,
+  packs: [
+    "build-tools",
+    "dotnet-dev",
+    "edit-workspace",
+    "git-local",
+    "git-read",
+    "node-dev",
+    "python-dev",
+    "run-app",
+    "web-read",
+  ],
+}
+const POLICY = {
+  status: { hash: "6a0baa0aea40", errors: [], overlays: [] },
+  rulesPath: "C:\\Users\\you\\AppData\\Local\\Programs\\JCVC\\app\\policy\\rules.yaml",
+  rulesYaml: "version: 1\n",
+  rulesYamlHash: "x",
+  rules: { floor: [], deny: [], escalate: [], allow: [], workspaceRoots: ["C:/dev"] },
+  remember: [{ id: "remember-1", tools: ["Bash"], commands: ["npm run storybook"] }],
+  localYaml: "",
+}
+const SUGGESTIONS = [
+  {
+    candidate: { tool: "Bash", command: "npx playwright test" },
+    preview: "",
+    approvals: 7,
+    lastSeen: iso(-3_600_000),
+    ruleIds: ["no-rule"],
+  },
+]
+
 // The stand-in for the Host's admin API.
 const realFetch = window.fetch.bind(window)
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -79,6 +140,21 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (p === "/api/jcvc/pictures")
     return json({ names: [], folder: "%LOCALAPPDATA%\\Gatehouse\\jcvc" })
   if (p === "/api/push") return json({ ntfy: { enabled: false, listening: false, sent: 0 } })
+  if (p === "/api/library" && init?.method === "PUT") {
+    userRules = JSON.parse(String(init.body)) as Record<string, unknown>
+    return json({ changed: [] })
+  }
+  if (p === "/api/library")
+    return json({ path: "rules.user.yaml", errors: [], packs: PACKS, base: [], user: userRules })
+  if (p === "/api/policy") return json(POLICY)
+  if (p === "/api/suggestions") return json(SUGGESTIONS)
+  if (p === "/api/policy/test")
+    return json({
+      outcome: "escalate",
+      ruleId: "package-install",
+      reason: "Installs packages from the network.",
+      risk: 70,
+    })
   if (p.startsWith("/api/")) return json({})
   return realFetch(input, init)
 }
@@ -370,6 +446,8 @@ useStore.getState().setUpdate(UPDATE)
 if (view === "workspace")
   useStore.setState({ route: "workspace", selectedSession: "s1", panes: ["s1", "s2"] })
 else if (view === "settings") useStore.setState({ route: "settings" })
+else if (view === "policy") useStore.setState({ route: "policy" })
+else if (view === "sessions") useStore.setState({ route: "sessions" })
 else useStore.setState({ route: "approvals", selectedRequest: "r1" })
 for (const r of ["r1", "r2", "r3"]) useStore.getState().markSeen?.(r)
 

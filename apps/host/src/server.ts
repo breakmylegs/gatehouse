@@ -347,6 +347,7 @@ export class HostServer {
           ...(cmd.extreme !== undefined ? { extreme: cmd.extreme } : {}),
           ...(cmd.resume ? { resume: cmd.resume } : {}),
           ...(cmd.fork !== undefined ? { fork: cmd.fork } : {}),
+          ...(cmd.freshFolder ? { freshFolder: true } : {}),
         })
         return { sessionId: s.id, info: s.info() }
       }

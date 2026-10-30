@@ -459,3 +459,15 @@ The owner found the Policy studio "very techy and not something the average user
 - **Always blocked** lists the floor and deny rules in words. **Learned from you** reuses `/api/suggestions` and the remembered rules. **Try it** runs `/api/policy/test` from the project folder of a file, so the code, tests and docs rule applies as it would in a session.
 - Research items not built yet: grant lifetimes, watch mode, a decision line in the transcript, snapshots before risky commands (F2 to F5).
 - Tests: `packages/policy/test/library.test.ts` (turnsOff, and the new packs' cases), `apps/web/test/choices.test.ts`, `apps/web/test/policy-choices.test.tsx`. 6 breaks, 6 caught.
+
+## Phase 29: a new project from what you want to build (30 Oct)
+
+The owner asked for a default root folder, and for a session started without a folder to take its folder name from the prompt. Research item F7 (`docs/research/features-2026-10-30.md`, section C1 and C2): no folder picker for a beginner, a short slug, a number on collision, git initialised so autonomy and checkpoints are safe.
+
+- **Settings, Where new projects go** (`projectsFolder`): a folder on a drive, below its root, outside Windows and Program Files (`PROJECTS_FOLDER`). It is added to the workspace roots in the Host and the Approver alike (`extraWorkspaceRoots`), or the deny rule `outside-workspace-write` would block every edit in a new project. A restart applies it, like the other roots.
+- **Sessions**: with it set, an empty Folder asks "What do you want to build?". The folder name comes from the words that are left once how you asked is dropped ("Build me an HTML page that acts like a simple version of excel" becomes `html-excel`), shown while you type, with Change the name. Start creates the session and sends what you typed as the first prompt.
+- **The Host** accepts `freshFolder` only for a folder straight inside the projects folder, adds -2, -3 when the name is taken by a folder with anything in it, and runs `git init` so checkpoints work from the first edit. A git failure is logged and the project still starts.
+- **Found while checking it on screen**: the form imported the name helper from the shared package's main entry, which loads Node's crypto and left a blank window; the tests run under Node and passed. It now has its own entry (`@gatehouse/shared/project-name`), and `apps/web/test/browser-imports.test.ts` refuses any value import of Node-only code in the screen. Also fixed: the start form overflowed at common widths, and the Folder box showed an example path that read as a value.
+- The demo page (`screens.html`) now stands in for the policy routes and has policy and sessions views, so the README pictures can show both.
+- Not built: the blueprint card (name, purpose, features) and opening in Plan mode (C1 steps 2 and 3).
+- Tests: `packages/shared/test/project-name.test.ts`, `packages/policy/test/projects-root.test.ts`, `apps/host/test/new-project.test.ts`, `apps/web/test/new-project.test.tsx`, `apps/web/test/browser-imports.test.ts`. 6 breaks, 6 caught; the import guard was proved by putting the bad import back.

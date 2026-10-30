@@ -24,6 +24,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     extreme: z.boolean().optional(),
     resume: Id.optional(),
     fork: z.boolean().optional(),
+    /** A new project: cwd is a folder in the projects folder that must be new, so a number is added if it is taken. */
+    freshFolder: z.boolean().optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),

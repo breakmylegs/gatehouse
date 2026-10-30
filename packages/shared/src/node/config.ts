@@ -4,6 +4,10 @@ import { z } from "zod"
 import { gatehouseDataDir } from "./paths.js"
 
 /** How often JCVC looks for a new version, in minutes. 0 means never. */
+/** A folder on a drive, below its root, outside Windows and Program Files. */
+export const PROJECTS_FOLDER =
+  /^[A-Za-z]:[\\/](?!(windows|program files)([\\/]|\s|\(|$))[^<>:"|?*\u0000-\u001f]+$/i
+
 export const UPDATE_INTERVALS = [0, 15, 30, 60, 240, 1440] as const
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 
@@ -29,6 +33,18 @@ function build(loose: boolean) {
     expectedOrg: z.string().optional(),
     /** Replaces the workspace roots in the rules file. Absent means use the rules file. */
     workspaceRoots: z.array(z.string().min(1)).optional(),
+    /**
+     * Where a new project goes when you start a session without choosing a folder (owner, 30 Oct). Its folder is
+     * named from your first prompt. It counts as a workspace root, or the rules would block every edit in it.
+     */
+    projectsFolder: z
+      .string()
+      .max(240)
+      .regex(
+        PROJECTS_FOLDER,
+        "must be a full folder path, not a drive, a network path or a Windows folder",
+      )
+      .optional(),
     /** Replaces the quiet hours in the rules file. Absent means use the rules file. */
     quietHours: obj({
       start: z.string().regex(TIME),

@@ -14,7 +14,8 @@
     "./canonical-json": "./src/canonical-json.ts",
     "./relay-protocol": "./src/relay-protocol.ts",
     "./phone-protocol": "./src/phone-protocol.ts",
-    "./highlight": "./src/highlight.ts"
+    "./highlight": "./src/highlight.ts",
+    "./project-name": "./src/project-name.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

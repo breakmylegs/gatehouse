@@ -1,7 +1,8 @@
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import NumberFlow from "@number-flow/react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { cleanName, projectName } from "@gatehouse/shared/project-name"
 import { money } from "../lib/format"
 import { useNow } from "../lib/useNow"
 import { api } from "../lib/api"
@@ -59,6 +60,14 @@ function StateMark({ state }: { state: SessionInfo["state"] }) {
   )
 }
 
+function StartButton({ busy, ready, label }: { busy: boolean; ready: boolean; label: string }) {
+  return (
+    <button className="btn btn-primary" disabled={busy || !ready}>
+      {busy ? "Starting…" : label}
+    </button>
+  )
+}
+
 /** How long the screen waits for a session to start. The first start after an install or update is the slow one. */
 const START_WAIT_MS = 180_000
 
@@ -95,6 +104,19 @@ export function Sessions() {
   const [effort, setEffort] = useState<EffortId | "">("")
   const [busy, setBusy] = useState(false)
   const [startedAt, setStartedAt] = useState(0)
+  // A new project: what you want to build names its folder, in the projects folder from Settings.
+  const [projects, setProjects] = useState<string>()
+  const [idea, setIdea] = useState("")
+  const [typedName, setTypedName] = useState<string>()
+  const [naming, setNaming] = useState(false)
+  useEffect(() => {
+    void api<{ saved: { projectsFolder?: string } }>("GET", "/api/settings").then((r) => {
+      if (r.ok) setProjects(r.data?.saved.projectsFolder ?? "")
+    })
+  }, [])
+  const fresh = !cwd.trim() && Boolean(projects)
+  const name = (typedName !== undefined ? cleanName(typedName) : "") || projectName(idea)
+  const freshPath = projects ? `${projects.replace(/[\\/]+$/, "")}\\${name}` : ""
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -119,7 +141,8 @@ export function Sessions() {
     const r = await send(
       {
         type: "create_session",
-        cwd: cwd.trim(),
+        cwd: fresh ? freshPath : cwd.trim(),
+        ...(fresh ? { freshFolder: true } : {}),
         ...(model ? { model } : {}),
         ...(effort ? { effort } : {}),
         ...wireOf(mode),
@@ -136,8 +159,15 @@ export function Sessions() {
       )
       return
     }
-    const id = (r.data as { sessionId: string }).sessionId
-    toast("Session started")
+    const { sessionId: id, info } = r.data as { sessionId: string; info: { cwd: string } }
+    if (fresh) {
+      // The first prompt goes straight to the new session, as if you had typed it there.
+      useStore.getState().addUserText(id, idea.trim())
+      void send({ type: "prompt", sessionId: id, text: idea.trim() })
+      toast(`Your project is in ${info.cwd}`)
+      setIdea("")
+      setTypedName(undefined)
+    } else toast("Session started")
     selectSession(id)
     setRoute("workspace")
   }
@@ -153,17 +183,21 @@ export function Sessions() {
 
       <form onSubmit={create} className="panel grid gap-3 p-4" aria-label="Start a session">
         <h2 className="m-0 text-[17px]">Start a session</h2>
-        <div className="grid grid-cols-[1fr_160px_170px_180px_auto] items-end gap-3 max-[900px]:grid-cols-1">
-          <label className="grid gap-1">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="grid min-w-[240px] flex-[1_1_320px] gap-1">
             <span>Folder</span>
             <input
               className="field mono"
-              required
+              required={!projects}
               value={cwd}
               onChange={(e) => setCwd(e.target.value)}
-              placeholder="C:\dev\my-project"
               spellCheck={false}
             />
+            {projects ? (
+              <span className="text-[12.5px] text-mut">
+                Leave it empty for a new project in {projects}.
+              </span>
+            ) : null}
             <button
               type="button"
               className="w-fit cursor-pointer border-0 bg-transparent p-0 text-left text-[13px] text-acc underline"
@@ -173,7 +207,7 @@ export function Sessions() {
               {picking ? "Waiting for the folder window..." : "Choose a folder..."}
             </button>
           </label>
-          <label className="grid gap-1">
+          <label className="grid w-[170px] grid-cols-[minmax(0,1fr)] gap-1">
             <span>Model</span>
             <select className="field" value={model} onChange={(e) => setModel(e.target.value)}>
               {MODELS.map((m) => (
@@ -183,7 +217,7 @@ export function Sessions() {
               ))}
             </select>
           </label>
-          <label className="grid gap-1">
+          <label className="grid w-[170px] grid-cols-[minmax(0,1fr)] gap-1">
             <span>Effort</span>
             <select
               className="field"
@@ -198,7 +232,7 @@ export function Sessions() {
               ))}
             </select>
           </label>
-          <label className="grid gap-1">
+          <label className="grid w-[170px] grid-cols-[minmax(0,1fr)] gap-1">
             <span>Mode</span>
             <select
               className="field"
@@ -212,10 +246,58 @@ export function Sessions() {
               ))}
             </select>
           </label>
-          <button className="btn btn-primary" disabled={busy || !cwd.trim()}>
-            {busy ? "Starting…" : "Start"}
-          </button>
+          {fresh ? null : <StartButton busy={busy} ready={Boolean(cwd.trim())} label="Start" />}
         </div>
+        {fresh ? (
+          <div className="grid gap-2">
+            <label className="grid gap-1">
+              <span>What do you want to build?</span>
+              <textarea
+                className="field"
+                rows={3}
+                required
+                value={idea}
+                onChange={(e) => setIdea(e.target.value)}
+              />
+            </label>
+            <p className="m-0 flex flex-wrap items-center gap-2 text-[13.5px]">
+              Your project goes in <span className="mono">{freshPath}</span>
+              {naming ? (
+                <input
+                  className="field mono w-56"
+                  aria-label="Folder name"
+                  autoFocus
+                  value={typedName ?? name}
+                  onChange={(e) => setTypedName(e.target.value)}
+                  onBlur={() => setNaming(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      setNaming(false)
+                    }
+                  }}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className="cursor-pointer border-0 bg-transparent p-0 text-acc underline"
+                  onClick={() => setNaming(true)}
+                >
+                  Change the name
+                </button>
+              )}
+            </p>
+            {/* After what you want to build, so the form reads top to bottom. */}
+            <div>
+              <StartButton busy={busy} ready={Boolean(idea.trim())} label="Start the project" />
+            </div>
+          </div>
+        ) : projects === undefined ? null : !projects && !cwd.trim() ? (
+          <p className="m-0 text-[13.5px] text-mut">
+            Tip: choose where new projects go in Settings, and you can start one from what you want
+            to build, without choosing a folder.
+          </p>
+        ) : null}
         <p className="m-0 text-xs text-mut">
           {MODE_OPTIONS.find((m) => m.id === mode)?.help}. The floor and the audit apply in every
           mode. {BYPASS_NOTE} A missing folder is created.

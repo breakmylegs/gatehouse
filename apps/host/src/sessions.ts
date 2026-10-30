@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import type { Effort, Verdict } from "@gatehouse/shared"
+import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
@@ -74,6 +75,43 @@ export function ensureFolder(cwd: string, log: (line: string) => void = () => un
   log(`created the project folder ${cwd}`)
 }
 
+/** cwd, or cwd-2, cwd-3 and so on: the first that does not exist or is an empty folder. */
+export function freeFolder(cwd: string): string {
+  const free = (p: string) => {
+    try {
+      return fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0
+    } catch {
+      return true
+    }
+  }
+  if (free(cwd)) return cwd
+  for (let n = 2; n < 100; n++) if (free(`${cwd}-${n}`)) return `${cwd}-${n}`
+  throw new SessionFolderError(
+    `There are already 99 projects called ${path.basename(cwd)}. Choose another name.`,
+  )
+}
+
+const sameFolder = (a: string, b: string) =>
+  path
+    .resolve(a)
+    .replace(/[\\/]+$/, "")
+    .toLowerCase() ===
+  path
+    .resolve(b)
+    .replace(/[\\/]+$/, "")
+    .toLowerCase()
+
+/** git init, so checkpoints work from the first edit. A failure is logged; the project still starts. */
+function gitInit(cwd: string, log: (line: string) => void): Promise<void> {
+  return new Promise((resolve) =>
+    execFile("git", ["init", "--quiet"], { cwd, windowsHide: true, timeout: 30_000 }, (e) => {
+      if (e)
+        log(`git init failed in ${cwd} (${e.message.split("\n")[0]}); checkpoints are off there`)
+      resolve()
+    }),
+  )
+}
+
 export class KillSwitchEngagedError extends Error {
   constructor() {
     super("The kill switch is engaged. Re-arm it on the desktop before starting a session.")
@@ -138,6 +176,8 @@ export interface StartSessionOptions {
   extreme?: boolean
   resume?: string
   fork?: boolean
+  /** A new project in the projects folder: the folder must be new (a number is added if the name is taken). */
+  freshFolder?: boolean
 }
 
 /** A prompt stream the Host pushes user messages into. It makes interrupt, mode and model changes possible. */
@@ -495,7 +535,16 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     if (!early.ok && early.code === "no-expected-org")
       throw new OrgGuardError(early.code, early.message)
     // After the checks above, so a refused start leaves nothing behind.
+    if (opts.freshFolder) {
+      const root = config.projectsFolder
+      if (!root || !sameFolder(path.dirname(path.resolve(opts.cwd)), root))
+        throw new SessionFolderError(
+          "A new project goes straight into your projects folder. Set it in Settings, then try again.",
+        )
+      opts = { ...opts, cwd: freeFolder(path.resolve(opts.cwd)) }
+    }
     ensureFolder(opts.cwd, this.#deps.log)
+    if (opts.freshFolder) await gitInit(opts.cwd, this.#deps.log)
     const session = new Session(this.#deps, opts)
     session.on("state", (info) => this.emit("session", info))
     session.on("message", (message) => this.emit("message", { sessionId: session.id, message }))

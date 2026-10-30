@@ -62,6 +62,8 @@ Your phone gets the same request at the same time if one is paired. The first va
 - **Auto**: Claude Code's own check decides routine actions, so far fewer wait for you. JCVC still denies what your rules deny, and still asks you about anything your rules rate High or Severe, or that it could not decide. Moderate and Low requests, and commands your rules do not name, are left to Claude Code's check. Turn on the rule library's packs to rate more commands.
 - **Extreme approval**: everything that would wait for you is approved straight away, written to the audit log, and your phone is told. The floor, the rules' denies and the kill switch still block. A request JCVC could not check (the Approver did not answer, or the audit could not be written) still waits for you, and its card says so.
 
+**A new project**: once Settings says where new projects go, leave Folder empty and say what you want to build. JCVC names a new folder from it (Change the name if you like), makes it a git repository so checkpoints work from the first edit, starts the session there and sends what you typed as your first prompt.
+
 Starting a session starts Claude Code itself. The Start button counts the seconds; the first start after JCVC is installed or updated can take a minute or more.
 
 In every mode the floor (secrets, destructive commands) is checked first and every decision is audited. Bypass permissions is never offered.
@@ -199,6 +201,7 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
     body: `Settings are saved on this computer, as you change them: a switch or a choice at once, a typed box when you leave it or press Enter. A short message confirms each save, or says what was wrong.
 
 - **Expected organisation**: sessions only start when your Claude account belongs to it. This stops a personal account being used by mistake.
+- **Where new projects go**: the folder a new project gets its own folder in, for example C:\\dev. It counts as a workspace folder. Restart JCVC after changing it.
 - **Workspace roots**: the folders Claude may work in without extra checks.
 - **Quiet hours**: hold phone notifications at night. Requests still wait on this computer.
 - **Timeouts**: how long the phone can answer, and when an unanswered request is denied.

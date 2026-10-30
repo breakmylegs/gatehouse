@@ -9,6 +9,7 @@ interface Config {
   redactTerms: string[]
   expectedOrg?: string
   workspaceRoots?: string[]
+  projectsFolder?: string
   digestTime?: string | null
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   phoneExpiryMs: number
@@ -34,6 +35,7 @@ const lines = (t: string) =>
 interface Values {
   org: string
   roots: string
+  projects: string
   quiet: boolean
   qStart: string
   qEnd: string
@@ -54,6 +56,7 @@ function valuesOf(d: SettingsData): Values {
   return {
     org: c.expectedOrg ?? "",
     roots: (d.saved.workspaceRoots ?? []).join("\n"),
+    projects: d.saved.projectsFolder ?? "",
     quiet: Boolean(q),
     qStart: q?.start ?? "22:00",
     qEnd: q?.end ?? "07:00",
@@ -83,6 +86,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   const rl = lines(v.roots)
   if (rl.length) body.workspaceRoots = rl
   else delete body.workspaceRoots
+  if (v.projects.trim()) body.projectsFolder = v.projects.trim().replace(/[\\/]+$/, "")
+  else delete body.projectsFolder
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -219,6 +224,39 @@ export function Settings() {
             onChange={(e) => edit({ org: e.target.value })}
             {...typed("Expected organisation")}
           />
+        </Field>
+        <Field
+          label="Where new projects go"
+          help="Start a session without choosing a folder and the project gets a new folder in here, named from your first prompt. It counts as one of your workspace folders. For example C:\dev. Restart JCVC after changing it."
+        >
+          <span className="flex flex-wrap gap-2">
+            <input
+              className="field mono min-w-[260px] flex-1"
+              value={v.projects}
+              onChange={(e) => edit({ projects: e.target.value })}
+              spellCheck={false}
+              {...typed("Projects folder")}
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={async () => {
+                const r = await api<{ path: string | null }>("POST", "/api/pick-folder", {
+                  start: v.projects.trim(),
+                })
+                if (r.ok && r.data?.path) change({ projects: r.data.path }, "Projects folder")
+                else if (!r.ok)
+                  toast.error(
+                    r.error ?? "The folder window could not open. Type the folder instead.",
+                    {
+                      id: "settings",
+                    },
+                  )
+              }}
+            >
+              Choose a folder...
+            </button>
+          </span>
         </Field>
         <Field
           label="Workspace roots"
