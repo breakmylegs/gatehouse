@@ -570,3 +570,4 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
   - `apps/web/test/stop.test.tsx`
 
   14 breaks, 14 caught.
+- **The context meter always shows** (owner): it was read only when a session went idle, so a pane opened mid-turn showed none. It is now read when the pane opens and after every turn. **Compact now** in its panel sends `/compact` between turns; the meter says Compact from 60% and its fill turns yellow from 80%; the transcript says when you asked and when Claude Code summarised (`compact_boundary`). Tests: `apps/web/test/context-meter.test.tsx`, 7 breaks, 7 caught.

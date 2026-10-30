@@ -133,7 +133,7 @@ Your own PowerShell commands in the session's folder, one at a time, with Up and
 
 - The plus button adds files or photos (from anywhere; files outside the folder are copied into .jcvc/attachments in it, secrets never), mentions a folder, and lists the session's slash commands and skills, connectors and plugins.
 - Paste or drop a picture and it shows as a thumbnail above the prompt box; choose it to see it large, or its cross to take it off. It is sent with your words, and your message shows it.
-- **Context**, under the prompt box, says how full the conversation is; choose it to see what fills it. When it is nearly full, Claude Code summarises the older parts by itself.
+- **Context**, under the prompt box, always says how full the conversation is; choose it to see what fills it. **Compact now** summarises the older parts between turns. From about 60% the meter says Compact, because Claude keeps the thread better with room to work; from 80% it is pressing. When it is nearly full, Claude Code summarises the older parts by itself, at a moment it chooses.
 - Enter sends. Shift+Enter adds a line.
 - Type / for commands: /plan, /default, /accept-edits, /auto, /extreme, /effort high, /model, /stop and /close.
 - When a request from this session is waiting, it appears above the composer with **Deny** and **Allow once** (Esc and Ctrl+Enter work while focus is inside it). More options opens the full card. A question or a plan shows in full there.

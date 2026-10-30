@@ -153,6 +153,8 @@ export function reduce(t: Transcript, message: unknown): Transcript {
     }
     return changed ? { ...t, items, seq: t.seq + 1 } : t
   }
+  if (type === "system" && str(m.subtype) === "compact_boundary")
+    return addSystem(t, "Claude Code summarised the earlier conversation to make room.")
   if (type === "result") {
     const { stopping, ...rest } = t
     const failed = m.is_error === true || str(m.subtype).startsWith("error")

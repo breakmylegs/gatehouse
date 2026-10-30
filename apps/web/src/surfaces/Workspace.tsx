@@ -6,7 +6,7 @@ import Markdown from "react-markdown"
 import { Virtuoso } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
-import { emptyTranscript, type Item, type Todo } from "../lib/transcript"
+import { addSystem, emptyTranscript, type Item, type Todo } from "../lib/transcript"
 import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise } from "../lib/groups"
 import { useNow } from "../lib/useNow"
@@ -544,15 +544,24 @@ interface ContextUsage {
 
 const tokens = (n: number) => (n < 1000 ? `${n}` : `${Math.round(n / 1000)}k`)
 
+/** From this full, compacting is worth it; from the second, it is pressing. Claude Code compacts by itself near the limit. */
+export const COMPACT_WORTH = 60
+export const COMPACT_SOON = 80
+
 /**
- * How full the conversation is: what Claude holds in mind for this session, as a share of what it can. Read after
- * each turn, from the last response and local estimates (no extra calls to count tokens). Opens to what fills it.
+ * How full the conversation is: what Claude holds in mind for this session, as a share of what it can. Always shown;
+ * read when the pane opens and after each turn, from the last response and local estimates (no extra calls to count
+ * tokens). Opens to what fills it, and to Compact now, which summarises the older parts between turns.
  */
 function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionInfo["state"] }) {
   const [u, setU] = useState<ContextUsage>()
   const [open, setOpen] = useState(false)
+  const read = useRef(false)
+  const between = state === "idle"
   useEffect(() => {
-    if (state !== "idle") return
+    // Once when the pane opens, whatever the session is doing; then after every turn.
+    if (read.current && state !== "idle") return
+    read.current = true
     let gone = false
     void send({ type: "context_usage", sessionId }).then((r) => {
       if (!gone && r.ok && r.data) setU(r.data as ContextUsage)
@@ -561,42 +570,95 @@ function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionI
       gone = true
     }
   }, [sessionId, state])
-  if (!u) return null
-  const pct = Math.max(0, Math.round(u.percentage))
-  const used = u.categories
+  const pct = u ? Math.max(0, Math.round(u.percentage)) : undefined
+  const used = (u?.categories ?? [])
     .filter((c) => (c.kind ?? "used") === "used" && c.tokens > 0)
     .sort((a, b) => b.tokens - a.tokens)
     .slice(0, 6)
+  const worth = pct !== undefined && pct >= COMPACT_WORTH
+  const advice =
+    pct === undefined
+      ? "JCVC reads this after each turn."
+      : pct >= COMPACT_SOON
+        ? "Compact now: the conversation is nearly full, and Claude Code will soon summarise it by itself, at a moment it chooses."
+        : worth
+          ? "Worth compacting now. It summarises the older parts, so Claude keeps the thread and has room to work."
+          : `Not needed yet. Compacting is worth it from about ${COMPACT_WORTH}%.`
+  function compact() {
+    setOpen(false)
+    useStore.setState((s) => ({
+      transcripts: {
+        ...s.transcripts,
+        [sessionId]: addSystem(
+          s.transcripts[sessionId] ?? emptyTranscript(),
+          "You asked Claude Code to compact the conversation.",
+        ),
+      },
+    }))
+    void send({ type: "prompt", sessionId, text: "/compact" }).then((r) => {
+      if (!r.ok) toast.error(r.error?.message ?? "Compacting did not start")
+    })
+  }
   return (
     <span className="relative">
       <button
         type="button"
         className="ctx-meter"
         aria-expanded={open}
-        aria-label={`Context ${pct}% used, ${tokens(u.totalTokens)} of ${tokens(u.maxTokens)} tokens`}
+        aria-label={
+          u && pct !== undefined
+            ? `Context ${pct}% used, ${tokens(u.totalTokens)} of ${tokens(u.maxTokens)} tokens${worth ? ", worth compacting" : ""}`
+            : "Context, not read yet"
+        }
         onClick={() => setOpen((v) => !v)}
       >
-        <span className="text-mut">Context</span> {pct}%
+        <span className="text-mut">Context</span> {pct !== undefined ? `${pct}%` : null}
         <span className="ctx-track" aria-hidden="true">
           <span
-            className={clsx("ctx-fill", pct >= 80 && "ctx-high")}
-            style={{ width: `${Math.min(100, pct)}%` }}
+            className={clsx("ctx-fill", pct !== undefined && pct >= COMPACT_SOON && "ctx-high")}
+            style={{ width: `${Math.min(100, pct ?? 0)}%` }}
           />
         </span>
+        {worth ? <span className="ctx-advice">Compact</span> : null}
       </button>
       {open ? (
         <div role="group" aria-label="What fills the context" className="ctx-panel panel">
-          <p className="m-0 font-semibold">
-            {tokens(u.totalTokens)} of {tokens(u.maxTokens)} tokens
+          {u ? (
+            <>
+              <p className="m-0 font-semibold">
+                {tokens(u.totalTokens)} of {tokens(u.maxTokens)} tokens
+              </p>
+              <ul className="m-0 grid list-none gap-0.5 p-0 text-[13px]">
+                {used.map((c) => (
+                  <li key={c.name} className="flex justify-between gap-4">
+                    <span>{c.name}</span>
+                    <span className="tabular-nums text-mut">{tokens(c.tokens)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          <p
+            className={clsx(
+              "m-0 text-[13px]",
+              pct !== undefined && pct >= COMPACT_SOON && "font-semibold",
+            )}
+          >
+            {advice}
           </p>
-          <ul className="m-0 grid list-none gap-0.5 p-0 text-[13px]">
-            {used.map((c) => (
-              <li key={c.name} className="flex justify-between gap-4">
-                <span>{c.name}</span>
-                <span className="tabular-nums text-mut">{tokens(c.tokens)}</span>
-              </li>
-            ))}
-          </ul>
+          <span className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={clsx("btn !min-h-7", worth && "btn-primary")}
+              disabled={!between}
+              onClick={compact}
+            >
+              Compact now
+            </button>
+            {between ? null : (
+              <span className="text-[12.5px] text-mut">Compacting works between turns.</span>
+            )}
+          </span>
           <p className="m-0 text-[12.5px] text-mut">
             How much of what Claude can hold in mind this conversation uses. When it is nearly full,
             Claude Code summarises the older parts by itself and the conversation carries on.

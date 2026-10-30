@@ -1218,6 +1218,12 @@ main[data-rail="hidden"] {
 .ctx-fill.ctx-high {
   background: var(--c-sign);
 }
+/* Past the point where compacting is worth it: the meter says so in words, not only by its fill. */
+.ctx-advice {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--c-acc);
+}
 .ctx-panel {
   position: absolute;
   bottom: calc(100% + 6px);
