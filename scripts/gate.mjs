@@ -49,12 +49,23 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   say(label)
   if (dry) return 0
   const started = Date.now()
+  // A retry replaces the worker count instead of adding a second one, which vitest refuses (30 Oct: the retry
+  // failed at once with "Expected a single value for option --maxWorkers").
   const once = (extra = []) =>
-    spawnSync(cmd, [...cmdArgs, ...extra], {
-      cwd: root,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    })
+    spawnSync(
+      cmd,
+      [
+        ...cmdArgs.filter(
+          (a) => !(extra.some((x) => x.startsWith("--maxWorkers")) && a.startsWith("--maxWorkers")),
+        ),
+        ...extra,
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    )
   let r = once()
   let out = (r.stdout ?? "") + (r.stderr ?? "")
   // This machine sometimes cannot start test workers under load. That is not a failure of the code: run once more,
