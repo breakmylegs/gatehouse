@@ -109,7 +109,15 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
   policy: {
     id: "policy",
     title: "Policy",
-    body: `The policy is the set of rules the Approver uses to decide requests.
+    body: `The policy is the set of rules the Approver uses to decide requests. The page opens on **Your choices**: what Claude may do, in words.
+
+- **Levels**: Careful (reads, and changes code, tests and docs), Balanced (for building an app: any file in your folders, git on this computer, building, testing, running your app and reading the web) and Hands-off (Balanced, and installing packages for your project). Sending code away and anything risky always ask.
+- **Switches**: change one thing at a time, for example let Claude install packages without asking. Each change saves at once; Undo in the message puts it back.
+- **Always blocked**: what no level or rule can allow.
+- **Learned from you**: things you allowed three times or more, offered as one exact rule, and the answers you made permanent (Ask me again removes one).
+- **Try it**: what would happen if Claude wanted to run a command, change or read a file, or open a page, and which choice decides it.
+
+**Advanced** is the full studio, below.
 
 - **Floor**: always blocked, whatever else says. Secrets, credentials and destructive commands live here. Nothing can lift these.
 - **Allow and deny rules**: what is decided for you without asking.

@@ -135,6 +135,7 @@ export const packSchema = {
     allow: { type: "array", items: ruleSchema },
     escalate: { type: "array", items: ruleSchema },
     deny: { type: "array", items: ruleSchema },
+    turnsOff: { type: "array", items: idPattern },
     cases: {
       type: "array",
       items: {

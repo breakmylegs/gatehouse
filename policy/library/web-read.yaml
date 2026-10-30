@@ -1,0 +1,16 @@
+version: 1
+id: web-read
+title: Search the web and read pages
+description: Lets Claude search the web and read web pages, for example documentation. A page can hold instructions meant to mislead Claude, so everything it wants to do afterwards is still checked as usual. Commands that download, such as curl, still ask you.
+turnsOff: [network]
+allow:
+  - { id: web-read-fetch, tools: [WebFetch, WebSearch] }
+escalate:
+  - id: web-read-download
+    commands: ["curl*", "wget*", "Invoke-WebRequest*", "Invoke-RestMethod*", "iwr *", "irm *"]
+    risk: 60
+    message: "Downloads from the internet."
+cases:
+  - { tool: WebFetch, input: { url: "https://react.dev/learn", prompt: "How do hooks work?" }, expect: allow, rule: web-read-fetch }
+  - { tool: WebSearch, input: { query: "vite proxy config" }, expect: allow }
+  - { tool: Bash, input: { command: "curl https://example.com" }, expect: escalate, rule: web-read-download }

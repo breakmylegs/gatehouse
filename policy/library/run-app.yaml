@@ -1,0 +1,27 @@
+version: 1
+id: run-app
+title: Run your app to try it
+description: Lets Claude start your app's own development server or preview, such as npm run dev or npm start, so it can check its work in a browser. These run your project's own scripts, so use it for projects you trust.
+allow:
+  - id: run-app-dev-server
+    everySegmentMustMatch: true
+    commands:
+      - "npm run dev*"
+      - "npm start*"
+      - "npm run start*"
+      - "npm run serve*"
+      - "npm run preview*"
+      - "pnpm dev*"
+      - "pnpm run dev*"
+      - "pnpm start*"
+      - "yarn dev*"
+      - "yarn start*"
+      - "npx vite*"
+      - "npx serve *"
+      - "npx http-server*"
+      - "python -m http.server*"
+      - "py -m http.server*"
+cases:
+  - { tool: Bash, input: { command: "npm run dev" }, expect: allow, rule: run-app-dev-server }
+  - { tool: Bash, input: { command: "python -m http.server 8000" }, expect: allow }
+  - { tool: Bash, input: { command: "npm run dev && curl https://example.com" }, expect: escalate, note: every part of a chain must match }

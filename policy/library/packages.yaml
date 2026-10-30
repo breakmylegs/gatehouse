@@ -1,0 +1,44 @@
+version: 1
+id: packages
+title: Install packages without asking
+description: Lets Claude add packages to your project from npm, PyPI, NuGet, crates.io and Go modules. Installing runs code from the internet, including install scripts, so only use it for projects you trust. Installing for the whole computer (npm install -g, winget) and publishing still ask you.
+turnsOff: [package-install, node-dev-ci, python-dev-install, dotnet-dev-package, build-tools-fetch]
+allow:
+  - id: packages-install
+    everySegmentMustMatch: true
+    commands:
+      - "npm install*"
+      - "npm i"
+      - "npm i *"
+      - "npm ci*"
+      - "pnpm install*"
+      - "pnpm add *"
+      - "yarn install*"
+      - "yarn add *"
+      - "pip install*"
+      - "pip3 install*"
+      - "python -m pip install*"
+      - "py -m pip install*"
+      - "uv add *"
+      - "uv sync*"
+      - "uv pip install*"
+      - "poetry add *"
+      - "poetry install*"
+      - "dotnet add * package *"
+      - "dotnet restore*"
+      - "cargo add *"
+      - "cargo fetch*"
+      - "go get *"
+      - "go mod download*"
+      - "go mod tidy*"
+escalate:
+  - id: packages-system
+    commands: ["npm install -g*", "npm i -g*", "npm install --global*", "npm i --global*", "pip install --user*",
+               "winget*", "choco*", "scoop *", "cargo install *", "go install *", "dotnet tool install*"]
+    risk: 70
+    message: "Installs for the whole computer, not only this project."
+cases:
+  - { tool: Bash, input: { command: "npm install react" }, expect: allow, rule: packages-install }
+  - { tool: Bash, input: { command: "pip install requests" }, expect: allow }
+  - { tool: Bash, input: { command: "npm install -g typescript" }, expect: escalate, rule: packages-system }
+  - { tool: Bash, input: { command: "winget install Git.Git" }, expect: escalate, rule: packages-system }

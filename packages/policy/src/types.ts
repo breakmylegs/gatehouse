@@ -95,6 +95,12 @@ export interface RulePack {
   allow?: Rule[]
   escalate?: Rule[]
   deny?: Rule[]
+  /**
+   * Allow or escalate rules this pack replaces, switched off while it is on: an ask beats an allow, so a pack that
+   * allows what a built-in rule asks about must turn that rule off. A floor or deny rule here is a load error, and
+   * an id that is not loaded (its pack is off) is ignored.
+   */
+  turnsOff?: string[]
   cases?: PackCase[]
 }
 

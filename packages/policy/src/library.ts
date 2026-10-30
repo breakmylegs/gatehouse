@@ -81,6 +81,12 @@ export function mergeRules(
     ),
   )
   const off = new Set<string>()
+  for (const pack of on)
+    for (const id of pack.turnsOff ?? []) {
+      if (fixed.has(id))
+        errors.push(`library pack ${pack.id}: ${id} is a floor or deny rule and cannot be switched off`)
+      else if (switchable.has(id)) off.add(id)
+    }
   for (const id of user.disabled ?? []) {
     if (fixed.has(id)) errors.push(`rules.user.yaml: ${id} is a floor or deny rule and cannot be switched off`)
     else if (!switchable.has(id)) errors.push(`rules.user.yaml: there is no allow or escalate rule called ${id}`)

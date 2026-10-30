@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { Insights } from "./Insights"
+import { PolicyChoices } from "./PolicyChoices"
 
 interface RuleLike {
   id: string
@@ -77,7 +78,54 @@ function select(r: RuleLike): string {
   return bits.join(" · ")
 }
 
+/**
+ * What Claude may do. The plain choices come first; Advanced is the full studio (rules, packs, the rules file,
+ * remembered rules, figures), for people who want the mechanics.
+ */
 export function Policy() {
+  const [view, setView] = useState<"choices" | "advanced">("choices")
+  return (
+    <div className="mx-auto grid max-w-[1100px] gap-5 p-6">
+      <header className="grid gap-3">
+        <h1 className="m-0">What Claude may do</h1>
+        <div role="tablist" aria-label="Policy views" className="flex gap-1 border-b border-line">
+          {(
+            [
+              ["choices", "Your choices"],
+              ["advanced", "Advanced"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              role="tab"
+              id={`view-${id}`}
+              aria-selected={view === id}
+              aria-controls={`view-panel-${id}`}
+              tabIndex={view === id ? 0 : -1}
+              className="tab"
+              onClick={() => setView(id)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+                  const next = view === "choices" ? "advanced" : "choices"
+                  setView(next)
+                  document.getElementById(`view-${next}`)?.focus()
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </header>
+      <div role="tabpanel" id={`view-panel-${view}`} aria-labelledby={`view-${view}`}>
+        {view === "choices" ? <PolicyChoices onAdvanced={() => setView("advanced")} /> : <Studio />}
+      </div>
+    </div>
+  )
+}
+
+/** The full policy studio. */
+function Studio() {
   const [tab, setTab] = useState<Tab>("rules")
   const [data, setData] = useState<PolicyData>()
   const [error, setError] = useState<string>()
@@ -94,9 +142,9 @@ export function Policy() {
   }, [load])
 
   return (
-    <div className="mx-auto grid max-w-[1100px] gap-4 p-6">
+    <div className="grid gap-4">
       <header className="flex flex-wrap items-baseline gap-4">
-        <h1 className="m-0">Policy studio</h1>
+        <h2 className="m-0 text-[19px]">Policy studio</h2>
         {data ? (
           <span className="text-mut">
             Live policy <span className="mono">{data.status.hash?.slice(0, 12) ?? "none"}</span>

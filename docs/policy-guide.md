@@ -226,7 +226,15 @@ A line in the audit file needs `tool` (or `toolName`), `input`, `cwd`, and `verd
 - The checks are made before the command runs. A file that changes between the check and the run is not covered.
 - Windows managed policy may be stricter. Gatehouse can only add restrictions on top of it.
 
-## 12. The judge, insights and the digest
+## 12. Packs, your rules and the plain choices
+
+Packs (`policy/library/*.yaml`) do nothing until your rules file (`rules.user.yaml`) switches them on. Your rules file can also switch off built-in allow or escalate rules (`disabled`) and holds rules of yours (ids start `my-`). The floor and the deny rules can never be switched off: listing one is a load error.
+
+An ask beats an allow (section 1), so a pack that allows what a built-in rule asks about lists that rule in `turnsOff`. It is switched off only while the pack is on. A floor or deny id in `turnsOff` is a load error; an id that is not loaded (its own pack is off) is ignored. `packages` turns off the install asks of `package-install` and the language packs, and asks again for whole-computer installs; `web-read` turns off `network` and asks again for downloads.
+
+The Policy page's **Your choices** view (`apps/web/src/lib/choices.ts`) is a plain layer over the same file: each choice owns some packs, switched-off rules and rules of yours, and reads back as "custom" when they were changed some other way. It only ever switches packs, switches off `edit-workspace-source`, or adds the deny rule `my-jcvc-no-push`.
+
+## 13. The judge, insights and the digest
 
 **The judge** is off. To turn it on, set `defaults.judge.enabled: true` in the rules file (Policy, Edit and activate). It is a separate one-turn question to a small model, with no tools, that can only turn an escalation into an allow, and only for a rule listed in `judgeEligible` (the seed lists `network`). It is shown the tool name, the parsed segments and the rule, nothing else: never the transcript, file contents or web content. It is not asked at all when the input is longer than `maxInputChars`, or reads like an instruction to it. A wrong-shaped answer, low confidence (under 0.85), an error or a timeout all leave the call escalated. An allow by the judge carries the rule id `judge:<rule>`, `decidedBy: judge`, and its reasoning in the audit record. While it is on, the Host waits up to 35 seconds for the Approver instead of 15, so a judge-eligible call can take a while to reach you.
 

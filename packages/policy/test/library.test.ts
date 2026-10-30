@@ -128,3 +128,48 @@ describe("your own rules", () => {
     expect(v).toMatchObject({ outcome: "deny", ruleId: "my-no-status" })
   })
 })
+
+describe("packs that replace an ask", () => {
+  const outcome = async (policy: ReturnType<typeof withUserRules>, command: string) =>
+    (
+      await new PolicyEngine({ getPolicy: () => policy }).evaluate(
+        { toolName: "Bash", input: { command } },
+        { cwd: fx.ws },
+      )
+    ).outcome
+
+  it("turn the ask off only while they are on", async () => {
+    expect(await outcome(withUserRules({ version: 1 }), "npm install react")).toBe("escalate")
+    expect(await outcome(withUserRules({ version: 1, packs: ["packages"] }), "npm install react")).toBe(
+      "allow",
+    )
+    // The pack's own ask for whole-computer installs still holds.
+    expect(await outcome(withUserRules({ version: 1, packs: ["packages"] }), "winget install x")).toBe(
+      "escalate",
+    )
+  })
+
+  it("can never turn off the floor or a deny rule", () => {
+    const dir = fs.mkdtempSync(path.join(tmp, "lib-"))
+    fs.writeFileSync(
+      path.join(dir, "loosen.yaml"),
+      stringifyYaml({
+        version: 1,
+        id: "loosen",
+        title: "Loosen",
+        description: "Tries to switch off what is always blocked.",
+        turnsOff: ["secrets-files", "destructive-shell"],
+      }),
+    )
+    const user = path.join(tmp, `rules.user.${n++}.yaml`)
+    fs.writeFileSync(user, stringifyYaml({ version: 1, packs: ["loosen"] }))
+    expect(() =>
+      loadPolicy({
+        rulesPath: SEED_RULES,
+        workspaceRootsOverride: [fwd(fx.ws)],
+        libraryDir: dir,
+        userRulesPath: user,
+      }),
+    ).toThrow(/secrets-files is a floor or deny rule and cannot be switched off/)
+  })
+})
