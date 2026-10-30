@@ -31,9 +31,9 @@ const UPDATE: UpdateStatus = {
   latest: {
     version: "1.0.75",
     notes: [
-      "- Context used and background tasks on each session's rail",
-      "- Faster start: the Approver starts while the window opens",
-      "- Approval cards show which files a command will touch",
+      "- Allow or deny a request inside the session that asked",
+      "- What Claude may do, in plain words, with three levels",
+      "- Start a new project from what you want to build",
     ].join("\n"),
   },
   phase: "ready",
@@ -462,7 +462,7 @@ createRoot(document.getElementById("root") as HTMLElement).render(
 // Views that need a click or a scroll once the page is up.
 setTimeout(() => {
   if (view === "update")
-    [...document.querySelectorAll("header button")]
+    [...document.querySelectorAll(".rail button")]
       .find((b) => b.textContent?.startsWith("Update"))
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
   if (view === "settings")

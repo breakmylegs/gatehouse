@@ -47,10 +47,13 @@ You need Node 24 and Git. Quit JCVC from its tray icon before running it over a 
 
 ### Sessions you can watch
 
-![Two sessions side by side in the workspace, each with its own model, mode and composer](docs/images/workspace.png)
+![The sidebar of sessions grouped by folder, and two sessions side by side, each waiting on a request that can be allowed or denied in place](docs/images/workspace.png)
 
-- Start a session on a folder, with the model, the effort and the mode you choose: **Manual** (asks before edits and commands), **Plan**, **Accept edits** or **Auto**. JCVC never uses the modes that skip permission checks.
-- Watch up to three sessions side by side, each with its own transcript, plan and task list, files and composer.
+- Your sessions sit in a sidebar, grouped by folder, with those that need you first. Every other page, the theme and help are in the profile menu at its foot, beside the kill switch.
+- **Start a new project from what you want to build.** Choose where new projects go in Settings, then say what you want: JCVC names a folder from it, makes it a git repository and sends your words as the first prompt. Or start a session on a folder you choose.
+- Pick the model, the effort and the mode under the prompt box: **Manual** (asks before edits and commands), **Plan**, **Accept edits** or **Auto**. JCVC never uses the modes that skip permission checks.
+- Watch up to three sessions side by side, each with its own transcript, plan, files and browser panels, and composer. A line under the transcript says what Claude is doing, how long it has taken and when anything last arrived, and says so if a turn looks stuck.
+- Runs of tool calls fold into one readable line ("Ran 2 commands, read schema.ts") that opens to each call.
 - See the files a session made or changed, browse its folder, and open files in a viewer (code, markdown, pictures, HTML) or a local dev server in a built-in browser.
 - Add files, photos, folders, slash commands and skills from the **+** menu, or paste a picture into the prompt.
 
@@ -65,11 +68,15 @@ Every permission request goes to the **Approver**, which answers in this order:
 
 Shell commands are parsed properly (Bash with tree-sitter, PowerShell with its own parser), so a safe command chained to a dangerous one is caught. If anything goes wrong while deciding, the request waits for you. It is never allowed by mistake.
 
-The **rule library** has packs for git, package managers, build tools, cloud command lines, file edits, the web, PowerShell and MCP servers. Switch packs on and off, write your own rules, and replay a change against your past decisions before you save it.
+**What Claude may do**, in plain words: choose Careful, Balanced (for building an app) or Hands-off, or set each switch yourself, such as letting Claude install packages for your project without asking. Every change saves at once and can be undone. It shows what is always blocked, offers rules learned from what you keep allowing, and answers "what would happen if Claude wanted to...".
+
+![What Claude may do: the three levels, with Balanced chosen, and the switches for files and commands](docs/images/policy.png)
+
+Under **Advanced**, the rule library has packs for git, package managers, build tools, running your app, the web, cloud command lines, containers and extra caution on Windows. Switch packs on and off, write your own rules, and replay a change against your past decisions before you save it.
 
 ### You decide the rest, here or on your phone
 
-- A request that needs you appears on the board with the exact command or diff, the rule that held it, a risk score and why. Allow, deny, deny with a message, edit then allow (the edit is checked again), or remember the choice.
+- A request that needs you appears in its session, above the prompt box, with Allow once and Deny, and on the board with the exact command or diff, the rule that held it, a risk score and why. Allow, deny, deny with a message, edit then allow (the edit is checked again), or remember the choice.
 - Windows tells you when something is waiting, even with JCVC closed to the tray.
 - **On your iPhone:** pair it once with a passkey. Requests reach it end to end encrypted through a Relay that runs inside JCVC or on a server of yours, and your answer only counts after JCVC has checked the passkey signature.
 - **Through ntfy or Slack:** a short, redacted summary with single-use Allow and Deny codes. Severe requests can never be allowed this way.

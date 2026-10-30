@@ -21,6 +21,7 @@ const SHOTS = [
   { file: "approvals.png", view: "approvals", theme: "light" },
   { file: "approvals-dark.png", view: "approvals", theme: "dark" },
   { file: "workspace.png", view: "workspace", theme: "dark" },
+  { file: "policy.png", view: "policy", theme: "light" },
   { file: "update.png", view: "update", theme: "light" },
   { file: "settings-updates.png", view: "settings", theme: "light" },
 ]
