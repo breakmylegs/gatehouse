@@ -1,6 +1,8 @@
 import {
+  changesSince,
   createCheckpoint,
   listCheckpoints,
+  restoreFiles,
   previewRestore,
   restoreCheckpoint,
   type Checkpoint,
@@ -81,6 +83,26 @@ export class CheckpointManager {
 
   preview(cwd: string, ref: string): Promise<RestorePreview> {
     return previewRestore(cwd, ref, this.#excludes())
+  }
+
+  /**
+   * What changed since a checkpoint, file by file. Without a checkpoint named, since the session's first: everything
+   * the session changed. Undefined when the session has no checkpoint yet.
+   */
+  async changes(cwd: string, sessionId: string, ref?: string) {
+    const all = await listCheckpoints(cwd, sessionId)
+    const from = ref ? all.find((c) => c.ref === ref) : all.at(-1)
+    if (!from) return { checkpoints: all, since: undefined }
+    return {
+      checkpoints: all,
+      since: from,
+      ...(await changesSince(cwd, from.ref, this.#excludes())),
+    }
+  }
+
+  /** Puts some files back as they were at a checkpoint, after a safety checkpoint. Needs `confirm: true`. */
+  undoFiles(cwd: string, ref: string, paths: string[], sessionId: string, confirm: boolean) {
+    return restoreFiles({ cwd, ref, paths, sessionId, confirm, excludeGlobs: this.#excludes() })
   }
 
   /** Needs `confirm: true`, which the UI sets only after showing the preview. */

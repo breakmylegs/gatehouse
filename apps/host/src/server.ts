@@ -29,9 +29,11 @@ import type { CheckpointManager } from "./checkpoints.js"
 import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
 import { SafetyError } from "./safety.js"
+import { TerminalError, type TerminalManager } from "./terminal.js"
 import { checkHostRequest } from "./server-guard.js"
 import {
   KillSwitchEngagedError,
+  ChatModeError,
   OrgGuardError,
   SessionFolderError,
   type SessionManager,
@@ -40,6 +42,8 @@ import type { UsageStore } from "./usage.js"
 
 export interface HostApp {
   manager: SessionManager
+  /** Your own commands in a session's folder. Absent in tests that do not need it. */
+  terminal?: TerminalManager
   broker: Broker
   kill: HostKillSwitch
   checkpoints: CheckpointManager
@@ -59,6 +63,8 @@ export interface HostApp {
   updates?: import("./update/service.js").UpdateService
   /** The phone channel. Absent in tests that do not need it. */
   phone?: PhoneService
+  /** Restarts JCVC through the window app. Absent where nothing can restart it (the console launcher, tests). */
+  restart?: () => void
   /** Past sessions from the SDK. */
   listHistory: (dir?: string) => Promise<unknown>
   log: (line: string) => void
@@ -247,6 +253,16 @@ export class HostServer {
     a.kill.on("changed", () => this.#broadcast({ type: "health", health: a.health() }))
     a.phone?.on("health", () => this.#broadcast({ type: "health", health: a.health() }))
     a.updates?.on("status", (update) => this.#broadcast({ type: "update", update }))
+    a.terminal?.on(
+      "output",
+      (e: { sessionId: string; runId: string; stream: "out" | "err"; text: string }) =>
+        this.#broadcast({ type: "term_output", ...e }),
+    )
+    a.terminal?.on(
+      "exit",
+      (e: { sessionId: string; runId: string; code: number | null; signal?: string }) =>
+        this.#broadcast({ type: "term_exit", ...e }),
+    )
   }
 
   /** Called when something outside the server changes health (the Approver restarting, a sign-in check). */
@@ -348,12 +364,28 @@ export class HostServer {
           ...(cmd.resume ? { resume: cmd.resume } : {}),
           ...(cmd.fork !== undefined ? { fork: cmd.fork } : {}),
           ...(cmd.freshFolder ? { freshFolder: true } : {}),
+          ...(cmd.kind ? { kind: cmd.kind } : {}),
+          ...(cmd.title ? { title: cmd.title } : {}),
         })
         return { sessionId: s.id, info: s.info() }
       }
       case "close_session":
+        a.terminal?.stop(cmd.sessionId)
         await this.#session(cmd.sessionId).close()
         return undefined
+      case "term_run": {
+        const t = a.terminal
+        if (!t) throw new CommandError("unavailable", "The terminal is not available here")
+        const s = this.#session(cmd.sessionId)
+        try {
+          return await t.run(s.id, s.cwd, cmd.command)
+        } catch (e) {
+          if (e instanceof TerminalError) throw new CommandError("terminal", e.message)
+          throw e
+        }
+      }
+      case "term_stop":
+        return { stopped: a.terminal?.stop(cmd.sessionId) ?? false }
       case "prompt":
         this.#session(cmd.sessionId).prompt(cmd.text)
         return undefined
@@ -413,10 +445,27 @@ export class HostServer {
           a.pwsh,
         )
       }
+      case "restart":
+        if (!a.restart)
+          throw new CommandError(
+            "unavailable",
+            "JCVC cannot restart itself from here. Quit it from the tray icon and open it again.",
+          )
+        a.restart()
+        return { restarting: true }
       case "kill":
         return await a.kill.engage("desktop", "Kill switch from the desktop")
       case "rearm":
         return await a.kill.rearm("desktop")
+      case "changes": {
+        const s = this.#session(cmd.sessionId)
+        return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+      }
+      case "undo_files": {
+        const s = this.#session(cmd.sessionId)
+        if (!cmd.confirm) throw new CommandError("not-confirmed", "Undoing needs your confirmation")
+        return await a.checkpoints.undoFiles(s.cwd, cmd.ref, cmd.paths, s.id, true)
+      }
       case "checkpoint_list":
         this.#knownCwd(cmd.cwd)
         return await a.checkpoints.list(cmd.cwd, cmd.sessionId)
@@ -458,6 +507,7 @@ function classify(e: unknown): CommandError {
   if (e instanceof OrgGuardError) return new CommandError(`org-guard.${e.code}`, e.message)
   if (e instanceof KillSwitchEngagedError) return new CommandError("kill-switch", e.message)
   if (e instanceof SessionFolderError) return new CommandError("folder-missing", e.message)
+  if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)
   return new CommandError("failed", (e as Error).message ?? "The command failed")
 }

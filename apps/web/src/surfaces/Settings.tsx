@@ -3,7 +3,7 @@ import { JcvcPicker } from "../components/JcvcPicker"
 import { UpdatesPanel } from "../components/UpdatesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
-import { useStore } from "../store"
+import { send, useSessionList, useStore } from "../store"
 
 interface Config {
   redactTerms: string[]
@@ -108,6 +108,16 @@ export function Settings() {
   const [error, setError] = useState<string>()
   const [errors, setErrors] = useState<string[]>()
   const [restart, setRestart] = useState(false)
+  const [restarting, setRestarting] = useState<{ busy: boolean; error?: string }>({ busy: false })
+
+  /** Restart JCVC now: the window app closes and opens it again. Open sessions stop, as with an update. */
+  async function restartNow() {
+    setRestart(true)
+    setRestarting({ busy: true })
+    const r = await send({ type: "restart" })
+    if (!r.ok)
+      setRestarting({ busy: false, error: r.error?.message ?? "JCVC could not restart itself." })
+  }
   const [v, setV] = useState<Values>()
   // The last values the Host accepted, and the latest on screen, for saves that run after a render.
   const saved = useRef<Values>(undefined)
@@ -152,9 +162,12 @@ export function Settings() {
       setErrors(undefined)
       const needsRestart = r.data?.restartRequired === true
       if (needsRestart) setRestart(true)
-      toast(needsRestart ? `${what} saved. Restart JCVC for it to take effect.` : `${what} saved`, {
-        id: "settings",
-      })
+      if (needsRestart)
+        toast(`${what} saved. It takes effect when JCVC restarts.`, {
+          id: "settings",
+          action: { label: "Restart now", onClick: () => void restartNow() },
+        })
+      else toast(`${what} saved`, { id: "settings" })
     })
   }
 
@@ -200,9 +213,11 @@ export function Settings() {
         Changes save as you make them. A typed setting saves when you leave the box or press Enter.
       </p>
       {restart ? (
-        <p role="status" className="panel m-0 p-3 font-semibold">
-          Saved. Restart JCVC for these changes to take effect.
-        </p>
+        <RestartPrompt
+          onLater={() => setRestart(false)}
+          onRestart={() => void restartNow()}
+          state={restarting}
+        />
       ) : null}
       {errors?.length ? (
         <ul role="alert" className="m-0 font-semibold text-sev">
@@ -484,6 +499,50 @@ export function Settings() {
       <p className="m-0 text-xs text-mut">
         Stored in <span className="mono">{data.path}</span>
       </p>
+    </div>
+  )
+}
+
+/** Restart now or later, after a setting that only takes effect when JCVC restarts. */
+function RestartPrompt({
+  state,
+  onRestart,
+  onLater,
+}: {
+  state: { busy: boolean; error?: string }
+  onRestart: () => void
+  onLater: () => void
+}) {
+  const open = useSessionList().filter((s) => s.state !== "ended" && s.state !== "error").length
+  return (
+    <div role="group" aria-label="Restart JCVC" className="panel m-0 grid gap-2 p-3">
+      <p role="status" className="m-0 font-semibold">
+        {state.busy
+          ? "Restarting JCVC. It closes and opens again by itself in a few seconds."
+          : "Saved. This change takes effect when JCVC restarts. Restart now?"}
+      </p>
+      {!state.busy && open > 0 ? (
+        <p className="m-0 text-[13.5px]">
+          {open} session{open === 1 ? " is" : "s are"} open. Restarting stops{" "}
+          {open === 1 ? "it" : "them"}; you can resume {open === 1 ? "it" : "them"} from Sessions
+          afterwards.
+        </p>
+      ) : null}
+      {state.error ? (
+        <p role="alert" className="m-0 text-[13.5px] font-semibold text-sev">
+          {state.error}
+        </p>
+      ) : null}
+      {state.busy ? null : (
+        <div className="flex gap-2">
+          <button type="button" className="btn btn-primary" onClick={onRestart}>
+            Restart now
+          </button>
+          <button type="button" className="btn" onClick={onLater}>
+            Later
+          </button>
+        </div>
+      )}
     </div>
   )
 }

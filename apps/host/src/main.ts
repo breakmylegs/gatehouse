@@ -26,6 +26,9 @@ const token = generateToken()
 host.app.broker.on("created", () => {
   process.stdout.write(JSON.stringify({ event: "attention" }) + "\n")
 })
+// Restart now, after a setting that needs it. Only the window app can do it; the console launcher cannot.
+if (env.GATEHOUSE_CAN_RESTART === "1")
+  host.app.restart = () => process.stdout.write(JSON.stringify({ event: "restart" }) + "\n")
 // Switching versions: the window app starts JCVC-Update.exe with the plan, then closes JCVC.
 host.updates.on("apply", ({ updater, plan }) => {
   process.stdout.write(JSON.stringify({ event: "apply-update", updater, plan }) + "\n")

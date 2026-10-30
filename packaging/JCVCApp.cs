@@ -219,7 +219,7 @@ internal sealed class MainForm : Form
         Step("Loading JCVC's code");
         try
         {
-            host = Hosting.StartChild(node, appDir, hostEntry, "");
+            host = Hosting.StartChild(node, appDir, hostEntry, "", true);
             host.OutputDataReceived += delegate(object s, DataReceivedEventArgs ev)
             {
                 if (ev.Data == null) return;
@@ -227,6 +227,7 @@ internal sealed class MainForm : Form
                 if (m.Success) OnUi(delegate { OnHostReady(m.Groups[1].Value); });
                 else if (ev.Data.Contains("\"event\":\"attention\"")) OnUi(delegate { Attention(); });
                 else if (Hosting.ApplyLine.IsMatch(ev.Data)) { string line = ev.Data; OnUi(delegate { ApplyUpdate(line); }); }
+                else if (Hosting.RestartLine.IsMatch(ev.Data)) OnUi(delegate { Restart(); });
                 else if (Hosting.ProgressLine.IsMatch(ev.Data)) { string text = Hosting.JsonField(ev.Data, "text"); OnUi(delegate { Step(text); }); }
                 else Remember(ev.Data);
             };
@@ -500,6 +501,27 @@ internal sealed class MainForm : Form
         else Remember("[update] " + message);
     }
 
+    /// <summary>
+    /// Restart now, after a setting that needs it: a fresh JCVC starts, waits for this one to close (--after), and
+    /// opens as usual. If it cannot start, this one keeps running and says why.
+    /// </summary>
+    private void Restart()
+    {
+        try
+        {
+            string args = "--after " + Process.GetCurrentProcess().Id + (withRelay ? " --relay " + relayArgs : "");
+            ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, args);
+            psi.UseShellExecute = false;
+            psi.WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath);
+            Process.Start(psi);
+            Quit();
+        }
+        catch (Exception ex)
+        {
+            Remember("[restart] JCVC could not start again: " + ex.Message);
+        }
+    }
+
     private void Quit()
     {
         quitting = true;
@@ -548,6 +570,7 @@ internal static class Program
     {
         AttachConsole(-1); // so --check and --help print in the terminal you ran them from
         bool check = false, browser = false, relay = false, help = false, inTray = false;
+        int afterPid = 0;
         string relayArgs = "";
         for (int i = 0; i < args.Length; i++)
         {
@@ -558,6 +581,7 @@ internal static class Program
             else if (a == "--help" || a == "-h" || a == "/?") help = true;
             else if (a == "--tray") inTray = true;
             else if (a == "--no-browser") { }
+            else if (a == "--after" && i + 1 < args.Length) int.TryParse(args[++i], out afterPid);
             else if (a == "--public-url" && i + 1 < args.Length) relayArgs = "--public-url \"" + args[++i] + "\"";
             else
             {
@@ -586,6 +610,12 @@ internal static class Program
             return p.ExitCode;
         }
 
+        // Restarting: the JCVC that started this one is closing. Wait for it, so this one is the only one.
+        if (afterPid > 0)
+        {
+            try { Process.GetProcessById(afterPid).WaitForExit(30000); }
+            catch (Exception) { }
+        }
         bool created;
         Mutex single = new Mutex(true, "Local\\Gatehouse.App", out created);
         if (!created && !check)

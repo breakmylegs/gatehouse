@@ -100,6 +100,20 @@ export function Rail({ onHide }: { onHide: () => void }) {
           </button>
         </li>
         <li>
+          <button
+            className="rail-item"
+            aria-current={route === "chat" ? "page" : undefined}
+            onClick={() => go("chat")}
+          >
+            <span>
+              <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                +
+              </span>
+              New chat
+            </span>
+          </button>
+        </li>
+        <li>
           <button className="rail-item" onClick={openPalette}>
             <span>
               <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">

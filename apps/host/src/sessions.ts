@@ -5,7 +5,7 @@ import fs from "node:fs"
 import path from "node:path"
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import { findProjectRoot, type Policy, type PwshWorker, type PolicyEngine } from "@gatehouse/policy"
-import { sanitiseEnv, uuidv7 } from "@gatehouse/shared"
+import { projectName, sanitiseEnv, uuidv7 } from "@gatehouse/shared"
 import type { GatehouseConfig } from "@gatehouse/shared/node"
 import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
@@ -39,6 +39,15 @@ export class OrgGuardError extends Error {
 }
 /** The folder for a new session cannot be used or made. */
 export class SessionFolderError extends Error {}
+
+/** A chat stays in Plan mode: it can read and search, never change files or run commands. */
+export class ChatModeError extends Error {
+  constructor() {
+    super(
+      "A chat stays in Plan mode, so it never changes files or runs commands. Start a coding session for that.",
+    )
+  }
+}
 
 /**
  * Makes sure the project folder exists. A folder that is missing is created, with any parent folders it needs, so
@@ -75,13 +84,15 @@ export function ensureFolder(cwd: string, log: (line: string) => void = () => un
   log(`created the project folder ${cwd}`)
 }
 
-/** cwd, or cwd-2, cwd-3 and so on: the first that does not exist or is an empty folder. */
-export function freeFolder(cwd: string): string {
+/** cwd, or cwd-2, cwd-3 and so on: the first that does not exist, or (unless emptyIsFree is false) is empty. */
+export function freeFolder(cwd: string, emptyIsFree = true): string {
   const free = (p: string) => {
+    if (!fs.existsSync(p)) return true
+    if (!emptyIsFree) return false
     try {
       return fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0
     } catch {
-      return true
+      return false
     }
   }
   if (free(cwd)) return cwd
@@ -124,6 +135,8 @@ export interface SessionInfo {
   id: string
   cwd: string
   project: string
+  /** Absent for a coding session. */
+  kind?: "code" | "chat"
   model?: string
   mode: SessionMode
   effort?: Effort
@@ -148,6 +161,8 @@ export interface SessionEvents {
 
 export interface SessionDeps {
   queryFn: QueryFn
+  /** Where chats get their folders: %LOCALAPPDATA%\Gatehouse\chats. Absent where chats are not offered. */
+  chatsDir?: string
   config: () => GatehouseConfig
   policy: () => Policy | undefined
   engine: PolicyEngine
@@ -178,7 +193,18 @@ export interface StartSessionOptions {
   fork?: boolean
   /** A new project in the projects folder: the folder must be new (a number is added if the name is taken). */
   freshFolder?: boolean
+  /** A chat, not a coding session: it gets a folder of its own under the data folder, named from title. */
+  kind?: "code" | "chat"
+  /** The first thing said in a chat, which names its folder. */
+  title?: string
 }
+
+/**
+ * Added to Claude's instructions in a chat. Its folder is outside your workspace folders, so the rules already
+ * block edits there; this keeps it talking rather than reaching for tools.
+ */
+export const CHAT_PROMPT =
+  "This is a chat in Jean-Claude Van Code, not a coding session. Answer in plain language, and look things up on the web when that helps. Do not create, edit or run files or commands unless the person asks; if they want something built, suggest they start a coding session for it."
 
 /** A prompt stream the Host pushes user messages into. It makes interrupt, mode and model changes possible. */
 class InputQueue implements AsyncIterable<SDKUserMessage> {
@@ -259,6 +285,7 @@ export class Session extends EventEmitter<SessionEvents> {
       id: this.id,
       cwd: this.cwd,
       project: this.project,
+      ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
       ...(this.#model !== undefined ? { model: this.#model } : {}),
       mode: this.#mode,
       ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
@@ -312,7 +339,12 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#model !== undefined ? { model: this.#model } : {}),
       permissionMode: this.#mode,
       ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
-      systemPrompt: { type: "preset", preset: "claude_code", snapshot: true },
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        snapshot: true,
+        ...(this.#opts.kind === "chat" ? { append: CHAT_PROMPT } : {}),
+      },
       settingSources: ["user", "project", "local"],
       includePartialMessages: true,
       env: sanitiseEnv(process.env),
@@ -442,6 +474,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Only default and plan are ever accepted (invariant 3). */
   async setMode(mode: SessionMode): Promise<void> {
+    if (this.#opts.kind === "chat" && mode !== "plan") throw new ChatModeError()
     if (!isAllowedMode(mode))
       throw new SafetyError(
         3,
@@ -461,6 +494,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Extreme approval for this session only. Written to the audit log, because it changes what gets asked. */
   async setExtreme(on: boolean): Promise<void> {
+    if (this.#opts.kind === "chat" && on) throw new ChatModeError()
     this.#extreme = on
     await this.#deps.audit.record({
       session: this.id,
@@ -535,7 +569,23 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     if (!early.ok && early.code === "no-expected-org")
       throw new OrgGuardError(early.code, early.message)
     // After the checks above, so a refused start leaves nothing behind.
-    if (opts.freshFolder) {
+    if (opts.kind === "chat") {
+      // The folder the screen sent is ignored: a chat always gets a new one of its own.
+      const dir = this.#deps.chatsDir
+      if (!dir) throw new SessionFolderError("Chats are not available here.")
+      fs.mkdirSync(dir, { recursive: true })
+      const name = projectName(opts.title ?? "")
+      // Plan mode, whatever was asked: the folder keeps a chat away from your projects, Plan mode keeps it from
+      // changing anything at all, including in your workspace folders, which the rules would otherwise let it edit.
+      opts = {
+        ...opts,
+        mode: "plan",
+        extreme: false,
+        freshFolder: false,
+        // Every chat a folder of its own, even when an earlier one with the same name is still empty.
+        cwd: freeFolder(path.join(dir, name === "project" ? "chat" : name), false),
+      }
+    } else if (opts.freshFolder) {
       const root = config.projectsFolder
       if (!root || !sameFolder(path.dirname(path.resolve(opts.cwd)), root))
         throw new SessionFolderError(

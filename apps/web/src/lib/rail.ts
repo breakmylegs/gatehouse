@@ -17,9 +17,18 @@ const RANK: Record<SessionInfo["state"], number> = {
   ended: 4,
 }
 
+/** Chats sit in a group of their own, after your projects. */
+const CHATS = "chats:"
+
 export function groupByFolder(list: SessionInfo[]): FolderGroup[] {
   const groups = new Map<string, FolderGroup>()
   for (const s of list) {
+    if (s.kind === "chat") {
+      const g = groups.get(CHATS) ?? { folder: CHATS, label: "Chats", sessions: [] }
+      g.sessions.push(s)
+      groups.set(CHATS, g)
+      continue
+    }
     const parts = s.cwd.replaceAll("\\", "/").replace(/\/+$/, "").split("/")
     const folder = parts.slice(0, -1).join("/") || parts[0] || s.cwd
     const key = folder.toLowerCase()
@@ -31,7 +40,10 @@ export function groupByFolder(list: SessionInfo[]): FolderGroup[] {
     g.sessions.sort(
       (a, b) => RANK[a.state] - RANK[b.state] || b.createdAt.localeCompare(a.createdAt),
     )
-  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label))
+  return [...groups.values()].sort(
+    (a, b) =>
+      Number(a.folder === CHATS) - Number(b.folder === CHATS) || a.label.localeCompare(b.label),
+  )
 }
 
 /** Pages that can sit in the rail as well as in the menus. You choose which, with Edit sidebar. */

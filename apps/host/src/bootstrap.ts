@@ -39,6 +39,7 @@ import { PhoneService } from "./relay/service.js"
 import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
 import { SessionManager, type SessionDeps } from "./sessions.js"
+import { TerminalManager } from "./terminal.js"
 import { localDay, UsageStore } from "./usage.js"
 import { UpdateService } from "./update/service.js"
 import { GitHubSource } from "./update/source.js"
@@ -169,11 +170,17 @@ export function createHost(opts: HostOptions = {}): Host {
   // Assigned once, below, after the kill switch that needs it is built, so it cannot be a const here.
   // eslint-disable-next-line prefer-const
   let manager!: SessionManager
+  // eslint-disable-next-line prefer-const
+  let terminal!: TerminalManager
   const kill = new HostKillSwitch({
     broker,
     audit,
     approver: { setKillSwitch: (e, by, reason) => approverClient.setKillSwitch(e, by, reason) },
-    interruptAll: () => manager.interruptAll(),
+    // The kill switch also stops your own commands in the terminal pane.
+    interruptAll: () => {
+      terminal.stopAll()
+      return manager.interruptAll()
+    },
     env,
     log,
   })
@@ -214,6 +221,7 @@ export function createHost(opts: HostOptions = {}): Host {
 
   const deps: SessionDeps = {
     queryFn,
+    chatsDir: path.join(gatehouseDataDir(env), "chats"),
     config: () => config,
     policy: () => store.current,
     engine,
@@ -461,9 +469,18 @@ export function createHost(opts: HostOptions = {}): Host {
     },
   })
 
+  terminal = new TerminalManager({
+    audit,
+    killed: () => kill.isEngaged(),
+    policyHash: () => store.current?.hash ?? "none",
+    log,
+    env,
+  })
+
   const app: HostApp = {
     updates,
     manager,
+    terminal,
     signIn,
     broker,
     kill,

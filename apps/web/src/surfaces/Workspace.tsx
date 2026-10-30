@@ -17,6 +17,8 @@ import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
+import { ChangesPane } from "../components/ChangesPane"
+import { TerminalPane } from "../components/TerminalPane"
 import { FilesPanel, Viewer, type Opened } from "../components/FilesPanel"
 import { PlusMenu } from "../components/PlusMenu"
 import { api } from "../lib/api"
@@ -130,7 +132,13 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
   ended: "Ended",
 }
 
-type Side = "files" | "plan"
+type Side = "plan" | "files" | "changes" | "terminal"
+const SIDE_LABEL: Record<Side, string> = {
+  plan: "Plan",
+  files: "Files",
+  changes: "Changes",
+  terminal: "Terminal",
+}
 
 function SessionPane({
   sessionId,
@@ -185,6 +193,7 @@ function SessionPane({
 
   const running = session.state === "running" || session.state === "waiting"
   const ended = session.state === "ended" || session.state === "error"
+  const chat = session.kind === "chat"
   const others = list.filter((s) => !panes.includes(s.id))
   // Each item says what it does, so it reads right out of context. A session shown in another pane swaps places.
   const titleMenu: MenuItem[] = [
@@ -243,35 +252,46 @@ function SessionPane({
             }
             items={titleMenu}
           />
-          <span className="mono truncate text-xs text-mut">{session.cwd}</span>
+          {chat ? (
+            <span className="truncate text-xs text-mut">
+              A chat, in Plan mode: Claude reads and searches, and never changes files
+            </span>
+          ) : (
+            <span className="mono truncate text-xs text-mut">{session.cwd}</span>
+          )}
         </span>
-        <span role="group" aria-label="Side panels" className="flex items-center gap-1">
-          {(["plan", "files"] as const).map((t) => (
+        {/* A chat has no project, so none of the project panels. */}
+        {chat ? null : (
+          <span role="group" aria-label="Side panels" className="flex items-center gap-1">
+            {(["plan", "files", "changes", "terminal"] as const).map((t) => (
+              <button
+                key={t}
+                ref={(el) => {
+                  tools.current[t] = el
+                }}
+                type="button"
+                className="pane-tool"
+                aria-pressed={side === t}
+                aria-controls={`rail-${session.id}`}
+                onClick={() => toggleSide(t)}
+              >
+                {SIDE_LABEL[t]}
+              </button>
+            ))}
             <button
-              key={t}
-              ref={(el) => {
-                tools.current[t] = el
-              }}
               type="button"
               className="pane-tool"
-              aria-pressed={side === t}
-              aria-controls={`rail-${session.id}`}
-              onClick={() => toggleSide(t)}
+              aria-pressed={opened?.kind === "browser"}
+              onClick={() =>
+                setOpened(
+                  opened?.kind === "browser" ? undefined : { kind: "browser", url: lastUrl },
+                )
+              }
             >
-              {t === "plan" ? "Plan" : "Files"}
+              Browser
             </button>
-          ))}
-          <button
-            type="button"
-            className="pane-tool"
-            aria-pressed={opened?.kind === "browser"}
-            onClick={() =>
-              setOpened(opened?.kind === "browser" ? undefined : { kind: "browser", url: lastUrl })
-            }
-          >
-            Browser
-          </button>
-        </span>
+          </span>
+        )}
       </header>
 
       <div className="pane-body min-h-0">
@@ -307,7 +327,7 @@ function SessionPane({
         ) : null}
         <aside
           id={`rail-${session.id}`}
-          aria-label={side === "plan" ? "Plan" : "Files"}
+          aria-label={side ? SIDE_LABEL[side] : "Files"}
           className="pane-rail min-h-0 grid-rows-[auto_1fr] border-l border-line bg-s1"
           onKeyDown={(e) => {
             if (e.key === "Escape" && side) {
@@ -317,13 +337,22 @@ function SessionPane({
           }}
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-2">
-            <h2 className="m-0 text-[15px]">{side === "plan" ? "Plan" : "Files"}</h2>
+            <h2 className="m-0 text-[15px]">{side ? SIDE_LABEL[side] : "Files"}</h2>
             <button type="button" className="btn !min-h-7 !text-[13px]" onClick={closeRail}>
               Close
             </button>
           </div>
-          <div className="min-h-0 overflow-auto p-4">
-            {side === "files" ? (
+          <div
+            className={clsx(
+              "min-h-0 p-4",
+              side === "terminal" ? "overflow-hidden" : "overflow-auto",
+            )}
+          >
+            {side === "terminal" ? (
+              <TerminalPane sessionId={session.id} cwd={session.cwd} />
+            ) : side === "changes" ? (
+              <ChangesPane sessionId={session.id} cwd={session.cwd} />
+            ) : side === "files" ? (
               <FilesPanel
                 sessionId={session.id}
                 cwd={session.cwd}
@@ -404,21 +433,25 @@ function SessionPane({
               ))}
             </select>
           </label>
-          <label className="composer-pick">
-            <span className="text-mut">Mode</span>
-            <select
-              className="composer-select"
-              value={uiModeOf(session)}
-              disabled={ended}
-              onChange={(e) => void changeMode(session, e.target.value as UiMode)}
-            >
-              {MODE_OPTIONS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {chat ? (
+            <span className="composer-pick">Plan mode, always, in a chat</span>
+          ) : (
+            <label className="composer-pick">
+              <span className="text-mut">Mode</span>
+              <select
+                className="composer-select"
+                value={uiModeOf(session)}
+                disabled={ended}
+                onChange={(e) => void changeMode(session, e.target.value as UiMode)}
+              >
+                {MODE_OPTIONS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {running ? (
             <button
               type="button"

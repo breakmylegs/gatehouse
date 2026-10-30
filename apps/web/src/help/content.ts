@@ -72,6 +72,16 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.`,
   },
+  chat: {
+    id: "chat",
+    title: "Chats",
+    body: `A chat is a conversation with Claude that is not about one of your projects: questions, explanations, ideas and writing.
+
+- Say what you want to talk about and choose **Start the chat**. It opens like a session, and your chats are listed under **Chats** in the sidebar.
+- Each chat gets a folder of its own in JCVC's data folder, outside your projects, and always runs in Plan mode: Claude can read and search, but never changes files or runs commands. Claude is told it is a chat.
+- It can look things up on the web, as your choices in What Claude may do allow.
+- To build something, start a coding session instead: New session in the sidebar.`,
+  },
   workspace: {
     id: "workspace",
     title: "Workspace",
@@ -84,7 +94,7 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 **At the top of a session**
 
 - Its name opens a menu: show another session here, open one beside it, close the pane, interrupt, or close the session.
-- **Plan**, **Files** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away.
+- **Plan**, **Files**, **Changes**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
 
 **Under the prompt box**
 
@@ -104,6 +114,14 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 **Files**
 
 Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
+
+**Changes**
+
+What the session changed, file by file, since its first checkpoint (or one you choose), with each diff. **Undo** puts one file back as it was then, and **Undo all of these** puts them all back; JCVC saves a checkpoint first, so you can go back to how things were before the undo.
+
+**Terminal**
+
+Your own PowerShell commands in the session's folder, one at a time, with Up and Down for earlier ones. They do not go through the Approver, like a PowerShell window you open yourself, and each is written to the audit log first. A program that asks a question as it runs gets no answer: Stop ends it. The kill switch stops it too.
 
 **The composer**
 

@@ -69,10 +69,10 @@ function StartButton({ busy, ready, label }: { busy: boolean; ready: boolean; la
 }
 
 /** How long the screen waits for a session to start. The first start after an install or update is the slow one. */
-const START_WAIT_MS = 180_000
+export const START_WAIT_MS = 180_000
 
 /** What starting a session is doing, with the seconds so far, so a slow start never looks like a hang. */
-function StartProgress({ since }: { since: number }) {
+export function StartProgress({ since }: { since: number }) {
   const now = useNow(1000)
   const s = Math.max(0, Math.round((now - since) / 1000))
   return (

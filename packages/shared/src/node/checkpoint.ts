@@ -296,3 +296,154 @@ export async function restoreCheckpoint(opts: {
   }
   return { restored: toWrite, deleted, safety }
 }
+
+export interface ChangeSince {
+  path: string
+  /** From the checkpoint to now: "added" was made since, "deleted" was removed since. */
+  change: FileChange
+  added: number
+  removed: number
+  binary: boolean
+  /** This file's unified diff from the checkpoint to now, cut at 40 KB. */
+  diff: string
+}
+
+const MAX_FILE_DIFF = 40_000
+
+/**
+ * What changed in the working tree since a checkpoint, file by file with its diff: the Changes pane. Nothing is
+ * changed. Files that checkpoints never hold (ignored files and excludeGlobs, such as secrets) are not listed.
+ */
+export async function changesSince(
+  cwd: string,
+  ref: string,
+  excludeGlobs?: readonly string[],
+): Promise<{ ref: string; commit: string; files: ChangeSince[]; truncated: boolean }> {
+  assertOurRef(ref)
+  const top = await repoTop(cwd)
+  const commit = await git(top, ["rev-parse", "--verify", `${ref}^{commit}`])
+  const currentTree = await snapshotTree(top, await headOf(top), excludeGlobs)
+  // Direction: checkpoint -> now.
+  const status = (
+    await gitRaw(top, [
+      "diff-tree",
+      "-r",
+      "--name-status",
+      "-z",
+      "--no-renames",
+      commit,
+      currentTree,
+    ])
+  )
+    .split("\0")
+    .filter((p) => p !== "")
+  const files: ChangeSince[] = []
+  for (let i = 0; i + 1 < status.length; i += 2) {
+    const s = status[i]
+    const change: FileChange | undefined =
+      s === "A" ? "added" : s === "D" ? "deleted" : s === "M" || s === "T" ? "modified" : undefined
+    if (change)
+      files.push({
+        path: status[i + 1] as string,
+        change,
+        added: 0,
+        removed: 0,
+        binary: false,
+        diff: "",
+      })
+  }
+  const byPath = new Map(files.map((f) => [f.path, f]))
+  const numstat = await gitRaw(top, [
+    "diff-tree",
+    "-r",
+    "--numstat",
+    "-z",
+    "--no-renames",
+    commit,
+    currentTree,
+  ])
+  for (const entry of numstat.split("\0").filter((p) => p !== "")) {
+    const [a = "", r = "", ...rest] = entry.split("\t")
+    const f = byPath.get(rest.join("\t"))
+    if (!f) continue
+    f.binary = a === "-"
+    f.added = Number(a) || 0
+    f.removed = Number(r) || 0
+  }
+  const full = await gitRaw(top, [
+    "-c",
+    "core.quotePath=false",
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
+    "--no-renames",
+    commit,
+    currentTree,
+  ])
+  let total = 0
+  let truncated = false
+  const head = "diff --git a/"
+  const sections = full.split(/^(?=diff --git )/m).filter((x) => x.startsWith("diff --git "))
+  sections.forEach((section, i) => {
+    const first = section.slice(0, section.indexOf("\n"))
+    // "diff --git a/<p> b/<p>": the same path twice, as nothing is renamed.
+    const p = first.slice(head.length, head.length + (first.length - head.length - 3) / 2)
+    const f = byPath.get(p) ?? files[i]
+    if (!f) return
+    let text = section
+    if (text.length > MAX_FILE_DIFF) {
+      text = text.slice(0, MAX_FILE_DIFF)
+      truncated = true
+    }
+    if (total + text.length > MAX_DIFF_CHARS) {
+      truncated = true
+      return
+    }
+    total += text.length
+    f.diff = text
+  })
+  return { ref, commit, files, truncated }
+}
+
+/**
+ * Puts some files back as they were at a checkpoint: the Changes pane's Undo for one file. Only files that differ
+ * from the checkpoint can be named. A safety checkpoint is taken first, so the undo can itself be undone. A file
+ * made since the checkpoint is deleted; one changed or removed since is written back.
+ */
+export async function restoreFiles(opts: {
+  cwd: string
+  ref: string
+  paths: readonly string[]
+  sessionId: string
+  confirm: boolean
+  excludeGlobs?: readonly string[]
+}): Promise<RestoreResult> {
+  if (opts.confirm !== true) throw new CheckpointError("Undoing needs explicit confirmation")
+  assertOurRef(opts.ref)
+  const top = await repoTop(opts.cwd)
+  const commit = await git(top, ["rev-parse", "--verify", `${opts.ref}^{commit}`])
+  const { changes } = await changesToCheckpoint(top, commit, opts.excludeGlobs)
+  const wanted = new Set(opts.paths)
+  const chosen = changes.filter((c) => wanted.has(c.path))
+  if (chosen.length !== wanted.size)
+    throw new CheckpointError("Only files that changed since the checkpoint can be undone")
+  const safety = await createCheckpoint({
+    cwd: top,
+    sessionId: opts.sessionId,
+    label: `before undoing ${chosen.length} file${chosen.length === 1 ? "" : "s"}`,
+    excludeGlobs: opts.excludeGlobs,
+  })
+  const toWrite = chosen.filter((c) => c.change !== "deleted").map((c) => c.path)
+  if (toWrite.length)
+    await git(top, ["restore", `--source=${commit}`, "--worktree", "--", ...toWrite])
+  const deleted: string[] = []
+  const topDir = path.resolve(top)
+  for (const c of chosen.filter((x) => x.change === "deleted")) {
+    const target = path.resolve(topDir, c.path)
+    if (target !== topDir && target.startsWith(topDir + path.sep)) {
+      fs.rmSync(target, { force: true })
+      deleted.push(c.path)
+    }
+  }
+  return { restored: toWrite, deleted, safety }
+}

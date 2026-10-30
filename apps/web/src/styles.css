@@ -1022,3 +1022,48 @@ main[data-rail="hidden"] {
   background: var(--c-sev);
   animation: none;
 }
+
+/*
+ * Terminal and Changes need more room than Files and Plan: a wider column in a wide pane, a wider panel over a
+ * narrow one. Inside container queries, so the wide rule never squeezes a narrow pane's transcript.
+ */
+@container (min-width: 981px) {
+  .pane[data-side="terminal"] .pane-body,
+  .pane[data-side="changes"] .pane-body {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr);
+  }
+  .pane[data-side="terminal"][data-viewer] .pane-body,
+  .pane[data-side="changes"][data-viewer] .pane-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(340px, 0.9fr);
+  }
+}
+@container (max-width: 980px) {
+  .pane[data-rail="open"][data-side="terminal"] .pane-rail,
+  .pane[data-rail="open"][data-side="changes"] .pane-rail {
+    width: min(560px, 96%);
+  }
+}
+
+/* The terminal pane's output. */
+.term-out {
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-s2);
+  color: var(--c-tx);
+  font: 12.5px/1.5 var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term-cmd {
+  font-weight: 600;
+}
+.term-err {
+  color: var(--c-sev);
+}
+.term-note {
+  color: var(--c-mut);
+}

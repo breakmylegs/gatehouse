@@ -26,6 +26,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     fork: z.boolean().optional(),
     /** A new project: cwd is a folder in the projects folder that must be new, so a number is added if it is taken. */
     freshFolder: z.boolean().optional(),
+    /** A chat rather than a coding session: the Host gives it a folder of its own and ignores cwd. */
+    kind: z.enum(["code", "chat"]).optional(),
+    /** The first thing said in a chat, which names its folder. */
+    title: z.string().max(2000).optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
@@ -52,6 +56,15 @@ export const ClientCommand = z.discriminatedUnion("type", [
     answers: z.record(z.string(), z.string().min(1).max(4000)),
   }),
   z.object({ type: z.literal("remember_preview"), requestId: Id }),
+  /** Your own command in the session's folder, from the terminal pane. Desktop only; not checked by the Approver. */
+  z.object({
+    type: z.literal("term_run"),
+    sessionId: Id,
+    command: z.string().min(1).max(8000),
+  }),
+  z.object({ type: z.literal("term_stop"), sessionId: Id }),
+  /** Restart JCVC, after a setting that needs it. The window app does it; elsewhere the reply says it cannot. */
+  z.object({ type: z.literal("restart") }),
   z.object({ type: z.literal("kill") }),
   z.object({ type: z.literal("rearm") }),
   z.object({
@@ -71,6 +84,20 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     confirm: z.boolean(),
   }),
+  /** What changed since a checkpoint of this session (its first, unless one is named), file by file. */
+  z.object({
+    type: z.literal("changes"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
+  /** Puts these files back as they were at the checkpoint, after a safety checkpoint. */
+  z.object({
+    type: z.literal("undo_files"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500),
+    paths: z.array(z.string().min(1).max(4096)).min(1).max(500),
+    confirm: z.boolean(),
+  }),
   z.object({ type: z.literal("list_history"), dir: z.string().min(1).max(4096).optional() }),
   z.object({ type: z.literal("refresh_account") }),
   z.object({ type: z.literal("signin_start"), method: z.enum(["claudeai", "sso"]) }),
@@ -87,6 +114,8 @@ export const SessionInfo = z.object({
   id: z.string(),
   cwd: z.string(),
   project: z.string(),
+  /** Absent for a coding session. */
+  kind: z.enum(["code", "chat"]).optional(),
   model: z.string().optional(),
   mode: Mode,
   effort: Effort.optional(),
@@ -176,6 +205,20 @@ export const ServerEvent = z.discriminatedUnion("type", [
     type: z.literal("phone_status"),
     id: z.string(),
     status: z.enum(["none", "held", "delivered", "expired"]),
+  }),
+  z.object({
+    type: z.literal("term_output"),
+    sessionId: z.string(),
+    runId: z.string(),
+    stream: z.enum(["out", "err"]),
+    text: z.string(),
+  }),
+  z.object({
+    type: z.literal("term_exit"),
+    sessionId: z.string(),
+    runId: z.string(),
+    code: z.number().int().nullable(),
+    signal: z.string().optional(),
   }),
   z.object({ type: z.literal("audit"), record: z.unknown() }),
   z.object({ type: z.literal("usage"), usage: z.unknown() }),

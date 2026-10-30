@@ -53,6 +53,9 @@ internal static class Hosting
     /// <summary>The line the Host prints to switch versions: {"event":"apply-update","updater":"...","plan":"..."}</summary>
     internal static readonly Regex ApplyLine = new Regex(@"""event""\s*:\s*""apply-update""");
 
+    /// <summary>The Host asks to be restarted, after a setting that needs it: {"event":"restart"}</summary>
+    internal static readonly Regex RestartLine = new Regex(@"""event""\s*:\s*""restart""");
+
     /// <summary>A start-up step the Host reports: {"event":"progress","text":"Loading your rules"}</summary>
     internal static readonly Regex ProgressLine = new Regex(@"""event""\s*:\s*""progress""");
 
@@ -167,6 +170,12 @@ internal static class Hosting
 
     internal static Process StartChild(string node, string appDir, string entry, string extraArgs)
     {
+        return StartChild(node, appDir, entry, extraArgs, false);
+    }
+
+    /// <summary>canRestart: the window app can restart JCVC when the Host asks; the console launcher cannot.</summary>
+    internal static Process StartChild(string node, string appDir, string entry, string extraArgs, bool canRestart)
+    {
         MakeJob();
         ProcessStartInfo psi = new ProcessStartInfo();
         psi.FileName = node;
@@ -184,6 +193,7 @@ internal static class Hosting
         // The one clean way to ask a child to stop that works the same everywhere: close its input.
         psi.EnvironmentVariables["GATEHOUSE_EXIT_ON_STDIN_CLOSE"] = "1";
         psi.EnvironmentVariables["GATEHOUSE_PACKAGED"] = "1";
+        if (canRestart) psi.EnvironmentVariables["GATEHOUSE_CAN_RESTART"] = "1";
         // Node keeps the compiled code here, so the next start reuses it instead of compiling everything again.
         if (string.IsNullOrEmpty(psi.EnvironmentVariables["NODE_COMPILE_CACHE"]))
             psi.EnvironmentVariables["NODE_COMPILE_CACHE"] = Path.Combine(DataDir(), "node-cache");

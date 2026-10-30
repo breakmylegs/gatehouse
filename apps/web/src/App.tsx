@@ -18,6 +18,7 @@ const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.
 const Approver = lazy(() => import("./surfaces/Approver").then((m) => ({ default: m.Approver })))
 const Settings = lazy(() => import("./surfaces/Settings").then((m) => ({ default: m.Settings })))
 const Workspace = lazy(() => import("./surfaces/Workspace").then((m) => ({ default: m.Workspace })))
+const NewChat = lazy(() => import("./surfaces/NewChat").then((m) => ({ default: m.NewChat })))
 
 const RAIL_HIDDEN = "gatehouse.rail.hidden"
 
@@ -144,6 +145,7 @@ export function App() {
                 {route === "setup" && <Setup />}
                 {route === "guide" && <Guide />}
                 {route === "approver" && <Approver />}
+                {route === "chat" && <NewChat />}
               </Suspense>
             </main>
             <HelpPane />

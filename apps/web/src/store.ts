@@ -27,6 +27,7 @@ export type Route =
   | "setup"
   | "guide"
   | "approver"
+  | "chat"
 
 export interface ResolvedView {
   id: string
@@ -70,6 +71,8 @@ export interface State {
   activity: Record<string, Activity>
   /** When anything last arrived in each running turn, and its tokens. */
   pulse: Record<string, Pulse>
+  /** Each session's terminal pane: what it printed, and whether a command is running. */
+  term: Record<string, TermState>
   audit: unknown[]
   route: Route
   selectedSession?: string
@@ -101,6 +104,9 @@ export interface State {
   setSetupDone: (done: boolean) => void
   setJcPic: (pic: string) => void
   addUserText: (sessionId: string, text: string) => void
+  termAppend: (sessionId: string, chunk: TermChunk) => void
+  termStarted: (sessionId: string, runId: string) => void
+  termClear: (sessionId: string) => void
 }
 
 let connection: Connection | undefined
@@ -124,6 +130,24 @@ const storedTheme = (): "light" | "dark" => {
     : "light"
 }
 
+export interface TermChunk {
+  stream: "cmd" | "out" | "err" | "note"
+  text: string
+}
+export interface TermState {
+  chunks: TermChunk[]
+  runId?: string
+}
+/** The terminal keeps this much of what it printed, per session. */
+export const TERM_KEEP = 400_000
+
+function termAdd(t: TermState | undefined, chunk: TermChunk): TermState {
+  const chunks = [...(t?.chunks ?? []), chunk]
+  let size = chunks.reduce((n, c) => n + c.text.length, 0)
+  while (size > TERM_KEEP && chunks.length > 1) size -= (chunks.shift() as TermChunk).text.length
+  return { ...t, chunks }
+}
+
 export const useStore = create<State>((set, get) => ({
   conn: "connecting",
   attempt: 0,
@@ -134,6 +158,7 @@ export const useStore = create<State>((set, get) => ({
   transcripts: {},
   activity: {},
   pulse: {},
+  term: {},
   audit: [],
   route: "approvals",
   theme: storedTheme(),
@@ -194,6 +219,16 @@ export const useStore = create<State>((set, get) => ({
     localStorage.setItem("gatehouse.setup", setupDone ? "done" : "")
     set({ setupDone })
   },
+  termAppend: (sessionId, chunk) =>
+    set((s) => ({ term: { ...s.term, [sessionId]: termAdd(s.term[sessionId], chunk) } })),
+  termStarted: (sessionId, runId) =>
+    set((s) => ({
+      term: { ...s.term, [sessionId]: { chunks: s.term[sessionId]?.chunks ?? [], runId } },
+    })),
+  termClear: (sessionId) =>
+    set((s) => ({
+      term: { ...s.term, [sessionId]: { ...s.term[sessionId], chunks: [] } },
+    })),
   addUserText: (sessionId, text) =>
     set((s) => ({
       transcripts: {
@@ -321,6 +356,30 @@ export const useStore = create<State>((set, get) => ({
         set((s) => {
           const p = s.pending[e.id]
           return p ? { pending: { ...s.pending, [e.id]: { ...p, phone: e.status } } } : s
+        })
+        return
+      case "term_output":
+        set((s) => ({
+          term: {
+            ...s.term,
+            [e.sessionId]: termAdd(s.term[e.sessionId], { stream: e.stream, text: e.text }),
+          },
+        }))
+        return
+      case "term_exit":
+        set((s) => {
+          const t = s.term[e.sessionId]
+          // An exit that belongs to an older command changes nothing.
+          if (t?.runId && t.runId !== e.runId) return {}
+          const said =
+            e.code === 0
+              ? undefined
+              : {
+                  stream: "note" as const,
+                  text: e.code === null ? "Stopped.\n" : `Exit code ${e.code}.\n`,
+                }
+          const next = said ? termAdd(t, said) : { chunks: t?.chunks ?? [] }
+          return { term: { ...s.term, [e.sessionId]: { chunks: next.chunks } } }
         })
         return
       case "audit":

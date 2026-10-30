@@ -627,6 +627,21 @@ describe("commands over the WebSocket", () => {
     await c.send({ type: "close_session", sessionId })
   })
 
+  it("restarts only where the window app can, and says so where it cannot", async () => {
+    delete hostApp.restart
+    expect(await c.send({ type: "restart" })).toMatchObject({
+      ok: false,
+      error: { code: "unavailable" },
+    })
+    let asked = 0
+    hostApp.restart = () => {
+      asked++
+    }
+    expect(await c.send({ type: "restart" })).toMatchObject({ ok: true, data: { restarting: true } })
+    expect(asked).toBe(1)
+    delete hostApp.restart
+  })
+
   it("tells the window the new health after a sign-in check", async () => {
     const before = c.events.filter((e) => e.type === "health").length
     await c.send({ type: "refresh_account" })
