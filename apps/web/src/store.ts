@@ -12,7 +12,14 @@ import { useMemo } from "react"
 import { create } from "zustand"
 import { tellShell } from "./lib/shell"
 import { Connection, type ConnState, type Reply, takeToken } from "./lib/connection"
-import { addSystem, addUser, emptyTranscript, reduce, type Transcript } from "./lib/transcript"
+import {
+  addSystem,
+  addUser,
+  emptyTranscript,
+  markStopping,
+  reduce,
+  type Transcript,
+} from "./lib/transcript"
 import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
 
 export type Route =
@@ -307,6 +314,16 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       case "session_event": {
+        if (e.event === "interrupted") {
+          const by = e.data.by === "kill-switch" ? "kill-switch" : "you"
+          set((s) => ({
+            transcripts: {
+              ...s.transcripts,
+              [e.sessionId]: markStopping(s.transcripts[e.sessionId] ?? emptyTranscript(), by),
+            },
+          }))
+          return
+        }
         if (e.event === "notify_user") {
           const text = typeof e.data.text === "string" ? e.data.text : ""
           const name = get().sessions[e.sessionId]?.project ?? "A session"

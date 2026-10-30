@@ -1081,8 +1081,11 @@ export const ItemView = memo(function ItemView({ item }: { item: Item }) {
     case "result":
       return (
         <p className={clsx("m-0 text-xs", item.isError ? "font-semibold text-sev" : "text-mut")}>
-          {item.isError ? "Turn ended with an error: " : "Turn finished. "}
-          {item.isError ? item.text : ""}
+          {item.stopped
+            ? item.text
+            : item.isError
+              ? `Turn ended with an error: ${item.text}`
+              : "Turn finished."}
           {item.costUsd !== undefined ? ` Session cost so far ${money(item.costUsd)}.` : ""}
         </p>
       )

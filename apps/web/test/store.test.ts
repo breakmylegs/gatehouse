@@ -164,4 +164,19 @@ describe("store events", () => {
     expect(describeEvent("stop", {})).toBeUndefined()
     expect(describeEvent("subagent_stop", {})).toBe("Subagent finished")
   })
+
+  it("reads the result after Interrupt as stopped by you, not as an error", () => {
+    const h = useStore.getState().handleEvent
+    h({ type: "session_event", sessionId: "s1", event: "interrupted", data: { by: "you" } })
+    h({
+      type: "sdk_message",
+      sessionId: "s1",
+      message: { type: "result", subtype: "error_during_execution", is_error: true },
+    })
+    expect(useStore.getState().transcripts.s1?.items.at(-1)).toMatchObject({
+      kind: "result",
+      text: "You stopped this turn.",
+      isError: false,
+    })
+  })
 })

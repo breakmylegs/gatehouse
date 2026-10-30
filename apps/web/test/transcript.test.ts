@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { addSystem, addUser, emptyTranscript, MAX_ITEMS, reduce } from "../src/lib/transcript"
+import {
+  addSystem,
+  addUser,
+  emptyTranscript,
+  markStopping,
+  MAX_ITEMS,
+  reduce,
+} from "../src/lib/transcript"
 
 const assistant = (content: unknown[], extra: object = {}) => ({
   type: "assistant",
@@ -90,6 +97,31 @@ describe("transcript reducer", () => {
     expect(t.items[1]).toMatchObject({ isError: true })
     t = reduce(t, assistant([{ type: "text", text: "inner" }], { parent_tool_use_id: "p1" }))
     expect(t.items[2]).toMatchObject({ kind: "text", subagent: "p1" })
+  })
+  it("says a turn you stopped was stopped, not that it failed", () => {
+    const failed = { type: "result", subtype: "error_during_execution", is_error: true }
+    // The Host says it is stopping the turn before the result arrives; text from the turn still lands.
+    let t = markStopping(emptyTranscript(), "you")
+    t = reduce(t, assistant([{ type: "text", text: "half way" }]))
+    t = reduce(t, failed)
+    expect(t.items[1]).toMatchObject({
+      kind: "result",
+      text: "You stopped this turn.",
+      isError: false,
+      stopped: true,
+    })
+    // Only that turn: the next failure is an error again, and says so without repeating itself.
+    t = reduce(t, failed)
+    expect(t.items[2]).toMatchObject({ text: "Claude Code did not say why.", isError: true })
+    expect(reduce(t, { type: "result", subtype: "error_max_turns" }).items[3]).toMatchObject({
+      text: "Claude reached the most steps a turn may take.",
+    })
+    expect(reduce(markStopping(t, "kill-switch"), failed).items.at(-1)).toMatchObject({
+      text: "The kill switch stopped this turn.",
+      isError: false,
+    })
+    // A turn that finished just before the stop: your next message clears it.
+    expect(addUser(markStopping(t, "you"), "next").stopping).toBeUndefined()
   })
   it("never throws on messages it does not understand", () => {
     const t = emptyTranscript()

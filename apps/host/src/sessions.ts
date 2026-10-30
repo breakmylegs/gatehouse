@@ -157,7 +157,8 @@ export interface SessionEvents {
   state: [SessionInfo]
   event: [
     {
-      type: "notification" | "stop" | "subagent_start" | "subagent_stop" | "decision"
+      type:
+        "notification" | "stop" | "subagent_start" | "subagent_stop" | "decision" | "interrupted"
       data: Record<string, unknown>
     },
   ]
@@ -504,7 +505,9 @@ export class Session extends EventEmitter<SessionEvents> {
     return await q.getContextUsage({ detail: "summary" })
   }
 
-  async interrupt(): Promise<void> {
+  /** Stops the running turn. The screen hears first, so the result that follows reads as stopped, not failed. */
+  async interrupt(by: "you" | "kill-switch" = "you"): Promise<void> {
+    if (this.#running) this.emit("event", { type: "interrupted", data: { by } })
     this.#deps.broker.cancelSession(this.id)
     await this.#q?.interrupt()
     if (this.#state === "running" || this.#state === "waiting") {
@@ -670,7 +673,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
   }
 
   async interruptAll(): Promise<void> {
-    await Promise.allSettled([...this.#sessions.values()].map((s) => s.interrupt()))
+    await Promise.allSettled([...this.#sessions.values()].map((s) => s.interrupt("kill-switch")))
   }
 
   async closeAll(): Promise<void> {

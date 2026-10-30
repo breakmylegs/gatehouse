@@ -28,6 +28,8 @@ export type Item =
       at?: number
       text: string
       isError: boolean
+      /** The turn was stopped on purpose, by you or the kill switch, so it is not an error. */
+      stopped?: boolean
       costUsd?: number
       turns?: number
     }
@@ -42,6 +44,8 @@ export interface Transcript {
   items: Item[]
   todos: Todo[]
   seq: number
+  /** Who stopped the running turn, until its result arrives. */
+  stopping?: "you" | "kill-switch"
 }
 
 export const MAX_ITEMS = 3000
@@ -68,14 +72,29 @@ export function addUser(
   text: string,
   images?: Array<{ url: string; name: string }>,
 ): Transcript {
-  return push(t, [{ id: `u${t.seq}`, kind: "user", text, ...(images?.length ? { images } : {}) }])
+  const { stopping: _done, ...rest } = t
+  return push(rest, [
+    { id: `u${t.seq}`, kind: "user", text, ...(images?.length ? { images } : {}) },
+  ])
+}
+
+/** The Host stopped the running turn: its result says so, instead of reading as an error. */
+export function markStopping(t: Transcript, by: "you" | "kill-switch"): Transcript {
+  return { ...t, stopping: by }
+}
+
+/** Words for a turn that failed without saying why, by the SDK's subtype. */
+const FAILED: Record<string, string> = {
+  error_max_turns: "Claude reached the most steps a turn may take.",
+  error_max_budget_usd: "Claude reached the spending limit for the turn.",
+  error_max_structured_output_retries: "Claude could not give its answer in the shape asked for.",
 }
 
 /** Each item notes when it arrived, for the time shown beside it. */
 function push(t: Transcript, add: Item[], todos?: Todo[], at: number = Date.now()): Transcript {
   let items = add.length ? [...t.items, ...add.map((i) => (i.at ? i : { ...i, at }))] : t.items
   if (items.length > MAX_ITEMS) items = items.slice(items.length - MAX_ITEMS)
-  return { items, todos: todos ?? t.todos, seq: t.seq + 1 }
+  return { ...t, items, todos: todos ?? t.todos, seq: t.seq + 1 }
 }
 
 export function reduce(t: Transcript, message: unknown): Transcript {
@@ -135,13 +154,21 @@ export function reduce(t: Transcript, message: unknown): Transcript {
     return changed ? { ...t, items, seq: t.seq + 1 } : t
   }
   if (type === "result") {
-    const isError = m.is_error === true || str(m.subtype).startsWith("error")
-    return push(t, [
+    const { stopping, ...rest } = t
+    const failed = m.is_error === true || str(m.subtype).startsWith("error")
+    const isError = failed && !stopping
+    return push(rest, [
       {
         id: `r${t.seq}`,
         kind: "result",
-        text: str(m.result) || (isError ? "The turn ended with an error" : "Done"),
+        text: stopping
+          ? stopping === "you"
+            ? "You stopped this turn."
+            : "The kill switch stopped this turn."
+          : str(m.result) ||
+            (isError ? (FAILED[str(m.subtype)] ?? "Claude Code did not say why.") : "Done"),
         isError,
+        ...(stopping ? { stopped: true } : {}),
         ...(typeof m.total_cost_usd === "number" ? { costUsd: m.total_cost_usd } : {}),
         ...(typeof m.num_turns === "number" ? { turns: m.num_turns } : {}),
       },

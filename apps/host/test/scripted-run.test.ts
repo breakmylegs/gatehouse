@@ -455,8 +455,12 @@ describe("interrupt and kill", () => {
     })
     await s.waitForPending()
     expect(session.info()).toMatchObject({ state: "waiting", pendingApprovals: 1 })
+    const told: unknown[] = []
+    session.on("event", (e) => told.push(e))
     await session.interrupt()
     await done
+    // The screen hears that you stopped it, so the result that follows does not read as an error.
+    expect(told).toContainEqual({ type: "interrupted", data: { by: "you" } })
     expect(r).toMatchObject({ executed: false })
     expect(r?.message).toContain("Cancelled")
     expect(s.broker.list()).toEqual([])
@@ -470,8 +474,11 @@ describe("interrupt and kill", () => {
       waiting = await api.callTool("Bash", { command: "pip install killed" })
     })
     await s.waitForPending()
+    const told: unknown[] = []
+    session.on("event", (e) => told.push(e))
     const status = await s.kill.engage("desktop", "test")
     await done
+    expect(told).toContainEqual({ type: "interrupted", data: { by: "kill-switch" } })
     expect(status).toMatchObject({ engaged: true, by: "desktop", approverConfirmed: true })
     expect(waiting).toMatchObject({ executed: false })
     expect(waiting?.message).toContain("Cancelled")
