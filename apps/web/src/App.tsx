@@ -130,7 +130,12 @@ export function App() {
             <main
               id="main"
               tabIndex={-1}
-              className="min-h-0 overflow-auto outline-none"
+              // The workspace fills the window and scrolls only its transcript, so the prompt box always shows.
+              className={
+                route === "workspace"
+                  ? "flex min-h-0 flex-col overflow-hidden outline-none"
+                  : "min-h-0 overflow-auto outline-none"
+              }
               data-rail={railHidden ? "hidden" : undefined}
             >
               <UpdateResult />

@@ -176,7 +176,10 @@ export function Rail({ onHide }: { onHide: () => void }) {
         />
       ) : null}
 
-      <div className="rail-sessions min-h-0 overflow-auto px-2 pb-2 pt-4" aria-label="Sessions">
+      <div
+        className="rail-sessions min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-4"
+        aria-label="Sessions"
+      >
         {groups.length === 0 ? (
           <p className="m-0 px-2 text-[13.5px] text-shell-mut">
             No sessions yet. Choose New session to start one.
@@ -196,7 +199,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
               <span className="text-[12px] text-shell-mut">{g.sessions.length}</span>
             </div>
             {folded[g.folder] ? null : (
-              <ul className="m-0 grid list-none gap-0.5 p-0">
+              <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-0.5 p-0">
                 {g.sessions.map((s) => {
                   const mark = STATE_MARK[s.state]
                   return (

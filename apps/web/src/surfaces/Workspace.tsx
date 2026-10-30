@@ -69,40 +69,42 @@ export function Workspace() {
 
   if (!session) {
     return (
-      <div className="mx-auto mt-14 grid max-w-xl gap-4 px-6">
-        <div>
-          <h1 className="m-0">Pick a session</h1>
-          <p className="m-0 mt-1 text-mut">
-            {list.length === 0
-              ? "No sessions are running. Start one from the Sessions page."
-              : "Choose a session to see its transcript and work with it."}
-          </p>
-        </div>
-        {list.length > 0 ? (
-          <div className="panel overflow-hidden">
-            {list.map((s) => (
-              <button
-                key={s.id}
-                className="board-row grid-cols-[auto_minmax(0,1fr)_auto]"
-                data-lit={s.state === "waiting" ? "" : undefined}
-                onClick={() => selectSession(s.id)}
-              >
-                <SessionCode session={s} className="!text-[15px]" />
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] font-semibold">{s.project}</span>
-                  <span className="mono block truncate text-xs text-mut">{s.cwd}</span>
-                </span>
-                <span className="text-[13px] text-mut">
-                  {s.state === "waiting" ? "Waiting on you" : s.state}
-                </span>
-              </button>
-            ))}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <div className="mx-auto mt-14 grid max-w-xl gap-4 px-6">
+          <div>
+            <h1 className="m-0">Pick a session</h1>
+            <p className="m-0 mt-1 text-mut">
+              {list.length === 0
+                ? "No sessions are running. Start one from the Sessions page."
+                : "Choose a session to see its transcript and work with it."}
+            </p>
           </div>
-        ) : null}
-        <div>
-          <button className="btn" onClick={() => setRoute("sessions")}>
-            Go to sessions
-          </button>
+          {list.length > 0 ? (
+            <div className="panel overflow-hidden">
+              {list.map((s) => (
+                <button
+                  key={s.id}
+                  className="board-row grid-cols-[auto_minmax(0,1fr)_auto]"
+                  data-lit={s.state === "waiting" ? "" : undefined}
+                  onClick={() => selectSession(s.id)}
+                >
+                  <SessionCode session={s} className="!text-[15px]" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[15px] font-semibold">{s.project}</span>
+                    <span className="mono block truncate text-xs text-mut">{s.cwd}</span>
+                  </span>
+                  <span className="text-[13px] text-mut">
+                    {s.state === "waiting" ? "Waiting on you" : s.state}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <div>
+            <button className="btn" onClick={() => setRoute("sessions")}>
+              Go to sessions
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -110,7 +112,7 @@ export function Workspace() {
 
   return (
     <div
-      className="grid h-full min-h-0 divide-x divide-line"
+      className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] divide-x divide-line"
       style={{ gridTemplateColumns: `repeat(${panes.length}, minmax(0, 1fr))` }}
     >
       {panes.map((id, i) => (
@@ -243,7 +245,7 @@ function SessionPane({
 
   return (
     <div
-      className="pane relative grid h-full min-w-0 grid-rows-[auto_1fr_auto]"
+      className="pane relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]"
       data-rail={side ? "open" : undefined}
       data-side={side ?? "none"}
       data-viewer={opened ? "" : undefined}
@@ -513,11 +515,11 @@ function SessionRequest({
   onOpen: (id: string) => void
 }) {
   return (
-    <div className="grid">
+    <div className="grid max-h-[40vh] overflow-y-auto">
       {view.request.kind === "permission" ? (
         <QuickDecision view={view} variant="panel" onMore={() => onOpen(view.request.id)} />
       ) : (
-        <div className="mb-2 max-h-[55vh] overflow-auto">
+        <div className="mb-2">
           <ApprovalCard view={view} />
         </div>
       )}
@@ -866,7 +868,7 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
         <textarea
           id={composerId}
           ref={area}
-          className="field w-full resize-y"
+          className="field max-h-[30vh] w-full resize-y"
           onPaste={(e) => {
             const files = [...e.clipboardData.files]
             if (files.length) {
