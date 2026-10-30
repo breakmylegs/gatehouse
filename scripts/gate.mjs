@@ -86,7 +86,10 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
     .slice(0, 25)
   for (const l of summary) console.log(`  ${l.trim()}`)
   say(`  ${r.status === 0 ? "passed" : "FAILED"} in ${secs}s`)
-  if (r.status !== 0 && summary.length === 0) console.log(out.slice(-4000))
+  // A failure the summary does not name (a test file that crashed, an unhandled error, a worker that died) shows
+  // its own output, or the run fails with nothing to go on (30 Oct: "72 passed (73)" and no FAIL line).
+  if (r.status !== 0 && !summary.some((l) => /FAIL|error TS|✖|problems?\)/.test(l)))
+    console.log(out.slice(-4000))
   return r.status ?? 1
 }
 
