@@ -1,5 +1,35 @@
-import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
+import type { Health, SessionInfo } from "@gatehouse/shared/ws-protocol"
 import type { Route } from "../store"
+
+/**
+ * The foot of the sidebar: every way a request reaches you away from the desk, by name. Green while at least one
+ * works; one that does not work says so in the words.
+ */
+export function notifyLine(h: Pick<Health, "relay" | "push">): {
+  ok: boolean
+  neutral: boolean
+  label: string
+} {
+  const ways = [
+    ...(h.relay.state === "not-configured"
+      ? []
+      : [
+          {
+            name:
+              h.relay.devices > 1 ? `the phone app (${h.relay.devices} phones)` : "the phone app",
+            ok: h.relay.state === "connected",
+          },
+        ]),
+    ...(h.push ?? []).map((p) => ({ name: p.channel === "ntfy" ? "ntfy" : "Slack", ok: p.ok })),
+  ]
+  if (ways.length === 0) return { ok: false, neutral: true, label: "No phone" }
+  const named = ways.map((w) => (w.ok ? w.name : `${w.name} (not connected)`))
+  return {
+    ok: ways.some((w) => w.ok),
+    neutral: false,
+    label: `Notifying on ${named.join(", ")}`,
+  }
+}
 
 /** Sessions in the rail, grouped by the folder their project sits in ("dev" for C:\dev\shop). */
 export interface FolderGroup {

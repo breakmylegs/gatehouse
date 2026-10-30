@@ -91,6 +91,8 @@ export interface SlackDeps {
   fetchImpl?: typeof fetch
   socketFactory?: (url: string) => MinimalSocket
   now?: () => number
+  /** Called when it is switched on or off, or connects or drops: for the line in the sidebar. */
+  onChange?: () => void
 }
 
 const VALUE = /^(allow|deny) ([0-9a-f-]{36}) ([A-Za-z0-9_-]{22,64})$/
@@ -147,6 +149,7 @@ export class SlackChannel {
     this.#d.broker.on("created", this.#onCreated)
     this.#d.broker.on("resolved", this.#onResolved)
     void this.#connect(1000)
+    this.#d.onChange?.()
   }
 
   stop(): void {
@@ -157,6 +160,18 @@ export class SlackChannel {
     this.#socket = undefined
     this.#codes.clear()
     this.#status = { ...this.#status, connected: false }
+    this.#d.onChange?.()
+  }
+
+  /** Connected or dropped. */
+  #connected(connected: boolean, lastError?: string): void {
+    const was = this.#status.connected
+    this.#status = {
+      ...this.#status,
+      connected,
+      ...(lastError !== undefined || connected ? { lastError } : {}),
+    }
+    if (connected !== was) this.#d.onChange?.()
   }
 
   async #api(
@@ -336,18 +351,18 @@ export class SlackChannel {
         : (new WebSocket(url) as unknown as MinimalSocket)
       this.#socket = socket
       socket.onmessage = (ev) => {
-        this.#status = { ...this.#status, connected: true, lastError: undefined }
+        this.#connected(true)
         this.handleEnvelope(typeof ev.data === "string" ? ev.data : String(ev.data))
       }
       socket.onerror = () => {
         this.#status = { ...this.#status, lastError: "The Slack connection had an error" }
       }
       socket.onclose = () => {
-        this.#status = { ...this.#status, connected: false }
+        this.#connected(false)
         if (this.#running) setTimeout(() => void this.#connect(1000), 1000)
       }
     } catch (e) {
-      this.#status = { ...this.#status, connected: false, lastError: (e as Error).message }
+      this.#connected(false, (e as Error).message)
       if (this.#running) setTimeout(() => void this.#connect(Math.min(pause * 2, 30_000)), pause)
     }
   }

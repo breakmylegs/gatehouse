@@ -34,6 +34,11 @@ export interface NtfyStatus {
   maxRisk?: number
   lastError?: string
   sent: number
+  /**
+   * The topic was made before 29 Oct, with capitals and letters that are easy to mix up. It still works; the panel
+   * offers a new one, and only you replace it, because the phone has to subscribe again.
+   */
+  oldStyle?: boolean
 }
 
 export interface NtfyDeps {
@@ -48,6 +53,8 @@ export interface NtfyDeps {
   log: (line: string) => void
   fetchImpl?: typeof fetch
   now?: () => number
+  /** Called when it is switched on or off, or starts or stops listening: for the line in the sidebar. */
+  onChange?: () => void
 }
 
 const REPLY = /^(allow|deny) ([0-9a-f-]{36}) ([A-Za-z0-9_-]{22,64})$/
@@ -62,8 +69,14 @@ export function randomTopic(): string {
   return `jcvc-${Array.from({ length: 5 }, group).join("-")}`
 }
 
-/** Topics JCVC made: five groups of four now, 20 to 24 letters and digits before 29 Oct. */
-const OWN_TOPIC = /^jcvc-(?:[A-Za-z0-9]{20,24}|[a-z2-9]{4}(?:-[a-z2-9]{4}){4})$/
+/**
+ * A topic JCVC makes: all lower case, none of 0 o 1 l i (owner, 30 Oct). ntfy treats O, o and 0 as different
+ * topics, so the mixed-case topics made before 29 Oct often reached a different topic from the one on the phone.
+ */
+const OWN_TOPIC = new RegExp(`^jcvc-[${TOPIC_LETTERS}]{4}(?:-[${TOPIC_LETTERS}]{4}){4}$`)
+
+/** Whether JCVC would make this topic today. */
+export const isOwnTopic = (topic: string): boolean => OWN_TOPIC.test(topic)
 
 /**
  * A topic typed back in, so a phone already subscribed keeps working: the name, or its address. Only a topic JCVC
@@ -71,7 +84,7 @@ const OWN_TOPIC = /^jcvc-(?:[A-Za-z0-9]{20,24}|[a-z2-9]{4}(?:-[a-z2-9]{4}){4})$/
  */
 export function ownTopic(typed: string): string | undefined {
   const name = typed.trim().split("/").filter(Boolean).at(-1) ?? ""
-  return OWN_TOPIC.test(name) ? name : undefined
+  return isOwnTopic(name) ? name : undefined
 }
 
 export class NtfyChannel {
@@ -99,6 +112,7 @@ export class NtfyChannel {
       ...this.#status,
       enabled: s?.enabled === true,
       ...(s ? { server: s.server, topic: s.topic, maxRisk: Math.min(s.maxRisk, SEVERE - 1) } : {}),
+      ...(s && !isOwnTopic(s.topic) ? { oldStyle: true } : {}),
     }
   }
 
@@ -110,6 +124,7 @@ export class NtfyChannel {
     this.#d.broker.on("created", this.#onCreated)
     this.#d.broker.on("resolved", this.#onResolved)
     void this.#listen()
+    this.#d.onChange?.()
   }
 
   stop(): void {
@@ -120,6 +135,18 @@ export class NtfyChannel {
     this.#abort = undefined
     this.#codes.clear()
     this.#status = { ...this.#status, listening: false }
+    this.#d.onChange?.()
+  }
+
+  /** Listening started or stopped. */
+  #listening(listening: boolean, lastError?: string): void {
+    const was = this.#status.listening
+    this.#status = {
+      ...this.#status,
+      listening,
+      ...(lastError !== undefined || listening ? { lastError } : {}),
+    }
+    if (listening !== was) this.#d.onChange?.()
   }
 
   async notify(view: PendingView): Promise<void> {
@@ -240,7 +267,7 @@ export class NtfyChannel {
           { signal: this.#abort.signal },
         )
         if (!res.ok || !res.body) throw new Error(`ntfy answered ${res.status}`)
-        this.#status = { ...this.#status, listening: true, lastError: undefined }
+        this.#listening(true)
         pause = 1000
         const reader = res.body.getReader()
         const decoder = new TextDecoder()
@@ -266,13 +293,9 @@ export class NtfyChannel {
         }
       } catch (e) {
         if (!this.#running) break
-        this.#status = {
-          ...this.#status,
-          listening: false,
-          lastError: `Listening failed: ${(e as Error).message}`,
-        }
+        this.#listening(false, `Listening failed: ${(e as Error).message}`)
       }
-      this.#status = { ...this.#status, listening: false }
+      this.#listening(false)
       if (!this.#running) break
       await new Promise((r) => setTimeout(r, pause))
       pause = Math.min(pause * 2, 30_000)

@@ -1,7 +1,7 @@
 import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
 import { useMemo, useState } from "react"
-import { groupByFolder, RAIL_PAGES, readRailPages, saveRailPages } from "../lib/rail"
+import { groupByFolder, notifyLine, RAIL_PAGES, readRailPages, saveRailPages } from "../lib/rail"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
@@ -395,17 +395,7 @@ function RailFoot() {
                 health.approver.state === "up" ? "Approver" : `Approver ${health.approver.state}`
               }
             />
-            <Dot
-              ok={health.relay.state === "connected"}
-              neutral={health.relay.state === "not-configured"}
-              label={
-                health.relay.state === "connected"
-                  ? `Phone, ${health.relay.devices}`
-                  : health.relay.state === "not-configured"
-                    ? "No phone"
-                    : "Phone unreachable"
-              }
-            />
+            <Dot {...notifyLine(health)} />
           </>
         ) : null}
       </div>

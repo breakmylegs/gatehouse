@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "../src/App"
-import { groupByFolder } from "../src/lib/rail"
+import { groupByFolder, notifyLine } from "../src/lib/rail"
 import { useStore } from "../src/store"
 
 const sent: unknown[] = []
@@ -121,6 +121,38 @@ describe("the sidebar", () => {
     const rail = screen.getByRole("navigation", { name: "Sidebar" })
     expect(within(rail).getByRole("button", { name: "Audit log" })).toBeTruthy()
     expect(JSON.parse(localStorage.getItem("gatehouse.rail.pages") ?? "[]")).toContain("audit")
+  })
+
+  it("names each way requests reach your phone, green while one of them works", () => {
+    const off = { state: "not-configured" as const, devices: 0 }
+    expect(notifyLine({ relay: off })).toEqual({ ok: false, neutral: true, label: "No phone" })
+    expect(notifyLine({ relay: off, push: [] }).label).toBe("No phone")
+    expect(notifyLine({ relay: off, push: [{ channel: "ntfy", ok: true }] })).toEqual({
+      ok: true,
+      neutral: false,
+      label: "Notifying on ntfy",
+    })
+    expect(
+      notifyLine({
+        relay: { state: "unreachable", devices: 1 },
+        push: [
+          { channel: "ntfy", ok: true },
+          { channel: "slack", ok: false },
+        ],
+      }),
+    ).toEqual({
+      ok: true,
+      neutral: false,
+      label: "Notifying on the phone app (not connected), ntfy, Slack (not connected)",
+    })
+    expect(notifyLine({ relay: { state: "unreachable", devices: 1 } }).ok).toBe(false)
+  })
+
+  it("shows ntfy at the foot of the sidebar when it is on", () => {
+    useStore.setState({ health: { ...health, push: [{ channel: "ntfy", ok: true }] } })
+    render(<App />)
+    expect(screen.getByRole("status").textContent).toContain("Notifying on ntfy")
+    expect(screen.getByRole("status").textContent).not.toContain("No phone")
   })
 
   it("hides with Ctrl+B and comes back from its button, still saying what needs you", async () => {

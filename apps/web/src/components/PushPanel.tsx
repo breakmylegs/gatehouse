@@ -10,6 +10,8 @@ interface NtfyStatus {
   maxRisk?: number
   lastError?: string
   sent: number
+  /** Made before 29 Oct: capitals, and letters such as O and 0 that are easy to mix up on a phone. */
+  oldStyle?: boolean
 }
 
 const LIMITS = [
@@ -146,6 +148,20 @@ export function PushPanel() {
                 </span>{" "}
                 in your phone&apos;s browser: test messages show there.
               </span>
+              {st?.oldStyle ? (
+                <span className="mt-2 block max-w-[72ch] text-[13.5px]">
+                  This topic is from before 29 Oct. It has capital letters and characters such as O
+                  and 0 that are easy to mix up when you type it on a phone. It still works. Topics
+                  JCVC makes now are all lower case, with none of 0, o, 1, l or i.{" "}
+                  <button
+                    type="button"
+                    className="cursor-pointer border-0 bg-transparent p-0 text-acc underline"
+                    onClick={() => setConfirmNew(true)}
+                  >
+                    Make a new topic
+                  </button>
+                </span>
+              ) : null}
               {typing ? (
                 <div className="mt-2 grid max-w-[60ch] gap-2">
                   <label className="grid gap-1">
@@ -251,7 +267,9 @@ export function PushPanel() {
         >
           <p className="m-0 max-w-[72ch]">
             Requests stop reaching your phone until you subscribe to the new topic in the ntfy app.
-            Make new topics only if this one got out.
+            {st?.oldStyle
+              ? " Then remove the old subscription."
+              : " Make new topics only if this one got out."}
           </p>
           <span className="flex flex-wrap gap-2">
             <button

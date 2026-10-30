@@ -183,6 +183,11 @@ export const Health = z.object({
     state: z.enum(["not-configured", "connected", "unreachable"]),
     devices: z.number().int().default(0),
   }),
+  /**
+   * The push channels that are switched on, and whether each one works now: ntfy listening for your answers, Slack
+   * connected. Absent from older Hosts.
+   */
+  push: z.array(z.object({ channel: z.enum(["ntfy", "slack"]), ok: z.boolean() })).optional(),
   signin: z.object({
     signedIn: z.boolean(),
     email: z.string().optional(),

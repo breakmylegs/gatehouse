@@ -710,57 +710,58 @@ describe("insights endpoints", () => {
     }
   })
 
-  it("takes back a topic JCVC made, even pasted as an address, and refuses one that could be guessed", async () => {
+  it("takes back a topic JCVC makes, even pasted as an address, and refuses any other", async () => {
     ctx.ntfy = {
       status: () => ({ enabled: true, listening: true, sent: 0 }),
       start: () => undefined,
       stop: () => undefined,
       test: async () => ({ ok: true }),
     }
+    const enable = (payload: unknown) =>
+      app.inject({ method: "POST", url: "/api/push/ntfy/enable", payload: payload as object })
     try {
-      await app.inject({ method: "POST", url: "/api/push/ntfy/enable", payload: {} })
+      await enable({})
       const before = runningConfig.push?.ntfy
-      // The older kind (22 letters and digits) and the newer (five groups of four), as the phone shows them.
-      const typed = await app.inject({
-        method: "POST",
-        url: "/api/push/ntfy/enable",
-        payload: { topic: " https://ntfy.sh/jcvc-t6YdOCy5dH5TBqoPnEXrLC ", maxRisk: 39 },
+      // As the phone shows it: an address, with spaces around it.
+      const typed = await enable({
+        topic: " https://ntfy.sh/jcvc-abcd-efgh-jkmn-pqrs-tuvw ",
+        maxRisk: 39,
       })
       expect(typed.statusCode).toBe(200)
       expect(runningConfig.push?.ntfy).toMatchObject({
-        topic: "jcvc-t6YdOCy5dH5TBqoPnEXrLC",
+        topic: "jcvc-abcd-efgh-jkmn-pqrs-tuvw",
         replyTopic: before?.replyTopic,
         maxRisk: 39,
       })
-      await app.inject({
-        method: "POST",
-        url: "/api/push/ntfy/enable",
-        payload: { topic: "jcvc-abcd-efgh-jkmn-pqrs-tuvw", newTopics: true },
-      })
+      await enable({ topic: "jcvc-wxyz-2345-6789-abcd-efgh", newTopics: true })
       expect(runningConfig.push?.ntfy).toMatchObject({
-        topic: "jcvc-abcd-efgh-jkmn-pqrs-tuvw",
+        topic: "jcvc-wxyz-2345-6789-abcd-efgh",
         replyTopic: before?.replyTopic,
       })
-      // Whoever reads the topic can tap Approve, so a name someone could guess is refused and nothing changes.
+      // ntfy treats capitals as different letters, so a phone on this name would get nothing.
+      const caps = await enable({ topic: "JCVC-ABCD-EFGH-JKMN-PQRS-TUVW" })
+      expect(caps.statusCode).toBe(400)
+      expect(caps.json().error).toMatch(/capital letters/)
+      // Whoever reads the topic can tap Approve, so a name someone could guess is refused. So is the older
+      // mixed-case kind, and any with letters that are easy to mix up (owner, 30 Oct). Nothing changes.
       for (const topic of [
         "alerts",
         "jcvc-abc",
         "jcvc-abcd-efgh",
         "my-phone-topic-2026-abcdef",
+        "jcvc-t6YdOCy5dH5TBqoPnEXrLC",
+        "jcvc-abcd-efgh-jkmn-pqrs-tuvo",
+        "jcvc-abcd-efgh-jkmn-pqrs-tuv0",
         42,
       ]) {
-        const r = await app.inject({
-          method: "POST",
-          url: "/api/push/ntfy/enable",
-          payload: { topic },
-        })
+        const r = await enable({ topic })
         expect(r.statusCode).toBe(400)
-        expect(r.json().error).toMatch(/JCVC made/)
+        expect(r.json().error).toMatch(/all lower case and have no o or 0/)
       }
-      expect(runningConfig.push?.ntfy?.topic).toBe("jcvc-abcd-efgh-jkmn-pqrs-tuvw")
+      expect(runningConfig.push?.ntfy?.topic).toBe("jcvc-wxyz-2345-6789-abcd-efgh")
       const log = await app.inject({ method: "GET", url: "/api/audit/export" })
       expect(log.body).toContain("typedTopic")
-      expect(log.body).not.toContain("t6YdOCy5dH5TBqoPnEXrLC")
+      expect(log.body).not.toContain("wxyz-2345")
     } finally {
       delete ctx.ntfy
     }

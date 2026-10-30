@@ -298,6 +298,7 @@ export function createHost(opts: HostOptions = {}): Host {
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
     log,
+    onChange: () => opts.onHealthChanged?.(),
     onRefused: (reason, requestId) =>
       void audit.record({
         session: "push",
@@ -329,6 +330,7 @@ export function createHost(opts: HostOptions = {}): Host {
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
     log,
+    onChange: () => opts.onHealthChanged?.(),
     onRefused: (reason, requestId) =>
       void audit.record({
         session: "push",
@@ -458,6 +460,14 @@ export function createHost(opts: HostOptions = {}): Host {
         errors: policy.errors,
       },
       relay: phone.health(),
+      push: [
+        ...(ntfy.status().enabled
+          ? [{ channel: "ntfy" as const, ok: ntfy.status().listening }]
+          : []),
+        ...(slack.status().enabled
+          ? [{ channel: "slack" as const, ok: slack.status().connected }]
+          : []),
+      ],
       signin: {
         signedIn: acct?.signedIn ?? false,
         ...(acct?.email ? { email: acct.email } : {}),

@@ -638,7 +638,9 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       return bad(
         reply,
         400,
-        "That is not a topic JCVC made. Copy the topic name from the ntfy app on your phone: it starts with jcvc-.",
+        typeof b.topic === "string" && ownTopic(b.topic.toLowerCase())
+          ? "That topic has capital letters, and ntfy treats them as different letters, so your phone would get nothing. In the ntfy app, subscribe to the topic all in lower case."
+          : "That is not a topic JCVC makes. JCVC topics start with jcvc-, are all lower case and have no o or 0. Copy the name from the ntfy app on your phone, or make new topics.",
       )
     const server =
       typeof b.server === "string" && b.server.trim()

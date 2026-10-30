@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { redactString } from "@gatehouse/policy"
 import { Broker } from "../src/broker.js"
 import { NtfyChannel, randomTopic, type NtfySettings } from "../src/push/ntfy.js"
@@ -175,6 +175,39 @@ describe("ntfy push", () => {
 })
 
 describe("topics and the test notification", () => {
+  it("says when the topic is the older kind, and keeps sending to it until you replace it", async () => {
+    const t = setup()
+    expect(t.channel.status().oldStyle).toBeUndefined()
+    // A phone subscribed to it still works, so nothing replaces it by itself.
+    t.settings.topic = "jcvc-t6YdOCy5dH5TBqoPnEXrLC"
+    expect(t.channel.status()).toMatchObject({ topic: t.settings.topic, oldStyle: true })
+    await t.channel.notify(t.view)
+    expect(t.posts[0]?.body.topic).toBe("jcvc-t6YdOCy5dH5TBqoPnEXrLC")
+  })
+
+  it("tells the sidebar when it is switched on, starts listening and is switched off", async () => {
+    const t = setup()
+    const seen: boolean[] = []
+    const channel: NtfyChannel = new NtfyChannel({
+      broker: t.broker,
+      settings: () => t.settings,
+      redact: (x) => x,
+      expiryMs: () => 60_000,
+      onRefused: () => undefined,
+      log: () => undefined,
+      // A stream that stays open, as ntfy's does.
+      fetchImpl: (async () =>
+        new Response(new ReadableStream({ start: () => undefined }), {
+          status: 200,
+        })) as typeof fetch,
+      onChange: () => seen.push(channel.status().listening),
+    })
+    channel.start()
+    await vi.waitFor(() => expect(seen).toEqual([false, true]))
+    channel.stop()
+    expect(seen).toEqual([false, true, false])
+  })
+
   it("makes topics a person can type into a phone without mixing up letters", () => {
     for (let i = 0; i < 200; i++) {
       const t = randomTopic()

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { PushPanel } from "../src/components/PushPanel"
 
 const posted: Array<{ url: string; body: unknown }> = []
+let oldStyle = false
 
 vi.mock("../src/lib/api", () => ({
   api: vi.fn(async (method: string, url: string, body?: unknown) => {
@@ -22,6 +23,7 @@ vi.mock("../src/lib/api", () => ({
             server: "https://ntfy.sh",
             topic: "jcvc-abcd-efgh-jkmn-pqrs-tuvw",
             maxRisk: 69,
+            ...(oldStyle ? { oldStyle: true } : {}),
           },
         },
       }
@@ -31,6 +33,7 @@ vi.mock("../src/lib/api", () => ({
 
 beforeEach(() => {
   posted.length = 0
+  oldStyle = false
 })
 afterEach(cleanup)
 
@@ -57,15 +60,37 @@ describe("the ntfy topic your phone is subscribed to", () => {
     render(<PushPanel />)
     fireEvent.click(await screen.findByRole("button", { name: "My phone has a different topic" }))
     fireEvent.change(screen.getByRole("textbox", { name: /^Topic on your phone/ }), {
-      target: { value: "jcvc-t6YdOCy5dH5TBqoPnEXrLC" },
+      target: { value: "jcvc-wxyz-2345-6789-abcd-efgh" },
     })
     fireEvent.click(screen.getByRole("button", { name: "Use this topic" }))
     await waitFor(() =>
       expect(posted).toEqual([
         {
           url: "/api/push/ntfy/enable",
-          body: expect.objectContaining({ topic: "jcvc-t6YdOCy5dH5TBqoPnEXrLC", newTopics: false }),
+          body: expect.objectContaining({
+            topic: "jcvc-wxyz-2345-6789-abcd-efgh",
+            newTopics: false,
+          }),
         },
+      ]),
+    )
+  })
+
+  it("offers a new topic in place of one from before 29 Oct, and changes nothing until you choose", async () => {
+    render(<PushPanel />)
+    await screen.findByRole("button", { name: "Make new topics" })
+    expect(screen.queryByText(/easy to mix up/)).toBeNull()
+    cleanup()
+    oldStyle = true
+    render(<PushPanel />)
+    expect(await screen.findByText(/easy to mix up/)).toBeTruthy()
+    fireEvent.click(screen.getByRole("button", { name: "Make a new topic" }))
+    expect(screen.getByText(/remove the old subscription/)).toBeTruthy()
+    expect(posted).toEqual([])
+    fireEvent.click(screen.getByRole("button", { name: "Replace the topic" }))
+    await waitFor(() =>
+      expect(posted).toEqual([
+        { url: "/api/push/ntfy/enable", body: expect.objectContaining({ newTopics: true }) },
       ]),
     )
   })
