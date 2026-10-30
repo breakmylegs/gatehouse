@@ -36,16 +36,19 @@ describe("App shell", () => {
 })
 
 describe("Jean-Claude mode", () => {
-  it("is always on, and the header switches only between its light and dark versions", async () => {
+  it("is always on, and the profile menu switches only between its light and dark versions", async () => {
     useStore.setState({ theme: "light", route: "approvals" })
     useStore.getState().handleEvent({ type: "hello", sessions: [], pending: [], health, usage: {} })
     render(<App />)
     expect(document.documentElement.dataset.jcvc).toBe("on")
     expect(screen.queryByRole("button", { name: /jean-claude mode/i })).toBeNull()
-    await userEvent.click(screen.getByRole("button", { name: "Jean-Claude dark" }))
+    const profile = screen.getByRole("button", { name: /Your profile and settings/ })
+    await userEvent.click(profile)
+    await userEvent.click(screen.getByRole("menuitem", { name: "Jean-Claude dark" }))
     expect(useStore.getState().theme).toBe("dark")
     expect(document.documentElement.dataset.jcvc).toBe("on")
-    expect(screen.getByRole("button", { name: "Jean-Claude light" })).toBeInTheDocument()
+    await userEvent.click(profile)
+    expect(screen.getByRole("menuitem", { name: "Jean-Claude light" })).toBeInTheDocument()
   })
 })
 

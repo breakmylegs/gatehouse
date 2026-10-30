@@ -7,7 +7,8 @@ import { Virtuoso } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
 import { emptyTranscript, type Item, type Todo } from "../lib/transcript"
-import { describeActivity } from "../lib/activity"
+import { describeActivity, describePulse } from "../lib/activity"
+import { groupItems, summarise } from "../lib/groups"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -15,6 +16,7 @@ import { money } from "../lib/format"
 import { send, usePending, useSessionList, useStore } from "../store"
 import { MODELS } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
+import { Menu, type MenuItem } from "../components/Menu"
 import { FilesPanel, Viewer, type Opened } from "../components/FilesPanel"
 import { PlusMenu } from "../components/PlusMenu"
 import { api } from "../lib/api"
@@ -110,76 +112,43 @@ export function Workspace() {
         <SessionPane
           key={`${i}:${id}`}
           sessionId={id}
+          index={i}
+          panes={panes}
           onChangeSession={(next) => setPane(i, next)}
-          controls={<PaneControls index={i} current={id} panes={panes} list={list} />}
         />
       ))}
     </div>
   )
 }
 
-/** Open another session beside this one, or close this pane. */
-function PaneControls({
-  index,
-  current,
-  panes,
-  list,
-}: {
-  index: number
-  current: string
-  panes: string[]
-  list: SessionInfo[]
-}) {
-  const openBeside = useStore((s) => s.openBeside)
-  const closePane = useStore((s) => s.closePane)
-  const others = list.filter((s) => !panes.includes(s.id))
-  const last = index === panes.length - 1
-  return (
-    <span className="flex items-center gap-2">
-      {last && panes.length < 3 && others.length > 0 ? (
-        <label className="flex items-center gap-1">
-          <span className="sr-only">Open another session beside this one</span>
-          <select
-            className="field"
-            value=""
-            onChange={(e) => e.target.value && openBeside(e.target.value)}
-          >
-            <option value="">Open beside…</option>
-            {others.map((s) => (
-              <option key={s.id} value={s.id}>
-                {sessionCode(s)} {s.project}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-      {panes.length > 1 ? (
-        <button
-          type="button"
-          className="btn"
-          aria-label={`Close the pane for ${current}`}
-          onClick={() => closePane(index)}
-        >
-          Close pane
-        </button>
-      ) : null}
-    </span>
-  )
+const STATE_WORDS: Record<SessionInfo["state"], string> = {
+  starting: "Starting",
+  idle: "Ready",
+  running: "Working",
+  waiting: "Needs you",
+  error: "Stopped with an error",
+  ended: "Ended",
 }
+
+type Side = "files" | "plan"
 
 function SessionPane({
   sessionId,
+  index,
+  panes,
   onChangeSession,
-  controls,
 }: {
   sessionId: string
+  index: number
+  panes: string[]
   onChangeSession: (id: string) => void
-  controls: React.ReactNode
 }) {
   const sessions = useStore((s) => s.sessions)
   const selected = sessionId
   const setRoute = useStore((s) => s.setRoute)
   const selectRequest = useStore((s) => s.selectRequest)
+  const openBeside = useStore((s) => s.openBeside)
+  const closePane = useStore((s) => s.closePane)
   const transcript =
     useStore((s) => (selected ? s.transcripts[selected] : undefined)) ?? emptyTranscript()
   const allPending = usePending()
@@ -194,140 +163,128 @@ function SessionPane({
   )
   const session = selected ? sessions[selected] : undefined
   const [opened, setOpened] = useState<Opened>()
-  const [side, setSide] = useState<"files" | "plan">("files")
+  const [side, setSide] = useState<Side | null>(null)
+  const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
+  useEffect(() => {
+    if (opened?.kind === "browser") setLastUrl(opened.url)
+  }, [opened])
 
-  const [railOpen, setRailOpen] = useState(false)
-  const railToggle = useRef<HTMLButtonElement>(null)
+  // Runs of tool calls read as one line each, opened on demand.
+  const shownItems = useMemo(() => groupItems(transcript.items), [transcript.items])
+  const tools = useRef<Partial<Record<Side, HTMLButtonElement | null>>>({})
+  const toggleSide = (t: Side) => setSide((s) => (s === t ? null : t))
   // Closing puts focus back on the button that opened it, so the keyboard does not lose its place.
   const closeRail = () => {
-    setRailOpen(false)
-    railToggle.current?.focus()
+    const was = side
+    setSide(null)
+    if (was) tools.current[was]?.focus()
   }
   if (!session) return null
 
   const running = session.state === "running" || session.state === "waiting"
   const ended = session.state === "ended" || session.state === "error"
+  const others = list.filter((s) => !panes.includes(s.id))
+  // Each item says what it does, so it reads right out of context. A session shown in another pane swaps places.
+  const titleMenu: MenuItem[] = [
+    ...list
+      .filter((s) => s.id !== session.id)
+      .map((s) => ({
+        label: `Show ${sessionCode(s)} ${s.project} here`,
+        onSelect: () => onChangeSession(s.id),
+      })),
+    ...(panes.length < 3 && index === panes.length - 1
+      ? others.map((s) => ({
+          label: `Open ${sessionCode(s)} ${s.project} beside`,
+          onSelect: () => openBeside(s.id),
+        }))
+      : []),
+    { kind: "separator" },
+    ...(panes.length > 1 ? [{ label: "Close this pane", onSelect: () => closePane(index) }] : []),
+    {
+      label: "Interrupt",
+      disabled: !running,
+      onSelect: () => void send({ type: "interrupt", sessionId: session.id }),
+    },
+    {
+      label: "Close session",
+      danger: true,
+      disabled: session.state === "ended",
+      onSelect: () => void send({ type: "close_session", sessionId: session.id }),
+    },
+  ]
 
   return (
     <div
       className="pane relative grid h-full min-w-0 grid-rows-[auto_1fr_auto]"
-      data-rail={railOpen ? "open" : undefined}
+      data-rail={side ? "open" : undefined}
+      data-side={side ?? "none"}
       data-viewer={opened ? "" : undefined}
       aria-label={`Session ${session.project}`}
     >
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line bg-s1 px-4 py-2.5">
-        <SessionCode session={session} className="!text-[17px]" />
-        <div className="grid min-w-[220px] flex-1 gap-0.5">
-          <label className="flex items-center gap-2">
-            <span className="sr-only">Session</span>
-            <select
-              className="field"
-              value={session.id}
-              onChange={(e) => onChangeSession(e.target.value)}
-            >
-              {list.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {sessionCode(s)} {s.project} ({s.state})
-                </option>
-              ))}
-            </select>
-          </label>
+      <header className="pane-head">
+        <SessionCode session={session} className="!text-[16px]" />
+        {/* Never narrower than the name and its state: the side panel buttons wrap below instead. */}
+        <span className="grid min-w-[11rem] flex-1">
+          <Menu
+            label={`${session.project}: switch, open beside, interrupt or close`}
+            className="pane-title"
+            button={
+              <>
+                <span className="min-w-[6ch] truncate">{session.project}</span>
+                <span className="shrink-0 text-[12.5px] font-normal text-mut">
+                  {STATE_WORDS[session.state]}
+                </span>
+                <span aria-hidden="true" className="text-[12px]">
+                  &#9662;
+                </span>
+              </>
+            }
+            items={titleMenu}
+          />
           <span className="mono truncate text-xs text-mut">{session.cwd}</span>
-        </div>
-        <label className="flex items-center gap-2">
-          <span className="text-mut">Model</span>
-          <select
-            className="field"
-            value={MODELS.some((m) => m.id === (session.model ?? "")) ? (session.model ?? "") : ""}
-            disabled={ended}
-            onChange={(e) =>
-              void send({
-                type: "set_model",
-                sessionId: session.id,
-                ...(e.target.value ? { model: e.target.value } : {}),
-              })
+        </span>
+        <span role="group" aria-label="Side panels" className="flex items-center gap-1">
+          {(["plan", "files"] as const).map((t) => (
+            <button
+              key={t}
+              ref={(el) => {
+                tools.current[t] = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === t}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide(t)}
+            >
+              {t === "plan" ? "Plan" : "Files"}
+            </button>
+          ))}
+          <button
+            type="button"
+            className="pane-tool"
+            aria-pressed={opened?.kind === "browser"}
+            onClick={() =>
+              setOpened(opened?.kind === "browser" ? undefined : { kind: "browser", url: lastUrl })
             }
           >
-            {MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <span className="text-mut">Effort</span>
-          <select
-            className="field"
-            value={session.effort ?? ""}
-            disabled={ended}
-            onChange={(e) =>
-              e.target.value &&
-              void send({
-                type: "set_effort",
-                sessionId: session.id,
-                effort: e.target.value as EffortId,
-              })
-            }
-          >
-            <option value="" disabled>
-              Model default
-            </option>
-            {EFFORTS.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <span className="text-mut">Mode</span>
-          <select
-            className="field"
-            value={uiModeOf(session)}
-            disabled={ended}
-            onChange={(e) => void changeMode(session, e.target.value as UiMode)}
-          >
-            {MODE_OPTIONS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="btn btn-deny"
-          disabled={!running}
-          onClick={() => void send({ type: "interrupt", sessionId: session.id })}
-        >
-          Interrupt
-        </button>
-        <button
-          ref={railToggle}
-          type="button"
-          className="btn pane-rail-toggle"
-          aria-expanded={railOpen}
-          aria-controls={`rail-${session.id}`}
-          onClick={() => setRailOpen((v) => !v)}
-        >
-          Files and plan
-        </button>
-        {controls}
+            Browser
+          </button>
+        </span>
       </header>
 
       <div className="pane-body min-h-0">
         <section aria-label="Transcript" className="pane-transcript min-h-0">
           <Virtuoso
             style={{ height: "100%" }}
-            data={transcript.items}
+            data={shownItems}
             followOutput="smooth"
-            initialTopMostItemIndex={Math.max(0, transcript.items.length - 1)}
+            initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
             computeItemKey={(_, it) => it.id}
             itemContent={(_, it) => (
               <div className="mx-auto max-w-[860px] px-5 py-1.5">
-                <ItemView item={it} />
+                {it.kind === "group" ? <ToolGroup tools={it.tools} /> : <ItemView item={it} />}
               </div>
             )}
             components={{
@@ -350,39 +307,22 @@ function SessionPane({
         ) : null}
         <aside
           id={`rail-${session.id}`}
-          aria-label="Files and plan"
+          aria-label={side === "plan" ? "Plan" : "Files"}
           className="pane-rail min-h-0 grid-rows-[auto_1fr] border-l border-line bg-s1"
           onKeyDown={(e) => {
-            if (e.key === "Escape" && railOpen) {
+            if (e.key === "Escape" && side) {
               e.stopPropagation()
               closeRail()
             }
           }}
         >
-          <div className="flex items-end border-b border-line px-2">
-            <div role="tablist" aria-label="Side panel" className="flex">
-              {(["files", "plan"] as const).map((t) => (
-                <button
-                  key={t}
-                  role="tab"
-                  aria-selected={side === t}
-                  className="tab !text-[14px]"
-                  onClick={() => setSide(t)}
-                >
-                  {t === "files" ? "Files" : "Plan"}
-                </button>
-              ))}
-            </div>
-            {/* Shown only while the panel covers the transcript, in a narrow window or pane. */}
-            <button
-              type="button"
-              className="btn pane-rail-close mb-1.5 ml-auto"
-              onClick={closeRail}
-            >
+          <div className="flex items-center justify-between border-b border-line px-4 py-2">
+            <h2 className="m-0 text-[15px]">{side === "plan" ? "Plan" : "Files"}</h2>
+            <button type="button" className="btn !min-h-7 !text-[13px]" onClick={closeRail}>
               Close
             </button>
           </div>
-          <div role="tabpanel" className="min-h-0 overflow-auto p-4">
+          <div className="min-h-0 overflow-auto p-4">
             {side === "files" ? (
               <FilesPanel
                 sessionId={session.id}
@@ -414,6 +354,81 @@ function SessionPane({
           <ActivityLine sessionId={session.id} cwd={session.cwd} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} />
+        {/* What the session runs on, under the prompt box where you look when you send. */}
+        <div className="composer-bar" role="group" aria-label="Model, effort and mode">
+          <label className="composer-pick">
+            <span className="text-mut">Model</span>
+            <select
+              className="composer-select"
+              value={
+                MODELS.some((m) => m.id === (session.model ?? "")) ? (session.model ?? "") : ""
+              }
+              disabled={ended}
+              onChange={(e) =>
+                void send({
+                  type: "set_model",
+                  sessionId: session.id,
+                  ...(e.target.value ? { model: e.target.value } : {}),
+                })
+              }
+            >
+              {MODELS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="composer-pick">
+            <span className="text-mut">Effort</span>
+            <select
+              className="composer-select"
+              value={session.effort ?? ""}
+              disabled={ended}
+              onChange={(e) =>
+                e.target.value &&
+                void send({
+                  type: "set_effort",
+                  sessionId: session.id,
+                  effort: e.target.value as EffortId,
+                })
+              }
+            >
+              <option value="" disabled>
+                Model default
+              </option>
+              {EFFORTS.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="composer-pick">
+            <span className="text-mut">Mode</span>
+            <select
+              className="composer-select"
+              value={uiModeOf(session)}
+              disabled={ended}
+              onChange={(e) => void changeMode(session, e.target.value as UiMode)}
+            >
+              {MODE_OPTIONS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {running ? (
+            <button
+              type="button"
+              className="btn btn-deny ml-auto !min-h-7"
+              onClick={() => void send({ type: "interrupt", sessionId: session.id })}
+            >
+              Interrupt
+            </button>
+          ) : null}
+        </div>
       </footer>
     </div>
   )
@@ -456,15 +471,32 @@ function SessionRequest({
 /** What the session is doing while a turn runs: thinking, writing a file, running a command. */
 function ActivityLine({ sessionId, cwd }: { sessionId: string; cwd: string }) {
   const activity = useStore((s) => s.activity[sessionId])
+  const pulse = useStore((s) => s.pulse[sessionId])
   const now = useNow(1000)
   const line = describeActivity(activity, now, cwd)
+  const beat = describePulse(pulse, now)
+  const detail = [line.detail, beat.tokens, beat.quiet].filter(Boolean).join(", ")
+  if (beat.stuck)
+    return (
+      <div className="activity" data-stuck="">
+        <span className="activity-dot" aria-hidden="true" />
+        <span role="status" className="font-semibold">
+          Possibly stuck: {line.label.charAt(0).toLowerCase() + line.label.slice(1)}
+        </span>
+        <span className="text-mut tabular-nums">{detail}</span>
+        <span className="basis-full pl-[19px] text-[13px]">
+          Nothing has arrived for {Math.round((now - (pulse?.last ?? now)) / 60_000)} min and
+          nothing is waiting for you. Interrupt stops this turn and keeps what was done.
+        </span>
+      </div>
+    )
   return (
     <div className="activity">
       <span className="activity-dot" aria-hidden="true" />
       <span role="status" className="font-semibold">
         {line.label}
       </span>
-      {line.detail ? <span className="text-mut tabular-nums">{line.detail}</span> : null}
+      {detail ? <span className="text-mut tabular-nums">{detail}</span> : null}
       {line.hint ? (
         <span className="basis-full pl-[19px] text-[13px] text-mut">{line.hint}</span>
       ) : null}
@@ -683,6 +715,45 @@ function SessionFacts({ sessionId }: { sessionId: string }) {
     </p>
   )
 }
+
+/**
+ * A run of tool calls as one line, "Ran 2 commands, read schema.ts", that opens to each call and its output. It
+ * says when one of them is waiting for you.
+ */
+const ToolGroup = memo(function ToolGroup({
+  tools,
+}: {
+  tools: Array<Extract<Item, { kind: "tool" }>>
+}) {
+  const [open, setOpen] = useState(false)
+  const waiting = useStore((st) =>
+    tools.some(
+      (t) =>
+        !t.result && Object.values(st.pending).some((p) => p.request.toolUseId === t.toolUseId),
+    ),
+  )
+  return (
+    <div className={clsx(tools[0]?.subagent && "ml-5")}>
+      <button
+        type="button"
+        className="tool-group-line"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{summarise(tools)}</span>
+        {waiting ? <span className="font-semibold text-tx">Waiting for you</span> : null}
+        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+      </button>
+      {open ? (
+        <div className="grid gap-1.5 pt-1.5">
+          {tools.map((t) => (
+            <ToolCard key={t.id} item={t} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+})
 
 export const ItemView = memo(function ItemView({ item }: { item: Item }) {
   switch (item.kind) {

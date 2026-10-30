@@ -186,3 +186,46 @@ export function describeActivity(
       return { label: `Running ${toolWords(a.tool)}${target}`, detail: `${s} s` }
   }
 }
+
+/** When anything last arrived in this turn, and the tokens Claude has written in it. */
+export interface Pulse {
+  last: number
+  /** Output tokens of the messages finished in this turn. */
+  done: number
+  /** Output tokens of the message being written now. */
+  now: number
+}
+
+/** The next pulse after one SDK message. A result ends the turn and its pulse. */
+export function nextPulse(p: Pulse | undefined, message: unknown, at: number): Pulse | undefined {
+  const m = obj(message)
+  if (str(m.type) === "result") return undefined
+  const base = p ?? { last: at, done: 0, now: 0 }
+  if (str(m.type) !== "stream_event") return { ...base, last: at }
+  const e = obj(m.event)
+  if (str(e.type) === "message_start") return { last: at, done: base.done + base.now, now: 0 }
+  const out = obj(e.usage).output_tokens
+  if (str(e.type) === "message_delta" && typeof out === "number")
+    return { ...base, last: at, now: out }
+  return { ...base, last: at }
+}
+
+/** After this long with nothing arriving and nothing waiting on you, a turn is called possibly stuck. */
+export const STALL_MS = 120_000
+
+/** "2.5k tokens" and "last activity 40 s ago" for the live line, and whether it looks stuck. */
+export function describePulse(
+  p: Pulse | undefined,
+  at: number,
+): { tokens?: string; quiet?: string; stuck: boolean } {
+  if (!p) return { stuck: false }
+  const total = p.done + p.now
+  const quietMs = at - p.last
+  return {
+    ...(total > 0
+      ? { tokens: total < 1000 ? `${total} tokens` : `${(total / 1000).toFixed(1)}k tokens` }
+      : {}),
+    ...(quietMs >= 10_000 ? { quiet: `last activity ${Math.round(quietMs / 1000)} s ago` } : {}),
+    stuck: quietMs >= STALL_MS,
+  }
+}

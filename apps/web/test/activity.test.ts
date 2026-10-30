@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { describeActivity, nextActivity, type Activity } from "../src/lib/activity"
+import {
+  describeActivity,
+  describePulse,
+  nextActivity,
+  nextPulse,
+  STALL_MS,
+  type Activity,
+} from "../src/lib/activity"
 
 const ev = (event: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({
   type: "stream_event",
@@ -127,5 +134,28 @@ describe("the place a call acts on", () => {
     expect(describeActivity(a, 0, "C:\\dev\\Bill").label).toBe(
       "Running Edit (C:/dev/Billing/src/app.ts)",
     )
+  })
+})
+
+describe("the pulse of a running turn", () => {
+  const ev = (event: Record<string, unknown>) => ({ type: "stream_event", event })
+
+  it("adds up the tokens Claude writes across the messages of a turn", () => {
+    let p = nextPulse(undefined, ev({ type: "message_start" }), 0)
+    p = nextPulse(p, ev({ type: "message_delta", usage: { output_tokens: 1200 } }), 1000)
+    p = nextPulse(p, ev({ type: "message_start" }), 2000)
+    p = nextPulse(p, ev({ type: "message_delta", usage: { output_tokens: 1300 } }), 3000)
+    expect(describePulse(p, 3000).tokens).toBe("2.5k tokens")
+    expect(nextPulse(p, { type: "result" }, 4000)).toBeUndefined()
+  })
+
+  it("says how long it has been quiet, and calls two quiet minutes possibly stuck", () => {
+    const p = nextPulse(undefined, ev({ type: "ping" }), 0)
+    expect(describePulse(p, 5_000)).toEqual({ stuck: false })
+    expect(describePulse(p, 40_000)).toEqual({ quiet: "last activity 40 s ago", stuck: false })
+    expect(describePulse(p, STALL_MS).stuck).toBe(true)
+    // Anything arriving, even a partial message, counts as a sign of life.
+    const later = nextPulse(p, ev({ type: "content_block_delta" }), STALL_MS - 1000)
+    expect(describePulse(later, STALL_MS).stuck).toBe(false)
   })
 })

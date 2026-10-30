@@ -728,7 +728,6 @@ mark.seg {
 .pane-rail {
   display: grid;
 }
-.pane-rail-toggle,
 .pane-rail-close {
   display: none;
 }
@@ -743,7 +742,6 @@ mark.seg {
   .pane-rail {
     display: none;
   }
-  .pane-rail-toggle,
   .pane-rail-close {
     display: inline-flex;
   }
@@ -757,4 +755,270 @@ mark.seg {
     width: min(320px, 92%);
     box-shadow: -8px 0 24px color-mix(in srgb, #000 18%, transparent);
   }
+}
+
+/*
+ * The app: the rail on the left, the page on the right (owner, 30 Oct: arranged like the desktop coding apps,
+ * in JCVC's own colours and type). Ctrl+B hides the rail.
+ */
+.app-shell {
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+.app-shell[data-rail="hidden"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  border-right: 1px solid var(--c-shell-line);
+}
+.rail-sessions {
+  flex: 1 1 auto;
+}
+.rail-session {
+  position: relative;
+}
+.rail-session-menu {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+.rail-session:hover .rail-session-menu,
+.rail-session:focus-within .rail-session-menu,
+.rail-session-menu:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+.rail-session[data-state="ended"] .rail-item {
+  opacity: 0.6;
+}
+.rail-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-shell-mut);
+  font: 600 14px var(--font-sign);
+  cursor: pointer;
+}
+.rail-icon:hover {
+  background: var(--c-shell-line);
+  color: var(--c-shell-tx);
+}
+.rail-profile {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-shell-tx);
+  font: 500 14px var(--font-sign);
+  cursor: pointer;
+}
+.rail-profile:hover,
+.rail-profile[aria-expanded="true"] {
+  background: var(--c-shell-2);
+  border-color: var(--c-shell-line);
+}
+.show-rail {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+}
+
+/* Menus float above everything, placed by their button. */
+.menu {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 8px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  box-shadow: 0 10px 30px color-mix(in srgb, #000 22%, transparent);
+}
+.menu-shell {
+  border-color: var(--c-shell-line);
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 500 14px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--c-s2);
+  outline: none;
+}
+.menu-shell .menu-item:hover,
+.menu-shell .menu-item:focus-visible {
+  background: var(--c-shell-line);
+}
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.menu-danger {
+  color: var(--c-sev);
+}
+.menu-hint {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.menu-sep {
+  width: 100%;
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--c-line);
+}
+.menu-shell .menu-sep {
+  border-top-color: var(--c-shell-line);
+}
+.menu-heading {
+  padding: 6px 10px 4px;
+  font: 500 12.5px var(--font-sign);
+  opacity: 0.75;
+}
+
+/* A session pane: its name with a menu, and the side panels it can open. */
+.pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s1);
+}
+.pane-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 600 17px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.pane-title:hover > span:first-child {
+  text-decoration: underline;
+}
+.pane-tool {
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 13.5px var(--font-sign);
+  cursor: pointer;
+}
+.pane-tool:hover {
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.pane-tool[aria-pressed="true"] {
+  border-color: var(--c-line);
+  background: var(--c-s2);
+  color: var(--c-tx);
+  font-weight: 600;
+}
+.pane[data-side="none"] .pane-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.pane[data-side="none"][data-viewer] .pane-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+.pane[data-side="none"] .pane-rail {
+  display: none;
+}
+
+/* Model, effort and mode under the prompt box. */
+.composer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 6px;
+}
+.composer-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 500 12.5px var(--font-sign);
+  color: var(--c-mut);
+}
+.composer-select {
+  min-height: 26px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-tx);
+  font: 500 13px var(--font-sign);
+  cursor: pointer;
+}
+.composer-select:hover {
+  border-color: var(--c-line);
+}
+main[data-rail="hidden"] {
+  padding-top: 44px;
+}
+
+/* A run of tool calls folded into one line. */
+.tool-group-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 14px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.tool-group-line:hover {
+  color: var(--c-tx);
+}
+.activity[data-stuck] .activity-dot {
+  background: var(--c-sev);
+  animation: none;
 }

@@ -77,25 +77,33 @@ Sessions waiting on you are lit and come first. Each has a code and colour that 
     title: "Workspace",
     body: `This is where you work with Claude in one session.
 
-**At the top**
+**The sidebar**
 
-- The session code and picker switch between sessions.
+On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and More. Below them, your sessions, grouped by the folder they are in, with those that need you first. Choose one to open it; its ... button opens it beside the others or closes it. At the foot: how the Host, the Approver and the phone are, the kill switch, and your profile menu, which holds Settings, What Claude may do, the Approver, the audit log, Phone and notifications, the theme and help. Edit sidebar, under More, chooses which pages sit in it. Ctrl+B hides and shows it.
+
+**At the top of a session**
+
+- Its name opens a menu: show another session here, open one beside it, close the pane, interrupt, or close the session.
+- **Plan**, **Files** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away.
+
+**Under the prompt box**
+
 - **Model**, **Effort** and **Mode** change for this session at once.
 - **Interrupt** stops the current turn.
 
 **The transcript**
 
-Claude's replies, the tools it used and their results appear in order. Tool calls show what ran and whether it was allowed.
+Claude's replies appear in order. A run of tool calls folds into one line, such as "Ran 2 commands, read schema.ts"; choose it to see each call, what ran and its output.
 
-While a turn runs, a line above the composer says what Claude is doing and for how long: thinking, writing a reply, writing a file (with the characters so far) or running a command. A large file takes a while, because Claude writes all of it before JCVC can check it.
+While a turn runs, a line above the composer says what Claude is doing and for how long: thinking, writing a reply, writing a file (with the characters so far) or running a command, with the tokens written and how long since anything last arrived. A large file takes a while, because Claude writes all of it before JCVC can check it. After two minutes with nothing arriving and nothing waiting for you, it says the turn is possibly stuck; Interrupt stops it and keeps what was done.
 
 **Side by side**
 
-Open beside, at the right of a session's header, shows another session next to it; up to three fit. Each has its own transcript, files and composer. Close pane removes one. On Sessions, Beside opens a session next to the ones already open. When a pane is narrow, Files and plan opens the side panel over it (Close or Esc puts it away), and an open file takes the transcript's place until you close it.
+Open beside, in a session's name menu or its ... button in the sidebar, shows another session next to it; up to three fit. Each has its own transcript, files and composer. Close this pane removes one. When a pane is narrow, Plan and Files open over it, and an open file takes the transcript's place until you close it.
 
 **Files**
 
-The Files tab on the right lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
+Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
 
 **The composer**
 
@@ -305,7 +313,7 @@ If anything goes wrong while deciding, the request waits for you or is denied. I
 **How it works**
 
 1. Every 30 minutes (change it in Settings, Updates) JCVC looks for a new version on GitHub.
-2. When there is one, an **Update to** button appears in the header. It lists what is new.
+2. When there is one, an **Update to** button appears at the foot of the sidebar. It lists what is new.
 3. Choose **Update now**. JCVC downloads only the parts that changed, checks them against its release signature, and builds the new version beside the one you are using. You can keep working while it does.
 4. JCVC then closes, switches to the new version and opens again by itself, usually within a minute. Open sessions stop when it closes; resume them from Sessions.
 

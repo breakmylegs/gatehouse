@@ -35,8 +35,17 @@ export function CommandPalette() {
         setOpen((o) => !o)
       }
     }
+    // The sidebar's Search opens it too.
+    const fromButton = () => {
+      back.current = document.activeElement as HTMLElement | null
+      setOpen(true)
+    }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    window.addEventListener("jcvc:palette", fromButton)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("jcvc:palette", fromButton)
+    }
   }, [])
 
   const close = () => {

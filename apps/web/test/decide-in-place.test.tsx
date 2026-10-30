@@ -204,17 +204,19 @@ describe("deciding in the session's own workspace", () => {
   })
 })
 
-describe("the Files and plan panel in a narrow pane", () => {
-  it("has a Close button, and Esc closes it too", () => {
+describe("the side panels of a pane", () => {
+  it("open from the pane's buttons, close with Close or Esc, and give focus back", () => {
     render(<Workspace />)
-    const toggle = screen.getByRole("button", { name: "Files and plan" })
-    fireEvent.click(toggle)
-    expect(toggle.getAttribute("aria-expanded")).toBe("true")
+    const files = screen.getByRole("button", { name: "Files" })
+    fireEvent.click(files)
+    expect(files.getAttribute("aria-pressed")).toBe("true")
+    expect(screen.getByRole("complementary", { name: "Files" })).toBeTruthy()
     fireEvent.click(screen.getByRole("button", { name: "Close" }))
-    expect(toggle.getAttribute("aria-expanded")).toBe("false")
-    fireEvent.click(toggle)
-    fireEvent.keyDown(screen.getByRole("tab", { name: "Files" }), { key: "Escape" })
-    expect(toggle.getAttribute("aria-expanded")).toBe("false")
+    expect(files.getAttribute("aria-pressed")).toBe("false")
+    expect(files).toHaveFocus()
+    fireEvent.click(screen.getByRole("button", { name: "Plan" }))
+    fireEvent.keyDown(screen.getByRole("complementary", { name: "Plan" }), { key: "Escape" })
+    expect(screen.getByRole("button", { name: "Plan" }).getAttribute("aria-pressed")).toBe("false")
   })
 })
 

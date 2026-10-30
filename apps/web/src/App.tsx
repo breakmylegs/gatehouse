@@ -1,4 +1,3 @@
-import NumberFlow from "@number-flow/react"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { Toaster } from "sonner"
 import { CommandPalette } from "./components/CommandPalette"
@@ -8,10 +7,11 @@ import { FirstRun } from "./surfaces/FirstRun"
 import { Setup } from "./surfaces/Setup"
 import { JcvcBackdrop } from "./components/JcvcBackdrop"
 import { HelpPane } from "./components/HelpPane"
-import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
+import { Rail } from "./components/Rail"
+import { UpdateResult } from "./components/UpdateNotice"
 import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
-import { type Route, send, usePendingCount, useStore } from "./store"
+import { usePendingCount, useStore } from "./store"
 
 const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
 const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.Policy })))
@@ -19,43 +19,40 @@ const Approver = lazy(() => import("./surfaces/Approver").then((m) => ({ default
 const Settings = lazy(() => import("./surfaces/Settings").then((m) => ({ default: m.Settings })))
 const Workspace = lazy(() => import("./surfaces/Workspace").then((m) => ({ default: m.Workspace })))
 
-const NAV: Array<{ route: Route; label: string }> = [
-  { route: "approvals", label: "Approvals" },
-  { route: "sessions", label: "Sessions" },
-  { route: "workspace", label: "Workspace" },
-  { route: "policy", label: "Policy" },
-  { route: "approver", label: "Approver" },
-  { route: "audit", label: "Audit log" },
-  { route: "devices", label: "Devices" },
-  { route: "settings", label: "Settings" },
-  { route: "guide", label: "User guide" },
-]
+const RAIL_HIDDEN = "gatehouse.rail.hidden"
 
 export function App() {
-  const [confirmKill, setConfirmKill] = useState(false)
   const route = useStore((s) => s.route)
   const setRoute = useStore((s) => s.setRoute)
   const conn = useStore((s) => s.conn)
-  const attempt = useStore((s) => s.attempt)
   const health = useStore((s) => s.health)
   const theme = useStore((s) => s.theme)
-  const setTheme = useStore((s) => s.setTheme)
   const setupDone = useStore((s) => s.setupDone)
-  const helpOpen = useStore((s) => s.helpOpen)
   const setHelpOpen = useStore((s) => s.setHelpOpen)
+  const pendingCount = usePendingCount()
+  const [railHidden, setRailHidden] = useState(() => localStorage.getItem(RAIL_HIDDEN) === "1")
+  const hideRail = (hidden: boolean) => {
+    localStorage.setItem(RAIL_HIDDEN, hidden ? "1" : "")
+    setRailHidden(hidden)
+  }
 
-  // F1 opens and closes the help for the page you are on.
+  // F1 opens and closes the help for the page you are on. Ctrl+B hides and shows the sidebar.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "F1") {
         e.preventDefault()
         setHelpOpen(!useStore.getState().helpOpen)
+      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "b") {
+        e.preventDefault()
+        setRailHidden((h) => {
+          localStorage.setItem(RAIL_HIDDEN, h ? "" : "1")
+          return !h
+        })
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
   }, [setHelpOpen])
-  const pendingCount = usePendingCount()
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -85,173 +82,78 @@ export function App() {
   const killed = health?.killSwitch.engaged ?? false
 
   return (
-    <div className="grid h-full grid-rows-[auto_auto_1fr]">
-      <a
-        href="#main"
-        onClick={(e) => {
-          e.preventDefault()
-          document.getElementById("main")?.focus()
-        }}
-        className="absolute left-2 top-2 z-50 -translate-y-16 rounded bg-sign px-3 py-1.5 text-sign-tx focus:translate-y-0"
-      >
-        Skip to content
-      </a>
-      <header className="shell flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-2.5">
-        <span className="flex items-baseline gap-2">
-          <strong className="sign text-[19px] tracking-tight [font-stretch:85%]">JCVC</strong>
-          <span className="sign text-[13px] font-normal text-shell-mut max-[1200px]:hidden">
-            Jean-Claude Van Code
-          </span>
-        </span>
-        <button
-          className="sign-pill"
-          data-on={pendingCount > 0 ? "" : undefined}
-          onClick={() => setRoute("approvals")}
-          aria-label={`Approvals, ${pendingCount} waiting`}
+    <>
+      <div className="app-shell" data-rail={railHidden ? "hidden" : undefined}>
+        <a
+          href="#main"
+          onClick={(e) => {
+            e.preventDefault()
+            document.getElementById("main")?.focus()
+          }}
+          className="absolute left-2 top-2 z-50 -translate-y-16 rounded bg-sign px-3 py-1.5 text-sign-tx focus:translate-y-0"
         >
-          Needs you <NumberFlow value={pendingCount} className="n" />
-        </button>
-        <StatusPill
-          ok={conn === "open"}
-          label={
-            conn === "open"
-              ? "Host connected"
-              : conn === "connecting"
-                ? `Connecting${attempt ? ` (try ${attempt + 1})` : ""}`
-                : "Host disconnected"
-          }
-        />
-        {health ? (
-          <>
-            <StatusPill
-              ok={health.approver.state === "up"}
-              label={`Approver ${health.approver.state === "up" ? "up" : health.approver.state}`}
-            />
-            <StatusPill
-              ok={health.relay.state === "connected"}
-              neutral={health.relay.state === "not-configured"}
-              label={
-                health.relay.state === "not-configured"
-                  ? "Phone relay not set up"
-                  : health.relay.state === "connected"
-                    ? `Phone relay connected, ${health.relay.devices} device${health.relay.devices === 1 ? "" : "s"}`
-                    : "Phone relay unreachable"
-              }
-            />
-          </>
-        ) : null}
-        <span className="ml-auto" />
-        <UpdateNotice />
-        <button className="btn" aria-expanded={helpOpen} onClick={() => setHelpOpen(!helpOpen)}>
-          Help <kbd className="!border-shell-line !bg-shell-2 !text-shell-tx">F1</kbd>
-        </button>
-        <button className="btn" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          {theme === "dark" ? "Jean-Claude light" : "Jean-Claude dark"}
-        </button>
-        {killed ? (
-          <button className="btn btn-primary" onClick={() => void send({ type: "rearm" })}>
-            Re-arm sessions
+          Skip to content
+        </a>
+        {railHidden ? (
+          <button type="button" className="btn show-rail" onClick={() => hideRail(false)}>
+            <span aria-hidden="true">&raquo;</span> Sidebar
+            {pendingCount > 0 ? (
+              <span className="font-semibold">, {pendingCount} need you</span>
+            ) : null}
           </button>
-        ) : confirmKill ? (
-          <span
-            role="group"
-            aria-label="Confirm the kill switch"
-            className="flex items-center gap-2"
-          >
-            <span className="font-semibold">Deny everything and stop new sessions?</span>
-            <button
-              className="btn btn-deny"
-              onClick={() => {
-                setConfirmKill(false)
-                void send({ type: "kill" })
-              }}
-            >
-              Yes, stop everything
-            </button>
-            <button className="btn" onClick={() => setConfirmKill(false)} autoFocus>
-              Cancel
-            </button>
-          </span>
         ) : (
-          <button className="btn btn-deny" onClick={() => setConfirmKill(true)}>
-            Kill switch
-          </button>
+          <Rail onHide={() => hideRail(true)} />
         )}
-      </header>
-      {conn !== "open" ? (
-        <div role="alert" className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev">
-          Not connected to the Host. Decisions are paused, and requests keep waiting. Reconnecting
-          automatically.
-        </div>
-      ) : killed ? (
-        <div role="alert" className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev">
-          Kill switch engaged. Every request is denied and no session can start until you re-arm.
-        </div>
-      ) : (
-        <div />
-      )}
-      <div className="grid min-h-0 grid-cols-[200px_1fr] max-[900px]:grid-cols-1">
-        <nav
-          aria-label="Surfaces"
-          className="shell overflow-auto border-t border-shell-line p-2 max-[900px]:border-b"
-        >
-          <ul className="m-0 grid list-none gap-0.5 p-0 max-[900px]:grid-flow-col">
-            {NAV.map((n) => (
-              <li key={n.route}>
-                <button
-                  className="rail-item"
-                  aria-current={route === n.route ? "page" : undefined}
-                  onClick={() => setRoute(n.route)}
-                >
-                  {n.label}
-                  {n.route === "approvals" && pendingCount > 0 ? (
-                    <span className="count">{pendingCount}</span>
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto]">
-          <main id="main" tabIndex={-1} className="min-h-0 overflow-auto outline-none">
-            <UpdateResult />
-            <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
-              {route === "approvals" && <Approvals />}
-              {route === "sessions" && <Sessions />}
-              {route === "workspace" && <Workspace />}
-              {route === "policy" && <Policy />}
-              {route === "audit" && <Audit />}
-              {route === "devices" && <Devices />}
-              {route === "settings" && <Settings />}
-              {route === "first-run" && <FirstRun />}
-              {route === "setup" && <Setup />}
-              {route === "guide" && <Guide />}
-              {route === "approver" && <Approver />}
-            </Suspense>
-          </main>
-          <HelpPane />
+        <div className="grid min-h-0 min-w-0 grid-rows-[auto_1fr]">
+          {conn !== "open" ? (
+            <div
+              role="alert"
+              className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
+            >
+              Not connected to the Host. Decisions are paused, and requests keep waiting.
+              Reconnecting automatically.
+            </div>
+          ) : killed ? (
+            <div
+              role="alert"
+              className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
+            >
+              Kill switch engaged. Every request is denied and no session can start until you
+              re-arm.
+            </div>
+          ) : (
+            <div />
+          )}
+          <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_auto]">
+            <main
+              id="main"
+              tabIndex={-1}
+              className="min-h-0 overflow-auto outline-none"
+              data-rail={railHidden ? "hidden" : undefined}
+            >
+              <UpdateResult />
+              <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
+                {route === "approvals" && <Approvals />}
+                {route === "sessions" && <Sessions />}
+                {route === "workspace" && <Workspace />}
+                {route === "policy" && <Policy />}
+                {route === "audit" && <Audit />}
+                {route === "devices" && <Devices />}
+                {route === "settings" && <Settings />}
+                {route === "first-run" && <FirstRun />}
+                {route === "setup" && <Setup />}
+                {route === "guide" && <Guide />}
+                {route === "approver" && <Approver />}
+              </Suspense>
+            </main>
+            <HelpPane />
+          </div>
         </div>
       </div>
+      {/* Outside the layout grid: each of these would otherwise take a row of it. */}
       <CommandPalette />
       <JcvcBackdrop />
       <Toaster position="bottom-right" theme={theme} closeButton />
-    </div>
-  )
-}
-
-function StatusPill({ ok, label, neutral }: { ok: boolean; label: string; neutral?: boolean }) {
-  return (
-    <span className="sign inline-flex items-center gap-1.5 text-[13px] font-normal text-shell-mut">
-      <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-        {ok ? (
-          <circle cx="5" cy="5" r="4" fill="currentColor" className="text-ok" />
-        ) : neutral ? (
-          <circle cx="5" cy="5" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        ) : (
-          <path d="M5 1 9 9H1z" fill="currentColor" className="text-sev" />
-        )}
-      </svg>
-      {label}
-    </span>
+    </>
   )
 }

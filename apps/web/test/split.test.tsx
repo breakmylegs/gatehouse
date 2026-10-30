@@ -40,14 +40,16 @@ beforeEach(() => {
 afterEach(cleanup)
 
 const panes = () => screen.getAllByLabelText(/^Session (atlas|beacon|comet)$/)
+/** A pane's name, which opens its menu: show another session here, open one beside, close. */
+const menuOf = (pane: HTMLElement) =>
+  within(pane).getByRole("button", { name: /: switch, open beside/ })
 
 describe("split view", () => {
   it("shows one session, then opens another beside it", () => {
     render(<Workspace />)
     expect(panes()).toHaveLength(1)
-    fireEvent.change(screen.getByLabelText("Open another session beside this one"), {
-      target: { value: "s2" },
-    })
+    fireEvent.click(menuOf(panes()[0]!))
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Open .* beacon beside$/ }))
     expect(panes().map((p) => p.getAttribute("aria-label"))).toEqual([
       "Session atlas",
       "Session beacon",
@@ -60,8 +62,11 @@ describe("split view", () => {
     useStore.setState({ panes: ["s1", "s2", "s3"] })
     render(<Workspace />)
     expect(panes()).toHaveLength(3)
-    expect(screen.queryByLabelText("Open another session beside this one")).toBeNull()
-    fireEvent.click(within(panes()[1]!).getByRole("button", { name: /close the pane/i }))
+    fireEvent.click(menuOf(panes()[2]!))
+    expect(screen.queryByRole("menuitem", { name: / beside$/ })).toBeNull()
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+    fireEvent.click(menuOf(panes()[1]!))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Close this pane" }))
     expect(panes().map((p) => p.getAttribute("aria-label"))).toEqual([
       "Session atlas",
       "Session comet",
@@ -71,8 +76,8 @@ describe("split view", () => {
   it("switching a pane to a session already on screen swaps the two", () => {
     useStore.setState({ panes: ["s1", "s2"] })
     render(<Workspace />)
-    const first = panes()[0]!
-    fireEvent.change(within(first).getAllByRole("combobox")[0]!, { target: { value: "s2" } })
+    fireEvent.click(menuOf(panes()[0]!))
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Show .* beacon here$/ }))
     expect(useStore.getState().panes).toEqual(["s2", "s1"])
   })
 

@@ -13,7 +13,7 @@ import { create } from "zustand"
 import { tellShell } from "./lib/shell"
 import { Connection, type ConnState, type Reply, takeToken } from "./lib/connection"
 import { addSystem, addUser, emptyTranscript, reduce, type Transcript } from "./lib/transcript"
-import { nextActivity, type Activity } from "./lib/activity"
+import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
 
 export type Route =
   | "approvals"
@@ -68,6 +68,8 @@ export interface State {
   transcripts: Record<string, Transcript>
   /** What each running session is doing now, for the line under its transcript. */
   activity: Record<string, Activity>
+  /** When anything last arrived in each running turn, and its tokens. */
+  pulse: Record<string, Pulse>
   audit: unknown[]
   route: Route
   selectedSession?: string
@@ -131,6 +133,7 @@ export const useStore = create<State>((set, get) => ({
   resolved: {},
   transcripts: {},
   activity: {},
+  pulse: {},
   audit: [],
   route: "approvals",
   theme: storedTheme(),
@@ -198,6 +201,7 @@ export const useStore = create<State>((set, get) => ({
         [sessionId]: addUser(s.transcripts[sessionId] ?? emptyTranscript(), text),
       },
       activity: { ...s.activity, [sessionId]: { phase: "sent", since: Date.now() } },
+      pulse: { ...s.pulse, [sessionId]: { last: Date.now(), done: 0, now: 0 } },
     })),
 
   handleEvent: (e) => {
@@ -228,7 +232,9 @@ export const useStore = create<State>((set, get) => ({
             return { sessions }
           const activity = { ...s.activity }
           delete activity[e.info.id]
-          return { sessions, activity }
+          const pulse = { ...s.pulse }
+          delete pulse[e.info.id]
+          return { sessions, activity, pulse }
         })
         return
       case "sdk_message": {
@@ -243,6 +249,14 @@ export const useStore = create<State>((set, get) => ({
             else delete activity[e.sessionId]
             return { activity }
           })
+        const beat = get().pulse[e.sessionId]
+        const nextBeat = nextPulse(beat, e.message, Date.now())
+        set((s) => {
+          const pulse = { ...s.pulse }
+          if (nextBeat) pulse[e.sessionId] = nextBeat
+          else delete pulse[e.sessionId]
+          return { pulse }
+        })
         // A partial message changes nothing in the transcript itself.
         if ((e.message as { type?: unknown } | null)?.type === "stream_event") return
         set((s) => ({
