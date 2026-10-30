@@ -342,7 +342,11 @@ function SessionPane({
             computeItemKey={(_, it) => it.id}
             itemContent={(_, it) => (
               <div className="mx-auto max-w-[860px] px-5 py-1.5">
-                {it.kind === "group" ? <ToolGroup tools={it.tools} /> : <ItemView item={it} />}
+                {it.kind === "group" ? (
+                  <ToolGroup tools={it.tools} />
+                ) : (
+                  <ItemView item={it} sessionId={session.id} />
+                )}
               </div>
             )}
             components={{
@@ -908,10 +912,13 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
     }
     // What Claude gets: your words, then a reference to each picture, which it opens.
     const full = [t, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
+    // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.
+    const st = useStore.getState().sessions[sessionId]?.state
     addUserText(
       sessionId,
       t,
       pictures.map((p) => ({ url: p.url, name: p.name })),
+      st === "running" || st === "waiting",
     )
     setText("")
     setPictures([])
@@ -1176,13 +1183,34 @@ function UserMessage({
   )
 }
 
-export const ItemView = memo(function ItemView({ item }: { item: Item }) {
+export const ItemView = memo(function ItemView({
+  item,
+  sessionId,
+}: {
+  item: Item
+  sessionId?: string
+}) {
   switch (item.kind) {
     case "user":
       return (
         <>
           <UserMessage text={item.text} images={item.images} />
-          <Stamp at={item.at} end />
+          {item.queued ? (
+            <p className="m-0 mt-1 flex flex-wrap items-center justify-end gap-2 text-[13px] text-mut">
+              Queued: Claude reads it at its next step.
+              {sessionId ? (
+                <button
+                  type="button"
+                  className="btn !min-h-7 !text-[13px]"
+                  onClick={() => void send({ type: "stop_session", sessionId })}
+                >
+                  Interrupt now
+                </button>
+              ) : null}
+            </p>
+          ) : (
+            <Stamp at={item.at} end />
+          )}
         </>
       )
     case "text":

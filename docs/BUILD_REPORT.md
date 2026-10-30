@@ -585,3 +585,10 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
   - the lines in `apps/web/test/store.test.ts`
 
   17 breaks, 17 caught.
+
+## Phase 37: a message sent while Claude works (30 Oct)
+
+- **Owner decision:** a message sent mid-turn reaches Claude at its next step, as Claude Code does, rather than waiting for the turn to end. It shows as queued until Claude has it, cannot be taken back, and can be made to interrupt.
+- A live probe (`docs/sdk-notes.md`) showed Claude takes such a message between tool calls and says nothing when it does. The transcript marks it **Queued: Claude reads it at its next step** until a tool result has come back after it and Claude has answered again (a subagent's steps do not count), or the turn ends.
+- **Interrupt now** beside it is Stop: the turn and its background tasks end, and Claude Code then runs the queued message, which the interrupt receipt confirms it keeps.
+- Tests: `apps/web/test/queue.test.tsx`. 7 breaks, 7 caught; one survived the first run and the test was tightened.

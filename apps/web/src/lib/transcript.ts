@@ -9,6 +9,8 @@ export type Item =
       at?: number
       text: string
       images?: Array<{ url: string; name: string }>
+      /** Sent while Claude worked, and not yet taken in: Claude reads it at its next step. */
+      queued?: boolean
     }
   | { id: string; kind: "text"; at?: number; text: string; subagent?: string }
   | { id: string; kind: "thinking"; at?: number; text: string }
@@ -46,6 +48,8 @@ export interface Transcript {
   seq: number
   /** Who stopped the running turn, until its result arrives. */
   stopping?: "you" | "kill-switch"
+  /** A tool result came back after a queued message was sent: Claude's next answer has seen it. */
+  pickup?: boolean
 }
 
 export const MAX_ITEMS = 3000
@@ -71,12 +75,34 @@ export function addUser(
   t: Transcript,
   text: string,
   images?: Array<{ url: string; name: string }>,
+  queued = false,
 ): Transcript {
+  // A message sent mid-turn leaves the turn as it was; one that starts a turn ends any stop that was under way.
   const { stopping: _done, ...rest } = t
-  return push(rest, [
-    { id: `u${t.seq}`, kind: "user", text, ...(images?.length ? { images } : {}) },
+  return push(queued ? t : rest, [
+    {
+      id: `u${t.seq}`,
+      kind: "user",
+      text,
+      ...(images?.length ? { images } : {}),
+      ...(queued ? { queued: true } : {}),
+    },
   ])
 }
+
+/**
+ * Claude Code takes a queued message in between tool calls and says nothing when it does (probe, 30 Oct). So it
+ * counts as taken in once a tool result has come back after it and Claude has answered again, or the turn ends.
+ */
+function delivered(t: Transcript): Transcript {
+  if (!t.items.some((i) => i.kind === "user" && i.queued)) return t
+  const { pickup: _p, ...rest } = t
+  return {
+    ...rest,
+    items: t.items.map((i) => (i.kind === "user" && i.queued ? { ...i, queued: false } : i)),
+  }
+}
+const hasQueued = (t: Transcript) => t.items.some((i) => i.kind === "user" && i.queued)
 
 /** The Host stopped the running turn: its result says so, instead of reading as an error. */
 export function markStopping(t: Transcript, by: "you" | "kill-switch"): Transcript {
@@ -101,6 +127,7 @@ export function reduce(t: Transcript, message: unknown): Transcript {
   const m = obj(message)
   const type = str(m.type)
   const sub = typeof m.parent_tool_use_id === "string" ? m.parent_tool_use_id : undefined
+  if (type === "assistant" && t.pickup && !sub) t = delivered(t)
   if (type === "assistant") {
     const content = obj(m.message).content
     if (!Array.isArray(content)) return t
@@ -151,12 +178,13 @@ export function reduce(t: Transcript, message: unknown): Transcript {
       items[idx] = { ...it, result: { text: resultText(b.content), isError: b.is_error === true } }
       changed = true
     }
+    if (changed && !sub && hasQueued(t)) return { ...t, items, seq: t.seq + 1, pickup: true }
     return changed ? { ...t, items, seq: t.seq + 1 } : t
   }
   if (type === "system" && str(m.subtype) === "compact_boundary")
     return addSystem(t, "Claude Code summarised the earlier conversation to make room.")
   if (type === "result") {
-    const { stopping, ...rest } = t
+    const { stopping, ...rest } = delivered(t)
     const failed = m.is_error === true || str(m.subtype).startsWith("error")
     const isError = failed && !stopping
     return push(rest, [

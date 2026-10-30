@@ -106,6 +106,7 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 - **Model**, **Effort** and **Mode** change for this session at once.
 - **Stop** stops the session there and then: the turn, and any subagents or commands still working in the background. If it is still working a few seconds later, **Force stop** ends its Claude process and starts it again on the same conversation, in the same pane.
 - When a turn has ended but subagents or commands are still working, the session says **Working in the background** and lists them.
+- A message you send while Claude works is **queued**: Claude reads it at its next step, between one action and the next, without stopping. It says Queued until Claude has it, and it cannot be taken back. **Interrupt now** beside it stops the turn, and Claude reads your message straight away.
 
 **The transcript**
 

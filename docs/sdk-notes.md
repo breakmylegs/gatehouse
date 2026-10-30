@@ -150,6 +150,7 @@ type AccountInfo = { email?, organization?, subscriptionType?, tokenSource?, api
 - `Query.interrupt()` resolves to a receipt on CLIs with `interrupt_receipt_v1`: `still_queued` lists queued user messages that will still run. Dropping one is a control request (`cancel_async_message`) with no public Query method, so JCVC cannot take a queued message back.
 - `SDKUserMessage.priority` (`now | next | later`): the SDK's own docs send composed messages at `later` "so a running turn cannot reorder them". With none, a message sent mid-turn is taken at Claude's next step.
 - Force stop is `close()` on the query, then a new query with `resume` on the same conversation.
+- Live probe, 30 Oct (Haiku, three file reads, a second message pushed after the first tool result with no priority): Claude took the message between tool calls and answered it in the same turn, with one result. No `isReplay` message came back, so JCVC treats a queued message as taken in once a tool result has come back after it and Claude has answered again, or the turn ends. An odd instruction ("end with the word BANANA") was declined as if injected; a natural one was followed.
 
 ### Tool-shadowing warning
 

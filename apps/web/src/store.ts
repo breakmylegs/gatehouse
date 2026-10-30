@@ -116,6 +116,8 @@ export interface State {
     sessionId: string,
     text: string,
     images?: Array<{ url: string; name: string }>,
+    /** Sent while Claude works: Claude reads it at its next step. */
+    queued?: boolean,
   ) => void
   termAppend: (sessionId: string, chunk: TermChunk) => void
   termStarted: (sessionId: string, runId: string) => void
@@ -283,14 +285,19 @@ export const useStore = create<State>((set, get) => ({
     set((s) => ({
       term: { ...s.term, [sessionId]: { ...s.term[sessionId], chunks: [] } },
     })),
-  addUserText: (sessionId, text, images) =>
+  addUserText: (sessionId, text, images, queued = false) =>
     set((s) => ({
       transcripts: {
         ...s.transcripts,
-        [sessionId]: addUser(s.transcripts[sessionId] ?? emptyTranscript(), text, images),
+        [sessionId]: addUser(s.transcripts[sessionId] ?? emptyTranscript(), text, images, queued),
       },
-      activity: { ...s.activity, [sessionId]: { phase: "sent", since: Date.now() } },
-      pulse: { ...s.pulse, [sessionId]: { last: Date.now(), done: 0, now: 0 } },
+      // A queued message joins the turn that is running, so what Claude is doing stays on the line.
+      ...(queued
+        ? {}
+        : {
+            activity: { ...s.activity, [sessionId]: { phase: "sent" as const, since: Date.now() } },
+            pulse: { ...s.pulse, [sessionId]: { last: Date.now(), done: 0, now: 0 } },
+          }),
     })),
 
   handleEvent: (e) => {
