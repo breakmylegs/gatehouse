@@ -8,6 +8,8 @@ import { Workspace } from "../src/surfaces/Workspace"
 import { useStore } from "../src/store"
 
 const sent: Array<{ type: string; requestId?: string }> = []
+// The workspace also reads how full the context is; these tests are about decisions.
+const decided = () => sent.filter((c) => c.type !== "context_usage")
 let reply: (cmd: { type: string }) => Promise<{
   ok: boolean
   data?: unknown
@@ -149,7 +151,7 @@ describe("deciding in the session's own workspace", () => {
     expect(within(panel).getByText("C:\\dev\\Test\\minisheet.html")).toBeTruthy()
     expect(within(panel).getByText(/No rule allows this call/)).toBeTruthy()
     fireEvent.click(within(panel).getByRole("button", { name: /^Allow once/ }))
-    expect(sent).toEqual([{ type: "approve", requestId: "a" }])
+    expect(decided()).toEqual([{ type: "approve", requestId: "a" }])
   })
 
   it("takes Ctrl+Enter and Esc only while focus is inside the request", () => {
@@ -160,7 +162,7 @@ describe("deciding in the session's own workspace", () => {
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" })
     expect(sent.filter((c) => c.type === "approve" || c.type === "deny")).toEqual([])
     fireEvent.keyDown(screen.getByRole("region", { name: "Write" }), { key: "Escape" })
-    expect(sent).toEqual([{ type: "deny", requestId: "a" }])
+    expect(decided()).toEqual([{ type: "deny", requestId: "a" }])
   })
 
   it("makes Deny the filled choice at high risk", () => {
