@@ -4,7 +4,7 @@ import { execFileSync, spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { limiter } from "../src/limits.js"
 
 const REPO = path.resolve(import.meta.dirname, "../../..")
@@ -48,11 +48,12 @@ describe.skipIf(!csc)("JCVC-Limits.exe", () => {
       () => undefined,
     )({
       command: process.execPath,
-      args: ["-e", "setTimeout(() => {}, 4000)"],
+      args: ["-e", "setTimeout(() => {}, 15000)"],
       env: process.env,
     } as never) as unknown as ReturnType<typeof spawn>
     try {
-      await new Promise((r) => setTimeout(r, 1200))
+      // The helper makes the job as it starts, which takes longer on a busy computer: wait for it, not a fixed time.
+      await vi.waitFor(() => expect(query(name)).toBeTruthy(), { timeout: 10_000, interval: 250 })
       expect(query(name)).toMatchObject({ cpu: 20, memoryMb: 2048, priority: "below" })
       await limiter(exe).set(name, "high")
       expect(query(name)).toMatchObject({ cpu: 0, memoryMb: 0, priority: "normal" })
