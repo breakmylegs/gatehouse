@@ -6,6 +6,10 @@
 export const CARRY_ON_PROMPT =
   "Carry on with the next item in your build queue, without asking me anything: where you would ask, choose the recommended option yourself. When nothing is left in the queue, end your reply with the line QUEUE EMPTY."
 
+/** Sent to a session that was working when JCVC closed, restarted or updated, so it picks up by itself (owner, 31 Oct). */
+export const RESUME_PROMPT =
+  "JCVC restarted while you were working, which stopped your last turn part way. Carry on from where you were, without starting again."
+
 const QUEUE_EMPTY = /\bQUEUE EMPTY\b/
 
 /** Why carrying on stopped. */

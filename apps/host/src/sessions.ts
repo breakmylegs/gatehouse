@@ -30,7 +30,13 @@ import {
 import type { UsageStore } from "./usage.js"
 import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
-import { CARRY_ON_DEFAULTS, CARRY_ON_PROMPT, CarryOn, type CarryOnStatus } from "./carry-on.js"
+import {
+  CARRY_ON_DEFAULTS,
+  CARRY_ON_PROMPT,
+  CarryOn,
+  RESUME_PROMPT,
+  type CarryOnStatus,
+} from "./carry-on.js"
 
 export class OrgGuardError extends Error {
   constructor(
@@ -514,7 +520,7 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#setState("idle")
     void this.#pump()
     // Brought back mid-run in Extreme approval: it carries on where it was, as you asked it to.
-    if (this.#opts.restore?.wasRunning && !this.#opts.restore.forced && this.#extreme) {
+    if (this.#opts.restore?.wasRunning && !this.#opts.restore.forced) {
       this.#carry.started()
       void this.#carryOnNow({ restart: true })
     }
@@ -662,7 +668,10 @@ export class Session extends EventEmitter<SessionEvents> {
       verdict: {
         outcome: "allow",
         ruleId: "extreme-carry-on",
-        reason: "Extreme approval is on, so the session carried on with its build queue by itself.",
+        reason:
+          data.restart === true
+            ? "JCVC restarted while the session was working, so it carried on where it was."
+            : "Extreme approval is on, so the session carried on with its build queue by itself.",
         risk: 0,
         decidedBy: "extreme-mode",
         policyHash: this.#deps.policy()?.hash ?? "",
@@ -674,7 +683,7 @@ export class Session extends EventEmitter<SessionEvents> {
       return
     }
     this.emit("event", { type: "carry_on", data })
-    this.#send(CARRY_ON_PROMPT)
+    this.#send(data.restart === true && !this.#extreme ? RESUME_PROMPT : CARRY_ON_PROMPT)
     this.emit("state", this.info())
   }
 

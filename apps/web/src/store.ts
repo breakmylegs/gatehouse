@@ -465,6 +465,9 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       case "approval_resolved":
+        // Answered here, on the phone or timed out: its notification has nothing left to ask.
+        shown.get(e.id)?.close()
+        shown.delete(e.id)
         set((s) => {
           const view = s.pending[e.id]
           const { [e.id]: _gone, ...rest } = s.pending
@@ -648,7 +651,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       return "Subagent finished"
     case "carry_on":
       return data.restart === true
-        ? "JCVC restarted mid-run, so the session carries on with its build queue by itself."
+        ? "JCVC restarted while this session was working, so it carries on where it was."
         : `Extreme approval: carrying on by itself, turn ${String(data.turn)} of ${String(data.of)}.`
     case "carry_on_end": {
       const why: Record<string, string> = {
@@ -670,6 +673,9 @@ function firstPending(p: Record<string, PendingView>): string | undefined {
     ?.request.id
 }
 
+/** The notifications on screen, by request, so each goes when its request is decided. */
+const shown = new Map<string, Notification>()
+
 /** Tells the user without moving focus: a toast always, a browser notification only if they turned it on. */
 function announce(v: PendingView, s: State): void {
   tellShell("attention")
@@ -685,10 +691,19 @@ function announce(v: PendingView, s: State): void {
   })
   if (s.notify && typeof Notification !== "undefined" && Notification.permission === "granted") {
     // Detail stays out of the notification: it can show on a locked screen or be mirrored.
-    new Notification("Jean-Claude Van Code", {
+    const n = new Notification("Jean-Claude Van Code", {
       body: `${what} needs your decision`,
       tag: v.request.id,
     })
+    shown.set(v.request.id, n)
+    n.onclick = () => {
+      window.focus()
+      const st = useStore.getState()
+      st.selectRequest(v.request.id)
+      st.setRoute("approvals")
+      if (!st.pending[v.request.id]) toast("That request was already decided.", { id: "stale" })
+      n.close()
+    }
   }
 }
 

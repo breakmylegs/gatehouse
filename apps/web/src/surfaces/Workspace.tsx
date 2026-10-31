@@ -831,11 +831,8 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
   const draftKey = `gatehouse.draft.${sessionId}`
   const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? "")
   useEffect(() => {
-    const t = setTimeout(() => {
-      if (text) localStorage.setItem(draftKey, text)
-      else localStorage.removeItem(draftKey)
-    }, 300)
-    return () => clearTimeout(t)
+    if (text) localStorage.setItem(draftKey, text)
+    else localStorage.removeItem(draftKey)
   }, [text, draftKey])
   const [active, setActive] = useState(0)
   const area = useRef<HTMLTextAreaElement>(null)

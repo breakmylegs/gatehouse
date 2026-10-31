@@ -73,14 +73,22 @@ function StartButton({ busy, ready, label }: { busy: boolean; ready: boolean; la
 export const START_WAIT_MS = 180_000
 
 /** What starting a session is doing, with the seconds so far, so a slow start never looks like a hang. */
-export function StartProgress({ since }: { since: number }) {
+export function StartProgress({ since, what }: { since: number; what?: string }) {
   const now = useNow(1000)
   const s = Math.max(0, Math.round((now - since) / 1000))
+  // What it is doing now, so a wait reads as work: Claude Code first, then the account, then the conversation.
+  const step =
+    s < 4
+      ? "starting Claude Code"
+      : s < 10
+        ? "checking your account"
+        : "reading the conversation back"
   return (
     <div className="activity !mb-0">
       <span className="activity-dot" aria-hidden="true" />
       <span role="status" className="font-semibold">
-        Starting Claude Code and checking your account
+        {what ?? "Starting Claude Code and checking your account"}
+        {what ? `: ${step}` : ""}
       </span>
       <span className="tabular-nums text-mut">{s} s</span>
       {s >= 15 ? (

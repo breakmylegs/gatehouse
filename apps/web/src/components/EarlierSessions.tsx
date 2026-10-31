@@ -40,6 +40,7 @@ export function EarlierSessions() {
   const [searching, setSearching] = useState(false)
   const [renaming, setRenaming] = useState<PastSession>()
   const [starting, setStarting] = useState<number>()
+  const [resuming, setResuming] = useState<string>()
 
   const load = useCallback(async () => {
     const r = await send({ type: "list_history" })
@@ -73,11 +74,13 @@ export function EarlierSessions() {
   async function resume(p: { sessionId: string; cwd?: string; title: string }, fork: boolean) {
     if (!p.cwd) return
     setStarting(Date.now())
+    setResuming(p.sessionId)
     const r = await send(
       { type: "create_session", cwd: p.cwd, resume: p.sessionId, ...(fork ? { fork: true } : {}) },
       START_WAIT_MS,
     )
     setStarting(undefined)
+    setResuming(undefined)
     if (!r.ok) {
       toast.error(r.error?.message ?? "It did not start", { id: "session" })
       return
@@ -150,7 +153,7 @@ export function EarlierSessions() {
         </label>
       </form>
 
-      {starting ? <StartProgress since={starting} /> : null}
+      {starting && !resuming ? <StartProgress since={starting} /> : null}
 
       {found ? (
         <div className="grid gap-1" aria-live="polite">
@@ -200,7 +203,11 @@ export function EarlierSessions() {
           aria-label="Earlier sessions"
         >
           {shown.map((p) => (
-            <li key={p.sessionId} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2">
+            <li
+              key={p.sessionId}
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2"
+              data-resuming={resuming === p.sessionId ? "" : undefined}
+            >
               <span className="grid min-w-0 flex-1">
                 <span className="truncate font-semibold">
                   {p.meta.pinned ? (
@@ -215,13 +222,18 @@ export function EarlierSessions() {
                   {p.cwd ?? "Folder not known"}, {stamp(p.lastModified)}
                 </span>
               </span>
+              {resuming === p.sessionId && starting ? (
+                <span className="basis-full sm:basis-auto">
+                  <StartProgress since={starting} what="Starting this session again" />
+                </span>
+              ) : null}
               <button
                 type="button"
                 className="btn !min-h-8"
                 disabled={!p.cwd || Boolean(starting)}
                 onClick={() => void resume(p, false)}
               >
-                Resume
+                {resuming === p.sessionId ? "Resuming" : "Resume"}
               </button>
               <button
                 type="button"

@@ -88,9 +88,9 @@ export function App() {
   return (
     <>
       {/* A newer version: one thin bar across the top, above the sidebar and the page. */}
-      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
+      <div className="flex h-full flex-col">
         <UpdateNotice />
-        <div className="app-shell" data-rail={railHidden ? "hidden" : undefined}>
+        <div className="app-shell min-h-0 flex-1" data-rail={railHidden ? "hidden" : undefined}>
           <a
             href="#main"
             onClick={(e) => {

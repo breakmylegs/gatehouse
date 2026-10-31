@@ -169,7 +169,7 @@ describe("store events", () => {
     expect(describeEvent("carry_on", { turn: 2, of: 25 })).toBe(
       "Extreme approval: carrying on by itself, turn 2 of 25.",
     )
-    expect(describeEvent("carry_on", { restart: true })).toMatch(/JCVC restarted mid-run/)
+    expect(describeEvent("carry_on", { restart: true })).toMatch(/JCVC restarted while this session was working/)
     expect(describeEvent("carry_on_end", { why: "done" })).toBe(
       "Stopped carrying on: the build queue is empty.",
     )
