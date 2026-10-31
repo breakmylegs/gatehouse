@@ -10,7 +10,8 @@ floor:
   - id: secrets-files
     tools: [Read, Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Grep, Glob]
     pathGlobs: ["**/.env", "**/.env.*", "**/*.pem", "**/*.pfx", "**/*.key", "**/id_rsa*", "**/id_ed25519*",
-                "**/.aws/**", "**/.azure/**", "**/.ssh/**", "**/.claude/.credentials.json"]
+                "**/.aws/**", "**/.azure/**", "**/.ssh/**", "**/.claude/.credentials.json",
+                "**/.credentials.json", "**/Gatehouse/accounts/**"]
     message: "Secrets files are blocked by policy. Ask the user to provide the values instead."
   - id: obfuscated-shell
     powershell: { encodedCommand: true, invokeExpression: true, dynamicInvocation: true }

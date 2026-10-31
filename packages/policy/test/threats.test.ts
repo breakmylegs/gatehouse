@@ -79,6 +79,21 @@ describe("threat: secrets reached through every tool", () => {
       expect((await engine.evaluate({ toolName: tool, input: { file_path: p, content: "x" } }, ctx())).outcome).toBe("deny")
     }
   })
+
+  it("so is every added account's sign-in, and the rest of its Claude Code folder (invariant 6)", async () => {
+    // An added account's Claude Code folder has no leading dot (apps/host/src/accounts.ts), so the main account's
+    // glob alone never matched it.
+    const acct = "C:/Users/someone/AppData/Local/Gatehouse/accounts/ab12cd34/claude"
+    for (const p of [`${acct}/.credentials.json`, `${acct}/settings.json`, "D:/elsewhere/.credentials.json"])
+      for (const tool of ["Read", "Write", "Edit"]) {
+        const v = await engine.evaluate({ toolName: tool, input: { file_path: p, content: "x" } }, ctx())
+        expect(v.outcome, `${tool} ${p}`).toBe("deny")
+      }
+    for (const command of [`cat ${acct}/.credentials.json`, `Get-Content ${acct}/.credentials.json`]) {
+      const toolName = command.startsWith("Get-") ? "PowerShell" : "Bash"
+      expect((await engine.evaluate({ toolName, input: { command } }, ctx())).outcome, command).toBe("deny")
+    }
+  })
 })
 
 describe("threat: chained command bypasses", () => {
