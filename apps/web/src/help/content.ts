@@ -168,6 +168,17 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
 
 Rules are files on this computer. Changes are picked up straight away.`,
   },
+  dashboard: {
+    id: "dashboard",
+    title: "Dashboard",
+    body: `Everything that matters now, on one page, each with the place to act on it.
+
+- **Not right**: only when something is wrong, such as the Host or the Approver not running, the kill switch on, a sign-in problem, requests not reaching your phone, a session that stopped with an error, or an update waiting.
+- **Needs you**: the requests waiting for you, decided in place, as on Approvals.
+- **Today**: what was spent and written today, how many sessions are working, and how often JCVC asked you in the last 24 hours. Usage has the detail.
+- **Sessions**: each open session, what it is doing now and what it has cost. Open shows it in the workspace.
+- **Lately**: what Claude told you, turns that finished or failed, and Extreme approval runs that ended, newest first, since this window opened.`,
+  },
   usage: {
     id: "usage",
     title: "Usage",

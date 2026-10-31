@@ -38,6 +38,7 @@ export type Route =
   | "guide"
   | "approver"
   | "usage"
+  | "dashboard"
   | "chat"
 
 export interface ResolvedView {
@@ -48,6 +49,16 @@ export interface ResolvedView {
   at: string
   view?: PendingView
 }
+
+/** Something that happened in a session, for Lately on the Dashboard. Kept for this window only. */
+export interface Notice {
+  id: string
+  at: number
+  sessionId?: string
+  text: string
+}
+const MAX_NOTICES = 30
+let noticeSeq = 0
 
 export interface UsageTotals {
   costUsd: number
@@ -85,6 +96,8 @@ export interface State {
   /** Each session's terminal pane: what it printed, and whether a command is running. */
   term: Record<string, TermState>
   audit: unknown[]
+  /** What happened lately, newest first: Claude told you, turns ended, Extreme runs ended. */
+  notices: Notice[]
   /** How each tool call was decided, by its id (unique across sessions), for the line on its card. */
   decisions: Record<string, Decision>
   addDecisions: (items: Array<{ toolUseId: string; d: Decision }>) => void
@@ -158,6 +171,7 @@ const KEPT_ROUTES: Route[] = [
   "guide",
   "approver",
   "usage",
+  "dashboard",
 ]
 function readView(): { route: Route; panes: string[]; selectedSession?: string } {
   try {
@@ -221,6 +235,7 @@ export const useStore = create<State>((set, get) => ({
   pulse: {},
   term: {},
   audit: [],
+  notices: [],
   decisions: {},
   addDecisions: (items) =>
     set((s) => {
@@ -372,6 +387,14 @@ export const useStore = create<State>((set, get) => ({
         })
         // A partial message changes nothing in the transcript itself.
         if ((e.message as { type?: unknown } | null)?.type === "stream_event") return
+        const done = e.message as { type?: unknown; is_error?: unknown; subtype?: unknown } | null
+        if (done?.type === "result")
+          notice(
+            e.sessionId,
+            done.is_error === true || String(done.subtype ?? "").startsWith("error")
+              ? "A turn ended with an error."
+              : "A turn finished.",
+          )
         set((s) => ({
           transcripts: {
             ...s.transcripts,
@@ -403,6 +426,7 @@ export const useStore = create<State>((set, get) => ({
         }
         const line = describeEvent(e.event, e.data)
         if (!line) return
+        if (e.event === "notify_user" || e.event === "carry_on_end") notice(e.sessionId, line)
         set((s) => ({
           transcripts: {
             ...s.transcripts,
@@ -549,6 +573,18 @@ function loadHistory(info: SessionInfo): void {
       transcripts: { ...s.transcripts, [info.id]: withHistory(s.transcripts[info.id], past) },
     }))
   })
+}
+
+/** Adds to Lately, newest first, naming the session. */
+function notice(sessionId: string, text: string): void {
+  const s = useStore.getState().sessions[sessionId]
+  const name = s ? (s.title ?? s.project) : "A session"
+  useStore.setState((st) => ({
+    notices: [
+      { id: `n${++noticeSeq}`, at: Date.now(), sessionId, text: `${name}: ${text}` },
+      ...st.notices,
+    ].slice(0, MAX_NOTICES),
+  }))
 }
 
 /** Why a session started again under its own id, for the line in its transcript. */

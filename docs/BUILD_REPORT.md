@@ -608,3 +608,17 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - **Charts** follow the dataviz method: one hue for a single series (the gate blue in light, a step inside the dark chart band in dark, both validated against their own surface), columns at most 24px wide with rounded data ends, hairline grid, labels in text colours, the tooltip kept inside the chart. Checked by eye in headless Edge in both themes, which found a "$0.000" axis label, a tooltip running off the page (and a sideways scrollbar) and the demo ignoring the range, all fixed.
 - The old view's tests (`insights.test.tsx`, UsageView) went with it; the new page's replace them.
 - Tests: `apps/web/test/usage.test.ts`, `apps/web/test/usage-page.test.tsx`, the report in `apps/host/test/usage.test.ts` and `api.test.ts`. 14 breaks, 14 caught; one survived the first run and the test was tightened.
+
+## Phase 40: the Dashboard (31 Oct)
+
+- **Owner ask:** at the top of the sidebar, a dashboard with the running sessions, some stats, alerts, notifications, the approvals waiting and anything else useful.
+- **Dashboard** is the first link in the sidebar. It shows:
+  - **Not right**, only when something is: the Host not connected, the kill switch on (with Re-arm), the Approver down, a sign-in or organisation problem, requests not reaching your phone, a session that stopped with an error. Each names the place to put it right.
+  - **Needs you**: the waiting requests, decided in place.
+  - **Today**: cost and output tokens today, sessions working, and how often JCVC asked you in the last 24 hours (the digest), with the way to Usage.
+  - **Sessions**: each open one, what it is doing (including work in the background) and what it cost, with Open.
+  - **Lately**: what Claude told you, turns finished or failed, Extreme runs that ended, newest first, kept for this window.
+- An update is not shown as something wrong: the bar at the top already offers it.
+- Nothing spent now reads $0.00 everywhere, not $0.000.
+- Checked by eye in headless Edge in both themes.
+- Tests: `apps/web/test/dashboard.test.tsx`. 8 breaks, 8 caught; one survived the first run and the test was tightened.

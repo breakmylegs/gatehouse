@@ -36,7 +36,9 @@ export function clock(iso: string): string {
     : d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })
 }
 
+/** Dollars: three places below a dollar, where most turns cost, two above; nothing spent is $0.00. */
 export function money(usd: number): string {
+  if (usd === 0) return "$0.00"
   return usd < 1 ? `$${usd.toFixed(3)}` : `$${usd.toFixed(2)}`
 }
 

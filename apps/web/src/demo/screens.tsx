@@ -185,6 +185,7 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (p === "/api/digest")
     return json({
       text: "In the last 24 hours: 214 calls went through automatically and 9 asked you.",
+      askedYou: 9,
     })
   if (p === "/api/settings") return json(SETTINGS)
   if (p.startsWith("/api/files/list")) return json({ entries: FILES, more: 0 })
@@ -576,6 +577,7 @@ else if (view === "settings") useStore.setState({ route: "settings" })
 else if (view === "policy") useStore.setState({ route: "policy" })
 else if (view === "sessions") useStore.setState({ route: "sessions" })
 else if (view === "usage") useStore.setState({ route: "usage" })
+else if (view === "dashboard") useStore.setState({ route: "dashboard" })
 else useStore.setState({ route: "approvals", selectedRequest: "r1" })
 for (const r of ["r1", "r2", "r3"]) useStore.getState().markSeen?.(r)
 

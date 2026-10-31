@@ -91,6 +91,20 @@ export function Rail({ onHide }: { onHide: () => void }) {
         <li>
           <button
             className="rail-item"
+            aria-current={route === "dashboard" ? "page" : undefined}
+            onClick={() => go("dashboard")}
+          >
+            <span>
+              <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                &#8962;
+              </span>
+              Dashboard
+            </span>
+          </button>
+        </li>
+        <li>
+          <button
+            className="rail-item"
             aria-current={route === "sessions" ? "page" : undefined}
             onClick={() => go("sessions")}
           >
