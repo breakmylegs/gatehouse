@@ -12,28 +12,42 @@ export const RESUME_PROMPT =
 
 const QUEUE_EMPTY = /\bQUEUE EMPTY\b/
 
-/** Why carrying on stopped. */
-export type CarryOnEnd = "done" | "turns" | "spend" | "stopped" | "error"
+/** Why carrying on stopped. Stalled: two turns in a row did no work, so nothing seems left to do. */
+export type CarryOnEnd = "done" | "turns" | "spend" | "stopped" | "error" | "stalled"
 
 export interface CarryOnLimits {
-  /** Automatic turns after one message of yours. */
-  turns: number
-  /** Dollars spent after one message of yours. */
-  usd: number
+  /** Automatic turns after one message of yours. None: no limit. */
+  turns?: number
+  /** Dollars spent after one message of yours. None: no limit. */
+  usd?: number
 }
 
-export const CARRY_ON_DEFAULTS: CarryOnLimits = { turns: 25, usd: 25 }
+/** Owner, 31 Oct: a session should not stop while its queue has work, so the limits are high, and yours to set. */
+export const CARRY_ON_DEFAULTS = { turns: 200, usd: 500 } as const
+
+/** The limits as Settings has them: a number each, or No limit, which an older version reads as its highest. */
+export function carryOnLimits(c?: {
+  turns?: number
+  usd?: number
+  noTurnLimit?: boolean
+  noSpendLimit?: boolean
+}): CarryOnLimits {
+  return {
+    ...(c?.noTurnLimit ? {} : { turns: c?.turns ?? CARRY_ON_DEFAULTS.turns }),
+    ...(c?.noSpendLimit ? {} : { usd: c?.usd ?? CARRY_ON_DEFAULTS.usd }),
+  }
+}
 
 export interface CarryOnStatus {
   turns: number
-  maxTurns: number
+  maxTurns?: number
   spentUsd: number
-  maxUsd: number
+  maxUsd?: number
   ended?: CarryOnEnd
 }
 
 export type CarryOnStep =
-  | { go: true; turn: number; of: number }
+  | { go: true; turn: number; of?: number }
   | { go: false; why: CarryOnEnd; turns: number; spentUsd: number }
 
 /** The count and spend of one run, from your message to the end of the queue. */
@@ -42,6 +56,8 @@ export class CarryOn {
   #turns = 0
   #costAtStart = 0
   #spent = 0
+  /** Turns in a row that did no work: no tool call, only words. */
+  #idle = 0
   #ended: CarryOnEnd | undefined
 
   constructor(limits: () => CarryOnLimits) {
@@ -53,6 +69,7 @@ export class CarryOn {
     this.#turns = 0
     this.#costAtStart = costSoFar
     this.#spent = 0
+    this.#idle = 0
     this.#ended = undefined
   }
 
@@ -62,10 +79,16 @@ export class CarryOn {
   }
 
   /**
-   * After a turn: whether to send the carry-on prompt. `costUsd` is the session's total so far, as the result says.
-   * Once a run has ended it says so only once, and stays ended until your next message.
+   * After a turn: whether to send the carry-on prompt. `costUsd` is the session's total so far, as the result says;
+   * `steps` is how many times Claude was called in the turn (1 means it only wrote, with no tool call). Once a run
+   * has ended it says so only once, and stays ended until your next message.
    */
-  next(r: { text: string; isError: boolean; costUsd?: number }): CarryOnStep | undefined {
+  next(r: {
+    text: string
+    isError: boolean
+    costUsd?: number
+    steps?: number
+  }): CarryOnStep | undefined {
     if (this.#ended) return undefined
     if (typeof r.costUsd === "number") this.#spent = Math.max(0, r.costUsd - this.#costAtStart)
     const limits = this.#limits()
@@ -75,19 +98,25 @@ export class CarryOn {
     }
     if (r.isError) return end("error")
     if (QUEUE_EMPTY.test(r.text)) return end("done")
-    if (this.#turns >= limits.turns) return end("turns")
-    if (this.#spent >= limits.usd) return end("spend")
+    this.#idle = r.steps !== undefined && r.steps <= 1 ? this.#idle + 1 : 0
+    if (this.#idle >= 2) return end("stalled")
+    if (limits.turns !== undefined && this.#turns >= limits.turns) return end("turns")
+    if (limits.usd !== undefined && this.#spent >= limits.usd) return end("spend")
     this.#turns++
-    return { go: true, turn: this.#turns, of: limits.turns }
+    return {
+      go: true,
+      turn: this.#turns,
+      ...(limits.turns !== undefined ? { of: limits.turns } : {}),
+    }
   }
 
   status(): CarryOnStatus {
     const l = this.#limits()
     return {
       turns: this.#turns,
-      maxTurns: l.turns,
+      ...(l.turns !== undefined ? { maxTurns: l.turns } : {}),
       spentUsd: this.#spent,
-      maxUsd: l.usd,
+      ...(l.usd !== undefined ? { maxUsd: l.usd } : {}),
       ...(this.#ended ? { ended: this.#ended } : {}),
     }
   }

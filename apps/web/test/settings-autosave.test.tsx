@@ -72,6 +72,16 @@ describe("settings save as you change them", () => {
     expect(screen.queryByRole("button", { name: /save settings/i })).toBeNull()
   })
 
+  it("sets Extreme approval's limits, with No limit kept readable by an older version", async () => {
+    render(<Settings />)
+    const spend = await screen.findByRole("combobox", { name: "Most spending" })
+    expect((spend as HTMLSelectElement).value).toBe("500")
+    fireEvent.change(spend, { target: { value: "none" } })
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.extremeCarryOn).toEqual({ turns: 200, usd: 1000, noSpendLimit: true })
+    await waitFor(() => expect(toasts).toEqual(["Extreme approval saved"]))
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     const org = await screen.findByRole("textbox", { name: /Expected organisation/ })

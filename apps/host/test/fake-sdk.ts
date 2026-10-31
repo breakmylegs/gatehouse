@@ -76,6 +76,7 @@ export class FakeSdk {
     let ended = false
     let turns = 0
     let lastSaid = ""
+    let toolsThisTurn = 0
     let currentAbort: AbortController | undefined
     const handle: FakeQueryHandle = {
       options: opts,
@@ -151,6 +152,7 @@ export class FakeSdk {
       },
       system: (m) => push({ type: "system", ...m }),
       callTool: async (toolName, input, o = {}) => {
+        toolsThisTurn++
         const id = o.toolUseId ?? `toolu_${++this.#toolCounter}`
         const pre = (await hook("PreToolUse", toolName, input, id, signal)) as {
           hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string }
@@ -214,6 +216,7 @@ export class FakeSdk {
               : JSON.stringify(msg.message.content)
           handle.prompts.push(text)
           lastSaid = ""
+          toolsThisTurn = 0
           currentAbort = new AbortController()
           try {
             await this.turn(makeApi(currentAbort.signal), text)
@@ -233,7 +236,8 @@ export class FakeSdk {
             subtype: "success",
             is_error: false,
             duration_ms: 5,
-            num_turns: 1,
+            // Like the real SDK: one call to Claude, and one more after each tool call.
+            num_turns: 1 + toolsThisTurn,
             result: lastSaid,
             total_cost_usd: this.costPerTurn * turns,
             usage: {

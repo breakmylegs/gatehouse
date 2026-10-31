@@ -798,7 +798,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const changed = (Object.keys(parsed.data) as Array<keyof GatehouseConfig>).filter(
       (k) => JSON.stringify(parsed.data[k]) !== JSON.stringify(before[k]),
     )
-    // These three are read each time they are used, so a saved change takes effect at once. The rest are read at
+    // These are read each time they are used, so a saved change takes effect at once. The rest are read at
     // start-up and need a restart.
     const running = ctx.config() as Record<string, unknown>
     for (const k of LIVE_SETTINGS) {
@@ -958,7 +958,7 @@ export function recordsSince(dir: string, fromMs: number): AuditRecord[] {
 const DAY = 86_400_000
 
 /** Settings the Host reads at the moment it uses them. */
-const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime"] as const
+const LIVE_SETTINGS = ["expectedOrg", "redactTerms", "digestTime", "extremeCarryOn"] as const
 
 /** Policy analytics, the digest and suggestions. Read-only except accepting a suggestion, which is desktop only. */
 function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {

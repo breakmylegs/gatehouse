@@ -31,9 +31,9 @@ import type { UsageStore } from "./usage.js"
 import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import {
-  CARRY_ON_DEFAULTS,
   CARRY_ON_PROMPT,
   CarryOn,
+  carryOnLimits,
   RESUME_PROMPT,
   type CarryOnStatus,
 } from "./carry-on.js"
@@ -308,7 +308,7 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
   readonly #background = new Map<string, string>()
   /** Extreme approval's run of automatic turns since your last message. */
-  readonly #carry = new CarryOn(() => this.#deps.config().extremeCarryOn ?? CARRY_ON_DEFAULTS)
+  readonly #carry = new CarryOn(() => carryOnLimits(this.#deps.config().extremeCarryOn))
   /** The session's total cost after its last turn, so a run counts only what it spends. */
   #lastCost = 0
   #resources: ResourceLevel = "high"
@@ -640,6 +640,7 @@ export class Session extends EventEmitter<SessionEvents> {
       text: typeof m.result === "string" ? m.result : "",
       isError: m.is_error === true || String(m.subtype ?? "").startsWith("error"),
       ...(typeof m.total_cost_usd === "number" ? { costUsd: m.total_cost_usd } : {}),
+      ...(typeof m.num_turns === "number" ? { steps: m.num_turns } : {}),
     })
     if (!step) return
     if (!step.go) {
@@ -650,7 +651,7 @@ export class Session extends EventEmitter<SessionEvents> {
       this.emit("state", this.info())
       return
     }
-    await this.#carryOnNow({ turn: step.turn, of: step.of })
+    await this.#carryOnNow({ turn: step.turn, ...(step.of !== undefined ? { of: step.of } : {}) })
   }
 
   /** Sends the carry-on message, once it is in the audit log. Nothing carries on that cannot be recorded. */

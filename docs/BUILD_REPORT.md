@@ -578,7 +578,7 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - **Questions and plans** (`apps/host/src/carry-on.ts`, `canuse.ts`): a question gets the option marked Recommended, or else the first (every recommended one where several may be chosen). A question with no options still waits for you. A plan is approved. Each is audited first with `decidedBy: extreme-mode`, and not given if it cannot be recorded.
 - **Carrying on**: after each turn the Host sends a carry-on message ("carry on with the next item in your build queue... end your reply with the line QUEUE EMPTY") until Claude ends a reply with QUEUE EMPTY. It stops after 25 automatic turns or $25 spent since your last message (`extremeCarryOn` in the settings file, read tolerantly), on a failed turn, on Stop and on the kill switch. Your next message starts a new run. Each carry-on is audited first (`extreme_carry_on`); the transcript says each turn and why it stopped.
 - **After a restart**, a session that was working in Extreme approval carries on by itself. After Force stop it does not.
-- Not yet: the limits have no place in Settings; they are in the settings file.
+- Since Phase 43 the limits are in Settings, higher by default, and can be No limit.
 - Tests (threat model T31):
   - `apps/host/test/carry-on.test.ts`
   - `apps/host/test/extreme-carry.test.ts` (the fake SDK's result now carries the turn's last words, as the real one does)
@@ -648,3 +648,12 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - **Not yet:** Earlier sessions lists only the main account's past sessions, because Claude Code keeps each account's in that account's folder; the page says so when another account is on show. Usage is not split by account.
 - Told the owner: the laptop's managed policy applies to every account and may refuse a personal sign-in, and company rules may not allow one.
 - Tests (threat model T33): `apps/host/test/accounts.test.ts`, `apps/web/test/accounts.test.tsx`. 14 breaks, 14 caught.
+
+## Phase 43: sessions keep going while the queue has work (31 Oct)
+
+- **Owner ask:** "I dont want sessions to stop when the turn is finished if there are still things in the build queue for it to do." A build session in Extreme approval stopped after one long turn at the old $25 limit.
+- **Owner decision** (CLAUDE.md invariant 3): the limits are the owner's, in Settings, **Extreme approval**. They default to 200 automatic turns and $500 after each message of yours, and either can be **No limit**. The settings file keeps a number for each as well (500 turns and $1,000 under No limit, the highest an older version accepts), with `noTurnLimit` and `noSpendLimit` added beside them, so an older version reads its highest limit instead of failing. The change applies at once, without a restart.
+- **A run that does nothing stops:** two turns in a row where Claude only wrote, with no tool call (the result's `num_turns` of 1), end the run as stalled. So with No limit a session that has nothing left, but never says QUEUE EMPTY, cannot loop.
+- **After a restart, any mode:** a session that was working when JCVC closed, restarted or updated carries on where it was. In Extreme approval it carries on with its queue; in any other mode it is told JCVC restarted and to carry on from where it was, once. Audited like a carry-on. Force stop still means it waits for you.
+- The fake SDK's result now counts one call to Claude plus one per tool call, as the real one does.
+- Tests: `apps/host/test/carry-on.test.ts`, `apps/host/test/extreme-carry.test.ts`, the lines in `apps/web/test/store.test.ts` and `apps/web/test/settings-autosave.test.tsx`. The stall guard was broken on purpose and its test failed.

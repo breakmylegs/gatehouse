@@ -174,8 +174,12 @@ describe("store events", () => {
       "Stopped carrying on: the build queue is empty.",
     )
     expect(describeEvent("carry_on_end", { why: "spend", spentUsd: 25.4 })).toBe(
-      "Stopped carrying on: it spent $25.40 since your last message, the most allowed.",
+      "Stopped carrying on: it spent $25.40 since your last message, the most allowed. Send a message to carry on, or raise the limit in Settings, Extreme approval.",
     )
+    expect(describeEvent("carry_on", { turn: 7 })).toBe(
+      "Extreme approval: carrying on by itself, turn 7.",
+    )
+    expect(describeEvent("carry_on_end", { why: "stalled" })).toMatch(/did no work/)
   })
 
   it("reads the result after Interrupt as stopped by you, not as an error", () => {

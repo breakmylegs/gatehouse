@@ -184,10 +184,12 @@ export const SessionInfo = z.object({
   carryOn: z
     .object({
       turns: z.number(),
-      maxTurns: z.number(),
+      /** Absent: no limit. */
+      maxTurns: z.number().optional(),
       spentUsd: z.number(),
-      maxUsd: z.number(),
-      ended: z.enum(["done", "turns", "spend", "stopped", "error"]).optional(),
+      /** Absent: no limit. */
+      maxUsd: z.number().optional(),
+      ended: z.enum(["done", "turns", "spend", "stopped", "error", "stalled"]).optional(),
     })
     .optional(),
 })

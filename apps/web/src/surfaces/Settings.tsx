@@ -16,7 +16,19 @@ interface Config {
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
   rulesPath?: string
+  extremeCarryOn?: { turns: number; usd: number; noTurnLimit?: boolean; noSpendLimit?: boolean }
 }
+
+/** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
+const CARRY_TURNS = ["25", "50", "100", "200", "500", "none"] as const
+const CARRY_USD = ["25", "50", "100", "250", "500", "1000", "none"] as const
+/** The choices, with a value saved by hand or by another version among them, in order. */
+const withCurrent = (list: readonly string[], v: string) =>
+  list.includes(v)
+    ? [...list]
+    : [...list.filter((n) => n !== "none"), v]
+        .sort((a, b) => Number(a) - Number(b))
+        .concat(list.includes("none") ? ["none"] : [])
 interface SettingsData {
   path: string
   saved: Partial<Config>
@@ -48,6 +60,9 @@ interface Values {
   terms: string
   cpEsc: boolean
   cpBurst: boolean
+  /** A number, or "none" for no limit. */
+  ecTurns: string
+  ecUsd: string
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -69,6 +84,8 @@ function valuesOf(d: SettingsData): Values {
     terms: c.redactTerms.join("\n"),
     cpEsc: c.checkpoints.beforeEscalation,
     cpBurst: c.checkpoints.editBursts,
+    ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
+    ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
   }
 }
 
@@ -91,6 +108,15 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
+  // Anything a newer version keeps beside the limits stays.
+  const { noTurnLimit: _t, noSpendLimit: _s, ...keep } = d.saved.extremeCarryOn ?? {}
+  body.extremeCarryOn = {
+    ...keep,
+    turns: v.ecTurns === "none" ? 500 : Number(v.ecTurns),
+    usd: v.ecUsd === "none" ? 1000 : Number(v.ecUsd),
+    ...(v.ecTurns === "none" ? { noTurnLimit: true } : {}),
+    ...(v.ecUsd === "none" ? { noSpendLimit: true } : {}),
+  }
   return body
 }
 
@@ -364,6 +390,43 @@ export function Settings() {
               onChange={(e) => edit({ hardMin: Number(e.target.value) })}
               {...typed("Desktop timeout")}
             />
+          </Field>
+        </div>
+      </fieldset>
+
+      <fieldset className="m-0 grid gap-3 border-0 p-0">
+        <legend className="mb-1 text-sm font-semibold">Extreme approval</legend>
+        <p className="m-0 text-xs text-mut">
+          A session in Extreme approval carries on by itself until Claude says its build queue is
+          empty. It also stops when two turns in a row do no work, when you press Stop, or at these
+          limits after each message of yours.
+        </p>
+        <div className="grid grid-cols-2 gap-3 max-[700px]:grid-cols-1">
+          <Field label="Most automatic turns">
+            <select
+              className="field"
+              value={v.ecTurns}
+              onChange={(e) => change({ ecTurns: e.target.value }, "Extreme approval")}
+            >
+              {withCurrent(CARRY_TURNS, v.ecTurns).map((n) => (
+                <option key={n} value={n}>
+                  {n === "none" ? "No limit" : `${n} turns`}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Most spending">
+            <select
+              className="field"
+              value={v.ecUsd}
+              onChange={(e) => change({ ecUsd: e.target.value }, "Extreme approval")}
+            >
+              {withCurrent(CARRY_USD, v.ecUsd).map((n) => (
+                <option key={n} value={n}>
+                  {n === "none" ? "No limit" : `$${Number(n).toLocaleString("en-GB")}`}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
       </fieldset>

@@ -652,7 +652,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
     case "carry_on":
       return data.restart === true
         ? "JCVC restarted while this session was working, so it carries on where it was."
-        : `Extreme approval: carrying on by itself, turn ${String(data.turn)} of ${String(data.of)}.`
+        : `Extreme approval: carrying on by itself, turn ${String(data.turn)}${typeof data.of === "number" ? ` of ${data.of}` : ""}.`
     case "carry_on_end": {
       const why: Record<string, string> = {
         done: "the build queue is empty",
@@ -660,8 +660,10 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
         spend: `it spent $${Number(data.spentUsd ?? 0).toFixed(2)} since your last message, the most allowed`,
         stopped: "you stopped it",
         error: "a turn ended with an error",
+        stalled: "its last two turns did no work, so nothing seems left to do",
       }
-      return `Stopped carrying on: ${why[String(data.why)] ?? "it was told to"}.`
+      const limit = data.why === "turns" || data.why === "spend"
+      return `Stopped carrying on: ${why[String(data.why)] ?? "it was told to"}.${limit ? " Send a message to carry on, or raise the limit in Settings, Extreme approval." : ""}`
     }
     default:
       return undefined

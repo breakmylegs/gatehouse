@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CarryOn, recommendedAnswers } from "../src/carry-on.js"
+import { CarryOn, carryOnLimits, recommendedAnswers } from "../src/carry-on.js"
 
 const run = (turns = 3, usd = 5) => new CarryOn(() => ({ turns, usd }))
 const ok = (text = "Done the next item.", costUsd?: number) => ({
@@ -42,6 +42,29 @@ describe("Extreme approval carrying on by itself", () => {
     expect(c.status().ended).toBe("stopped")
     c.started()
     expect(c.next(ok())).toEqual({ go: true, turn: 1, of: 3 })
+  })
+
+  it("keeps going with no limit when Settings says so, and an older reader still gets a number", () => {
+    const c = new CarryOn(() => carryOnLimits({ turns: 500, usd: 1000, noTurnLimit: true, noSpendLimit: true }))
+    c.started()
+    for (let i = 1; i <= 600; i++) expect(c.next(ok("next", i * 10))).toEqual({ go: true, turn: i })
+    expect(c.status()).not.toHaveProperty("maxTurns")
+    expect(c.status()).not.toHaveProperty("maxUsd")
+    // Owner, 31 Oct: the defaults leave room for a long build queue.
+    expect(carryOnLimits()).toEqual({ turns: 200, usd: 500 })
+    expect(carryOnLimits({ turns: 40, usd: 60, noSpendLimit: true })).toEqual({ turns: 40 })
+  })
+
+  it("stops when two turns in a row did no work, even with no limit", () => {
+    const c = new CarryOn(() => ({}))
+    c.started()
+    expect(c.next({ ...ok("Shall I go on?"), steps: 1 })).toMatchObject({ go: true })
+    expect(c.next({ ...ok("Built it."), steps: 9 })).toMatchObject({ go: true })
+    expect(c.next({ ...ok("Nothing to do."), steps: 1 })).toMatchObject({ go: true })
+    expect(c.next({ ...ok("Still nothing."), steps: 1 })).toMatchObject({
+      go: false,
+      why: "stalled",
+    })
   })
 })
 

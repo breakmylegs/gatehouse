@@ -125,14 +125,17 @@ function build(loose: boolean) {
     }),
     /**
      * Extreme approval carries on by itself after each turn until the build queue is empty (owner, 30 Oct), at most
-     * this many automatic turns and dollars after one message of yours.
+     * this many automatic turns and dollars after one message of yours. Owner, 31 Oct: higher by default, and either
+     * may be No limit (the flags; an older version reads the number, kept at its highest).
      */
     extremeCarryOn: z
       .object({
-        turns: z.number().int().min(1).max(500).default(25),
-        usd: z.number().min(1).max(1000).default(25),
+        turns: z.number().int().min(1).max(500).default(200),
+        usd: z.number().min(1).max(1000).default(500),
+        noTurnLimit: z.boolean().optional(),
+        noSpendLimit: z.boolean().optional(),
       })
-      .default({ turns: 25, usd: 25 }),
+      .default({ turns: 200, usd: 500 }),
   })
 }
 
