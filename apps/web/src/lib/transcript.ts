@@ -316,6 +316,9 @@ export function reduceHistory(t: Transcript, message: unknown): Transcript {
       const said = text.trim()
       if (!said || said.startsWith("<")) return t
       if (said.startsWith("[Request interrupted")) return addSystem(t, "You stopped this turn.")
+      // Claude Code's summary after compacting is written as a message from you; it is not one.
+      if (said.startsWith("This session is being continued from a previous conversation"))
+        return addSystem(t, "Claude Code summarised the earlier conversation to make room.")
       return addUser(t, said)
     }
   }

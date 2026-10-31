@@ -1026,6 +1026,40 @@ main[data-rail="hidden"] {
   color: var(--c-acc-tx);
 }
 
+/* Back to the latest, when you have scrolled up the conversation. */
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 4;
+  transform: translateX(-50%);
+  padding: 5px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  font: 500 13px var(--font-ui);
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 16%, transparent);
+  cursor: pointer;
+}
+.jump-latest:hover {
+  background: var(--c-s2);
+}
+/* Why a session stopped, above its prompt box. */
+.pane-stopped {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-sev);
+  border-radius: 6px;
+  color: var(--c-sev);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
 /* A run of tool calls folded into one line. */
 .tool-group-line {
   display: inline-flex;

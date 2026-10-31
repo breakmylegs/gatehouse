@@ -681,3 +681,10 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - **Found** while mapping the code for the Wave 1 plan: the floor's secrets rule blocked `**/.claude/.credentials.json`, which is the main account's sign-in. An added account's Claude Code folder is `%LOCALAPPDATA%\Gatehouse\accounts\<id>\claude` (Phase 42), with no leading dot, so a session's Read of its `.credentials.json` was not denied by the floor. It would have escalated, and Extreme approval approves escalations. Invariant 6 was not kept for added accounts.
 - **Fix:** the secrets rule also covers `**/.credentials.json` anywhere and everything under `**/Gatehouse/accounts/**`. Claude Code itself still reads its own folder; only Claude's tools are refused.
 - Tests: `packages/policy/test/threats.test.ts` (Read, Write and Edit of the file and the folder, and `cat` and `Get-Content` of the file). It failed before the fix and passes after it.
+## Phase 48: why a session stopped, and the latest in view (31 Oct)
+
+- **Owner report:** after JCVC restarted at 12:18 three sessions showed "Stopped with an error" with no reason. The Host wrote reasons only to its error output, which the window keeps in memory, so they were lost with the restart and could not be recovered.
+- **Now:** a stopped session says why above its prompt box, with **Start again** (the same conversation, as Force stop does). The Host also keeps its log in `%LOCALAPPDATA%\Gatehouse\host.log` (redacted with the settings' list before it is written, invariant 12; two files of 2 MB at most). A session's error line names its project.
+- **Owner asks:** **Jump to latest** appears once you scroll up the conversation (and Ctrl+Shift+End in the pane). A resumed or restarted session opens at its end once its conversation is read back, rather than at the top.
+- Claude Code's summary after compacting, read back from its transcript, showed as a message from you. It is now the quiet line "Claude Code summarised the earlier conversation to make room".
+- Tests: `apps/web/test/jump-latest.test.tsx`, `apps/host/test/host-log.test.ts`. 6 breaks, 6 caught.

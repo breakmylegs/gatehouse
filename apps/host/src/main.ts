@@ -5,11 +5,17 @@
  */
 import path from "node:path"
 import { generateToken } from "./approver-process.js"
+import { gatehouseDataDir } from "@gatehouse/shared/node"
 import { createHost, REPO_ROOT } from "./bootstrap.js"
+import { fileLog } from "./host-log.js"
 import { HostServer } from "./server.js"
 
 const env = process.env
-const log = (line: string) => process.stderr.write(`[host] ${line}\n`)
+const logFile = fileLog(path.join(gatehouseDataDir(env), "host.log"))
+const log = (line: string) => {
+  process.stderr.write(`[host] ${line}\n`)
+  logFile.write(line)
+}
 
 // The start-up picture shows these steps as they happen. This first one means the Host's own code has loaded.
 const progress = (text: string) =>
@@ -22,6 +28,7 @@ const host = createHost({
   keepOpenSessions: true,
   limitResources: true,
 })
+logFile.setTerms(() => host.config.redactTerms)
 const token = generateToken()
 // The window app shows a Windows notification from this line, so it works even while the page is hidden in the
 // tray or minimised. The line carries no detail: what the request is stays inside the app.

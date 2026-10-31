@@ -610,7 +610,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   #fatal(e: Error): void {
     this.#error = e.message
-    this.#deps.log(`session ${this.id} stopped: ${e.message}`)
+    this.#deps.log(`session ${this.id} (${this.project}) stopped with an error: ${e.message}`)
     this.#deps.broker.cancelSession(this.id, "The session stopped with an error")
     this.#setState("error")
     this.#q?.close()

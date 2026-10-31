@@ -3,7 +3,7 @@ import clsx from "clsx"
 import { diffLines } from "diff"
 import { memo, useEffect, useId, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown"
-import { Virtuoso } from "react-virtuoso"
+import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
 import { addSystem, emptyTranscript, type Item, type Picture as Shown, type Todo } from "../lib/transcript"
@@ -207,6 +207,19 @@ function SessionPane({
 
   // Runs of tool calls read as one line each, opened on demand.
   const shownItems = useMemo(() => groupItems(transcript.items), [transcript.items])
+  // Owner, 31 Oct: a quick way back to the latest, and a resumed or restarted session opens at its latest.
+  const scroller = useRef<VirtuosoHandle>(null)
+  const [atEnd, setAtEnd] = useState(true)
+  const toLatest = (smooth = false) =>
+    scroller.current?.scrollToIndex({ index: "LAST", align: "end", ...(smooth ? { behavior: "smooth" } : {}) })
+  const historyShown = useRef(false)
+  const hasHistory = shownItems.some((i) => i.id.startsWith("h") || i.id.startsWith("g-h"))
+  useEffect(() => {
+    if (!hasHistory || historyShown.current) return
+    historyShown.current = true
+    // The conversation read back arrives after the pane opened at the top: go to its end.
+    requestAnimationFrame(() => toLatest())
+  }, [hasHistory])
   const tools = useRef<Partial<Record<Side, HTMLButtonElement | null>>>({})
   const toggleSide = (t: Side) => setSide((s) => (s === t ? null : t))
   // Closing puts focus back on the button that opened it, so the keyboard does not lose its place.
@@ -353,11 +366,23 @@ function SessionPane({
       ) : null}
 
       <div className="pane-body min-h-0">
-        <section aria-label="Transcript" className="pane-transcript min-h-0">
+        <section
+          aria-label="Transcript"
+          className="pane-transcript relative min-h-0"
+          onKeyDown={(e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === "End") {
+              e.preventDefault()
+              toLatest()
+            }
+          }}
+        >
           <Virtuoso
+            ref={scroller}
             style={{ height: "100%" }}
             data={shownItems}
             followOutput="smooth"
+            atBottomThreshold={80}
+            atBottomStateChange={setAtEnd}
             initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
             computeItemKey={(_, it) => it.id}
             itemContent={(_, it) => (
@@ -377,6 +402,11 @@ function SessionPane({
               ),
             }}
           />
+          {atEnd || shownItems.length === 0 ? null : (
+            <button type="button" className="jump-latest" onClick={() => toLatest(true)}>
+              Jump to latest <span aria-hidden="true">&darr;</span>
+            </button>
+          )}
         </section>
         {opened ? (
           <Viewer
@@ -432,6 +462,7 @@ function SessionPane({
       </div>
 
       <footer className="border-t border-line bg-s1 p-3">
+        {session.state === "error" ? <StoppedLine session={session} /> : null}
         {pending[0] ? (
           <SessionRequest
             view={pending[0]}
@@ -737,6 +768,38 @@ function ContextMeter({
         </div>
       ) : null}
     </span>
+  )
+}
+
+/**
+ * Why a session stopped, in its own words, and a way to start it again on the same conversation (owner, 31 Oct:
+ * "it is not clear why").
+ */
+function StoppedLine({ session }: { session: SessionInfo }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div role="alert" className="pane-stopped">
+      <span>
+        <strong>Stopped with an error:</strong>{" "}
+        {session.error ?? "Claude Code did not say why. The Host's log (host.log) may say more."}
+      </span>
+      {session.sdkSessionId ? (
+        <button
+          type="button"
+          className="btn !min-h-7"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            void send({ type: "force_stop", sessionId: session.id }, 120_000).then((r) => {
+              setBusy(false)
+              if (!r.ok) toast.error(r.error?.message ?? "It could not be started again")
+            })
+          }}
+        >
+          {busy ? "Starting again" : "Start again"}
+        </button>
+      ) : null}
+    </div>
   )
 }
 
