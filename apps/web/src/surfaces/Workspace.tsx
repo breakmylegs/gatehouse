@@ -449,7 +449,11 @@ function SessionPane({
         <Composer sessionId={session.id} disabled={ended} />
         {/* What the session runs on, under the prompt box where you look when you send. */}
         <div className="composer-bar" role="group" aria-label="Model, effort and mode">
-          <ContextMeter sessionId={session.id} state={session.state} />
+          <ContextMeter
+            sessionId={session.id}
+            state={session.state}
+            pending={session.compactPending === true}
+          />
           <label className="composer-pick">
             <span className="text-mut">Model</span>
             <select
@@ -611,7 +615,16 @@ export const COMPACT_SOON = 80
  * read when the pane opens and after each turn, from the last response and local estimates (no extra calls to count
  * tokens). Opens to what fills it, and to Compact now, which summarises the older parts between turns.
  */
-function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionInfo["state"] }) {
+function ContextMeter({
+  sessionId,
+  state,
+  pending,
+}: {
+  sessionId: string
+  state: SessionInfo["state"]
+  /** You asked to compact while a turn ran: it compacts when the turn ends. */
+  pending: boolean
+}) {
   const [u, setU] = useState<ContextUsage>()
   const [open, setOpen] = useState(false)
   const read = useRef(false)
@@ -642,6 +655,7 @@ function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionI
         : worth
           ? "Worth compacting now. It summarises the older parts, so Claude keeps the thread and has room to work."
           : `Not needed yet. Compacting is worth it from about ${COMPACT_WORTH}%.`
+  // Owner, 31 Oct: Compact can be pressed while Claude works; it then compacts when the turn ends.
   function compact() {
     setOpen(false)
     useStore.setState((s) => ({
@@ -649,11 +663,13 @@ function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionI
         ...s.transcripts,
         [sessionId]: addSystem(
           s.transcripts[sessionId] ?? emptyTranscript(),
-          "You asked Claude Code to compact the conversation.",
+          between
+            ? "You asked Claude Code to compact the conversation."
+            : "You asked Claude Code to compact the conversation when this turn ends.",
         ),
       },
     }))
-    void send({ type: "prompt", sessionId, text: "/compact" }).then((r) => {
+    void send({ type: "compact", sessionId }).then((r) => {
       if (!r.ok) toast.error(r.error?.message ?? "Compacting did not start")
     })
   }
@@ -708,14 +724,11 @@ function ContextMeter({ sessionId, state }: { sessionId: string; state: SessionI
             <button
               type="button"
               className={clsx("btn !min-h-7", worth && "btn-primary")}
-              disabled={!between}
+              disabled={pending || state === "starting" || state === "ended" || state === "error"}
               onClick={compact}
             >
-              Compact now
+              {pending ? "Compacts after this turn" : between ? "Compact now" : "Compact after this turn"}
             </button>
-            {between ? null : (
-              <span className="text-[12.5px] text-mut">Compacting works between turns.</span>
-            )}
           </span>
           <p className="m-0 text-[12.5px] text-mut">
             How much of what Claude can hold in mind this conversation uses. When it is nearly full,

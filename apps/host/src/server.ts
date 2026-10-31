@@ -558,6 +558,9 @@ export class HostServer {
         return await this.#history().search(cmd.query)
       case "context_usage":
         return await this.#session(cmd.sessionId).contextUsage()
+      case "compact":
+        this.#session(cmd.sessionId).compact()
+        return undefined
       case "signin_start":
         return this.#signIn(cmd.account).start(cmd.method)
       case "signin_status":

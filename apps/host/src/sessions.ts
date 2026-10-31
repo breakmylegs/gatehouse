@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events"
-import type { Effort, Verdict } from "@gatehouse/shared"
+import { Effort, type Verdict } from "@gatehouse/shared"
 import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -172,6 +172,8 @@ export interface SessionInfo {
   resources?: ResourceLevel
   /** Which signed-in account it runs on. Absent for the main one. */
   account?: string
+  /** You asked to compact while a turn ran: it compacts when the turn ends. */
+  compactPending?: boolean
 }
 
 export interface SessionEvents {
@@ -200,6 +202,14 @@ export interface SessionDeps {
     title?: string
     pinned?: boolean
     archived?: boolean
+  }
+  /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
+  resumeSettings?: (sdkSessionId: string) => {
+    model?: string
+    effort?: string
+    mode?: SessionMode
+    extreme?: boolean
+    resources?: ResourceLevel
   }
   /** Where chats get their folders: %LOCALAPPDATA%\Gatehouse\chats. Absent where chats are not offered. */
   chatsDir?: string
@@ -312,6 +322,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #carry = new CarryOn(() => carryOnLimits(this.#deps.config().extremeCarryOn))
   /** The session's total cost after its last turn, so a run counts only what it spends. */
   #lastCost = 0
+  /** You asked to compact while a turn ran: it compacts when the turn ends. */
+  #compactAfterTurn = false
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** Its job object's name, unique to this start, for changing the limits while it runs. */
@@ -394,6 +406,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
+      ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
         ? { carryOn: this.#carry.status() }
         : {}),
@@ -561,6 +574,16 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#running = false
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      if (this.#compactAfterTurn) {
+        // Asked for while the turn ran: it compacts now, and Extreme approval carries on after that.
+        this.#compactAfterTurn = false
+        try {
+          this.#send("/compact")
+          return
+        } catch {
+          this.emit("state", this.info())
+        }
+      }
       if (this.#extreme) void this.#afterTurn(m)
     }
   }
@@ -609,6 +632,19 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#input.push(text)
   }
 
+  /**
+   * Summarises the older conversation to make room: now between turns, or straight after the turn that is running
+   * (owner, 31 Oct). The screen shows it waiting.
+   */
+  compact(): void {
+    if (this.#running) {
+      this.#compactAfterTurn = true
+      this.emit("state", this.info())
+      return
+    }
+    this.#send("/compact")
+  }
+
   /** Which signed-in account it runs on. */
   get account(): string {
     return this.#account
@@ -649,8 +685,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Stops the running turn. The screen hears first, so the result that follows reads as stopped, not failed. */
   async interrupt(by: "you" | "kill-switch" = "you"): Promise<void> {
-    // Stopping a turn stops Extreme carrying on, until your next message.
+    // Stopping a turn stops Extreme carrying on, until your next message, and a compact that was to follow it.
     this.#carry.stopped()
+    this.#compactAfterTurn = false
     if (this.#running) this.emit("event", { type: "interrupted", data: { by } })
     this.#deps.broker.cancelSession(this.id)
     await this.#q?.interrupt()
@@ -865,6 +902,20 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
 
   async start(opts: StartSessionOptions): Promise<Session> {
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
+    // Resume starts a conversation with what it last ran with, for anything the screen did not choose (owner, 31 Oct).
+    // The mode is checked again with every other option before Claude Code starts (invariant 3).
+    if (opts.resume !== undefined && !opts.restore) {
+      const was = this.#deps.resumeSettings?.(opts.resume) ?? {}
+      const effort = Effort.safeParse(was.effort)
+      opts = {
+        ...(was.model !== undefined ? { model: was.model } : {}),
+        ...(effort.success ? { effort: effort.data } : {}),
+        ...(was.mode !== undefined ? { mode: was.mode } : {}),
+        ...(was.extreme !== undefined ? { extreme: was.extreme } : {}),
+        ...(was.resources !== undefined ? { resources: was.resources } : {}),
+        ...opts,
+      }
+    }
     const config = this.#deps.config()
     // Checked again inside Session.start with the live account. This early check gives a clear message
     // when there is nothing to compare against.

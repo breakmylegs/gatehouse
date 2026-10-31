@@ -131,6 +131,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("search_history"), query: z.string().min(2).max(200) }),
   /** How full a session's context is. */
   z.object({ type: z.literal("context_usage"), sessionId: Id }),
+  /** Summarise the older conversation: now between turns, or straight after the running one. */
+  z.object({ type: z.literal("compact"), sessionId: Id }),
   z.object({ type: z.literal("refresh_account"), account: z.string().max(20).optional() }),
   z.object({
     type: z.literal("signin_start"),
@@ -180,6 +182,8 @@ export const SessionInfo = z.object({
   resources: z.enum(["low", "medium", "high"]).optional(),
   /** Which signed-in account it runs on. Absent for the main one. */
   account: z.string().optional(),
+  /** You asked to compact while a turn ran: it compacts when the turn ends. */
+  compactPending: z.boolean().optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn: z
     .object({

@@ -261,6 +261,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const deps: SessionDeps = {
     queryFn,
     sessionMeta: (id) => sessionMeta.get(id),
+    resumeSettings: (id) => sessionMeta.settings(id),
     chatsDir: path.join(gatehouseDataDir(env), "chats"),
     config: () => config,
     policy: () => store.current,
@@ -319,6 +320,17 @@ export function createHost(opts: HostOptions = {}): Host {
     ? new OpenSessionsStore(path.join(gatehouseDataDir(env), "open-sessions.json"))
     : undefined
   if (openSessions) manager.on("session", (info) => openSessions.note(info))
+  // What each conversation runs with, kept by its Claude Code id, so Resume starts it the same way (owner, 31 Oct).
+  manager.on("session", (info) => {
+    if (!info.sdkSessionId || info.kind === "chat") return
+    sessionMeta.keepSettings(info.sdkSessionId, {
+      ...(info.model !== undefined ? { model: info.model } : {}),
+      ...(info.effort !== undefined ? { effort: info.effort } : {}),
+      mode: info.mode,
+      extreme: info.extreme === true,
+      ...(info.resources !== undefined ? { resources: info.resources } : {}),
+    })
+  })
 
   const phoneStore = new PhoneStore(
     path.join(gatehouseDataDir(env), "phone.json"),

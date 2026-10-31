@@ -81,7 +81,7 @@ describe("the context meter", () => {
     expect(panel.textContent).toContain("Worth compacting now")
     fireEvent.click(within(panel).getByRole("button", { name: "Compact now" }))
     await waitFor(() =>
-      expect(sent.at(-1)).toEqual({ type: "prompt", sessionId: ID, text: "/compact" }),
+      expect(sent.at(-1)).toEqual({ type: "compact", sessionId: ID }),
     )
     // The transcript says so, rather than showing a typed command.
     expect(useStore.getState().transcripts[ID]?.items.at(-1)).toMatchObject({
@@ -90,7 +90,7 @@ describe("the context meter", () => {
     })
   })
 
-  it("does not push compacting when there is room, and waits for the turn to end", async () => {
+  it("does not push compacting when there is room, and compacts after the turn when asked mid-turn", async () => {
     percentage = 30
     open("running")
     const meter = await screen.findByRole("button", { name: /Context 30% used/ })
@@ -98,10 +98,21 @@ describe("the context meter", () => {
     fireEvent.click(meter)
     const panel = screen.getByRole("group", { name: "What fills the context" })
     expect(panel.textContent).toContain("Not needed yet")
+    fireEvent.click(within(panel).getByRole("button", { name: "Compact after this turn" }))
+    await waitFor(() => expect(sent.at(-1)).toEqual({ type: "compact", sessionId: ID }))
+    expect(useStore.getState().transcripts[ID]?.items.at(-1)).toMatchObject({
+      text: "You asked Claude Code to compact the conversation when this turn ends.",
+    })
+    // Once asked, it says so and cannot be asked twice.
+    useStore.setState((st) => ({
+      sessions: { [ID]: { ...st.sessions[ID]!, compactPending: true } },
+    }))
+    fireEvent.click(await screen.findByRole("button", { name: /Context 30% used/ }))
+    const again = screen.getByRole("group", { name: "What fills the context" })
     expect(
-      (within(panel).getByRole("button", { name: "Compact now" }) as HTMLButtonElement).disabled,
+      (within(again).getByRole("button", { name: "Compacts after this turn" }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true)
-    expect(panel.textContent).toContain("Compacting works between turns.")
   })
 
   it("says when Claude Code summarised the conversation", () => {
