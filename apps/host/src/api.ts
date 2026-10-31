@@ -43,6 +43,7 @@ import {
 } from "./analytics.js"
 import type { HostAudit } from "./hostaudit.js"
 import { localDay, type UsageStore } from "./usage.js"
+import type { PlanUsage } from "./plan-usage.js"
 import type { PhoneService } from "./relay/service.js"
 
 /**
@@ -68,6 +69,8 @@ export interface AdminContext {
   pickFolder?: FolderPicker
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** An account's plan limits, read on one of its open sessions. */
+  planUsage?: (account: string, fresh: boolean) => Promise<PlanUsage | undefined>
   /** The Windows file window for the composer's Add files. Injected so tests never open a window. */
   pickFiles?: () => Promise<string[]>
   /** Opens Explorer with a file selected. Injected so tests never open a window. */
@@ -266,6 +269,13 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (!day.test(q.from ?? "") || !day.test(q.to ?? "") || (q.from as string) > (q.to as string))
       return bad(reply, 400, "Give from and to as YYYY-MM-DD, from first.")
     return ctx.usage.report(q.from as string, q.to as string)
+  })
+
+  // The account's plan limits, for the meter beside the prompt box. Null where none can be read.
+  app.get("/api/plan-usage", async (req) => {
+    const q = req.query as Record<string, string | undefined>
+    const account = q.account && /^[a-z0-9-]{1,20}$/.test(q.account) ? q.account : "main"
+    return { usage: (await ctx.planUsage?.(account, q.fresh === "1")) ?? null }
   })
 
   app.get("/api/audit/verify", async () => {

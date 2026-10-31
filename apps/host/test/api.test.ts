@@ -845,6 +845,30 @@ describe("insights endpoints", () => {
   })
 })
 
+describe("the plan meter's limits", () => {
+  it("gives the account's limits, or null, and keeps an account name to the shape JCVC makes", async () => {
+    const asked: Array<[string, boolean]> = []
+    ctx.planUsage = async (account, fresh) => {
+      asked.push([account, fresh])
+      return account === "main" ? { limits: [], at: "2026-10-31T10:00:00Z" } : undefined
+    }
+    try {
+      const main = await app.inject({ method: "GET", url: "/api/plan-usage?fresh=1" })
+      expect(main.json()).toEqual({ usage: { limits: [], at: "2026-10-31T10:00:00Z" } })
+      const other = await app.inject({ method: "GET", url: "/api/plan-usage?account=personal" })
+      expect(other.json()).toEqual({ usage: null })
+      await app.inject({ method: "GET", url: "/api/plan-usage?account=..%2F..%2Fx" })
+      expect(asked).toEqual([
+        ["main", true],
+        ["personal", false],
+        ["main", false],
+      ])
+    } finally {
+      delete ctx.planUsage
+    }
+  })
+})
+
 describe("the Usage page's report", () => {
   it("gives cost and tokens for a range of days, and refuses a range it cannot read", async () => {
     const usage = new UsageStore(undefined, () => new Date(2026, 9, 31, 9))

@@ -14,7 +14,8 @@ import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
 import { money, stamp } from "../lib/format"
-import { send, usePending, useSessionList, useStore } from "../store"
+import { MAIN_ACCOUNT, send, usePending, useSessionList, useStore } from "../store"
+import { PlanMeter } from "../components/PlanMeter"
 import { MODELS } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
@@ -531,7 +532,10 @@ function SessionPane({
               </select>
             </label>
           ) : null}
-          <StopButton sessionId={session.id} busy={busy} />
+          <span className="ml-auto flex items-center gap-2">
+            <PlanMeter account={session.account ?? MAIN_ACCOUNT} idle={session.state === "idle"} />
+            <StopButton sessionId={session.id} busy={busy} />
+          </span>
         </div>
       </footer>
     </div>
@@ -753,7 +757,7 @@ function StopButton({ sessionId, busy }: { sessionId: string; busy: boolean }) {
   if (!busy) return null
   const stuck = askedAt !== undefined && now - askedAt >= FORCE_AFTER_MS
   return (
-    <span className="ml-auto flex gap-2">
+    <span className="flex gap-2">
       {stuck ? (
         <button
           type="button"

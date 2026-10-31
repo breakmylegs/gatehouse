@@ -611,6 +611,7 @@ export function createHost(opts: HostOptions = {}): Host {
       localRelay,
       ntfy,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      planUsage: (account, fresh) => manager.planUsage(account, fresh),
       pickFiles: pickFilesWithWindows,
       updates,
       updateToken,

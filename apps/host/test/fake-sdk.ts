@@ -67,6 +67,9 @@ export class FakeSdk {
   readonly queries: FakeQueryHandle[] = []
   /** Cost reported by each result message. */
   costPerTurn = 0.01
+  /** What the experimental usage call answers, in order. */
+  usageAnswers: unknown[] = [{ rate_limits_available: false, rate_limits: null }]
+  usageCalls = 0
   #toolCounter = 0
 
   readonly queryFn: QueryFn = ({ prompt, options }) => {
@@ -303,6 +306,11 @@ export class FakeSdk {
       },
       async initializationResult() {
         return handle.initializationResult()
+      },
+      // The /usage data, one answer per call from the list, then the last again.
+      usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => {
+        this.usageCalls++
+        return this.usageAnswers.length > 1 ? this.usageAnswers.shift() : this.usageAnswers[0]
       },
       close() {
         handle.closed = true

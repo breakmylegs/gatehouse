@@ -37,6 +37,7 @@ import {
   RESUME_PROMPT,
   type CarryOnStatus,
 } from "./carry-on.js"
+import { planLimits, type PlanUsage } from "./plan-usage.js"
 
 export class OrgGuardError extends Error {
   constructor(
@@ -608,6 +609,34 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#input.push(text)
   }
 
+  /** Which signed-in account it runs on. */
+  get account(): string {
+    return this.#account
+  }
+
+  /** Open and able to answer: started, and neither ended nor failed. */
+  get live(): boolean {
+    return this.#q !== undefined && this.#state !== "error" && this.#state !== "ended"
+  }
+
+  /**
+   * The account's plan limits, from Claude Code's own /usage data. The SDK marks the call experimental, so anything
+   * missing or unexpected is nothing (docs/sdk-notes.md). Asks no question of Claude and touches no token.
+   */
+  async planUsage(): Promise<PlanUsage | undefined> {
+    type Read = (o: { skipBehaviors: boolean }) => Promise<unknown>
+    const q = this.#q as unknown as
+      | { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: Read }
+      | undefined
+    const read = q?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.bind(q)
+    if (!read) return undefined
+    const first = planLimits(await read({ skipBehaviors: true }))
+    if (first) return first
+    // The first answer can come before Claude Code has fetched the numbers (probe, 31 Oct).
+    await new Promise((r) => setTimeout(r, PLAN_RETRY_MS))
+    return planLimits(await read({ skipBehaviors: true }))
+  }
+
   /** How full the conversation is, from the last response and local estimates (no extra token counting). */
   async contextUsage(): Promise<unknown> {
     if (!this.#q) throw new Error("The session has not started")
@@ -817,9 +846,17 @@ export interface ManagerEvents {
 }
 
 /** Starts, finds and stops sessions. One SDK query() per session. */
+/** How long the plan limits are kept before an open session is asked again, and the wait for unfetched numbers. */
+const PLAN_FRESH_MS = 60_000
+const PLAN_RETRY_MS = 2000
+
 export class SessionManager extends EventEmitter<ManagerEvents> {
   readonly #deps: SessionDeps
   readonly #sessions = new Map<string, Session>()
+  readonly #plan = new Map<
+    string,
+    { at: number; value?: PlanUsage; pending?: Promise<PlanUsage | undefined> }
+  >()
 
   constructor(deps: SessionDeps) {
     super()
@@ -911,6 +948,28 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       const info = s.info()
       if (info.sdkSessionId === sdkSessionId) this.emit("session", info)
     }
+  }
+
+  /**
+   * The account's plan limits, read on one of its open sessions, at most once a minute unless asked fresh. Nothing
+   * when the account has no session open, since starting one only to ask would start Claude Code.
+   */
+  async planUsage(account = MAIN_ACCOUNT, fresh = false): Promise<PlanUsage | undefined> {
+    const c = this.#plan.get(account)
+    if (c?.pending) return c.pending
+    if (c && !fresh && Date.now() - c.at < PLAN_FRESH_MS) return c.value
+    const s = [...this.#sessions.values()].find((x) => x.account === account && x.live)
+    if (!s) return c?.value
+    const pending = s
+      .planUsage()
+      .catch(() => undefined)
+      .then((value) => {
+        const kept = value ?? c?.value
+        this.#plan.set(account, { at: Date.now(), ...(kept ? { value: kept } : {}) })
+        return kept
+      })
+    this.#plan.set(account, { ...(c ?? { at: 0 }), pending })
+    return pending
   }
 
   /** The kill switch: every turn and every background task stops. */
