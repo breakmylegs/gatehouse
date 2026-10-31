@@ -24,6 +24,7 @@ import {
   assertSafeOptions,
   isAllowedMode,
   isShadowWarning,
+  outOfProcessServers,
   SafetyError,
   type SessionMode,
 } from "./safety.js"
@@ -521,6 +522,16 @@ export class Session extends EventEmitter<SessionEvents> {
       if (!snapshot.org.ok) {
         // Invariant 14: nothing is sent to a session on the wrong account.
         throw new OrgGuardError(snapshot.org.code, snapshot.org.message)
+      }
+      // Owner, 31 Oct: only in-process MCP servers in a session. Nothing is sent to one that has another.
+      const q = this.#q as unknown as { mcpServerStatus?: () => Promise<unknown> }
+      if (q.mcpServerStatus) {
+        const outside = outOfProcessServers(await q.mcpServerStatus())
+        if (outside.length)
+          throw new SafetyError(
+            17,
+            `MCP servers outside the process are not allowed in a session: ${outside.join(", ")}`,
+          )
       }
     } catch (e) {
       this.#q.close()

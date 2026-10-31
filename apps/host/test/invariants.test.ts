@@ -10,6 +10,7 @@ import {
   isAllowedMode,
   isBareToolName,
   isShadowWarning,
+  outOfProcessServers,
   SafetyError,
 } from "../src/safety.js"
 import { KillSwitchEngagedError, OrgGuardError } from "../src/sessions.js"
@@ -709,5 +710,38 @@ describe("session lifecycle", () => {
     await s.kill.engage("desktop", "lifecycle test")
     await expect(s.manager.start({ cwd: s.repo })).rejects.toBeInstanceOf(KillSwitchEngagedError)
     await s.kill.rearm("desktop")
+  })
+})
+
+describe("only in-process MCP servers in a session (owner, 31 Oct)", () => {
+  it("lists stdio, SSE and HTTP servers that are connected or connecting, and nothing else", () => {
+    expect(
+      outOfProcessServers([
+        { name: "companion", status: "connected", config: { type: "sdk", name: "companion" }, source: "sdk" },
+        { name: "files", status: "connected", config: { command: "node", args: ["x.js"] }, source: "project" },
+        { name: "docs", status: "pending", config: { type: "http", url: "https://example.com/mcp" } },
+        { name: "feed", status: "connected", config: { type: "sse", url: "https://example.com/sse" } },
+        { name: "figma", status: "connected", config: { type: "claudeai-proxy", url: "https://x", id: "1" } },
+        { name: "blocked", status: "failed", config: { type: "stdio", command: "evil" } },
+        { name: "off", status: "disabled", config: { type: "http", url: "https://x" } },
+      ]),
+    ).toEqual(["files", "docs", "feed"])
+    expect(outOfProcessServers(undefined)).toEqual([])
+    expect(outOfProcessServers("nonsense")).toEqual([])
+  })
+
+  it("refuses to start a session that has one, and starts one that has only the Companion", async () => {
+    const st = await buildStack()
+    try {
+      await st.manager.start({ cwd: st.repo })
+      st.sdk.mcpStatus = [
+        { name: "companion", status: "connected", config: { type: "sdk", name: "companion" }, source: "sdk" },
+        { name: "files", status: "connected", config: { type: "stdio", command: "node" }, source: "user" },
+      ]
+      await expect(st.manager.start({ cwd: st.repo })).rejects.toThrow(/outside the process.*files/)
+      expect(st.sdk.queries.at(-1)?.closed).toBe(true)
+    } finally {
+      await st.stop()
+    }
   })
 })

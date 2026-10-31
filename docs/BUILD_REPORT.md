@@ -688,3 +688,10 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - **Owner asks:** **Jump to latest** appears once you scroll up the conversation (and Ctrl+Shift+End in the pane). A resumed or restarted session opens at its end once its conversation is read back, rather than at the top.
 - Claude Code's summary after compacting, read back from its transcript, showed as a message from you. It is now the quiet line "Claude Code summarised the earlier conversation to make room".
 - Tests: `apps/web/test/jump-latest.test.tsx`, `apps/host/test/host-log.test.ts`. 6 breaks, 6 caught.
+## Phase 49: Wave 1 slice W1-01, safety fixes before new work (31 Oct)
+
+- **Plan approved** by the owner ("continue", 31 Oct), with the recommended options where the plan asked. Where an earlier owner decision conflicts with the research (the Jean-Claude photo, the full name), the owner's decision stands until they say otherwise.
+- **O9, only in-process MCP servers:** after the account check, a session reads `mcpServerStatus()` (SDK 0.3.310), and a stdio, SSE or HTTP server that is connected or connecting stops it with a safety error (numbered 17, the number proposed for this rule in `docs/plan/claude-md-additions.diff`). The managed policy already blocks such servers here; this is JCVC's own check. A claude.ai connector (type `claudeai-proxy`) runs through Anthropic's proxy and is left to the policy, so sessions with connectors such as Figma still start. Servers a plugin adds after start are not checked yet. Threat model T34.
+- **O7, slash commands:** the prompt box refused every slash command but JCVC's nine, so Claude Code's own commands and skills from the plus menu could not be sent. A command or skill the session offers (from its init message) now goes to Claude as typed. JCVC's commands still work, and an unknown one still says so.
+- Found for W1-08: `assertSafeOptions` refuses any inline `settings` (invariant 5), so turning off Claude Code's auto memory for chats that way (ADR 0006) needs a narrow allowance.
+- Tests: `apps/host/test/invariants.test.ts`, `apps/web/test/slash-commands.test.tsx`. 6 breaks, 6 caught.

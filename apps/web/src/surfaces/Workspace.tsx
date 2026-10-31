@@ -1025,9 +1025,21 @@ function Composer({ sessionId, disabled }: { sessionId: string; disabled: boolea
         case "/close":
           r = await send({ type: "close_session", sessionId })
           break
-        default:
+        default: {
+          // A Claude Code command or skill this session offers (the plus menu lists them) goes to Claude as typed.
+          const own = useStore.getState().meta[sessionId]
+          const name = (cmd ?? "").slice(1)
+          if (own && (own.slashCommands.includes(name) || own.skills.includes(name))) {
+            const st = useStore.getState().sessions[sessionId]?.state
+            addUserText(sessionId, t, undefined, st === "running" || st === "waiting")
+            setText("")
+            r = await send({ type: "prompt", sessionId, text: t })
+            if (!r.ok) toast.error(r.error?.message ?? "The prompt was not sent")
+            return
+          }
           toast.error(`Unknown command ${cmd}. Type / to see the list.`)
           return
+        }
       }
       if (!r.ok) toast.error(r.error?.message ?? "That did not work")
       setText("")

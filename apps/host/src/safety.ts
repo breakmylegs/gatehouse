@@ -95,6 +95,29 @@ export function assertSafeOptions(options: Options): void {
   }
 }
 
+/**
+ * Owner's rule of 31 Oct: a session uses only in-process SDK MCP servers (the Companion). The managed policy on this
+ * laptop already blocks the rest; JCVC checks for itself too. Returns the servers, from `mcpServerStatus()`, that run
+ * outside the process (stdio, SSE or HTTP) and are connected or connecting. A claude.ai connector goes through
+ * Anthropic's own proxy and is not a server on this computer, so it is left to the policy.
+ */
+export function outOfProcessServers(statuses: unknown): string[] {
+  if (!Array.isArray(statuses)) return []
+  const out: string[] = []
+  for (const raw of statuses) {
+    const s = (raw ?? {}) as { name?: unknown; status?: unknown; config?: unknown }
+    const c = (s.config ?? {}) as { type?: unknown; command?: unknown }
+    const outside =
+      c.type === "stdio" ||
+      c.type === "sse" ||
+      c.type === "http" ||
+      (c.type === undefined && typeof c.command === "string")
+    if (outside && (s.status === "connected" || s.status === "pending"))
+      out.push(typeof s.name === "string" ? s.name : "unnamed")
+  }
+  return out
+}
+
 const SHADOWED =
   /CLAUDE_SDK_CAN_USE_TOOL_SHADOWED|canUseTool[^\n]{0,80}\b(shadow|never (be )?called|bypass)/i
 

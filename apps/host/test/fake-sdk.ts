@@ -69,6 +69,10 @@ export class FakeSdk {
   costPerTurn = 0.01
   /** What the experimental usage call answers, in order. */
   usageAnswers: unknown[] = [{ rate_limits_available: false, rate_limits: null }]
+  /** What mcpServerStatus answers: by default only the in-process Companion. */
+  mcpStatus: unknown[] = [
+    { name: "companion", status: "connected", config: { type: "sdk", name: "companion" }, source: "sdk" },
+  ]
   usageCalls = 0
   #toolCounter = 0
 
@@ -307,6 +311,7 @@ export class FakeSdk {
       async initializationResult() {
         return handle.initializationResult()
       },
+      mcpServerStatus: async () => this.mcpStatus,
       // The /usage data, one answer per call from the list, then the last again.
       usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: async () => {
         this.usageCalls++

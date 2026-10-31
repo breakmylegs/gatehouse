@@ -28,6 +28,10 @@ Facts from the code:
 - **Projects:** a chat project is a folder `%LOCALAPPDATA%\Gatehouse\projects\<name>\` with `knowledge\` and `instructions.md`. A chat in a project starts in its own folder as now, with the project folder added through `additionalDirectories`, so Claude reads knowledge files on demand. Each Read of a knowledge file shows in the turn, which meets "each turn shows which files were included".
 - **Instructions:** global instructions (Settings), project instructions and session instructions all go into `append`, in that order, with a size limit and a visible note at the top of the session.
 
+## Found while building W1-01
+
+`assertSafeOptions` (`apps/host/src/safety.ts`) refuses any inline `settings`, because settings can carry permission rules (invariant 5). Turning off auto memory through `Options.settings` needs a narrow allowance: an object holding `autoMemoryEnabled: false` and nothing else.
+
 ## Consequences
 
 - Memory and instructions are the user's own data files, read tolerantly and changed only by adding, as the conventions require.
