@@ -91,6 +91,7 @@ export function groupByFolder(list: SessionInfo[]): FolderGroup[] {
 export const RAIL_PAGES: Array<{ route: Route; label: string }> = [
   { route: "approvals", label: "Approvals" },
   { route: "sessions", label: "All sessions" },
+  { route: "usage", label: "Usage" },
   { route: "policy", label: "What Claude may do" },
   { route: "audit", label: "Audit log" },
   { route: "approver", label: "Approver" },

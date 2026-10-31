@@ -1234,3 +1234,82 @@ main[data-rail="hidden"] {
   width: 300px;
   padding: 12px;
 }
+
+/*
+ * The Usage page's charts. One hue for a single series: the gate blue in light, a step of it inside the dark chart
+ * band in dark (both checked with the dataviz validator against their own surface, 30 Oct).
+ */
+:root {
+  --c-viz: oklch(47% 0.15 258);
+}
+:root[data-theme="dark"] {
+  --c-viz: oklch(64% 0.14 256);
+}
+.usage-chart {
+  overflow: visible;
+  font: 11px var(--font-sign);
+}
+.usage-grid {
+  stroke: var(--c-line);
+  stroke-width: 1;
+}
+.usage-base {
+  stroke: var(--c-mut);
+  stroke-width: 1;
+}
+.usage-axis {
+  fill: var(--c-mut);
+}
+.usage-bar {
+  fill: var(--c-viz);
+}
+.usage-slot {
+  outline: none;
+  cursor: default;
+}
+.usage-slot[data-on] .usage-bar {
+  filter: brightness(1.15);
+}
+.usage-slot:focus-visible rect {
+  stroke: var(--c-acc);
+  stroke-width: 2;
+}
+.usage-tip {
+  position: absolute;
+  top: 4px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.usage-track {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--c-s2);
+}
+.usage-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 4px;
+  background: var(--c-viz);
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.usage-table th,
+.usage-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--c-line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.usage-table th:first-child,
+.usage-table td:first-child {
+  text-align: left;
+}

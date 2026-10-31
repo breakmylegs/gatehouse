@@ -24,8 +24,6 @@ vi.mock("recharts", async (orig) => {
 })
 
 import { Insights, percent, seconds } from "../src/surfaces/Insights"
-import { UsageView } from "../src/surfaces/UsageView"
-import { useStore } from "../src/store"
 
 const analytics = {
   evaluations: 200,
@@ -175,53 +173,5 @@ describe("Insights", () => {
     )
     expect(screen.getByText("No rule asked you in this period.")).toBeInTheDocument()
     expect(screen.getByText("No days to show.")).toBeInTheDocument()
-  })
-})
-
-describe("UsageView", () => {
-  it("shows the digest, and spend by day, project and model", async () => {
-    const t = {
-      costUsd: 1.5,
-      inputTokens: 1000,
-      outputTokens: 500,
-      cacheReadTokens: 0,
-      cacheCreationTokens: 0,
-      turns: 1,
-    }
-    useStore.setState({
-      usage: {
-        total: t,
-        byProject: { atlas: t },
-        byModel: { "claude-sonnet-5-5": t },
-        byDay: { "2026-10-27": t, "2026-10-26": { ...t, costUsd: 0.25 } },
-      },
-    })
-    routes["GET /api/digest"] = () => ({
-      ok: true,
-      data: {
-        text: "In the last 24 hours: 2 calls went through automatically.",
-        askedYou: 0,
-        costUsd: 1.5,
-      },
-    })
-    render(<UsageView />)
-    expect(await screen.findByText(/2 calls went through automatically/)).toBeInTheDocument()
-    expect(screen.getByRole("table", { name: "Last 14 days" })).toBeInTheDocument()
-    expect(
-      within(screen.getByRole("table", { name: "By project" })).getByText("atlas"),
-    ).toBeInTheDocument()
-    expect(
-      within(screen.getByRole("table", { name: "By model" })).getByText("claude-sonnet-5-5"),
-    ).toBeInTheDocument()
-    const days = within(screen.getByRole("table", { name: "Last 14 days" }))
-      .getAllByRole("row")
-      .map((r) => r.textContent)
-    expect(days[1]).toContain("2026-10-27")
-  })
-
-  it("says so when nothing has been recorded", async () => {
-    useStore.setState({ usage: undefined })
-    render(<UsageView />)
-    expect(await screen.findByText("No usage recorded yet.")).toBeInTheDocument()
   })
 })

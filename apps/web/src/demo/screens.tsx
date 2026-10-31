@@ -124,6 +124,45 @@ const SUGGESTIONS = [
   },
 ]
 
+/** A fortnight of sample usage for the Usage page: three projects, two models. */
+const USAGE_REPORT = (() => {
+  const day = (back: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() - back)
+    const p = (n: number) => String(n).padStart(2, "0")
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+  const t = (costUsd: number) => ({
+    costUsd,
+    inputTokens: Math.round(costUsd * 40),
+    outputTokens: Math.round(costUsd * 6000),
+    turns: Math.max(1, Math.round(costUsd)),
+  })
+  const days: Record<string, Record<string, unknown>> = {}
+  const spend = [2.1, 6.4, 0, 3.2, 8.9, 12.4, 4.1, 0.6, 9.8, 15.2, 7.7, 21.3, 18.1, 45.5]
+  spend.forEach((c, i) => {
+    if (!c) return
+    days[day(spend.length - 1 - i)] = {
+      "019a3b2c-1d00-7abc-8000-000000000001": {
+        project: "billing-service",
+        total: t(c * 0.6),
+        models: { "claude-opus-5-5": t(c * 0.55), "claude-haiku-5-5": t(c * 0.05) },
+      },
+      "019a3b2c-1d00-7abc-8000-000000000002": {
+        project: "docs-site",
+        total: t(c * 0.3),
+        models: { "claude-sonnet-5-5": t(c * 0.3) },
+      },
+      "019a3b2c-1d00-7abc-8000-000000000003": {
+        project: "atlas",
+        total: t(c * 0.1),
+        models: { "claude-opus-5-5": t(c * 0.1) },
+      },
+    }
+  })
+  return { from: day(29), to: day(0), splitSince: day(13), days, daysWithoutCells: {} }
+})()
+
 // The stand-in for the Host's admin API.
 const realFetch = window.fetch.bind(window)
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -135,6 +174,18 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       headers: { "content-type": "application/json" },
     })
   if (p === "/api/update") return json(UPDATE)
+  if (p === "/api/usage/report") {
+    const q = new URL(url, location.href).searchParams
+    return json({
+      ...USAGE_REPORT,
+      from: q.get("from") ?? USAGE_REPORT.from,
+      to: q.get("to") ?? USAGE_REPORT.to,
+    })
+  }
+  if (p === "/api/digest")
+    return json({
+      text: "In the last 24 hours: 214 calls went through automatically and 9 asked you.",
+    })
   if (p === "/api/settings") return json(SETTINGS)
   if (p.startsWith("/api/files/list")) return json({ entries: FILES, more: 0 })
   if (p === "/api/jcvc/pictures")
@@ -524,6 +575,7 @@ if (view === "workspace")
 else if (view === "settings") useStore.setState({ route: "settings" })
 else if (view === "policy") useStore.setState({ route: "policy" })
 else if (view === "sessions") useStore.setState({ route: "sessions" })
+else if (view === "usage") useStore.setState({ route: "usage" })
 else useStore.setState({ route: "approvals", selectedRequest: "r1" })
 for (const r of ["r1", "r2", "r3"]) useStore.getState().markSeen?.(r)
 

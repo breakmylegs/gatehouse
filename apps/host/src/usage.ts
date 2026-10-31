@@ -20,6 +20,29 @@ export interface UsageSnapshot {
   byModel: Record<string, UsageTotals>
   /** By local calendar day, YYYY-MM-DD. Files written before this existed load with none. */
   byDay: Record<string, UsageTotals>
+  /**
+   * By day, then session: the session's totals and its models', so the Usage page can filter by any of them.
+   * Kept in the file, never sent with every change (it grows with each day); the page asks for a range. Files
+   * written before 30 Oct load with none.
+   */
+  cells?: Record<string, Record<string, UsageCell>>
+}
+
+export interface UsageCell {
+  project: string
+  total: UsageTotals
+  models: Record<string, UsageTotals>
+}
+
+/** What the Usage page shows for a range of days: each day's cells, and every session's project. */
+export interface UsageReport {
+  from: string
+  to: string
+  /** The first day anything was recorded by session, so the page can say what it cannot split. */
+  splitSince?: string
+  days: Record<string, Record<string, UsageCell>>
+  /** Totals by day for days kept before cells existed, so the totals still add up. */
+  daysWithoutCells: Record<string, UsageTotals>
 }
 
 const zero = (): UsageTotals => ({
@@ -122,8 +145,24 @@ export class UsageStore {
     }
   }
 
+  /** What every window is told after each change: everything but the cells, which only the Usage page needs. */
   snapshot(): UsageSnapshot {
-    return structuredClone(this.#snap)
+    const { cells: _cells, ...rest } = this.#snap
+    return structuredClone(rest)
+  }
+
+  /** The days from `from` to `to` (YYYY-MM-DD, both included), for the Usage page. */
+  report(from: string, to: string): UsageReport {
+    const days: Record<string, Record<string, UsageCell>> = {}
+    const daysWithoutCells: Record<string, UsageTotals> = {}
+    const cells = this.#snap.cells ?? {}
+    for (const [day, t] of Object.entries(this.#snap.byDay)) {
+      if (day < from || day > to) continue
+      if (cells[day]) days[day] = structuredClone(cells[day])
+      else daysWithoutCells[day] = { ...t }
+    }
+    const split = Object.keys(cells).sort()[0]
+    return { from, to, ...(split ? { splitSince: split } : {}), days, daysWithoutCells }
   }
 
   /**
@@ -151,9 +190,17 @@ export class UsageStore {
     add(session, total)
     add((this.#snap.byProject[project] ??= zero()), total)
     add(this.#snap.total, total)
-    add((this.#snap.byDay[localDay(this.#now())] ??= zero()), total)
+    const day = localDay(this.#now())
+    add((this.#snap.byDay[day] ??= zero()), total)
     for (const [model, t] of Object.entries(modelDeltas))
       add((this.#snap.byModel[model] ??= zero()), t)
+    const cell = (((this.#snap.cells ??= {})[day] ??= {})[sessionId] ??= {
+      project,
+      total: zero(),
+      models: {},
+    })
+    add(cell.total, total)
+    for (const [model, t] of Object.entries(modelDeltas)) add((cell.models[model] ??= zero()), t)
     this.#last.set(sessionId, { ...usageFromResult(result).total })
     this.#lastModels.set(sessionId, byModel)
     this.onChange?.(this.snapshot())

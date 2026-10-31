@@ -258,6 +258,16 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     })
   })
 
+  // The Usage page: cost and tokens by day, session and model for a range of days (owner, 30 Oct).
+  app.get("/api/usage/report", async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>
+    const day = /^\d{4}-\d{2}-\d{2}$/
+    if (!ctx.usage) return bad(reply, 501, "Usage is not available here.")
+    if (!day.test(q.from ?? "") || !day.test(q.to ?? "") || (q.from as string) > (q.to as string))
+      return bad(reply, 400, "Give from and to as YYYY-MM-DD, from first.")
+    return ctx.usage.report(q.from as string, q.to as string)
+  })
+
   app.get("/api/audit/verify", async () => {
     const r = verifyAudit(ctx.auditDir)
     return {

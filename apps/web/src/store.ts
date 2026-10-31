@@ -37,6 +37,7 @@ export type Route =
   | "setup"
   | "guide"
   | "approver"
+  | "usage"
   | "chat"
 
 export interface ResolvedView {
@@ -156,6 +157,7 @@ const KEPT_ROUTES: Route[] = [
   "settings",
   "guide",
   "approver",
+  "usage",
 ]
 function readView(): { route: Route; panes: string[]; selectedSession?: string } {
   try {

@@ -168,6 +168,22 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
 
 Rules are files on this computer. Changes are picked up straight away.`,
   },
+  usage: {
+    id: "usage",
+    title: "Usage",
+    body: `What your sessions spent and how many tokens they used, as Claude Code reports it after each turn.
+
+**Filters**, in one row at the top, cut everything below them: the dates (today, or the last 7, 30 or 90 days), a project, a session and a model.
+
+- The tiles give the cost, input and output tokens and turns for what you chose. Turns are not kept by model, so with a model chosen they are not counted.
+- **Cost by day** has a column for each day; point at one, or move to it with Tab, for its cost and tokens.
+- **By project**, **By model** and **By session** list the largest first.
+- **Show as a table** under each one gives the same figures as rows.
+
+**Last 24 hours** says what went through automatically and what asked you.
+
+Before this version JCVC kept only a total for each day. Those days count in the totals and by day, not by project, model or session, and the page says so.`,
+  },
   approver: {
     id: "approver",
     title: "Approver",

@@ -16,7 +16,6 @@ import {
   type UiMode,
 } from "../lib/modes"
 import { send, useSessionList, useStore } from "../store"
-import { UsageView } from "./UsageView"
 import { EarlierSessions } from "../components/EarlierSessions"
 import { titleOf } from "../lib/sessionActions"
 import { SessionCode } from "../components/SessionCode"
@@ -392,7 +391,17 @@ export function Sessions() {
         </table>
       )}
       <EarlierSessions />
-      <UsageView />
+      <p className="m-0 text-mut">
+        What sessions spent, by day, project, model and session, is on{" "}
+        <button
+          type="button"
+          className="cursor-pointer border-0 bg-transparent p-0 text-acc underline"
+          onClick={() => useStore.getState().setRoute("usage")}
+        >
+          Usage
+        </button>
+        .
+      </p>
     </div>
   )
 }

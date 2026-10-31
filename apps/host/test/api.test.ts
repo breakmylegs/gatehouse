@@ -8,6 +8,7 @@ import { AuditWriter } from "@gatehouse/shared/audit"
 import { GatehouseConfig } from "@gatehouse/shared/node"
 import { registerApi, queryAudit, type AdminContext } from "../src/api.js"
 import { HostAudit } from "../src/hostaudit.js"
+import { UsageStore } from "../src/usage.js"
 
 const REPO = path.resolve(import.meta.dirname, "../../..")
 let root: string
@@ -840,6 +841,33 @@ describe("insights endpoints", () => {
       expect(log.body).not.toContain("xoxb-1-2-abc")
     } finally {
       delete ctx.slack
+    }
+  })
+})
+
+describe("the Usage page's report", () => {
+  it("gives cost and tokens for a range of days, and refuses a range it cannot read", async () => {
+    const usage = new UsageStore(undefined, () => new Date(2026, 9, 31, 9))
+    usage.record("s1", "shop", { total_cost_usd: 1, num_turns: 1, usage: {} })
+    ctx.usage = usage
+    try {
+      const ok = await app.inject({
+        method: "GET",
+        url: "/api/usage/report?from=2026-10-31&to=2026-10-31",
+      })
+      expect(ok.statusCode).toBe(200)
+      expect(ok.json().days["2026-10-31"].s1.total.costUsd).toBe(1)
+      for (const q of [
+        "",
+        "?from=2026-10-31",
+        "?from=31-10-2026&to=2026-10-31",
+        "?from=2026-11-01&to=2026-10-31",
+      ]) {
+        const bad = await app.inject({ method: "GET", url: `/api/usage/report${q}` })
+        expect(bad.statusCode).toBe(400)
+      }
+    } finally {
+      delete ctx.usage
     }
   })
 })
