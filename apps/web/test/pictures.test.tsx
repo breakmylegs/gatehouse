@@ -27,6 +27,7 @@ vi.mock("../src/store", async (orig) => {
 })
 vi.mock("../src/lib/api", () => ({
   api: vi.fn(async (_m: string, url: string, body?: Record<string, unknown>) => {
+    if (url === "/api/files/preview") return { ok: true, status: 200, data: { base: "/preview/tok/" } }
     if (url === "/api/files/attach-data") {
       attached.push(body ?? {})
       return { ok: true, status: 200, data: { rel: `.jcvc/attachments/${++n}-shot.png` } }
@@ -158,5 +159,49 @@ describe("the time beside each message", () => {
     expect(times).toHaveLength(2)
     expect(times[0]?.textContent).toMatch(/^\d\d:\d\d$/)
     expect(times[0]?.getAttribute("aria-label")).toMatch(/\d{4}/)
+  })
+})
+
+describe("pictures Claude captured, and yours after a restart", () => {
+  it("shows a picture a tool gave back beside its line, and opens it large", () => {
+    const h = useStore.getState().handleEvent
+    h({
+      type: "sdk_message",
+      sessionId: "s1",
+      message: {
+        type: "assistant",
+        message: { content: [{ type: "tool_use", id: "t1", name: "mcp__browser__capture", input: {} }] },
+      },
+    })
+    h({
+      type: "sdk_message",
+      sessionId: "s1",
+      message: {
+        type: "user",
+        message: {
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "t1",
+              content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" } }],
+            },
+          ],
+        },
+      },
+    })
+    render(<Workspace />)
+    fireEvent.click(screen.getByRole("button", { name: "Show Picture Claude captured" }))
+    const dialog = screen.getByRole("dialog", { name: "Picture Claude captured" })
+    expect(within(dialog).getByRole("img").getAttribute("src")).toBe("data:image/png;base64,iVBORw0KGgo=")
+  })
+
+  it("loads a picture you attached, read back after a restart, from the session folder", async () => {
+    useStore.getState().addUserText("s1", "look\n\n@.jcvc/attachments/0a1b2c-image.png")
+    render(<Workspace />)
+    const shown = await screen.findByRole("button", { name: "Show Pasted picture" })
+    expect(shown.querySelector("img")?.getAttribute("src")).toBe(
+      "/preview/tok/.jcvc/attachments/0a1b2c-image.png",
+    )
+    expect(screen.getByText("look")).toBeTruthy()
   })
 })

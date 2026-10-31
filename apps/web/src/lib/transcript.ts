@@ -2,13 +2,25 @@
  * Turns the SDK's message stream into a flat list of things to show. The SDK shapes are only read
  * defensively: anything unexpected becomes a plain "system" line rather than an exception.
  */
+/**
+ * A picture to show: one you attached, or one a tool gave back (a page Claude captured, a picture it read). One you
+ * attached comes back after a restart by its place in the session folder, shown through the folder's preview address.
+ */
+export interface Picture {
+  name: string
+  /** Ready to show: a blob or data address. */
+  url?: string
+  /** Its place in the session folder, when it has no address yet. */
+  path?: string
+}
+
 export type Item =
   | {
       id: string
       kind: "user"
       at?: number
       text: string
-      images?: Array<{ url: string; name: string }>
+      images?: Picture[]
       /** Sent while Claude worked, and not yet taken in: Claude reads it at its next step. */
       queued?: boolean
     }
@@ -21,7 +33,7 @@ export type Item =
       toolUseId: string
       name: string
       input: Record<string, unknown>
-      result?: { text: string; isError: boolean }
+      result?: { text: string; isError: boolean; images?: Picture[] }
       subagent?: string
     }
   | {
@@ -60,31 +72,99 @@ const obj = (v: unknown): Record<string, unknown> =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
 const str = (v: unknown): string => (typeof v === "string" ? v : "")
 
+/** Pictures a tool may give back, and the largest one kept (as base64), so a long session stays light enough. */
+const PICTURE_TYPES = /^image\/(png|jpeg|gif|webp)$/
+const MAX_PICTURE = 8_000_000
+const MAX_PICTURES = 4
+
+/** A picture block as a data address, in the API's shape or the MCP one, or nothing when it cannot be shown. */
+function pictureOf(c: unknown): string | undefined {
+  const b = obj(c)
+  if (b.type !== "image") return undefined
+  const src = obj(b.source)
+  const type = str(src.media_type) || str(b.mimeType)
+  const data = src.type === "base64" ? str(src.data) : str(b.data)
+  if (!PICTURE_TYPES.test(type) || !data || data.length > MAX_PICTURE) return undefined
+  return `data:${type};base64,${data}`
+}
+
 function resultText(content: unknown): string {
   if (typeof content === "string") return content
   if (Array.isArray(content))
     return content
       .map((c) =>
-        obj(c).type === "text" ? str(obj(c).text) : `[${str(obj(c).type) || "content"}]`,
+        obj(c).type === "text"
+          ? str(obj(c).text)
+          : pictureOf(c)
+            ? undefined
+            : `[${str(obj(c).type) || "content"}]`,
       )
+      .filter((x): x is string => x !== undefined)
       .join("\n")
   return ""
 }
 
+const baseName = (p: string) => p.split(/[\\/]/).filter(Boolean).at(-1) ?? p
+
+/** The pictures in a tool's result, named by the file it read or as a capture. */
+function resultPictures(content: unknown, tool: { name: string; input: Record<string, unknown> }): Picture[] {
+  if (!Array.isArray(content)) return []
+  const file = str(tool.input.file_path)
+  const name = tool.name === "Read" && file ? baseName(file) : "Picture Claude captured"
+  return content
+    .map(pictureOf)
+    .filter((u): u is string => u !== undefined)
+    .slice(0, MAX_PICTURES)
+    .map((url) => ({ url, name }))
+}
+
+/** A picture you mentioned: @ and a place in the session folder, never one outside it. */
+const MENTIONED = /(^|\s)@([^\s@"'<>|:*?\\]+\.(?:png|jpe?g|gif|webp))(?=\s|$)/gi
+
+function pictureName(rel: string): string {
+  const base = baseName(rel)
+  if (!rel.startsWith(".jcvc/attachments/")) return base
+  const named = base.replace(/^[0-9a-f]{6}-/i, "")
+  return /^(image|pasted)\.\w+$/i.test(named) ? "Pasted picture" : named
+}
+
+/**
+ * The pictures mentioned in what you sent, taken out of the words, so your message shows them as pictures (as it did
+ * when you sent it) after a restart reads it back.
+ */
+export function splitPictures(text: string): { text: string; images: Picture[] } {
+  const images: Picture[] = []
+  const rest = text.replace(MENTIONED, (whole, lead: string, rel: string) => {
+    if (rel.startsWith("/") || rel.split("/").includes("..")) return whole
+    images.push({ path: rel, name: pictureName(rel) })
+    return lead
+  })
+  if (!images.length) return { text, images }
+  return {
+    text: rest
+      .replace(/[ \t]+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+    images,
+  }
+}
+
 export function addUser(
   t: Transcript,
-  text: string,
-  images?: Array<{ url: string; name: string }>,
+  said: string,
+  attached?: Picture[],
   queued = false,
 ): Transcript {
   // A message sent mid-turn leaves the turn as it was; one that starts a turn ends any stop that was under way.
   const { stopping: _done, ...rest } = t
+  const { text, images: mentioned } = splitPictures(said)
+  const images = [...(attached ?? []), ...mentioned]
   return push(queued ? t : rest, [
     {
       id: `u${t.seq}`,
       kind: "user",
       text,
-      ...(images?.length ? { images } : {}),
+      ...(images.length ? { images } : {}),
       ...(queued ? { queued: true } : {}),
     },
   ])
@@ -175,7 +255,15 @@ export function reduce(t: Transcript, message: unknown): Transcript {
       if (idx < 0) continue
       const it = items[idx] as Extract<Item, { kind: "tool" }>
       if (items === t.items) items = [...items]
-      items[idx] = { ...it, result: { text: resultText(b.content), isError: b.is_error === true } }
+      const images = resultPictures(b.content, it)
+      items[idx] = {
+        ...it,
+        result: {
+          text: resultText(b.content),
+          isError: b.is_error === true,
+          ...(images.length ? { images } : {}),
+        },
+      }
       changed = true
     }
     if (changed && !sub && hasQueued(t)) return { ...t, items, seq: t.seq + 1, pickup: true }

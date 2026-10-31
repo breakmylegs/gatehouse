@@ -657,3 +657,10 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - **After a restart, any mode:** a session that was working when JCVC closed, restarted or updated carries on where it was. In Extreme approval it carries on with its queue; in any other mode it is told JCVC restarted and to carry on from where it was, once. Audited like a carry-on. Force stop still means it waits for you.
 - The fake SDK's result now counts one call to Claude plus one per tool call, as the real one does.
 - Tests: `apps/host/test/carry-on.test.ts`, `apps/host/test/extreme-carry.test.ts`, the lines in `apps/web/test/store.test.ts` and `apps/web/test/settings-autosave.test.tsx`. The stall guard was broken on purpose and its test failed.
+
+## Phase 44: pictures in the conversation (31 Oct)
+
+- **Owner asks:** pasted pictures shown in the chat like Claude Code, and a picture Claude made or captured shown as Claude Code shows it.
+- **Yours:** a picture you paste or attach already showed in your message while JCVC ran. After a restart the conversation is read back from Claude Code, where the message holds only the picture's place (`@.jcvc/attachments/...`). Your message now shows such a mention as the picture again, loaded through the session folder's preview address (only inside that folder, never a file the floor blocks, as the preview pane is). A mention outside the folder, or of a file that is not a picture, stays as words. A pasted picture reads as "Pasted picture", any other by its file name. If the address has gone after a restart, the picture asks for a new one once.
+- **Claude's:** a picture a tool gives back (a page Claude captured, a picture it read) shows small at the end of the tool line, opening large, and in the tool's card. Only png, jpeg, gif and webp, at most four a result and none over 8 MB, so a long session stays light. Read names it by its file; any other tool's reads "Picture Claude captured".
+- Tests: `apps/web/test/transcript.test.ts`, `apps/web/test/pictures.test.tsx`. 4 breaks, 4 caught.

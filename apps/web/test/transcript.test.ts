@@ -6,6 +6,9 @@ import {
   markStopping,
   MAX_ITEMS,
   reduce,
+  reduceHistory,
+  splitPictures,
+  type Item,
 } from "../src/lib/transcript"
 
 const assistant = (content: unknown[], extra: object = {}) => ({
@@ -145,5 +148,81 @@ describe("transcript reducer", () => {
     expect(t.items.length).toBe(MAX_ITEMS)
     expect(t.items.at(-1)).toMatchObject({ text: `s${MAX_ITEMS + 49}` })
     expect(addUser(t, "hi").items.at(-1)).toMatchObject({ kind: "user", text: "hi" })
+  })
+})
+
+describe("pictures in the transcript", () => {
+  const png = "iVBORw0KGgo="
+  it("keeps a picture a tool gave back, named by the file it read, and leaves it out of the words", () => {
+    let t = reduce(
+      emptyTranscript(),
+      assistant([{ type: "tool_use", id: "t1", name: "Read", input: { file_path: "C:\\p\\shot.png" } }]),
+    )
+    t = reduce(t, {
+      type: "user",
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/png", data: png } },
+              { type: "text", text: "Captured." },
+            ],
+          },
+        ],
+      },
+    })
+    expect(t.items[0]).toMatchObject({
+      kind: "tool",
+      result: { text: "Captured.", images: [{ name: "shot.png", url: `data:image/png;base64,${png}` }] },
+    })
+  })
+
+  it("names any other tool's picture as a capture, takes the MCP shape too, and never shows a type it should not", () => {
+    let t = reduce(
+      emptyTranscript(),
+      assistant([{ type: "tool_use", id: "t1", name: "mcp__browser__capture", input: {} }]),
+    )
+    t = reduce(t, {
+      type: "user",
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "t1",
+            content: [
+              { type: "image", data: png, mimeType: "image/jpeg" },
+              { type: "image", source: { type: "base64", media_type: "image/svg+xml", data: png } },
+            ],
+          },
+        ],
+      },
+    })
+    const r = (t.items[0] as Extract<Item, { kind: "tool" }>).result
+    expect(r?.images).toEqual([{ name: "Picture Claude captured", url: `data:image/jpeg;base64,${png}` }])
+    expect(r?.text).toBe("[image]")
+  })
+
+  it("shows a picture you attached as a picture again when the conversation is read back", () => {
+    const t = reduceHistory(emptyTranscript(), {
+      type: "user",
+      message: { content: "What is wrong here?\n\n@.jcvc/attachments/0a1b2c-image.png @docs/flow.png" },
+    })
+    expect(t.items[0]).toEqual(
+      expect.objectContaining({
+        kind: "user",
+        text: "What is wrong here?",
+        images: [
+          { path: ".jcvc/attachments/0a1b2c-image.png", name: "Pasted picture" },
+          { path: "docs/flow.png", name: "flow.png" },
+        ],
+      }),
+    )
+  })
+
+  it("leaves a mention outside the folder, or of something that is not a picture, as words", () => {
+    for (const said of ["see @../secret.png", "see @C:/Users/x/a.png", "see @notes.md", "mail a@b.png"])
+      expect(splitPictures(said)).toEqual({ text: said, images: [] })
   })
 })

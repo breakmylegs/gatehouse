@@ -6,7 +6,8 @@ import Markdown from "react-markdown"
 import { Virtuoso } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
-import { addSystem, emptyTranscript, type Item, type Todo } from "../lib/transcript"
+import { addSystem, emptyTranscript, type Item, type Picture as Shown, type Todo } from "../lib/transcript"
+import { usePictures } from "../lib/pictures"
 import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise } from "../lib/groups"
 import { useNow } from "../lib/useNow"
@@ -1152,19 +1153,49 @@ const ToolGroup = memo(function ToolGroup({
   const blocked = useStore(
     (st) => tools.filter((t) => st.decisions[t.toolUseId]?.outcome === "deny").length,
   )
+  // What the tools gave back as pictures (a page Claude captured, a picture it read), beside the line.
+  const pictures = useMemo(() => tools.flatMap((t) => t.result?.images ?? []), [tools])
+  const [viewing, setViewing] = useState<Shown>()
   return (
     <div className={clsx(tools[0]?.subagent && "ml-5")}>
-      <button
-        type="button"
-        className="tool-group-line"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span>{summarise(tools)}</span>
-        {waiting ? <span className="font-semibold text-tx">Waiting for you</span> : null}
-        {blocked ? <span className="font-semibold text-sev">{blocked} blocked</span> : null}
-        <span aria-hidden="true">{open ? "▾" : "▸"}</span>
-      </button>
+      <div className="tool-group-row">
+        <button
+          type="button"
+          className="tool-group-line"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span>{summarise(tools)}</span>
+          {waiting ? <span className="font-semibold text-tx">Waiting for you</span> : null}
+          {blocked ? <span className="font-semibold text-sev">{blocked} blocked</span> : null}
+          <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+        </button>
+        {pictures.length ? (
+          <span className="tool-pics">
+            {pictures.slice(0, 3).map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                className="pic-tool"
+                aria-label={`Show ${p.name}`}
+                onClick={() => setViewing(p)}
+              >
+                <img src={p.url} alt="" />
+              </button>
+            ))}
+            {pictures.length > 3 ? (
+              <span className="text-xs text-mut">and {pictures.length - 3} more</span>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
+      {viewing?.url ? (
+        <PictureViewer
+          url={viewing.url}
+          name={viewing.name}
+          onClose={() => setViewing(undefined)}
+        />
+      ) : null}
       {open ? (
         <div className="grid gap-1.5 pt-1.5">
           {tools.map((t) => (
@@ -1190,30 +1221,42 @@ function Stamp({ at, end }: { at?: number; end?: boolean }) {
   )
 }
 
-/** What you sent, with the pictures you attached, each opening large. */
+/**
+ * What you sent, with the pictures you attached, each opening large. After a restart a picture comes back from the
+ * session folder, where it was saved when you attached it.
+ */
 function UserMessage({
   text,
   images,
+  sessionId,
 }: {
   text: string
-  images?: Array<{ url: string; name: string }>
+  images?: Shown[]
+  sessionId?: string
 }) {
   const [viewing, setViewing] = useState<{ url: string; name: string }>()
+  const { shown, retry } = usePictures(sessionId, images)
   return (
     <div className="ml-auto grid max-w-[80%] justify-items-end gap-1.5">
-      {images?.length ? (
+      {shown.length ? (
         <div className="flex flex-wrap justify-end gap-1.5">
-          {images.map((im, i) => (
-            <button
-              key={i}
-              type="button"
-              className="pic-sent"
-              aria-label={`Show ${im.name}`}
-              onClick={() => setViewing(im)}
-            >
-              <img src={im.url} alt={im.name} />
-            </button>
-          ))}
+          {shown.map((im, i) =>
+            im.url ? (
+              <button
+                key={i}
+                type="button"
+                className="pic-sent"
+                aria-label={`Show ${im.name}`}
+                onClick={() => setViewing({ url: im.url as string, name: im.name })}
+              >
+                <img src={im.url} alt={im.name} onError={retry} />
+              </button>
+            ) : (
+              <span key={i} className="pic-sent pic-missing">
+                {im.name}
+              </span>
+            ),
+          )}
         </div>
       ) : null}
       {text ? (
@@ -1244,7 +1287,7 @@ export const ItemView = memo(function ItemView({
     case "user":
       return (
         <>
-          <UserMessage text={item.text} images={item.images} />
+          <UserMessage text={item.text} images={item.images} sessionId={sessionId} />
           {item.queued ? (
             <p className="m-0 mt-1 flex flex-wrap items-center justify-end gap-2 text-[13px] text-mut">
               Queued: Claude reads it at its next step.
@@ -1314,6 +1357,7 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
   // Why it was allowed, asked or stopped (F2). Your rules' allows stay quiet: most calls are those.
   const decision = useStore((st) => st.decisions[item.toolUseId])
   const said = decision ? describeDecision(decision) : undefined
+  const [viewing, setViewing] = useState<Shown>()
   const setRoute = useStore((st) => st.setRoute)
   const changeable =
     decision !== undefined &&
@@ -1370,7 +1414,7 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
           <pre className="cmd">{JSON.stringify(input, null, 2)}</pre>
         )}
         {path ? <p className="mono m-0 text-xs text-mut [overflow-wrap:anywhere]">{path}</p> : null}
-        {item.result ? (
+        {item.result && (item.result.text || !item.result.images?.length) ? (
           <pre className={clsx("cmd max-h-72 overflow-auto", item.result.isError && "text-sev")}>
             {item.result.text.length > 20_000
               ? item.result.text.slice(0, 20_000) +
@@ -1378,7 +1422,29 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
               : item.result.text || "(no output)"}
           </pre>
         ) : null}
+        {item.result?.images?.length ? (
+          <span className="flex flex-wrap gap-1.5">
+            {item.result.images.map((p, i) => (
+              <button
+                key={i}
+                type="button"
+                className="pic-sent"
+                aria-label={`Open ${p.name}`}
+                onClick={() => setViewing(p)}
+              >
+                <img src={p.url} alt={p.name} />
+              </button>
+            ))}
+          </span>
+        ) : null}
       </div>
+      {viewing?.url ? (
+        <PictureViewer
+          url={viewing.url}
+          name={viewing.name}
+          onClose={() => setViewing(undefined)}
+        />
+      ) : null}
     </details>
   )
 }

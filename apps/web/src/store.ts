@@ -20,6 +20,7 @@ import {
   reduce,
   reduceHistory,
   withHistory,
+  type Picture,
   type Transcript,
 } from "./lib/transcript"
 import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
@@ -139,7 +140,7 @@ export interface State {
   addUserText: (
     sessionId: string,
     text: string,
-    images?: Array<{ url: string; name: string }>,
+    images?: Picture[],
     /** Sent while Claude works: Claude reads it at its next step. */
     queued?: boolean,
   ) => void

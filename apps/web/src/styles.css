@@ -1144,6 +1144,43 @@ main[data-rail="hidden"] {
 .pic-remove:hover {
   background: var(--c-s2);
 }
+/* A picture a tool gave back, small at the end of its line; and one of yours that could not be loaded. */
+.tool-group-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tool-pics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.pic-tool {
+  display: block;
+  width: 46px;
+  height: 32px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s2);
+  cursor: zoom-in;
+}
+.pic-tool img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.pic-missing {
+  padding: 6px 10px;
+  color: var(--c-mut);
+  font-size: 12.5px;
+  cursor: default;
+}
 /* Pictures in your message in the transcript. */
 .pic-sent img {
   display: block;
