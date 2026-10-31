@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { stamp } from "../lib/format"
 import { exportPastSession, setSessionMeta } from "../lib/sessionActions"
-import { send, useStore } from "../store"
+import { MAIN_ACCOUNT, send, useStore } from "../store"
 import { START_WAIT_MS, StartProgress } from "../surfaces/Sessions"
 import { Menu } from "./Menu"
 import { RenameDialog } from "./RenameDialog"
@@ -31,6 +31,7 @@ interface Found {
  */
 export function EarlierSessions() {
   const open = useStore((s) => s.sessions)
+  const account = useStore((s) => s.activeAccount)
   const [list, setList] = useState<PastSession[]>()
   const [error, setError] = useState<string>()
   const [showArchived, setShowArchived] = useState(false)
@@ -103,6 +104,17 @@ export function EarlierSessions() {
       await load()
   }
 
+  // Claude Code keeps each account's past sessions in that account's folder; JCVC lists the main one's so far.
+  if (account !== MAIN_ACCOUNT)
+    return (
+      <section aria-label="Earlier sessions" className="grid gap-1">
+        <h2 className="m-0 text-[18px]">Earlier sessions</h2>
+        <p className="m-0 text-mut">
+          Earlier sessions are listed for the main account only, for now. Show the main account to
+          resume one.
+        </p>
+      </section>
+    )
   return (
     <section aria-labelledby="earlier-h" className="grid gap-3">
       <div>

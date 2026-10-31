@@ -638,3 +638,13 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
   - `apps/web/test/resources-select.test.tsx`
 
   15 breaks, 15 caught. The first kill test looked for the job by name and passed with kill-on-close removed: a named job loses its name with its last handle even while its processes live on. It now checks the processes themselves.
+
+## Phase 42: several Claude accounts at once (31 Oct)
+
+- **Owner ask:** sign in several accounts at the same time (the Accenture one and a personal one), switch between them, and have the window show what is happening in the chosen one, without stopping anything on either.
+- **Owner decisions** (CLAUDE.md invariant 14): the organisation check is per account; a sign-in that could pick up the wrong account happens in a private browser window.
+- **How:** the main account is Claude Code's usual sign-in, unchanged. Each added account (`apps/host/src/accounts.ts`) has a Claude Code folder of its own under `%LOCALAPPDATA%\Gatehouse\accounts`, given to Claude Code as CLAUDE_CONFIG_DIR, with its own sign-in (Anthropic's own flow in the unmodified binary) and its own account check. JCVC never reads what is in the folder (invariant 6). Once an account has signed in, you confirm the organisation it reports; from then on its sessions start only while it still reports that one.
+- **The window:** the profile menu lists each account, the one on show ticked; choosing another shows its sessions in the sidebar, the workspace, the Dashboard and Sessions, and new sessions and chats start on it. Nothing on the other account stops; approvals from every account stay on Approvals and in the Needs you count. **Accounts...** adds an account and signs it in, offers **Open in a private window** for the sign-in page (Edge InPrivate, Anthropic's pages only), confirms its organisation and removes it (its folder is kept). Adding, confirming and removing are audited. The settings file gains `accounts` (read tolerantly); open sessions keep their account across a restart.
+- **Not yet:** Earlier sessions lists only the main account's past sessions, because Claude Code keeps each account's in that account's folder; the page says so when another account is on show. Usage is not split by account.
+- Told the owner: the laptop's managed policy applies to every account and may refuse a personal sign-in, and company rules may not allow one.
+- Tests (threat model T33): `apps/host/test/accounts.test.ts`, `apps/web/test/accounts.test.tsx`. 14 breaks, 14 caught.

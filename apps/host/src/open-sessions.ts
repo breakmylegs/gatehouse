@@ -18,6 +18,8 @@ export interface OpenSession {
   running: boolean
   createdAt: string
   resources?: "low" | "medium" | "high"
+  /** The account it runs on; the main one when absent. */
+  account?: string
 }
 
 const MODES = new Set(["default", "plan", "acceptEdits", "auto"])
@@ -48,6 +50,9 @@ function read(e: Record<string, unknown>): OpenSession | undefined {
     createdAt: str(e.createdAt) ?? new Date(0).toISOString(),
     ...(e.resources === "low" || e.resources === "medium" || e.resources === "high"
       ? { resources: e.resources }
+      : {}),
+    ...(typeof e.account === "string" && /^[0-9a-f]{8}$/.test(e.account)
+      ? { account: e.account }
       : {}),
   }
 }
@@ -104,6 +109,7 @@ export class OpenSessionsStore {
         running: info.state === "running" || info.state === "waiting",
         createdAt: info.createdAt,
         ...(info.resources ? { resources: info.resources } : {}),
+        ...(info.account ? { account: info.account } : {}),
       })
     this.#later()
   }
@@ -181,6 +187,7 @@ export async function restoreOpenSessions(
         ...(o.effort ? { effort: o.effort } : {}),
         extreme: o.extreme,
         ...(o.resources ? { resources: o.resources } : {}),
+        ...(o.account ? { account: o.account } : {}),
         ...(o.sdkSessionId ? { resume: o.sdkSessionId } : {}),
         restore: { id: o.id, createdAt: o.createdAt, wasRunning: o.running },
       })

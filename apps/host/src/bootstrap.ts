@@ -17,6 +17,7 @@ import {
   query,
   renameSession,
   resolveSettings,
+  type Options,
 } from "@anthropic-ai/claude-agent-sdk"
 import { PolicyEngine, PolicyStore, PwshWorker, redact, redactString } from "@gatehouse/policy"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
@@ -31,6 +32,7 @@ import {
   type GatehouseConfig,
 } from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
+import { Accounts, type AccountEntry } from "./accounts.js"
 import { APPROVER_TIMEOUT_MS, ApproverClient } from "./approver-client.js"
 import { ApproverProcess, freePort, generateToken } from "./approver-process.js"
 import { Broker } from "./broker.js"
@@ -200,6 +202,20 @@ export function createHost(opts: HostOptions = {}): Host {
   })
 
   const queryFn: QueryFn = opts.queryFn ?? (query as unknown as QueryFn)
+  const probeOptions = (probeEnv: Record<string, string | undefined>): Options => ({
+    cwd: process.cwd(),
+    permissionMode: "default",
+    env: probeEnv,
+    settingSources: [],
+    // The probe sends no prompt, so nothing can run. If something somehow did, it would be denied.
+    canUseTool: async () => ({
+      behavior: "deny",
+      message: "This is an account check, not a session.",
+    }),
+    hooks: {
+      PreToolUse: [{ hooks: [async () => denyOutput("This is an account check, not a session.")] }],
+    },
+  })
   const account = new AccountMonitor({
     queryFn,
     expectedOrg: () => config.expectedOrg,
@@ -488,6 +504,18 @@ export function createHost(opts: HostOptions = {}): Host {
           ? [{ channel: "slack" as const, ok: slack.status().connected }]
           : []),
       ],
+      accounts: accounts.all().map((a) => {
+        const s = accounts.monitor(a.id).last()
+        return {
+          id: a.id,
+          label: a.label,
+          signedIn: s?.signedIn ?? false,
+          ...(s?.email ? { email: s.email } : {}),
+          ...(s?.organization ? { organization: s.organization } : {}),
+          ...(a.expectedOrg ? { expectedOrg: a.expectedOrg } : {}),
+          orgOk: s?.org.ok ?? false,
+        }
+      }),
       signin: {
         signedIn: acct?.signedIn ?? false,
         ...(acct?.email ? { email: acct.email } : {}),
@@ -517,6 +545,30 @@ export function createHost(opts: HostOptions = {}): Host {
       opts.onHealthChanged?.()
     },
   })
+  // Several accounts at once (owner, 30 Oct): the main one is the sign-in above; each added one has its own folder.
+  const accounts = new Accounts({
+    saved: () => (config.accounts ?? []) as AccountEntry[],
+    save: async (list) => {
+      const file = configPath(env)
+      const saved = fs.existsSync(file)
+        ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>)
+        : {}
+      saved.accounts = list
+      const parsed = GatehouseConfigSchema.parse(saved) as GatehouseConfig
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      await writeFileAtomic(file, JSON.stringify(parsed, null, 2) + "\n")
+      ;(config as { accounts?: GatehouseConfig["accounts"] }).accounts = parsed.accounts
+    },
+    mainExpectedOrg: () => config.expectedOrg,
+    dataDir: gatehouseDataDir(env),
+    queryFn,
+    probeOptions,
+    managedDetected,
+    mainMonitor: account,
+    mainSignIn: signIn,
+    onSignedIn: () => opts.onHealthChanged?.(),
+  })
+  deps.accounts = accounts
 
   terminal = new TerminalManager({
     audit,
@@ -531,6 +583,7 @@ export function createHost(opts: HostOptions = {}): Host {
     manager,
     terminal,
     signIn,
+    accounts,
     broker,
     kill,
     checkpoints,
@@ -664,6 +717,13 @@ export function createHost(opts: HostOptions = {}): Host {
               ? log(`relay inside JCVC did not start: ${st.message ?? ""}`)
               : undefined,
           )
+      // Each added account's sign-in is checked in the background, as the main one's is.
+      for (const a of accounts.all().slice(1))
+        void accounts
+          .monitor(a.id)
+          .refresh()
+          .then(() => opts.onHealthChanged?.())
+          .catch(() => undefined)
       // In the background: the window opens at once and each session appears as it comes back.
       if (openSessions)
         void restoreOpenSessions(openSessions, {

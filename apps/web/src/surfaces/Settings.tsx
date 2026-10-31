@@ -3,7 +3,7 @@ import { JcvcPicker } from "../components/JcvcPicker"
 import { UpdatesPanel } from "../components/UpdatesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
-import { send, useSessionList, useStore } from "../store"
+import { send, useStore } from "../store"
 
 interface Config {
   redactTerms: string[]
@@ -513,7 +513,10 @@ function RestartPrompt({
   onRestart: () => void
   onLater: () => void
 }) {
-  const open = useSessionList().filter((s) => s.state !== "ended" && s.state !== "error").length
+  // A restart closes every account's sessions, not only the one on show.
+  const open = Object.values(useStore((s) => s.sessions)).filter(
+    (s) => s.state !== "ended" && s.state !== "error",
+  ).length
   return (
     <div role="group" aria-label="Restart JCVC" className="panel m-0 grid gap-2 p-3">
       <p role="status" className="m-0 font-semibold">

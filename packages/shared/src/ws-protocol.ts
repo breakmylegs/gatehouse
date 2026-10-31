@@ -17,6 +17,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_session"),
     cwd: z.string().min(1).max(4096),
+    /** The account to run it on; the main one when absent. */
+    account: z.string().max(20).optional(),
     model: z.string().min(1).max(200).optional(),
     mode: Mode.optional(),
     effort: Effort.optional(),
@@ -129,10 +131,19 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("search_history"), query: z.string().min(2).max(200) }),
   /** How full a session's context is. */
   z.object({ type: z.literal("context_usage"), sessionId: Id }),
-  z.object({ type: z.literal("refresh_account") }),
-  z.object({ type: z.literal("signin_start"), method: z.enum(["claudeai", "sso"]) }),
-  z.object({ type: z.literal("signin_status") }),
-  z.object({ type: z.literal("signin_cancel") }),
+  z.object({ type: z.literal("refresh_account"), account: z.string().max(20).optional() }),
+  z.object({
+    type: z.literal("signin_start"),
+    method: z.enum(["claudeai", "sso"]),
+    account: z.string().max(20).optional(),
+  }),
+  z.object({ type: z.literal("signin_status"), account: z.string().max(20).optional() }),
+  z.object({ type: z.literal("signin_cancel"), account: z.string().max(20).optional() }),
+  /** Several accounts at once: add one, confirm the organisation it reports, remove it, sign it in privately. */
+  z.object({ type: z.literal("account_add"), label: z.string().max(60) }),
+  z.object({ type: z.literal("account_confirm_org"), account: z.string().max(20) }),
+  z.object({ type: z.literal("account_remove"), account: z.string().max(20) }),
+  z.object({ type: z.literal("account_private_window"), account: z.string().max(20) }),
 ])
 export type ClientCommand = z.infer<typeof ClientCommand>
 
@@ -167,6 +178,8 @@ export const SessionInfo = z.object({
   background: z.array(z.string()).optional(),
   /** How much of this computer the session may use. Absent where JCVC cannot limit it. */
   resources: z.enum(["low", "medium", "high"]).optional(),
+  /** Which signed-in account it runs on. Absent for the main one. */
+  account: z.string().optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn: z
     .object({
@@ -216,6 +229,20 @@ export const Health = z.object({
    * connected. Absent from older Hosts.
    */
   push: z.array(z.object({ channel: z.enum(["ntfy", "slack"]), ok: z.boolean() })).optional(),
+  /** Every signed-in account, the main one first. Absent from older Hosts. */
+  accounts: z
+    .array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        signedIn: z.boolean(),
+        email: z.string().optional(),
+        organization: z.string().optional(),
+        expectedOrg: z.string().optional(),
+        orgOk: z.boolean(),
+      }),
+    )
+    .optional(),
   signin: z.object({
     signedIn: z.boolean(),
     email: z.string().optional(),

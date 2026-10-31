@@ -31,6 +31,20 @@ function build(loose: boolean) {
     redactTerms: z.array(z.string()).default([]),
     /** The organisation the signed-in account must belong to (invariant 14). */
     expectedOrg: z.string().optional(),
+    /**
+     * Claude accounts added beside the main one (owner, 30 Oct). Each has a Claude Code folder of its own and the
+     * organisation it must belong to, confirmed once it has signed in.
+     */
+    accounts: z
+      .array(
+        z.object({
+          id: z.string().regex(/^[0-9a-f]{8}$/),
+          label: z.string().max(60),
+          configDir: z.string().min(1),
+          expectedOrg: z.string().optional(),
+        }),
+      )
+      .optional(),
     /** Replaces the workspace roots in the rules file. Absent means use the rules file. */
     workspaceRoots: z.array(z.string().min(1)).optional(),
     /**

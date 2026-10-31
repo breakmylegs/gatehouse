@@ -29,6 +29,7 @@ import {
 } from "./safety.js"
 import type { UsageStore } from "./usage.js"
 import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
+import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import { CARRY_ON_DEFAULTS, CARRY_ON_PROMPT, CarryOn, type CarryOnStatus } from "./carry-on.js"
 
 export class OrgGuardError extends Error {
@@ -162,6 +163,8 @@ export interface SessionInfo {
   carryOn?: CarryOnStatus
   /** How much of this computer the session may use. Absent where JCVC cannot limit it. */
   resources?: ResourceLevel
+  /** Which signed-in account it runs on. Absent for the main one. */
+  account?: string
 }
 
 export interface SessionEvents {
@@ -195,6 +198,8 @@ export interface SessionDeps {
   chatsDir?: string
   /** Runs each session inside a job object with its resource limits. Absent where that is not possible. */
   limiter?: Limiter
+  /** The accounts signed in beside the main one. Absent where there is only the main one. */
+  accounts?: Accounts
   config: () => GatehouseConfig
   policy: () => Policy | undefined
   engine: PolicyEngine
@@ -236,6 +241,8 @@ export interface StartSessionOptions {
   restore?: { id: string; createdAt: string; wasRunning: boolean; forced?: boolean }
   /** How much of this computer it may use; High (no limits) when not given. */
   resources?: ResourceLevel
+  /** The account to run it on; the main one when not given. */
+  account?: string
 }
 
 /**
@@ -299,6 +306,7 @@ export class Session extends EventEmitter<SessionEvents> {
   /** The session's total cost after its last turn, so a run counts only what it spends. */
   #lastCost = 0
   #resources: ResourceLevel = "high"
+  readonly #account: string
   /** Its job object's name, unique to this start, for changing the limits while it runs. */
   readonly #job = `Local\\JCVC-${uuidv7()}`
   /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
@@ -346,6 +354,7 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#effort = opts.effort
     this.#extreme = opts.extreme === true
     this.#resources = opts.resources ?? "high"
+    this.#account = opts.account ?? MAIN_ACCOUNT
     this.#onBrokerChange = () => this.#refreshWaiting()
     deps.broker.on("created", this.#onBrokerChange)
     deps.broker.on("resolved", this.#onBrokerChange)
@@ -377,6 +386,7 @@ export class Session extends EventEmitter<SessionEvents> {
         : {}),
       ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
+      ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
         ? { carryOn: this.#carry.status() }
         : {}),
@@ -439,7 +449,8 @@ export class Session extends EventEmitter<SessionEvents> {
       },
       settingSources: ["user", "project", "local"],
       includePartialMessages: true,
-      env: sanitiseEnv(process.env),
+      // Its account's own Claude Code folder, and never a credential (invariant 6).
+      env: d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env),
       canUseTool: createCanUseTool({
         sessionId: this.id,
         cwd: this.cwd,
@@ -485,7 +496,8 @@ export class Session extends EventEmitter<SessionEvents> {
     try {
       const init = await this.#q.initializationResult()
       const managed = await d.managedDetected().catch(() => undefined)
-      const snapshot = d.account.note(init.account, managed)
+      // Invariant 14, per account: this account must still belong to the organisation confirmed for it.
+      const snapshot = (d.accounts?.monitor(this.#account) ?? d.account).note(init.account, managed)
       if (!snapshot.org.ok) {
         // Invariant 14: nothing is sent to a session on the wrong account.
         throw new OrgGuardError(snapshot.org.code, snapshot.org.message)
@@ -683,6 +695,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
       extreme: this.#extreme,
       resources: this.#resources,
+      ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#sdkSessionId !== undefined ? { resume: this.#sdkSessionId } : {}),
     }
   }
@@ -808,11 +821,19 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     const config = this.#deps.config()
     // Checked again inside Session.start with the live account. This early check gives a clear message
     // when there is nothing to compare against.
+    // Each account has the organisation confirmed for it; an account JCVC does not know never starts.
+    const accountId = opts.account ?? MAIN_ACCOUNT
+    if (accountId !== MAIN_ACCOUNT && !this.#deps.accounts?.get(accountId))
+      throw new OrgGuardError("no-expected-org", "That account is not signed in to JCVC.")
+    const monitor =
+      accountId === MAIN_ACCOUNT
+        ? this.#deps.account
+        : (this.#deps.accounts?.monitor(accountId) ?? this.#deps.account)
     const early = checkOrg(
-      this.#deps.account.last()?.organization
-        ? { organization: this.#deps.account.last()?.organization }
-        : undefined,
-      config.expectedOrg,
+      monitor.last()?.organization ? { organization: monitor.last()?.organization } : undefined,
+      accountId === MAIN_ACCOUNT
+        ? config.expectedOrg
+        : this.#deps.accounts?.get(accountId)?.expectedOrg,
     )
     if (!early.ok && early.code === "no-expected-org")
       throw new OrgGuardError(early.code, early.message)

@@ -326,6 +326,18 @@ Every decision, automatic or yours, is written to a tamper-evident audit log.`,
 
 If anything goes wrong while deciding, the request waits for you or is denied. It is never allowed by mistake.`,
   },
+  {
+    id: "accounts",
+    title: "Several Claude accounts",
+    body: `You can sign in more than one Claude account, such as your work one and a personal one, and switch between them from your name at the foot of the sidebar.
+
+- **Choosing an account** shows its sessions in the sidebar, the workspace, the Dashboard and Sessions, and new sessions and chats start on it. Sessions on your other accounts keep running, and their requests still come to Approvals.
+- **Accounts...** adds one: give it a name, then sign it in through Anthropic's own page. If your browser is already signed in to another Claude account, choose **Open in a private window**, or the page may sign this one in as that one.
+- **Confirm the organisation** the account says it belongs to. Its sessions start only once you have, and only while it still says so.
+- **Remove** takes an added account off the list; its sign-in stays in its own folder.
+
+Earlier sessions are listed for the main account only, for now. Your laptop's managed policy applies to every account and may refuse one outside your organisation; check your company's rules before you add a personal one.`,
+  },
   ...Object.values(PAGE_HELP).filter(
     (a) => a.id !== "setup" && a.id !== "first-run" && a.id !== "guide",
   ),

@@ -95,10 +95,10 @@ describe("the sidebar", () => {
     await userEvent.click(screen.getByRole("button", { name: /Your profile and settings: alex/ }))
     const menu = screen.getByRole("menu")
     expect(within(menu).getByText("alex@example.com")).toBeTruthy()
-    // Focus starts on the first action, and the arrow keys move.
-    expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveFocus()
+    // Focus starts on the first action, your accounts, and the arrow keys move.
+    expect(within(menu).getByRole("menuitem", { name: "Accounts..." })).toHaveFocus()
     fireEvent.keyDown(menu, { key: "ArrowDown" })
-    expect(within(menu).getByRole("menuitem", { name: "What Claude may do" })).toHaveFocus()
+    expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveFocus()
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Jean-Claude dark" }))
     expect(useStore.getState().theme).toBe("dark")
     expect(screen.queryByRole("menu")).toBeNull()

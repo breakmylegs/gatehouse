@@ -1,3 +1,4 @@
+import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import fs from "node:fs"
 import type { SignInFlow } from "./signin.js"
 import type net from "node:net"
@@ -52,6 +53,8 @@ export interface HostApp {
   account: AccountMonitor
   /** Starts Anthropic's own sign-in. Absent in tests that do not need it. */
   signIn?: SignInFlow
+  /** The accounts signed in beside the main one. */
+  accounts?: Accounts
   audit: HostAudit
   engine: PolicyEngine
   policy: () => Policy | undefined
@@ -273,10 +276,46 @@ export class HostServer {
     this.#broadcast({ type: "health", health: this.#opts.app.health() })
   }
 
-  #signIn(): SignInFlow {
+  #signIn(account?: string): SignInFlow {
+    if (account && account !== MAIN_ACCOUNT) {
+      const accounts = this.#accounts()
+      if (!accounts.get(account))
+        throw new CommandError("unknown-account", "There is no such account")
+      return accounts.signIn(account)
+    }
     const f = this.#opts.app.signIn
     if (!f) throw new CommandError("unavailable", "Signing in from the app is not available here")
     return f
+  }
+
+  #accounts(): Accounts {
+    const a = this.#opts.app.accounts
+    if (!a) throw new CommandError("unavailable", "More accounts are not available here")
+    return a
+  }
+
+  /** Adding, confirming and removing an account are recorded, as other changes from the desktop are. */
+  async #auditAccount(
+    event: string,
+    input: Record<string, unknown>,
+    reason: string,
+  ): Promise<void> {
+    await this.#opts.app.audit.record({
+      session: "desktop",
+      event,
+      channel: "desktop",
+      tool: "accounts",
+      input,
+      verdict: {
+        outcome: "allow",
+        ruleId: event.replace(/_/g, "-"),
+        reason,
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
   }
 
   // ---- commands in ----
@@ -375,6 +414,7 @@ export class HostServer {
           ...(cmd.freshFolder ? { freshFolder: true } : {}),
           ...(cmd.kind ? { kind: cmd.kind } : {}),
           ...(cmd.title ? { title: cmd.title } : {}),
+          ...(cmd.account ? { account: cmd.account } : {}),
         })
         return { sessionId: s.id, info: s.info() }
       }
@@ -519,13 +559,48 @@ export class HostServer {
       case "context_usage":
         return await this.#session(cmd.sessionId).contextUsage()
       case "signin_start":
-        return this.#signIn().start(cmd.method)
+        return this.#signIn(cmd.account).start(cmd.method)
       case "signin_status":
-        return this.#signIn().status()
+        return this.#signIn(cmd.account).status()
       case "signin_cancel":
-        return this.#signIn().cancel()
+        return this.#signIn(cmd.account).cancel()
+      case "account_add": {
+        const added = await this.#accounts().add(cmd.label)
+        await this.#auditAccount(
+          "account_added",
+          { account: added.id, label: added.label },
+          `The account ${added.label} was added from the desktop.`,
+        )
+        this.announceHealth()
+        return added
+      }
+      case "account_confirm_org": {
+        const confirmed = await this.#accounts().confirmOrg(cmd.account)
+        await this.#auditAccount(
+          "account_org_confirmed",
+          { account: confirmed.id, organization: confirmed.expectedOrg },
+          `The account ${confirmed.label} must belong to ${confirmed.expectedOrg ?? "its organisation"}, as confirmed from the desktop.`,
+        )
+        this.announceHealth()
+        return confirmed
+      }
+      case "account_remove":
+        await this.#accounts().remove(cmd.account)
+        await this.#auditAccount(
+          "account_removed",
+          { account: cmd.account },
+          "An account was removed from the desktop.",
+        )
+        this.announceHealth()
+        return undefined
+      case "account_private_window":
+        this.#accounts().openPrivate(cmd.account)
+        return undefined
       case "refresh_account": {
-        const snapshot = await a.account.refresh()
+        const snapshot =
+          cmd.account && cmd.account !== MAIN_ACCOUNT
+            ? await this.#accounts().monitor(cmd.account).refresh()
+            : await a.account.refresh()
         // Every open window shows the new result, not only the one that asked.
         this.announceHealth()
         return snapshot

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { send, useStore } from "../store"
+import { accountForNew, send, useStore } from "../store"
 import { MODELS, START_WAIT_MS, StartProgress } from "./Sessions"
 
 /**
@@ -30,6 +30,7 @@ export function NewChat() {
         title: said,
         // The Host keeps a chat in Plan mode whatever is sent; saying so here too.
         mode: "plan",
+        ...accountForNew(),
         ...(model ? { model } : {}),
       },
       START_WAIT_MS,

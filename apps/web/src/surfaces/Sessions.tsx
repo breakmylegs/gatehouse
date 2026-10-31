@@ -15,7 +15,7 @@ import {
   type EffortId,
   type UiMode,
 } from "../lib/modes"
-import { send, useSessionList, useStore } from "../store"
+import { accountForNew, send, useSessionList, useStore } from "../store"
 import { EarlierSessions } from "../components/EarlierSessions"
 import { titleOf } from "../lib/sessionActions"
 import { SessionCode } from "../components/SessionCode"
@@ -147,6 +147,7 @@ export function Sessions() {
         ...(model ? { model } : {}),
         ...(effort ? { effort } : {}),
         ...wireOf(mode),
+        ...accountForNew(),
       },
       START_WAIT_MS,
     )

@@ -1,8 +1,9 @@
+import { AccountsDialog } from "./AccountsDialog"
 import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
 import { useMemo, useState } from "react"
 import { groupByFolder, notifyLine, RAIL_PAGES, readRailPages, saveRailPages } from "../lib/rail"
-import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
+import { MAIN_ACCOUNT, type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
 import { RenameDialog } from "./RenameDialog"
@@ -380,7 +381,16 @@ function RailFoot() {
   const helpOpen = useStore((s) => s.helpOpen)
   const setHelpOpen = useStore((s) => s.setHelpOpen)
   const killed = health?.killSwitch.engaged ?? false
-  const signin = health?.signin
+  const activeAccount = useStore((s) => s.activeAccount)
+  const setActiveAccount = useStore((s) => s.setActiveAccount)
+  const [managing, setManaging] = useState(false)
+  const accounts = health?.accounts ?? []
+  // The account on show is the one named here; the main one's sign-in is the one Health has always carried.
+  const shown = accounts.find((a) => a.id === activeAccount)
+  const signin =
+    shown && shown.id !== MAIN_ACCOUNT
+      ? { signedIn: shown.signedIn, email: shown.email, organization: shown.organization }
+      : health?.signin
 
   const who = signin?.signedIn
     ? (signin.email?.split("@")[0] ?? "Signed in")
@@ -390,6 +400,7 @@ function RailFoot() {
 
   return (
     <div className="grid gap-2 border-t border-shell-line px-3 py-3">
+      {managing ? <AccountsDialog onClose={() => setManaging(false)} /> : null}
       <div role="status" className="flex flex-wrap gap-x-3 gap-y-1 text-[12.5px] text-shell-mut">
         <Dot
           ok={conn === "open"}
@@ -467,6 +478,16 @@ function RailFoot() {
         }
         items={[
           ...(signin?.email ? [{ kind: "heading" as const, label: signin.email }] : []),
+          // Each account, the one on show ticked; choosing one shows its sessions and stops nothing.
+          ...(accounts.length > 1
+            ? accounts.map((a) => ({
+                label: `${a.label}${a.email ? `, ${a.email}` : ""}`,
+                checked: a.id === activeAccount,
+                onSelect: () => setActiveAccount(a.id),
+              }))
+            : []),
+          { label: "Accounts...", onSelect: () => setManaging(true) },
+          { kind: "separator" as const },
           { label: "Settings", onSelect: () => setRoute("settings") },
           { label: "What Claude may do", onSelect: () => setRoute("policy") },
           { label: "Approver", onSelect: () => setRoute("approver") },

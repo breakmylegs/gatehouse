@@ -25,6 +25,9 @@ import {
 import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
 import { fromRecord, laterDecision, type Decision } from "./lib/decision"
 
+/** The main Claude account: Claude Code's usual sign-in on this computer. */
+export const MAIN_ACCOUNT = "main"
+
 export type Route =
   | "approvals"
   | "sessions"
@@ -98,6 +101,9 @@ export interface State {
   audit: unknown[]
   /** What happened lately, newest first: Claude told you, turns ended, Extreme runs ended. */
   notices: Notice[]
+  /** The account whose sessions the window shows, and that new sessions start on. */
+  activeAccount: string
+  setActiveAccount: (id: string) => void
   /** How each tool call was decided, by its id (unique across sessions), for the line on its card. */
   decisions: Record<string, Decision>
   addDecisions: (items: Array<{ toolUseId: string; d: Decision }>) => void
@@ -236,6 +242,20 @@ export const useStore = create<State>((set, get) => ({
   term: {},
   audit: [],
   notices: [],
+  activeAccount: localStorage.getItem("gatehouse.account") || MAIN_ACCOUNT,
+  // Switching shows another account's sessions; nothing on either stops (owner, 30 Oct).
+  setActiveAccount: (id) =>
+    set((s) => {
+      localStorage.setItem("gatehouse.account", id)
+      const mine = (sid: string) => (s.sessions[sid]?.account ?? MAIN_ACCOUNT) === id
+      const panes = s.panes.filter(mine)
+      return {
+        activeAccount: id,
+        panes,
+        selectedSession:
+          s.selectedSession && mine(s.selectedSession) ? s.selectedSession : panes[0],
+      }
+    }),
   decisions: {},
   addDecisions: (items) =>
     set((s) => {
@@ -694,9 +714,20 @@ export function usePending(): PendingView[] {
   return useMemo(() => pendingList({ pending }), [pending])
 }
 
+/** The sessions of the account the window shows. Approvals from every account stay on Approvals. */
 export function useSessionList(): SessionInfo[] {
   const sessions = useStore((s) => s.sessions)
-  return useMemo(() => Object.values(sessions), [sessions])
+  const account = useStore((s) => s.activeAccount)
+  return useMemo(
+    () => Object.values(sessions).filter((x) => (x.account ?? MAIN_ACCOUNT) === account),
+    [sessions, account],
+  )
+}
+
+/** The account new sessions start on, as the Host wants it: nothing for the main one. */
+export function accountForNew(): { account?: string } {
+  const a = useStore.getState().activeAccount
+  return a && a !== MAIN_ACCOUNT ? { account: a } : {}
 }
 
 export function usePendingCount(): number {
