@@ -1,0 +1,22 @@
+Proposed additions to CLAUDE.md (31 Oct 2026). Not applied. For the owner to approve first.
+
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ Security invariants (non-negotiable) @@
+ 5. **No `updatedPermissions`.** Never return it from `canUseTool`. "Remember" writes to the Gatehouse policy overlay instead, so the Approver stays the single decider and every decision keeps a rule id.
++   Every automatic allow, from any feature (automations, research, memory, artifacts), carries a rule id and an audit entry. No feature may weaken the floor's never list or the hash-chained audit log.
+@@
+ 7. **Local listeners.** All listeners bind to 127.0.0.1 only. Each one:
+@@
+    The Web UI uses a per-launch session token.
++   A second window (such as the quick-launch overlay) loads the same interface behind the same token and checks. Sandboxed content (artifacts, previews) never receives the token.
+@@
+ 16. **Branding.**
+    - Do not name or style the product as Claude Code or claude.ai, and do not imitate their visual design.
++   - In particular: no warm cream or beige backgrounds, no terracotta or orange-family accents, no serif display type, no radial or starburst marks, no Anthropic logos. A test checks the theme tokens for orange-family accents.
++17. **MCP in sessions.** Only in-process SDK MCP servers (the Companion and its tools). Never a stdio or HTTP MCP server inside a session. The managed policy on this laptop blocks them, and JCVC must not depend on them.
++18. **No elevation.** Windows 11 first, on a corporate laptop with no admin rights. Nothing JCVC installs, runs or asks for may need elevation. Prefer per-user locations (`%LOCALAPPDATA%`, HKCU).
++19. **Fonts.** Segoe UI Variable is used by name as a system font only. Never bundle, copy or embed it. Bundled fonts must carry a licence that allows it (for example SIL OFL 1.1), recorded in `docs/BUILD_REPORT.md`.
+@@ Conventions @@
++- Visual rules (owner, 31 Oct, pending ADR 0002): quiet and neutral, Windows-native. One accent colour for focus, selection and the main action. Risk always shows a shape, a word and a number. Light, dark and Windows high contrast are all supported. No hover tooltips. No placeholders in settings boxes.
++- Plans and decisions live in `docs/plan/` (backlog, waves) and `docs/decisions/` (ADRs). Update `docs/plan/backlog.md` after each slice.
