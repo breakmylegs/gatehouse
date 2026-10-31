@@ -279,6 +279,18 @@ execFileSync(
   ],
   { stdio: "inherit" },
 )
+// JCVC-Limits.exe: runs each session's Claude Code inside a job object with its resource limits.
+execFileSync(
+  csc,
+  [
+    "/nologo",
+    "/target:exe",
+    "/optimize+",
+    `/out:${path.join(dest, "JCVC-Limits.exe")}`,
+    pk("Limits.cs"),
+  ],
+  { stdio: "inherit" },
+)
 for (const f of [wv2Core, wv2Forms, wv2Loader])
   fs.copyFileSync(f, path.join(dest, path.basename(f)))
 // The start-up picture the window shows while the Host starts (the page shows it again once it loads).

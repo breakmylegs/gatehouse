@@ -20,6 +20,7 @@ const host = createHost({
   onHealthChanged: () => server.announceHealth(),
   onProgress: progress,
   keepOpenSessions: true,
+  limitResources: true,
 })
 const token = generateToken()
 // The window app shows a Windows notification from this line, so it works even while the page is hidden in the

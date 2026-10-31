@@ -28,6 +28,7 @@ import {
   type SessionMode,
 } from "./safety.js"
 import type { UsageStore } from "./usage.js"
+import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
 import { CARRY_ON_DEFAULTS, CARRY_ON_PROMPT, CarryOn, type CarryOnStatus } from "./carry-on.js"
 
 export class OrgGuardError extends Error {
@@ -159,6 +160,8 @@ export interface SessionInfo {
   background?: string[]
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn?: CarryOnStatus
+  /** How much of this computer the session may use. Absent where JCVC cannot limit it. */
+  resources?: ResourceLevel
 }
 
 export interface SessionEvents {
@@ -190,6 +193,8 @@ export interface SessionDeps {
   }
   /** Where chats get their folders: %LOCALAPPDATA%\Gatehouse\chats. Absent where chats are not offered. */
   chatsDir?: string
+  /** Runs each session inside a job object with its resource limits. Absent where that is not possible. */
+  limiter?: Limiter
   config: () => GatehouseConfig
   policy: () => Policy | undefined
   engine: PolicyEngine
@@ -229,6 +234,8 @@ export interface StartSessionOptions {
    * time. A chat keeps its folder.
    */
   restore?: { id: string; createdAt: string; wasRunning: boolean; forced?: boolean }
+  /** How much of this computer it may use; High (no limits) when not given. */
+  resources?: ResourceLevel
 }
 
 /**
@@ -291,6 +298,9 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #carry = new CarryOn(() => this.#deps.config().extremeCarryOn ?? CARRY_ON_DEFAULTS)
   /** The session's total cost after its last turn, so a run counts only what it spends. */
   #lastCost = 0
+  #resources: ResourceLevel = "high"
+  /** Its job object's name, unique to this start, for changing the limits while it runs. */
+  readonly #job = `Local\\JCVC-${uuidv7()}`
   /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
   readonly #tellDecision = (toolUseId: string, v: Verdict) => {
     try {
@@ -335,6 +345,7 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#model = opts.model
     this.#effort = opts.effort
     this.#extreme = opts.extreme === true
+    this.#resources = opts.resources ?? "high"
     this.#onBrokerChange = () => this.#refreshWaiting()
     deps.broker.on("created", this.#onBrokerChange)
     deps.broker.on("resolved", this.#onBrokerChange)
@@ -365,6 +376,7 @@ export class Session extends EventEmitter<SessionEvents> {
           }
         : {}),
       ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
+      ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
         ? { carryOn: this.#carry.status() }
         : {}),
@@ -406,6 +418,11 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       approver: d.approver,
       verdicts: this.#verdicts,
+    }
+    // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
+    const onStderr = (data: string) => {
+      if (isShadowWarning(data))
+        this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
     }
     const eventHook = createEventHook(hookDeps)
     const postHook = createPostToolHook(hookDeps)
@@ -453,10 +470,11 @@ export class Session extends EventEmitter<SessionEvents> {
         SubagentStop: [{ hooks: [eventHook] }],
       },
       mcpServers: d.companion({ sessionId: this.id, cwd: this.cwd }) as Options["mcpServers"],
-      stderr: (data) => {
-        if (isShadowWarning(data))
-          this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
-      },
+      stderr: onStderr,
+      // Inside a job object with the session's limits, when JCVC can make one. Its stderr comes back to onStderr.
+      ...(d.limiter
+        ? { spawnClaudeCodeProcess: d.limiter.spawn(this.#job, () => this.#resources, onStderr) }
+        : {}),
       ...(this.#opts.resume !== undefined
         ? { resume: this.#opts.resume, forkSession: this.#opts.fork === true }
         : {}),
@@ -664,8 +682,42 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#model !== undefined ? { model: this.#model } : {}),
       ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
       extreme: this.#extreme,
+      resources: this.#resources,
       ...(this.#sdkSessionId !== undefined ? { resume: this.#sdkSessionId } : {}),
     }
+  }
+
+  /**
+   * How much of this computer the session may use: applied at once to it and everything it started, and recorded.
+   * If the running job cannot be changed, the level still applies from its next start.
+   */
+  async setResources(level: ResourceLevel): Promise<void> {
+    const limiter = this.#deps.limiter
+    if (!limiter) throw new Error("JCVC cannot limit sessions here")
+    if (this.#q)
+      await limiter
+        .set(this.#job, level)
+        .catch((e: Error) => this.#deps.log(`resource limits not changed now: ${e.message}`))
+    this.#resources = level
+    await this.#deps.audit.record({
+      session: this.id,
+      event: "resources_changed",
+      channel: "desktop",
+      tool: "session",
+      cwd: this.cwd,
+      project: this.project,
+      input: { level, ...LEVELS[level] },
+      verdict: {
+        outcome: "allow",
+        ruleId: "resources-changed",
+        reason: `Resources for this session set to ${level} from the desktop.`,
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    this.emit("state", this.info())
   }
 
   /** Only default and plan are ever accepted (invariant 3). */

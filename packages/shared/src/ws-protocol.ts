@@ -38,6 +38,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stop_session"), sessionId: Id }),
   /** Ends the Claude process at once and starts it again on the same conversation, under the same id. */
   z.object({ type: z.literal("force_stop"), sessionId: Id }),
+  /** How much of this computer a session may use: Low, Medium or High. */
+  z.object({
+    type: z.literal("set_resources"),
+    sessionId: Id,
+    level: z.enum(["low", "medium", "high"]),
+  }),
   z.object({ type: z.literal("set_mode"), sessionId: Id, mode: Mode }),
   z.object({ type: z.literal("set_effort"), sessionId: Id, effort: Effort }),
   z.object({ type: z.literal("set_extreme"), sessionId: Id, on: z.boolean() }),
@@ -159,6 +165,8 @@ export const SessionInfo = z.object({
   restarted: z.object({ wasRunning: z.boolean(), forced: z.boolean().optional() }).optional(),
   /** What is still working in the background after the turn ended (subagents, shell commands), by description. */
   background: z.array(z.string()).optional(),
+  /** How much of this computer the session may use. Absent where JCVC cannot limit it. */
+  resources: z.enum(["low", "medium", "high"]).optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn: z
     .object({

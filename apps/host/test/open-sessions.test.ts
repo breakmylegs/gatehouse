@@ -38,6 +38,7 @@ describe("the sessions JCVC brings back after a restart", () => {
         model: "claude-opus-5-5",
         effort: "max",
         extreme: true,
+        resources: "low",
       }),
     )
     store.note(info(B, { kind: "chat", mode: "plan" }))
@@ -53,6 +54,7 @@ describe("the sessions JCVC brings back after a restart", () => {
         extreme: true,
         running: true,
         createdAt: "2026-10-30T10:00:01Z",
+        resources: "low",
       },
       expect.objectContaining({ id: B, kind: "chat", mode: "plan", running: false }),
     ])
@@ -110,7 +112,9 @@ describe("the sessions JCVC brings back after a restart", () => {
   it("starts each one again with its id and settings, and drops one that cannot come back", async () => {
     const f = file()
     const store = new OpenSessionsStore(f)
-    store.note(info(A, { state: "waiting", sdkSessionId: "sdk-a", mode: "auto" }))
+    store.note(
+      info(A, { state: "waiting", sdkSessionId: "sdk-a", mode: "auto", resources: "medium" }),
+    )
     store.note(info(B, { sdkSessionId: "sdk-b" }))
     await store.flush()
     const started: StartSessionOptions[] = []
@@ -129,6 +133,7 @@ describe("the sessions JCVC brings back after a restart", () => {
       cwd: "C:/dev/a",
       mode: "auto",
       extreme: false,
+      resources: "medium",
       resume: "sdk-a",
       restore: { id: A, createdAt: "2026-10-30T10:00:01Z", wasRunning: true },
     })

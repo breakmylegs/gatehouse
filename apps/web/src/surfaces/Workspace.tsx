@@ -515,6 +515,21 @@ function SessionPane({
               </select>
             </label>
           )}
+          {session.resources ? (
+            <label className="composer-pick">
+              <span className="text-mut">Resources</span>
+              <select
+                className="composer-select"
+                value={session.resources}
+                disabled={ended}
+                onChange={(e) => void changeResources(session.id, e.target.value as Level)}
+              >
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+          ) : null}
           <StopButton sessionId={session.id} busy={busy} />
         </div>
       </footer>
@@ -554,6 +569,22 @@ function SessionRequest({
       ) : null}
     </div>
   )
+}
+
+type Level = "low" | "medium" | "high"
+/** What each level lets the session use, said when you choose it. */
+export const LEVEL_WORDS: Record<Level, string> = {
+  high: "High: no limits for this session.",
+  medium:
+    "Medium: this session and the commands it runs may use half the processor and 4 GB of memory, and give way to what you are doing. A command that needs more memory fails.",
+  low: "Low: this session and the commands it runs may use a fifth of the processor and 2 GB of memory, and give way to what you are doing. A command that needs more memory fails.",
+}
+
+/** Low, Medium or High for one session, applied at once to it and to everything it started (owner, 30 Oct). */
+async function changeResources(sessionId: string, level: Level) {
+  const r = await send({ type: "set_resources", sessionId, level })
+  if (r.ok) toast(LEVEL_WORDS[level], { id: "resources" })
+  else toast.error(r.error?.message ?? "The limits were not changed", { id: "resources" })
 }
 
 /** What the session is doing while a turn runs: thinking, writing a file, running a command. */

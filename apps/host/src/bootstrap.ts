@@ -3,6 +3,7 @@ import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
+import { findLimitsExe, limiter } from "./limits.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { pickFolderWithWindows } from "./folder-picker.js"
@@ -75,6 +76,8 @@ export interface HostOptions {
   onProgress?: (text: string) => void
   /** Keeps the open sessions and brings them back at the next start. The desktop Host does; the CLI does not. */
   keepOpenSessions?: boolean
+  /** Runs sessions inside job objects with their resource limits (JCVC-Limits.exe). The desktop Host does. */
+  limitResources?: boolean
 }
 
 export interface Host {
@@ -285,6 +288,15 @@ export function createHost(opts: HostOptions = {}): Host {
       approverClient.setKillSwitch(...a),
   }
   deps.approver = approverProxy as unknown as ApproverClient
+  if (opts.limitResources) {
+    const exe = findLimitsExe({
+      installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
+      repoRoot: REPO_ROOT,
+      dataDir: gatehouseDataDir(env),
+      log,
+    })
+    if (exe) deps.limiter = limiter(exe)
+  }
   manager = new SessionManager(deps)
   // The sessions open now, so a restart or an update brings them back (owner, 30 Oct: nothing lost).
   const openSessions = opts.keepOpenSessions

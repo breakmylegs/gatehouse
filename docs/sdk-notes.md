@@ -54,6 +54,7 @@ type SDKUserMessage = {
 | `resume`, `forkSession`, `sessionId`, `continue` | | resume and fork |
 | `persistSession` | boolean | default true, sessions saved under `~/.claude/projects/` |
 | `pathToClaudeCodeExecutable` | string | not set, use the bundled binary |
+| `spawnClaudeCodeProcess` | `(o: SpawnOptions) => SpawnedProcess` | since Phase 41, where JCVC-Limits.exe exists: Claude Code is started inside it, in a job object with the session's resource limits. `SpawnOptions` is `{ command, args, cwd?, env, signal }`; a ChildProcess satisfies `SpawnedProcess`. The SDK reads only stdin and stdout from a custom spawn (its own spawn also reads stderr for the `stderr` option), so the Host passes the helper's stderr to the same handler, which keeps the shadowing check of invariant 4. `onProcessSpawned` exists in the code but is not in sdk.d.ts, so it is not used. |
 | `stderr` | `(data: string) => void` | capture diagnostics |
 | `managedSettings` | `Settings` | restrictive policy tier only. Not needed. |
 | `permissionPromptToolName` | string | UNVERIFIED exact name, near line 2046 of `sdk.d.ts`. For headless runs (Phase 2). |

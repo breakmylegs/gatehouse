@@ -404,6 +404,9 @@ export class HostServer {
       case "stop_session":
         await this.#session(cmd.sessionId).stop()
         return undefined
+      case "set_resources":
+        await this.#session(cmd.sessionId).setResources(cmd.level)
+        return undefined
       case "force_stop":
         return { info: (await a.manager.forceStop(cmd.sessionId)).info() }
       case "set_mode":

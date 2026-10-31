@@ -15,6 +15,7 @@ JCVC\
   runtime\node.exe           the Node it runs on
   app\                       the application, with its production node_modules
   JCVC-Update.exe            switches to a new version after JCVC closes, and goes back if it does not start
+  JCVC-Limits.exe            runs each session's Claude Code inside a job object with its resource limits (packaging/Limits.cs)
   release.json               this folder's version and the hash of each part
   README.txt
 ```

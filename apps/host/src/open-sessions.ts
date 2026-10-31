@@ -17,6 +17,7 @@ export interface OpenSession {
   /** A turn was running, or waiting on you, when this was last written. */
   running: boolean
   createdAt: string
+  resources?: "low" | "medium" | "high"
 }
 
 const MODES = new Set(["default", "plan", "acceptEdits", "auto"])
@@ -45,6 +46,9 @@ function read(e: Record<string, unknown>): OpenSession | undefined {
     extreme: e.extreme === true,
     running: e.running === true,
     createdAt: str(e.createdAt) ?? new Date(0).toISOString(),
+    ...(e.resources === "low" || e.resources === "medium" || e.resources === "high"
+      ? { resources: e.resources }
+      : {}),
   }
 }
 
@@ -99,6 +103,7 @@ export class OpenSessionsStore {
         extreme: info.extreme === true,
         running: info.state === "running" || info.state === "waiting",
         createdAt: info.createdAt,
+        ...(info.resources ? { resources: info.resources } : {}),
       })
     this.#later()
   }
@@ -175,6 +180,7 @@ export async function restoreOpenSessions(
         ...(o.model ? { model: o.model } : {}),
         ...(o.effort ? { effort: o.effort } : {}),
         extreme: o.extreme,
+        ...(o.resources ? { resources: o.resources } : {}),
         ...(o.sdkSessionId ? { resume: o.sdkSessionId } : {}),
         restore: { id: o.id, createdAt: o.createdAt, wasRunning: o.running },
       })

@@ -622,3 +622,19 @@ The owner now builds JCVC from a session inside JCVC, so every update used to en
 - Nothing spent now reads $0.00 everywhere, not $0.000.
 - Checked by eye in headless Edge in both themes.
 - Tests: `apps/web/test/dashboard.test.tsx`. 8 breaks, 8 caught; one survived the first run and the test was tightened.
+
+## Phase 41: Low, Medium and High per session (31 Oct)
+
+- **Owner ask:** a way to control a session's processor and memory use from the session bar: Low, Medium and High, where Low uses the least. ROADMAP item 12 had the design (Windows job objects through a small C# helper).
+- **Resources** in the session bar: **High** has no limits (as before); **Medium** half the processor and 4 GB of memory; **Low** a fifth of the processor and 2 GB. Medium and Low also run below normal priority, so they give way to what you are doing. The caps cover everything the session starts, shell commands included; a command that needs more memory than the cap fails, which the choice says when you make it. A change applies at once to a running session, is audited (`resources_changed`) and is kept in `open-sessions.json`, so it survives a restart and a Force stop.
+- **JCVC-Limits.exe** (`packaging/Limits.cs`, built next to JCVC.exe like JCVC-Update.exe; from a source checkout it is built once into `%LOCALAPPDATA%\Gatehouse\bin`): the Host starts Claude Code through the SDK's documented `spawnClaudeCodeProcess`, and the helper starts it suspended inside a named job object with the limits and kill-on-close, hands it its own input, output and error, resumes it and exits with its exit code. The command line after the first " -- " goes on exactly as it came, so nothing is quoted twice. `--set` changes a running job; `--query` reads one. Where the helper is missing, the SDK starts Claude Code itself and the choice is not offered.
+- **Invariant 4 kept:** a custom spawn's stderr is not read by the SDK, so the Host passes it to the same handler, and the shadowing warning still stops the session (tested). Threat model T32.
+- **Checked for real:** the caps read back, change while running, the exit code and streams pass through, killing the helper ends the job and its children, and a 400 MB cap refuses a child that asks for 1.28 GB while no cap lets it.
+- A processor rate with no flags is refused by Windows ("The parameter is incorrect"), so no limit is a cap at the whole processor.
+- Tests:
+  - `apps/host/test/limits-exe.test.ts` (builds the helper with csc and runs it)
+  - `apps/host/test/resources.test.ts`
+  - the level in `apps/host/test/open-sessions.test.ts`
+  - `apps/web/test/resources-select.test.tsx`
+
+  15 breaks, 15 caught. The first kill test looked for the job by name and passed with kill-on-close removed: a named job loses its name with its last handle even while its processes live on. It now checks the processes themselves.
