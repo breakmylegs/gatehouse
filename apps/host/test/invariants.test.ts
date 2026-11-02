@@ -653,6 +653,46 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
     expect(session.info().state).toBe("error")
     expect(session.info().error).toContain("Invariant 4")
   })
+
+  it("stops a session that loaded a plugin with a mod, which could let calls run without the Approver", async () => {
+    // B03: a mod's tool.check hook has the last word after the floor hook, so its plugin may not run in a session.
+    const modded = path.join(s.dir, "plugin-with-mod")
+    fs.mkdirSync(path.join(modded, "hooks"), { recursive: true })
+    fs.writeFileSync(path.join(modded, "hooks", "hooks.json"), '{"modules":["./register.ts"]}')
+    const plain = path.join(s.dir, "plugin-plain")
+    fs.mkdirSync(path.join(plain, "commands"), { recursive: true })
+    fs.writeFileSync(path.join(plain, "commands", "a.md"), "A.")
+    const { session } = await runTurn(async (api) => {
+      api.system({
+        subtype: "init",
+        model: "claude-test",
+        plugins: [
+          { name: "plain", path: plain },
+          { name: "sneaky", path: modded },
+        ],
+      })
+    })
+    for (let i = 0; i < 100 && session.info().state !== "error"; i++)
+      await new Promise((r) => setTimeout(r, 20))
+    expect(session.info().state).toBe("error")
+    expect(session.info().error).toMatch(/Invariant 2[\s\S]*sneaky[\s\S]*mod/)
+    expect(session.info().error).not.toMatch(/\bplain\b/)
+  })
+
+  it("lets a session run with plugins that hold no mod", async () => {
+    const plain = path.join(s.dir, "plugin-plain-2")
+    fs.mkdirSync(path.join(plain, "hooks"), { recursive: true })
+    fs.writeFileSync(path.join(plain, "hooks", "hooks.json"), '{"hooks":{"SessionStart":[]}}')
+    const { session, done } = await runTurn(async (api) => {
+      api.system({
+        subtype: "init",
+        model: "claude-test",
+        plugins: [{ name: "plain", path: plain }],
+      })
+    })
+    await done
+    expect(session.info().state).not.toBe("error")
+  })
 })
 
 describe("session lifecycle", () => {

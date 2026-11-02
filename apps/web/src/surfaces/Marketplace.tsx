@@ -8,6 +8,8 @@ interface Contents {
   agents: number
   skills: number
   hooks: boolean
+  /** Read tolerantly: a Host from before B03 does not send it. */
+  mods?: boolean
   mcpServers: boolean
   lspServers: boolean
   dependencies: number
@@ -30,7 +32,7 @@ const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many
 export function holds(c: Contents | undefined): string[] {
   if (!c) return ["Not readable before installing"]
   return [
-    ...(c.hooks ? ["Hooks"] : []),
+    ...(c.mods ? ["A mod"] : c.hooks ? ["Hooks"] : []),
     ...(c.mcpServers ? ["MCP servers"] : []),
     ...(c.lspServers ? ["Language servers"] : []),
     ...(c.dependencies ? [n(c.dependencies, "other plugin", "other plugins")] : []),

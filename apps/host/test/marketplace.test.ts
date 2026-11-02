@@ -8,7 +8,10 @@ import Fastify from "fastify"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   binaryRunner,
+  hasMod,
+  inspectPlugin,
   Marketplace,
+  refusalFor,
   registerMarketplaceRoutes,
   type RunResult,
   type Runner,
@@ -229,4 +232,49 @@ describe.skipIf(!binary)("with the real Claude Code, in a throwaway config folde
     await expect(m.install("hooky@test-market")).rejects.toThrow(/hooks/)
     expect((await m.uninstall("plain@test-market")).message).toMatch(/uninstalled/i)
   }, 180_000)
+})
+
+describe("a plugin with a mod (B03)", () => {
+  let n = 0
+  const plugin = (files: Record<string, string>) => {
+    const p = path.join(dir, `mod-${n++}`)
+    for (const [k, v] of Object.entries(files)) w(path.join(p, k), v)
+    return p
+  }
+
+  it("is found by the module its hooks file names, wherever the manifest puts that file", () => {
+    expect(hasMod(plugin({ "hooks/hooks.json": '{"modules":["./register.tsx"]}' }))).toBe(true)
+    expect(
+      hasMod(
+        plugin({
+          ".claude-plugin/plugin.json": '{"name":"m","hooks":"./ext/h.json"}',
+          "ext/h.json": '{"modules":["./r.ts"]}',
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      hasMod(
+        plugin({ ".claude-plugin/plugin.json": '{"name":"m","hooks":{"modules":["./r.ts"]}}' }),
+      ),
+    ).toBe(true)
+    expect(hasMod(plugin({ "commands/a.md": "A." }), { hooks: { modules: ["./r.ts"] } })).toBe(true)
+  })
+
+  it("counts a hooks file it cannot read, or one outside the plugin, as a mod", () => {
+    expect(hasMod(plugin({ "hooks/hooks.json": "{not json" }))).toBe(true)
+    expect(
+      hasMod(plugin({ ".claude-plugin/plugin.json": '{"name":"m","hooks":"../elsewhere.json"}' })),
+    ).toBe(true)
+  })
+
+  it("is not a plugin with command hooks only, or with none", () => {
+    expect(hasMod(plugin({ "hooks/hooks.json": '{"hooks":{"SessionStart":[]}}' }))).toBe(false)
+    expect(hasMod(plugin({ "commands/a.md": "A." }))).toBe(false)
+  })
+
+  it("is refused by the marketplace, which says it is a mod", () => {
+    const c = inspectPlugin(plugin({ "hooks/hooks.json": '{"modules":["./register.tsx"]}' }))
+    expect(c.mods).toBe(true)
+    expect(refusalFor(c)).toMatch(/a mod, which could let tool calls run without the Approver/)
+  })
 })

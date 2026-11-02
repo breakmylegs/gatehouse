@@ -26,6 +26,8 @@ export interface Contents {
   agents: number
   skills: number
   hooks: boolean
+  /** A hooks module (a mod): its tool.check hook could let a call run without the Approver. */
+  mods: boolean
   mcpServers: boolean
   lspServers: boolean
   dependencies: number
@@ -105,6 +107,7 @@ export function inspectPlugin(dir: string, entry: Raw = {}): Contents {
       (d) => d.isDirectory() && fs.existsSync(path.join(skillsDir, d.name, "SKILL.md")),
     ),
     hooks: hooksFile || present(manifest.hooks) || present(entry.hooks),
+    mods: hasMod(dir, entry),
     mcpServers:
       fs.existsSync(path.join(dir, ".mcp.json")) ||
       present(manifest.mcpServers) ||
@@ -117,12 +120,56 @@ export function inspectPlugin(dir: string, entry: Raw = {}): Contents {
   }
 }
 
+/**
+ * Whether a plugin's folder holds a mod: a hooks module that hooks/hooks.json, or a hooks file or entry the manifest
+ * names, lists under "modules" (Claude Code 2.1.310's plugin format). A mod's tool.check hook has the last word on
+ * whether a tool call runs, after Codehouse's floor hook, so it could allow a call the Approver never saw (invariant
+ * 2). A hooks file that is named but cannot be read counts as a mod: fail closed.
+ */
+export function hasMod(dir: string, entry: Raw = {}): boolean {
+  const manifest = obj(readJson(path.join(dir, ".claude-plugin", "plugin.json")))
+  const files: string[] = [path.join(dir, "hooks", "hooks.json")]
+  const named: unknown[] = []
+  for (const h of [manifest.hooks, entry.hooks])
+    for (const one of Array.isArray(h) ? h : h === undefined || h === null ? [] : [h]) {
+      if (typeof one !== "string") {
+        named.push(one)
+        continue
+      }
+      const file = inside(dir, one)
+      // A hooks file outside the plugin cannot be read for what it holds.
+      if (!file) return true
+      files.push(file)
+    }
+  const modules = (v: unknown) => present(obj(v).modules)
+  if (named.some(modules)) return true
+  for (const file of files) {
+    if (!fs.existsSync(file)) continue
+    const j = readJson(file)
+    if (j === undefined || modules(j)) return true
+  }
+  return false
+}
+
+/**
+ * Of the plugins a session reports it loaded (its start message's `plugins`), the names of those with a mod. The
+ * names are the plugins' own, so only plain characters are kept for showing them.
+ */
+export function pluginsWithMods(plugins: unknown): string[] {
+  if (!Array.isArray(plugins)) return []
+  return plugins
+    .map((p) => obj(p))
+    .filter((p) => typeof p.path === "string" && hasMod(p.path))
+    .map((p) => (str(p.name) ?? "A plugin").replace(/[^\w@.\- ]/g, "").slice(0, 80) || "A plugin")
+}
+
 /** Why a plugin with these contents is refused, or undefined when it may be installed. */
 export function refusalFor(c: Contents | undefined): string | undefined {
   if (!c)
     return "Its files are not in a marketplace on this computer (they are on GitHub or the web), so Codehouse cannot read what it holds before installing it."
   const why: string[] = []
-  if (c.hooks) why.push("hooks, which run commands outside the Approver")
+  if (c.mods) why.push("a mod, which could let tool calls run without the Approver")
+  else if (c.hooks) why.push("hooks, which run commands outside the Approver")
   if (c.mcpServers) why.push("MCP servers that run outside the session")
   if (c.lspServers) why.push("language servers that run as separate programs")
   if (c.dependencies) why.push("other plugins it installs with it")

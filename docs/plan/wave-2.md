@@ -20,7 +20,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 |---|---|---|---|
 | B01 | Approver in a PreToolUse hook | done, and a gap closed | The floor hook sees every call (since Phase 0) and asks in Manual (Phase 72). Checking the permissions page found Plan mode was not covered; fixed in Phase 87 (T50) |
 | B02 | Pin the permission mode and setting sources | done | Mode set on every session (invariant 3); confirmed a session otherwise starts in `default` from 2.1.302. Setting sources stay user, project, local for coding sessions: allow rules there cannot skip the Approver because the hook answers ask (deny > ask > allow) |
-| B03 | Refuse plugin mods and plugin permission logic | partial | Hooks and outside servers refused (Phase 80). Add: refuse any plugin with a mods component; zip and URL installs covered by the same reader |
+| B03 | Refuse plugin mods and plugin permission logic | done (Phase 96) | Hooks, outside servers, other plugins and anything not readable first refused (Phase 80); a mod is named in the refusal; a session that loaded a plugin with a mod from outside Codehouse stops before any tool runs; CLAUDE_CODE_PLUGIN_DIRS stripped |
 | B04 | Claude Code version range gate | todo | Sessions refuse a binary outside the range a signed Codehouse release names; a Doctor link |
 | B05 | Fail-closed fuzz suite for the decision path, phone included | partial | Many fail-closed tests exist; add 10,000 fuzzed payloads (truncated, wrong signature, replayed, late) with zero allows |
 | B06 | MCP 2026-07-28 readiness in in-process servers | todo | URL-mode elicitation becomes an Approver decision showing the full URL, never opens a browser by itself |

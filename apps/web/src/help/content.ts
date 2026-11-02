@@ -109,7 +109,8 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 
 - A plugin is someone else's code. Codehouse installs only one whose files it can read before installing, and never one with **hooks** (they run commands without asking the Approver), **MCP or language servers** (programs that run outside the session), or other plugins it brings with it. A plugin on GitHub or the web cannot be read first, so it is listed but not installed.
 - **Install** asks you first, then Claude Code installs it for your main account. Codehouse reads the installed copy again and removes it at once if it holds anything refused. Coding sessions you start afterwards have it; chats load no plugins.
-- **Remove** takes it away again. Every install, removal and refusal is in the audit log.`,
+- **Remove** takes it away again. Every install, removal and refusal is in the audit log.
+- A **mod** (a plugin that changes how Claude Code itself behaves) could let a tool run without the Approver, so Codehouse never installs one, and a session that loads one installed some other way, for example with Claude Code in a terminal, stops before it runs anything and names the plugin to remove.`,
   },
   prompts: {
     id: "prompts",

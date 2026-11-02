@@ -28,6 +28,7 @@ import {
 } from "./hooks.js"
 import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
+import { pluginsWithMods } from "./marketplace.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -830,6 +831,18 @@ export class Session extends EventEmitter<SessionEvents> {
       if (isShadowWarning(JSON.stringify(m)))
         this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
       if ((m.subtype as string) === "init" && typeof m.model === "string") this.#model = m.model
+      // B03: a plugin installed outside Codehouse can hold a mod, whose tool.check hook has the last word after the
+      // floor hook and so could allow a call the Approver never saw. Such a session stops before any tool runs.
+      if ((m.subtype as string) === "init") {
+        const modded = pluginsWithMods(m.plugins)
+        if (modded.length)
+          this.#fatal(
+            new SafetyError(
+              2,
+              `${modded.join(", ")} ${modded.length === 1 ? "is a plugin with a mod" : "are plugins with mods"}, which could let tool calls run without the Approver, so this session was stopped. Remove ${modded.length === 1 ? "it" : "them"} (claude plugin uninstall <name>) or turn ${modded.length === 1 ? "it" : "them"} off, then start the session again.`,
+            ),
+          )
+      }
       this.#noteBackground(m)
     }
     if (msg.type === "result") {

@@ -54,6 +54,7 @@ describe("the marketplace page", () => {
     expect(within(hooky).getByText(/does not install it\. It has hooks/)).toBeTruthy()
     expect(within(hooky).queryByRole("button", { name: /install/i })).toBeNull()
     expect(holds(plain)).toEqual(["2 skills", "1 command"])
+    expect(holds({ ...plain, hooks: true, mods: true })).toEqual(["A mod", "2 skills", "1 command"])
     expect(holds(undefined)).toEqual(["Not readable before installing"])
   })
 
