@@ -130,10 +130,10 @@ html[data-scene="on"] body::before {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--scene-img, none) no-repeat right 3% bottom / auto 90%;
+  /* The pack's scenes are whole pictures composed for faint use behind the interface. */
+  background: var(--scene-img, none) no-repeat center / cover;
   opacity: 0.08;
-  filter: grayscale(0.6);
-  mask-image: linear-gradient(to left, #000 35%, transparent 95%);
+  mask-image: linear-gradient(to left, #000 40%, transparent 100%);
 }
 html[data-scene="on"][data-theme="dark"] body::before {
   opacity: 0.11;
@@ -1270,10 +1270,6 @@ mark.seg {
   background: rgb(0 0 0 / 0.25);
   color: #ffffff;
 }
-.kill-icon {
-  font-size: 14px;
-  line-height: 1;
-}
 .kill-confirm {
   position: absolute;
   top: calc(100% + 8px);
@@ -1792,10 +1788,6 @@ main[data-rail="hidden"] {
 }
 .copy-btn.is-done {
   color: var(--c-tx);
-}
-.copy-icon {
-  font-size: 12px;
-  line-height: 1;
 }
 .msg-actions {
   display: flex;
@@ -2352,4 +2344,35 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
 }
 @media (prefers-reduced-motion: reduce) {
   .progress-dot { animation: none; }
+}
+
+/* The interface icons from the Codehouse visual identity pack (components/Icon.tsx). */
+.icon {
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: -0.2em;
+}
+.rail-item-label {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+/* An empty page or list shows the pack's spot picture above what to do next (components/EmptyState.tsx). */
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.empty-state img {
+  width: min(240px, 60%);
+  height: auto;
+}
+.pane-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }

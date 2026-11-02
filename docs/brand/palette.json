@@ -1,0 +1,19 @@
+{
+  "nightSky": [
+    "#0a0b1e",
+    "#1c1240",
+    "#3a1840"
+  ],
+  "neonPink": "#ff4fa0",
+  "neonTeal": "#4ff0e0",
+  "warmAmber": [
+    "#ffb347",
+    "#ffcf80"
+  ],
+  "wood": [
+    "#2a1b24",
+    "#3b2630",
+    "#5a3420"
+  ],
+  "lightGround": "#f4f6f9"
+}

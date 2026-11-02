@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><defs>
+      <linearGradient id="nightSky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0a0b1e"/>
+        <stop offset="0.68" stop-color="#1c1240"/>
+        <stop offset="1" stop-color="#3a1840"/>
+      </linearGradient>
+      <linearGradient id="dawnSky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f4f6f9"/>
+        <stop offset="0.55" stop-color="#f5d9e9"/>
+        <stop offset="1" stop-color="#f7b9c9"/>
+      </linearGradient>
+      <linearGradient id="woodGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#5a3420"/>
+        <stop offset="1" stop-color="#2a1b24"/>
+      </linearGradient>
+      <linearGradient id="wetLot" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#17101b"/>
+        <stop offset="1" stop-color="#08080e"/>
+      </linearGradient>
+      <filter id="glowPink" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="12" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glowTeal" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="12" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glowAmber" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="15" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="16"/>
+      </filter>
+    </defs><rect x="44" y="44" width="936" height="936" rx="212" fill="#0a0b1e" stroke="#33226a" stroke-width="8"/><ellipse cx="512" cy="552" rx="360" ry="330" fill="#31145c" opacity="0.16"/><g transform="translate(512 536) scale(2.25)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <g stroke="#ff4fa0" stroke-width="18" filter="url(#glowPink)"><path d="M -78 -42 L 0 -88 L 78 -42" /></g>
+      <g stroke="#4ff0e0" stroke-width="18" filter="url(#glowTeal)">
+        <path d="M -82 -28 V 76 H 82 V -28" />
+        <path d="M -26 -28 L -64 6 L -26 40"/>
+        <path d="M 26 -28 L 64 6 L 26 40"/>
+      </g>
+      <path d="M 18 -42 L -18 54" stroke="#ff4fa0" stroke-width="18" filter="url(#glowPink)"/>
+    </g></svg>

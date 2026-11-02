@@ -66,6 +66,8 @@ import {
   type PaneView,
 } from "../lib/paneView"
 import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
+import { Icon, type IconName } from "../components/Icon"
+import { EmptyState } from "../components/EmptyState"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -114,11 +116,17 @@ export function Workspace() {
         <div className="mx-auto mt-14 grid max-w-xl gap-4 px-6">
           <div>
             <h1 className="m-0">Pick a session</h1>
-            <p className="m-0 mt-1 text-mut">
-              {list.length === 0
-                ? "No sessions are running. Start one from the Sessions page."
-                : "Choose a session to see its transcript and work with it."}
-            </p>
+            {list.length === 0 ? (
+              <EmptyState picture="empty-sessions">
+                <p className="m-0 mt-1 text-mut">
+                  No sessions are running. Start one from the Sessions page.
+                </p>
+              </EmptyState>
+            ) : (
+              <p className="m-0 mt-1 text-mut">
+                Choose a session to see its transcript and work with it.
+              </p>
+            )}
           </div>
           {list.length > 0 ? (
             <div className="panel overflow-hidden">
@@ -208,6 +216,15 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
 }
 
 type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources"
+/** Each side panel's icon from the Codehouse pack. */
+const SIDE_ICON: Record<Side, IconName> = {
+  plan: "plan",
+  files: "files",
+  changes: "changes",
+  terminal: "terminal",
+  artifacts: "artifacts",
+  sources: "sources",
+}
 const SIDE_LABEL: Record<Side, string> = {
   plan: "Plan",
   files: "Files",
@@ -486,6 +503,7 @@ function SessionPane({
               aria-controls={`rail-${session.id}`}
               onClick={() => toggleSide("artifacts")}
             >
+              <Icon name="artifacts" size={14} />
               Artifacts
             </button>
             <button
@@ -498,6 +516,7 @@ function SessionPane({
               aria-controls={`rail-${session.id}`}
               onClick={() => toggleSide("sources")}
             >
+              <Icon name="sources" size={14} />
               Sources{sourceCount ? ` ${sourceCount}` : ""}
             </button>
           </span>
@@ -515,6 +534,7 @@ function SessionPane({
                 aria-controls={`rail-${session.id}`}
                 onClick={() => toggleSide(t)}
               >
+                <Icon name={SIDE_ICON[t]} size={14} />
                 {SIDE_LABEL[t]}
               </button>
             ))}
@@ -1540,7 +1560,7 @@ function Composer({
                   area.current?.focus()
                 }}
               >
-                <span aria-hidden="true">&times;</span>
+                <Icon name="close" size={12} />
               </button>
             </li>
           ))}
@@ -1856,9 +1876,7 @@ function UserMessage({
               aria-label="Retry: carry on from just before this message, sending it again"
               onClick={() => void carryOnFrom(sessionId, point, text)}
             >
-              <span aria-hidden="true" className="copy-icon">
-                ↻
-              </span>
+              <Icon name="auto" size={14} className="copy-icon" />
               Retry
             </button>
           ) : null}
@@ -1873,9 +1891,7 @@ function UserMessage({
               }
               onClick={() => (canFork ? setEditing(text) : composeIn(sessionId, text))}
             >
-              <span aria-hidden="true" className="copy-icon">
-                ✎
-              </span>
+              <Icon name="rename" size={14} className="copy-icon" />
               Edit
             </button>
           ) : null}

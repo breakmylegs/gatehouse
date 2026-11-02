@@ -7,6 +7,7 @@ import { AccountsDialog } from "./AccountsDialog"
 import { Menu } from "./Menu"
 import { openPalette } from "./Rail"
 import { SessionCode } from "./SessionCode"
+import { Icon } from "./Icon"
 
 /** A session's state in a word, for the strip. */
 function stateWord(s: {
@@ -99,9 +100,7 @@ export function CommandDeck() {
               aria-expanded={confirmKill}
               onClick={() => setConfirmKill((v) => !v)}
             >
-              <span aria-hidden="true" className="kill-icon">
-                ⏻
-              </span>
+              <Icon name="kill-switch" className="kill-icon" />
               Stop everything
               <kbd aria-hidden="true">Ctrl Shift K</kbd>
             </button>

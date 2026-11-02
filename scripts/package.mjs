@@ -19,8 +19,12 @@ import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { icoFromPngs } from "./ico.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
+// The Codehouse visual identity pack's files for the Windows side (owner, 2 Nov).
+const brand = (f) => path.join(root, "packaging", "brand", f)
+const ICON_SIZES = [16, 24, 32, 48, 64, 128, 256]
 const args = process.argv.slice(2)
 const has = (f) => args.includes(f)
 const outIdx = args.indexOf("--out")
@@ -184,21 +188,9 @@ const csc = [
   process.env.windir + "\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe",
 ].find((p) => fs.existsSync(p))
 if (!csc) throw new Error("The C# compiler that ships with Windows (csc.exe) was not found.")
-// An .ico can hold a PNG, so the app icon is the phone's icon.
-const png = fs.readFileSync(path.join(root, "apps/phone/public/icon-192.png"))
-const ico = Buffer.alloc(22 + png.length)
-ico.writeUInt16LE(0, 0)
-ico.writeUInt16LE(1, 2)
-ico.writeUInt16LE(1, 4)
-ico[6] = 192
-ico[7] = 192
-ico.writeUInt16LE(1, 10)
-ico.writeUInt16LE(32, 12)
-ico.writeUInt32LE(png.length, 14)
-ico.writeUInt32LE(22, 18)
-png.copy(ico, 22)
+// The app icon: the Codehouse pack's mark at each size Windows asks for, as PNGs inside one .ico.
 const icoFile = path.join(outBase, "gatehouse.ico")
-fs.writeFileSync(icoFile, ico)
+fs.writeFileSync(icoFile, icoFromPngs(ICON_SIZES.map((n) => brand(`codehouse-icon-${n}.png`))))
 // The window app uses Microsoft's WebView2 libraries, fetched once from NuGet and kept in dist-app/.cache.
 const WV2 = "1.0.4314.35"
 const cache = path.join(outBase, ".cache")
@@ -301,6 +293,12 @@ fs.copyFileSync(
   path.join(root, "apps", "web", "public", "codehouse", "splash.png"),
   path.join(dest, "splash.png"),
 )
+// The tray marks from the pack, normal and waiting on you, at the two sizes the tray uses.
+for (const state of ["normal", "attention"])
+  for (const n of [16, 32]) {
+    const f = `tray-${state}-${n}.png`
+    fs.copyFileSync(brand(f), path.join(dest, f))
+  }
 fs.copyFileSync(path.join(wv2Dir, "LICENSE.txt"), path.join(dest, "WebView2-LICENSE.txt"))
 
 fs.writeFileSync(

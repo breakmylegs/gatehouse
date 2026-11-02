@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { EmptyState } from "../components/EmptyState"
 
 interface Contents {
   commands: number
@@ -116,10 +117,12 @@ export function Marketplace() {
       ) : !data ? (
         <p className="m-0 text-mut">Reading the marketplaces…</p>
       ) : data.plugins.length === 0 ? (
-        <p className="m-0 text-mut">
-          No marketplace on this computer lists any plugins. Claude Code adds its official
-          marketplace the first time it starts.
-        </p>
+        <EmptyState picture="empty-marketplace">
+          <p className="m-0 text-mut">
+            No marketplace on this computer lists any plugins. Claude Code adds its official
+            marketplace the first time it starts.
+          </p>
+        </EmptyState>
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0" aria-label="Plugins">
           {shown.map((p) => (

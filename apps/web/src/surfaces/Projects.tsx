@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { useStore } from "../store"
+import { EmptyState } from "../components/EmptyState"
 
 interface Summary {
   name: string
@@ -153,7 +154,11 @@ export function Projects() {
           </form>
           <nav aria-label="Your projects" className="settings-nav grid gap-0.5">
             {list === undefined ? <p className="m-0 text-mut">Loading…</p> : null}
-            {list?.length === 0 ? <p className="m-0 text-mut">No projects yet.</p> : null}
+            {list?.length === 0 ? (
+              <EmptyState picture="empty-projects">
+                <p className="m-0 text-mut">No projects yet.</p>
+              </EmptyState>
+            ) : null}
             {list?.map((p) => (
               <button
                 key={p.name}

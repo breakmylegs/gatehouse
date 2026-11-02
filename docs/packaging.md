@@ -10,7 +10,8 @@ It does not contain the whole application. It finds its files in the folder arou
 Codehouse\
   Codehouse.exe              the window, with the tray icon and the quick prompt (packaging/CodehouseApp.cs, Overlay.cs, Hotkey.cs)
   Codehouse-Console.exe      the same thing in a console window, for troubleshooting and scripts
-  splash.png                 the start-up picture the window shows while it starts
+  splash.png                 the start-up picture the window shows while it starts (from the visual identity pack)
+  tray-*.png                 the tray marks, normal and waiting on you, at 16 and 32 px (docs/brand/README.md)
   Microsoft.Web.WebView2.Core.dll, Microsoft.Web.WebView2.WinForms.dll, WebView2Loader.dll, WebView2-LICENSE.txt
   runtime\node.exe           the Node it runs on
   app\                       the application, with its production node_modules

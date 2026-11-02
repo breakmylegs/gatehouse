@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
-import { BUILTIN_PICTURES, loadUserPicture, USER_PREFIX } from "../lib/scenes"
+import { BUILTIN_PICTURES, loadUserPicture, sceneFile, USER_PREFIX } from "../lib/scenes"
 import { useStore } from "../store"
 
 function Thumb({ choice, label }: { choice: string; label: string }) {
+  const theme = useStore((s) => s.theme)
   const [src, setSrc] = useState<string>()
   useEffect(() => {
     if (!choice.startsWith(USER_PREFIX)) {
       const hit = BUILTIN_PICTURES.find((p) => p.id === choice)
-      setSrc(hit ? `./${hit.file}` : undefined)
+      setSrc(hit ? `./${sceneFile(hit, theme)}` : undefined)
       return
     }
     let url: string | undefined
@@ -22,7 +23,7 @@ function Thumb({ choice, label }: { choice: string; label: string }) {
       gone = true
       if (url) URL.revokeObjectURL(url)
     }
-  }, [choice])
+  }, [choice, theme])
   return src ? (
     <img src={src} alt="" className="h-14 w-20 rounded object-cover" />
   ) : (

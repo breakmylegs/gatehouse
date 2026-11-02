@@ -24,6 +24,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\dist-app\gatehouse.ico
 UninstallDisplayIcon={app}\Codehouse.exe
+; The setup artwork from the Codehouse visual identity pack.
+WizardImageFile=brand\installer-side.png
+WizardSmallImageFile=brand\installer-small.png
 
 [Tasks]
 Name: "logon"; Description: "Start Codehouse when I sign in"; Flags: unchecked

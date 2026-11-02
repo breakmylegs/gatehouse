@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { fillPrompt, variablesOf, type SavedPrompt } from "../lib/prompts"
 import type { SessionMeta } from "../lib/sessionMeta"
+import { Icon } from "./Icon"
 
 type Panel = "none" | "prompts" | "commands" | "connectors" | "plugins"
 
@@ -106,14 +107,7 @@ export function PlusMenu({
         disabled={disabled || busy}
         onClick={() => (open ? close() : setOpen(true))}
       >
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-          <path
-            d="M7 1.5v11M1.5 7h11"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-          />
-        </svg>
+        <Icon name="new" />
       </button>
       {open ? (
         <div

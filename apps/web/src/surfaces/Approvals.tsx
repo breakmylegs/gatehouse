@@ -8,6 +8,7 @@ import { SessionCode } from "../components/SessionCode"
 import { age } from "../lib/format"
 import { useNow } from "../lib/useNow"
 import { usePending, useStore } from "../store"
+import { EmptyState } from "../components/EmptyState"
 
 export function Approvals() {
   const pending = usePending()
@@ -84,11 +85,11 @@ export function Approvals() {
           ) : null}
         </div>
         {pending.length === 0 ? (
-          <div className="px-4 py-2">
+          <EmptyState picture="all-done">
             <p className="m-0 text-mut">
               Nothing is waiting. Automatic decisions are going through.
             </p>
-          </div>
+          </EmptyState>
         ) : (
           <Virtuoso
             ref={list}

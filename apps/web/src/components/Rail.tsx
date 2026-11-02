@@ -15,6 +15,7 @@ import {
 import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { openExport } from "./ExportDialog"
+import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
 import { RenameDialog } from "./RenameDialog"
@@ -26,17 +27,35 @@ import {
   titleOf,
 } from "../lib/sessionActions"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
+import { EmptyState } from "./EmptyState"
 
 /** Opens the Ctrl+K palette from a button. */
 export const openPalette = () => window.dispatchEvent(new Event("codeh:palette"))
 
-const STATE_MARK: Record<string, { text: string; className: string }> = {
-  waiting: { text: "Needs you", className: "font-semibold text-warn" },
-  running: { text: "Working", className: "text-shell-tx" },
-  starting: { text: "Starting", className: "text-shell-mut" },
-  error: { text: "Stopped", className: "text-sev" },
-  ended: { text: "Ended", className: "text-shell-mut" },
-  paused: { text: "Paused", className: "font-semibold text-warn" },
+const STATE_MARK: Record<string, { text: string; className: string; icon: IconName }> = {
+  waiting: { text: "Needs you", className: "font-semibold text-warn", icon: "needs-you" },
+  running: { text: "Working", className: "text-shell-tx", icon: "working" },
+  starting: { text: "Starting", className: "text-shell-mut", icon: "waiting" },
+  error: { text: "Stopped", className: "text-sev", icon: "failed" },
+  ended: { text: "Ended", className: "text-shell-mut", icon: "ended" },
+  paused: { text: "Paused", className: "font-semibold text-warn", icon: "paused" },
+}
+
+/** Each page's icon from the Codehouse pack, where the sidebar shows it. */
+const PAGE_ICON: Partial<Record<Route, IconName>> = {
+  approvals: "needs-you",
+  sessions: "code",
+  usage: "usage",
+  projects: "projects",
+  memory: "memory",
+  prompts: "prompts",
+  marketplace: "marketplace",
+  policy: "policy",
+  audit: "audit-log",
+  approver: "approver",
+  devices: "devices",
+  settings: "settings",
+  guide: "help",
 }
 
 const FOLDED_KEY = "gatehouse.rail.folded"
@@ -147,7 +166,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
           aria-label="Hide the sidebar (Ctrl+B)"
           onClick={onHide}
         >
-          <span aria-hidden="true">&laquo;</span>
+          <Icon name="sidebar-hide" />
         </button>
       </div>
 
@@ -167,7 +186,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
               }
             }}
           >
-            <span aria-hidden="true">{m === "chat" ? "\u{1F4AC}\uFE0E" : "</>"}</span>
+            <Icon name={m} size={15} />
             {m === "chat" ? "Chat" : "Code"}
           </button>
         ))}
@@ -177,11 +196,11 @@ export function Rail({ onHide }: { onHide: () => void }) {
         <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
           {(
             [
-              ["chat", "+", "New chat"],
-              ["projects", "\u2261", "Projects"],
-              ["memory", "\u25CB", "Memory"],
-              ["prompts", "\u275D", "Prompts"],
-            ] as const
+              ["chat", "new", "New chat"],
+              ["projects", "projects", "Projects"],
+              ["memory", "memory", "Memory"],
+              ["prompts", "prompts", "Prompts"],
+            ] as const satisfies ReadonlyArray<readonly [Route, IconName, string]>
           ).map(([r, mark, label]) => (
             <li key={r}>
               <button
@@ -189,10 +208,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 aria-current={route === r ? "page" : undefined}
                 onClick={() => go(r)}
               >
-                <span>
-                  <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                    {mark}
-                  </span>
+                <span className="rail-item-label">
+                  <Icon name={mark} />
                   {label}
                 </span>
               </button>
@@ -200,10 +217,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
           ))}
           <li>
             <button className="rail-item" onClick={openPalette}>
-              <span>
-                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                  /
-                </span>
+              <span className="rail-item-label">
+                <Icon name="search" />
                 Search
               </span>
               <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
@@ -218,10 +233,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
               aria-current={route === "dashboard" ? "page" : undefined}
               onClick={() => go("dashboard")}
             >
-              <span>
-                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                  &#8962;
-                </span>
+              <span className="rail-item-label">
+                <Icon name="home" />
                 Dashboard
               </span>
             </button>
@@ -232,10 +245,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
               aria-current={route === "sessions" ? "page" : undefined}
               onClick={() => go("sessions")}
             >
-              <span>
-                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                  +
-                </span>
+              <span className="rail-item-label">
+                <Icon name="new" />
                 New session
               </span>
             </button>
@@ -246,20 +257,16 @@ export function Rail({ onHide }: { onHide: () => void }) {
               aria-current={route === "chat" ? "page" : undefined}
               onClick={() => go("chat")}
             >
-              <span>
-                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                  +
-                </span>
+              <span className="rail-item-label">
+                <Icon name="new" />
                 New chat
               </span>
             </button>
           </li>
           <li>
             <button className="rail-item" onClick={openPalette}>
-              <span>
-                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                  /
-                </span>
+              <span className="rail-item-label">
+                <Icon name="search" />
                 Search
               </span>
               <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
@@ -275,8 +282,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
                   aria-current={route === r ? "page" : undefined}
                   onClick={() => go(r)}
                 >
-                  <span>
-                    <span aria-hidden="true" className="mr-2 inline-block w-3" />
+                  <span className="rail-item-label">
+                    <Icon name={PAGE_ICON[r] ?? "more"} />
                     {page.label}
                   </span>
                 </button>
@@ -290,10 +297,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
               placement="right"
               tone="shell"
               button={
-                <span>
-                  <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                    &middot;&middot;&middot;
-                  </span>
+                <span className="rail-item-label">
+                  <Icon name="more" />
                   More
                 </span>
               }
@@ -327,7 +332,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
             className="rail-icon"
             tone="shell"
             align="end"
-            button={<span aria-hidden="true">&middot;&middot;&middot;</span>}
+            button={<Icon name="more" />}
             items={[
               hideEnded
                 ? { label: "Show ended sessions", onSelect: () => chooseHide(false) }
@@ -341,11 +346,13 @@ export function Rail({ onHide }: { onHide: () => void }) {
           />
         </div>
         {groups.length === 0 && hiddenEnded === 0 ? (
-          <p className="m-0 px-2 text-[13.5px] text-shell-mut">
-            {mode === "chat"
-              ? "No chats yet. Choose New chat to start one."
-              : "No sessions yet. Choose New session to start one."}
-          </p>
+          <EmptyState picture={mode === "chat" ? "empty-chats" : "empty-sessions"}>
+            <p className="m-0 text-[13.5px] text-shell-mut">
+              {mode === "chat"
+                ? "No chats yet. Choose New chat to start one."
+                : "No sessions yet. Choose New session to start one."}
+            </p>
+          </EmptyState>
         ) : null}
         {groups.map((g) => (
           <section key={g.folder} aria-label={`Sessions in ${g.label}`} className="mb-2">
@@ -391,7 +398,13 @@ export function Rail({ onHide }: { onHide: () => void }) {
                           <span className="truncate">{titleOf(s)}</span>
                         </span>
                         {mark ? (
-                          <span className={clsx("shrink-0 text-[12px]", mark.className)}>
+                          <span
+                            className={clsx(
+                              "inline-flex shrink-0 items-center gap-1 text-[12px]",
+                              mark.className,
+                            )}
+                          >
+                            <Icon name={mark.icon} size={13} />
                             {mark.text}
                           </span>
                         ) : null}
@@ -402,7 +415,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
                           className="rail-icon"
                           placement="right"
                           tone="shell"
-                          button={<span aria-hidden="true">&middot;&middot;&middot;</span>}
+                          button={<Icon name="more" />}
                           items={[
                             { label: "Open", onSelect: () => open(s.id) },
                             {

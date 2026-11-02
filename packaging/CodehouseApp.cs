@@ -97,7 +97,7 @@ internal sealed class MainForm : Form
         Controls.Add(web);
 
         splash.Dock = DockStyle.Fill;
-        splash.BackColor = Color.FromArgb(11, 11, 12);
+        splash.BackColor = Color.FromArgb(10, 11, 30);
         try
         {
             string pic = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "splash.png");
@@ -143,8 +143,12 @@ internal sealed class MainForm : Form
         Controls.Add(splash);
         splash.BringToFront();
 
-        tray.Icon = Icon;
+        // The tray marks from the Codehouse pack: the normal one, and the one with the amber dot while a decision waits.
+        trayNormal = TrayIcon("normal");
+        trayAttention = TrayIcon("attention");
+        tray.Icon = trayNormal ?? Icon;
         tray.Text = "Codehouse";
+        Activated += delegate { tray.Icon = trayNormal ?? Icon; };
         ContextMenuStrip menu = new ContextMenuStrip();
         menu.Items.Add("Open Codehouse", null, delegate { ShowWindow(); });
         quickItem = new ToolStripMenuItem("Quick prompt", null, delegate { OpenQuick(); });
@@ -645,10 +649,26 @@ internal sealed class MainForm : Form
     }
 
     private DateTime lastAttention = DateTime.MinValue;
+    private Icon trayNormal;
+    private Icon trayAttention;
+
+    /// <summary>A tray mark from the pack (tray-normal-16.png and the rest, next to the exe), sized for the screen.</summary>
+    private static Icon TrayIcon(string state)
+    {
+        try
+        {
+            int size = SystemInformation.SmallIconSize.Width > 16 ? 32 : 16;
+            string file = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tray-" + state + "-" + size + ".png");
+            if (!File.Exists(file)) return null;
+            using (Bitmap b = new Bitmap(file)) return Icon.FromHandle(b.GetHicon());
+        }
+        catch (Exception) { return null; }
+    }
 
     private void Attention()
     {
         if (ContainsFocus && Visible && WindowState != FormWindowState.Minimized) return;
+        if (trayAttention != null) tray.Icon = trayAttention;
         // The Host's line and the page can both report the same request; show one notification for it.
         if ((DateTime.UtcNow - lastAttention).TotalSeconds < 3) return;
         lastAttention = DateTime.UtcNow;

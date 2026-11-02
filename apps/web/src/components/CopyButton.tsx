@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useEffect, useRef, useState } from "react"
 import { copyText } from "../lib/copy"
+import { Icon } from "./Icon"
 
 /**
  * A small Copy button that says Copied for a moment (owner, 1 Nov). The text can be worked out when it is pressed,
@@ -40,9 +41,7 @@ export function CopyButton({
           })
         }}
       >
-        <span aria-hidden="true" className="copy-icon">
-          {done === "copied" ? "✓" : "⧉"}
-        </span>
+        <Icon name={done === "copied" ? "done" : "copy"} size={14} className="copy-icon" />
         {done === "copied" ? "Copied" : done === "failed" ? "Could not copy" : label}
       </button>
       <span role="status" className="sr-only">

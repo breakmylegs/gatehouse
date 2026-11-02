@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { download } from "../lib/exportMarkdown"
+import { EmptyState } from "../components/EmptyState"
 
 interface Entry {
   id: string
@@ -144,7 +145,11 @@ export function MemoryPage() {
       {scopes.map(([key, title, list]) => (
         <section key={key} aria-label={title} className="grid gap-2">
           <h2 className="m-0 text-[16px]">{title}</h2>
-          {list.length === 0 ? <p className="m-0 text-mut">Nothing kept here yet.</p> : null}
+          {list.length === 0 ? (
+            <EmptyState picture="empty-memory">
+              <p className="m-0 text-mut">Nothing kept here yet.</p>
+            </EmptyState>
+          ) : null}
           <ul className="m-0 grid list-none gap-2 p-0">
             {list.map((e) => (
               <li key={e.id} className="panel grid gap-1.5 p-3">

@@ -3,18 +3,19 @@ import { pictureUrl } from "../lib/scenes"
 import { useStore } from "../store"
 
 /**
- * the Codehouse look, always on: a very faint picture behind the page, in the light and the dark theme. It paints through a CSS variable that the page
+ * The Codehouse look, always on: a very faint scene from the pack behind the page, its light version in the light theme. It paints through a CSS variable that the page
  * background reads (see styles.css), so it sits behind every panel and never over any text.
  */
 export function SceneBackdrop() {
   const choice = useStore((s) => s.jcPic)
   const route = useStore((s) => s.route)
+  const theme = useStore((s) => s.theme)
 
   useEffect(() => {
     const root = document.documentElement
     let cancelled = false
     let made: string | undefined
-    void pictureUrl(choice, route).then((url) => {
+    void pictureUrl(choice, route, theme).then((url) => {
       if (cancelled) {
         if (url?.startsWith("blob:")) URL.revokeObjectURL(url)
         return
@@ -29,7 +30,7 @@ export function SceneBackdrop() {
       cancelled = true
       if (made?.startsWith("blob:")) URL.revokeObjectURL(made)
     }
-  }, [choice, route])
+  }, [choice, route, theme])
 
   return null
 }

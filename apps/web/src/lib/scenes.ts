@@ -1,15 +1,63 @@
 import type { Route } from "../store"
 
 /**
- * The pictures that come with the app, for the Codehouse look: original roadhouse scenes drawn for it (owner, 2 Nov:
- * royalty-free, nothing taken from any film). A choice saved for a picture that has gone falls back to the first.
+ * The pictures that come with the app, for the Codehouse look: the background scenes from the Codehouse visual
+ * identity pack (owner, 2 Nov: original artwork, royalty-free, nothing taken from any film). Each has a dark version
+ * and, where the pack has one, a light version for the light theme. The first four ids are the ones earlier versions
+ * saved, so a saved choice still finds its picture; a choice for a picture that has gone falls back to the first.
  */
 export const BUILTIN_PICTURES = [
-  { id: "neon", label: "The sign at night", file: "codehouse/neon-sign.svg" },
-  { id: "highway", label: "The highway at dusk", file: "codehouse/highway.svg" },
-  { id: "bar", label: "Inside the bar", file: "codehouse/bar.svg" },
-  { id: "lot", label: "The parking lot", file: "codehouse/lot.svg" },
-] as const
+  {
+    id: "neon",
+    label: "The sign at night",
+    file: "codehouse/scenes/scene-neon-sign.png",
+    light: "codehouse/scenes/scene-neon-sign-light.png",
+  },
+  {
+    id: "highway",
+    label: "The highway",
+    file: "codehouse/scenes/scene-highway.png",
+    light: "codehouse/scenes/scene-highway-light.png",
+  },
+  {
+    id: "bar",
+    label: "Inside the bar",
+    file: "codehouse/scenes/scene-bar.png",
+    light: "codehouse/scenes/scene-bar-light.png",
+  },
+  {
+    id: "lot",
+    label: "The parking lot",
+    file: "codehouse/scenes/scene-lot.png",
+    light: "codehouse/scenes/scene-lot-light.png",
+  },
+  {
+    id: "front",
+    label: "The front door",
+    file: "codehouse/scenes/scene-front.png",
+    light: "codehouse/scenes/scene-front-light.png",
+  },
+  {
+    id: "porch",
+    label: "The porch",
+    file: "codehouse/scenes/scene-porch.png",
+    light: "codehouse/scenes/scene-porch-light.png",
+  },
+  {
+    id: "car-park",
+    label: "The car park",
+    file: "codehouse/scenes/scene-car-park.png",
+    light: "codehouse/scenes/scene-car-park-light.png",
+  },
+  { id: "jukebox", label: "The jukebox", file: "codehouse/scenes/scene-jukebox.png" },
+  { id: "dawn", label: "Dawn", file: "codehouse/scenes/scene-dawn.png" },
+] as const satisfies ReadonlyArray<{ id: string; label: string; file: string; light?: string }>
+
+export type Theme = "light" | "dark"
+
+/** The file to show for a picture in a theme: its light version in the light theme, if it has one. */
+export const sceneFile = (p: (typeof BUILTIN_PICTURES)[number], theme: Theme): string =>
+  theme === "light" && "light" in p ? p.light : p.file
 
 export type PictureChoice = "auto" | string
 
@@ -17,13 +65,22 @@ export type PictureChoice = "auto" | string
 const AUTO: Partial<Record<Route, string>> = {
   approvals: "neon",
   sessions: "highway",
+  dashboard: "car-park",
   workspace: "bar",
+  chat: "porch",
+  projects: "front",
+  memory: "jukebox",
+  prompts: "jukebox",
+  marketplace: "front",
+  usage: "car-park",
   policy: "lot",
   audit: "highway",
+  approver: "lot",
   devices: "bar",
   settings: "neon",
-  setup: "lot",
-  "first-run": "lot",
+  guide: "dawn",
+  setup: "dawn",
+  "first-run": "dawn",
 }
 
 export const autoPictureFor = (route: Route): string => AUTO[route] ?? "neon"
@@ -45,9 +102,13 @@ export async function loadUserPicture(name: string): Promise<string | undefined>
 }
 
 /** The address to paint for a choice, or undefined while a user picture loads or if it is gone. */
-export async function pictureUrl(choice: PictureChoice, route: Route): Promise<string | undefined> {
+export async function pictureUrl(
+  choice: PictureChoice,
+  route: Route,
+  theme: Theme = "dark",
+): Promise<string | undefined> {
   if (choice.startsWith(USER_PREFIX)) return loadUserPicture(choice.slice(USER_PREFIX.length))
   const id = choice === "auto" ? autoPictureFor(route) : choice
   const hit = BUILTIN_PICTURES.find((p) => p.id === id) ?? BUILTIN_PICTURES[0]
-  return `./${hit.file}`
+  return `./${sceneFile(hit, theme)}`
 }

@@ -20,6 +20,7 @@ import { EarlierSessions } from "../components/EarlierSessions"
 import { titleOf } from "../lib/sessionActions"
 import { SessionCode } from "../components/SessionCode"
 import clsx from "clsx"
+import { EmptyState } from "../components/EmptyState"
 
 export const MODELS: Array<{ id: string; label: string }> = [
   { id: "", label: "Default model" },
@@ -337,9 +338,9 @@ export function Sessions() {
       </form>
 
       {sorted.length === 0 ? (
-        <div>
-          <p className="text-mut">No sessions yet. Start one above.</p>
-        </div>
+        <EmptyState picture="empty-sessions">
+          <p className="m-0 text-mut">No sessions yet. Start one above.</p>
+        </EmptyState>
       ) : (
         <table className="panel w-full border-separate border-spacing-0 overflow-hidden text-left">
           <caption className="sr-only">Sessions, those waiting on you first</caption>

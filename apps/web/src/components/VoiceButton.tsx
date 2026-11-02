@@ -1,5 +1,6 @@
 import { useSyncExternalStore, type RefObject } from "react"
 import { inShell, tellShell } from "../lib/shell"
+import { Icon } from "./Icon"
 
 /**
  * Voice (W1-16): a microphone beside the prompt box that starts Windows voice typing there, as Win+H does. It is off
@@ -55,24 +56,7 @@ export function VoiceButton({
         tellShell("voice")
       }}
     >
-      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-        <rect
-          x="4.5"
-          y="1"
-          width="5"
-          height="8"
-          rx="2.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-        />
-        <path
-          d="M2.5 6.5a4.5 4.5 0 0 0 9 0M7 11v2"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-        />
-      </svg>
+      <Icon name="microphone" />
     </button>
   )
 }

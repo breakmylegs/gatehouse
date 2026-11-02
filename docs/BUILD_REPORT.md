@@ -127,6 +127,16 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **In a coding session** files changed after that point stay changed; a checkpoint restore puts them back.
 - Tests: `apps/host/test/redo.test.ts`, `apps/web/test/redo.test.tsx` (new), `restore.test.tsx` (a fork's earlier conversation stops at the point), `copy.test.tsx` (Edit opens in place). Six break checks fail as they should.
 
+## Phase 92: the Codehouse visual identity pack (2 Nov, owner: "These are the new visuals to use for Codehouse ... This is a priority")
+
+- **What it does:** the app now uses the owner's visual identity pack, as supplied, everywhere a picture or icon shows. Nothing is drawn by the build. `docs/brand/README.md` says where each file went.
+- **Windows:** the exe and installer icon is the pack's mark at seven sizes (16 to 256) in one .ico (`scripts/ico.mjs`; it was one 192 px picture before). The tray uses the pack's tray mark, and its amber-dot version while a decision waits, back to normal when the window is opened. The setup wizard shows the pack's side and small artwork (PNG, checked with Inno Setup 6 on this computer). The start-up window shows the pack's splash on its night-sky colour.
+- **Desktop interface:** 56 interface icons from the pack's sprite (`components/Icon.tsx`) in the sidebar (each page, New chat and New session, Search, More, hide the sidebar, the Chat | Code switch, and each session's state), the pane tools (Plan, Files, Changes, Terminal, Artifacts, Sources), Copy, Retry, Edit, the add menu, the microphone, removing a picture and the kill switch. Empty pages and lists show the pack's spot pictures (approvals all done, sessions, chats, projects, memory, marketplace, search with no match). The scene behind each screen is one of the pack's nine scenes, its light version in the light theme; the four scene ids saved by earlier versions still find a picture. The page icon and the boot picture are the pack's.
+- **Phone:** the pack's home-screen, maskable and Apple touch icons.
+- **Removed:** the four scene drawings made in Phase 88 (`neon-sign.svg`, `highway.svg`, `bar.svg`, `lot.svg`).
+- **Not used yet:** the wordmarks are in the app's files for a later place that wants one. The offline picture waits for a full-page offline state (being offline is a banner today).
+- Tests: `apps/web/test/brand.test.tsx`, `apps/host/test/brand-files.test.ts` (new; the .ico goes through the C# compiler), `scenes.test.tsx` (the pack's scenes in both themes, earlier ids). Seven break checks fail as they should.
+
 ## Owner to-do list (running)
 
 Things that cannot be done from the laptop session. This list is repeated at the end of the report.
@@ -134,6 +144,7 @@ Things that cannot be done from the laptop session. This list is repeated at the
 1. Phase 6 needs the owner's server and an iPhone: deploy the Relay (`deploy/relay`), pair the phone, and run the real-device checks in the runbook.
 2. Set `expectedOrg` in Gatehouse settings to `ACN - Premium` (the organisation the SDK reported on this account).
 3. Re-check the managed-policy findings below on the managed build of the laptop if it differs from this one.
+4. Upload `docs/brand/social-preview.png` as the repository's social preview (GitHub, Settings, General, Social preview). GitHub has no API for it.
 
 ## Environment facts found while building
 

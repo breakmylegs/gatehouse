@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { type AppCommand, buildCommands, rankCommands } from "../lib/commands"
 import { readHideEnded } from "../lib/rail"
 import { usePending, useSessionList, useStore } from "../store"
+import { EmptyState } from "./EmptyState"
 
 /**
  * Ctrl+K: jump to a page, a session or a waiting request, or do what the menus do, all from the one list in
@@ -106,7 +107,11 @@ export function CommandPalette() {
           className="field w-full !rounded-none !border-0 !border-b !border-line"
         />
         <Command.List className="max-h-80 overflow-auto p-1">
-          <Command.Empty className="p-3 text-mut">Nothing matches.</Command.Empty>
+          <Command.Empty className="text-mut">
+            <EmptyState picture="empty-search">
+              <p className="m-0">Nothing matches.</p>
+            </EmptyState>
+          </Command.Empty>
           {pending.length > 0 ? (
             <Command.Group heading="Waiting on you" className="text-[13px] text-mut">
               {pending.slice(0, 50).map((p) => (
