@@ -2339,3 +2339,17 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   outline: 2px solid var(--c-acc);
   outline-offset: 1px;
 }
+
+/* The step in progress on the plan card breathes gently; still when you ask for less motion. */
+.progress-dot {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: progress-breathe 1.6s ease-in-out infinite;
+}
+@keyframes progress-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-dot { animation: none; }
+}

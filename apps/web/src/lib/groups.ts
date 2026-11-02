@@ -94,8 +94,17 @@ function part(t: Tool): { key: string; one: string; many: (n: number) => string 
       }
       return { key: "fetch", one: `read ${host}`, many: (n) => `read ${n} web pages` }
     }
-    case "TodoWrite":
-      return { key: "plan", one: "updated the plan", many: () => "updated the plan" }
+    case "TodoWrite": {
+      // How far the plan was at this update: "updated the plan (3 of 7 done)".
+      const todos = Array.isArray((t.input as { todos?: unknown }).todos)
+        ? (t.input as { todos: Array<{ status?: unknown }> }).todos
+        : []
+      const done = todos.filter((x) => x?.status === "completed").length
+      const said = todos.length
+        ? `updated the plan (${done} of ${todos.length} done)`
+        : "updated the plan"
+      return { key: "plan", one: said, many: () => said }
+    }
     case "Task":
     case "Agent":
       return { key: "agent", one: "started a helper", many: (n) => `started ${n} helpers` }

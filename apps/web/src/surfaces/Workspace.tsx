@@ -28,6 +28,7 @@ import {
 import { usePictures } from "../lib/pictures"
 import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise, summaryItems } from "../lib/groups"
+import { ProgressCard, StepList } from "../components/ProgressCard"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -687,6 +688,11 @@ function SessionPane({
           <ActivityLine sessionId={session.id} cwd={session.cwd} compact={barFolded} />
         ) : background.length ? (
           <BackgroundLine tasks={background} />
+        ) : null}
+        {/* The plan while there is one to follow: steps done, in progress and not started (owner, 2 Nov). */}
+        {transcript.todos.length &&
+        (session.state === "running" || transcript.todos.some((t) => t.status !== "completed")) ? (
+          <ProgressCard todos={transcript.todos} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} starting={session.state === "starting"} />
         {/* What the session runs on, under the prompt box where you look when you send. */}
@@ -1625,19 +1631,7 @@ function TodoPanel({ todos }: { todos: Todo[] }) {
       {todos.length === 0 ? (
         <p className="m-0 text-mut">Claude has not made a list yet.</p>
       ) : (
-        <ul className="m-0 grid list-none gap-1.5 p-0">
-          {todos.map((t, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <span aria-hidden="true" className="mt-0.5 w-4 shrink-0 text-center">
-                {t.status === "completed" ? "✓" : t.status === "in_progress" ? "▶" : "○"}
-              </span>
-              <span className={t.status === "completed" ? "text-mut line-through" : undefined}>
-                {t.content}
-                <span className="sr-only">{`, ${t.status.replace("_", " ")}`}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
+        <StepList todos={todos} />
       )}
     </section>
   )

@@ -73,6 +73,8 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.
 
+**Progress**: while Claude works through a plan, a card above the prompt box shows each step, ticked when done, glowing while in progress, an empty circle before, with how many are done. A long plan shows the steps around the current one; **Show all** opens it all. Each update to the plan in the conversation says how far it was.
+
 **Chat and Code** at the top of the sidebar switch between the two sides of Codehouse. Chat lists your chats: each project with its chats, then **Chats** for those in no project, with New chat, Projects, Memory and Prompts above. Code lists your coding sessions by folder, with New session and your pages above. It remembers the side you chose, and turns to the right side when you open a chat or a session from Search.
 
 **Ended sessions in the sidebar** are hidden by default, so the list shows what is working or needs you. A line at the bottom says how many are hidden and **Show** brings them back. The ... menu above the list switches this on or off, and **Archive all ended** puts every ended session away at once; they stay under Earlier sessions. A session that stopped with an error is never hidden, and neither is an ended one you have open.

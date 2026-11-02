@@ -114,6 +114,12 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Look:** Codehouse's own sidebar colours, two halves with the chosen one raised; the behaviour follows the reference, the look does not copy it (invariant 16). Keyboard: Tab to it, left and right arrows switch.
 - Tests: `apps/web/test/rail-switch.test.tsx` (new). Three break checks fail as they should.
 
+## Phase 90: the progress card (2 Nov, owner: "showing progress on a card that has radio buttons that show completed, in progress or not started")
+
+- **What it does:** while a session has a plan (Claude's task list) that is not finished, or a turn is running, a card above the prompt box shows each step: a filled circle with a tick when done, a ring with a gently pulsing dot while in progress (still under reduced motion), an empty ring before; the step in progress reads as Claude words it while doing it ("Running the tests"). The header says how many are done, with a slim bar. A plan longer than five shows the steps around the current one; **Show all** opens it. Each plan update in the conversation now reads "updated the plan (3 of 7 done)". The task list in the side panel uses the same marks.
+- **Accessibility:** each step says its state in words to a screen reader ("done", "in progress", "not started"); the bar is a progressbar with its numbers.
+- Tests: `apps/web/test/progress.test.tsx` (new). Three break checks fail as they should.
+
 ## Owner to-do list (running)
 
 Things that cannot be done from the laptop session. This list is repeated at the end of the report.

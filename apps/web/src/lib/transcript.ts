@@ -58,6 +58,8 @@ export type Item =
 export interface Todo {
   content: string
   status: "pending" | "in_progress" | "completed"
+  /** What Claude says while doing it, such as "Running the tests". */
+  activeForm?: string
 }
 
 export interface Transcript {
@@ -259,6 +261,7 @@ export function reduce(t: Transcript, message: unknown): Transcript {
             status: (["pending", "in_progress", "completed"].includes(str(obj(x).status))
               ? str(obj(x).status)
               : "pending") as Todo["status"],
+            ...(str(obj(x).activeForm) ? { activeForm: str(obj(x).activeForm) } : {}),
           }))
         add.push({
           id,
