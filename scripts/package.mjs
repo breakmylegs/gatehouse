@@ -190,7 +190,10 @@ const csc = [
 if (!csc) throw new Error("The C# compiler that ships with Windows (csc.exe) was not found.")
 // The app icon: the Codehouse pack's mark at each size Windows asks for, as PNGs inside one .ico.
 const icoFile = path.join(outBase, "gatehouse.ico")
-fs.writeFileSync(icoFile, icoFromPngs(ICON_SIZES.map((n) => brand(`codehouse-icon-${n}.png`))))
+fs.writeFileSync(
+  icoFile,
+  icoFromPngs(ICON_SIZES.map((n) => fs.readFileSync(brand(`codehouse-icon-${n}.png`)))),
+)
 // The window app uses Microsoft's WebView2 libraries, fetched once from NuGet and kept in dist-app/.cache.
 const WV2 = "1.0.4314.35"
 const cache = path.join(outBase, ".cache")

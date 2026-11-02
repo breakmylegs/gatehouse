@@ -26,7 +26,14 @@ describe("threat: markup in text shown to the user", () => {
     const { container } = render(
       <ItemView item={{ id: "1", kind: "text", text: HOSTILE.join("\n\n") }} />,
     )
-    expect(container.querySelector("script, iframe, form, input, style, svg, img")).toBeNull()
+    expect(container.querySelector("script, iframe, form, input, style, img")).toBeNull()
+    // The only pictures are the app's own icons (the Copy button's), each one link into the pack's sprite.
+    for (const svg of container.querySelectorAll("svg")) {
+      expect(svg.getAttribute("data-icon")).toBeTruthy()
+      expect(svg.children).toHaveLength(1)
+      expect(svg.children[0]!.tagName.toLowerCase()).toBe("use")
+      expect(svg.children[0]!.getAttribute("href")).toMatch(/^\.\/codehouse\/icons\.svg#[a-z-]+$/)
+    }
     for (const el of container.querySelectorAll("*")) {
       for (const a of el.getAttributeNames()) expect(a.toLowerCase().startsWith("on")).toBe(false)
     }
