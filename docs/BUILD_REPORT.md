@@ -137,12 +137,19 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Not used yet:** the wordmarks are in the app's files for a later place that wants one. The offline picture waits for a full-page offline state (being offline is a banner today).
 - Tests: `apps/web/test/brand.test.tsx`, `apps/host/test/brand-files.test.ts` (new; the .ico goes through the C# compiler), `scenes.test.tsx` (the pack's scenes in both themes, earlier ids). Seven break checks fail as they should.
 
+## Phase 94: find in this conversation (2 Nov, the everyday features of the Claude and ChatGPT apps)
+
+- **What it does:** Ctrl+F in a session pane opens a small bar over the transcript. It finds the words (ignoring case) in what was said and in each tool's command, path, address, pattern and output, says "2 of 5" or "No matches", marks each matching line at its edge and outlines the one shown, and scrolls it into the middle. Enter goes to the next, Shift+Enter to the one before, the arrow buttons do the same, and Esc or the close button closes it and puts you back in the prompt box. Each pane has its own.
+- **How:** `lib/find.ts` (`itemText`, `findIn`) over the lines the pane shows, `components/FindBar.tsx`, and the pane's list scrolls to the match.
+- Tests: `apps/web/test/find.test.tsx` (new). Six break checks fail as they should (one needed a third match before going back and forward could be told apart).
+
 ## Phase 93: moving over from an install made before the rename (2 Nov, owner: "I might not be able to update this app to the new version based on this error")
 
 - **What happened:** the owner's install (1.0.173, made before the rename) said "The update's description is not valid: Invalid input: expected" its old product name. Its updater only accepts a release under that name, and it cannot be changed from here. Publishing releases under the old name again would bring it back into the releases (invariant 16), so that was not done.
 - **What it does now:** Codehouse-Setup.exe is the one-time way across. It always installs into `%LOCALAPPDATA%\Programs\Codehouse` and the Codehouse Start menu group (`UsePreviousAppDir=no`, `UsePreviousGroup=no`). It finds the earlier install from Windows' record of the same AppId, never by name. While anything runs from that folder (the window, its Host, its sessions' Claude Code) it says so and waits for Retry, because both versions share one single-instance lock and a fresh Codehouse would only bring the old window forward. After installing it removes the earlier folder, the folders its updater kept beside it, and the Start menu, desktop and sign-in shortcuts that started it; shortcuts to anything else stay. It only ever removes a folder directly under `%LOCALAPPDATA%\Programs` that holds the earlier uninstaller, and a file Windows still holds goes at the next sign-in. Data, settings, policy, audit log and sessions in `%LOCALAPPDATA%\Gatehouse` are not touched, so a session that was working carries on.
 - **Checked:** `scripts/installer-move-check.mjs` (new) rehearses it with a test AppId and stand-in folders, a process running from the earlier folder, shortcuts and an updater backup; ten checks pass and it leaves nothing behind. With the wait taken out of the installer, four of them fail. The release stopped part-way while this was found was not published.
 - Docs: `docs/packaging.md` (the steps, replacing a section the rename had garbled).
+- **Release 2.0.7** went out with `--skip-tests`, because the owner could not update: the same day's gate had run the related tests (1,480 of 1,481 passed; the one failure, the XSS test meeting the pack's icons, was fixed and passes), and the release's own run of them takes 25 minutes on this computer. The package check and the installer rehearsal ran.
 
 ## Owner to-do list (running)
 

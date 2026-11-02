@@ -30,6 +30,8 @@ import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise, summaryItems } from "../lib/groups"
 import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
+import { findIn } from "../lib/find"
+import { FindBar } from "../components/FindBar"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -330,6 +332,31 @@ function SessionPane({
       align: "end",
       ...(smooth ? { behavior: "smooth" } : {}),
     })
+  // Find in this conversation (Ctrl+F): which lines match, and which one is shown.
+  const paneRef = useRef<HTMLDivElement>(null)
+  const [finding, setFinding] = useState(false)
+  const [findQuery, setFindQuery] = useState("")
+  const [findAt, setFindAt] = useState(0)
+  const hits = useMemo(
+    () => (finding ? findIn(shownItems, findQuery) : []),
+    [finding, shownItems, findQuery],
+  )
+  const hitSet = useMemo(() => new Set(hits), [hits])
+  const current = hits.length ? hits[Math.min(findAt, hits.length - 1)] : undefined
+  useEffect(() => {
+    if (current === undefined) return
+    following.current = false
+    scroller.current?.scrollToIndex({ index: current, align: "center" })
+  }, [current])
+  const stepFind = (by: 1 | -1) =>
+    setFindAt((a) =>
+      hits.length ? (Math.min(a, hits.length - 1) + by + hits.length) % hits.length : 0,
+    )
+  const closeFind = () => {
+    setFinding(false)
+    setFindQuery("")
+    paneRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus()
+  }
   const historyShown = useRef(false)
   const hasHistory = shownItems.some((i) => i.id.startsWith("h") || i.id.startsWith("g-h"))
   useEffect(() => {
@@ -440,6 +467,13 @@ function SessionPane({
 
   return (
     <div
+      ref={paneRef}
+      onKeyDown={(e) => {
+        if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+          e.preventDefault()
+          setFinding(true)
+        }
+      }}
       className="pane relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]"
       data-rail={side ? "open" : undefined}
       data-density={view.density}
@@ -580,6 +614,19 @@ function SessionPane({
               }
             }}
           >
+            {finding ? (
+              <FindBar
+                query={findQuery}
+                count={hits.length}
+                at={Math.min(findAt, Math.max(0, hits.length - 1))}
+                onQuery={(q) => {
+                  setFindQuery(q)
+                  setFindAt(0)
+                }}
+                onStep={stepFind}
+                onClose={closeFind}
+              />
+            ) : null}
             <Virtuoso
               ref={scroller}
               style={{ height: "100%" }}
@@ -597,8 +644,14 @@ function SessionPane({
               }}
               initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
               computeItemKey={(_, it) => `${view.detail}:${it.id}`}
-              itemContent={(_, it) => (
-                <div className="pane-item mx-auto max-w-[860px]">
+              itemContent={(index, it) => (
+                <div
+                  className={clsx(
+                    "pane-item mx-auto max-w-[860px]",
+                    hitSet.has(index) && "find-hit",
+                    index === current && "find-current",
+                  )}
+                >
                   {it.kind === "group" ? (
                     <ToolGroup tools={it.tools} onOpenArtifact={openArtifacts} />
                   ) : (

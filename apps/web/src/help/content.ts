@@ -75,6 +75,8 @@ Sessions waiting on you are lit and come first. Each has a code and colour that 
 
 **Retry and Edit** on any of your messages carry the conversation on from just before it: **Retry** sends the same words again, **Edit** lets you change them in place (Enter sends, Esc cancels). The new version takes the old one's place, and the old one is kept under Earlier sessions. Wait for Claude to finish first, or stop it. In a coding session, files changed after that point stay as they are.
 
+**Find in this conversation**: press Ctrl+F in a session to find words in what was said, including commands, file paths and tool output. It says how many lines match and outlines the one shown; Enter goes to the next, Shift+Enter to the one before, and Esc closes it and puts you back in the prompt box.
+
 **Progress**: while Claude works through a plan, a card above the prompt box shows each step, ticked when done, glowing while in progress, an empty circle before, with how many are done. A long plan shows the steps around the current one; **Show all** opens it all. Each update to the plan in the conversation says how far it was.
 
 **Chat and Code** at the top of the sidebar switch between the two sides of Codehouse. Chat lists your chats: each project with its chats, then **Chats** for those in no project, with New chat, Projects, Memory and Prompts above. Code lists your coding sessions by folder, with New session and your pages above. It remembers the side you chose, and turns to the right side when you open a chat or a session from Search.

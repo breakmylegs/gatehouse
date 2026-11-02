@@ -12,7 +12,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | O-2 | "Codehouse stopped unexpectedly" with nothing to say why | done | Phase 85: exit code logged, starts again by itself (3 in 10 min) |
 | O-3 | Chat and Code switch at the top left, as in Claude Code | done (Phase 89) | Sidebar toggle: Chat shows chats and New chat, Code shows coding sessions and New session; follows what is open; remembered. Behaviour like Claude's, Codehouse's own look (invariant 16) |
 | O-4 | Progress card: steps done, in progress, not started | done (Phase 90) | Live in the conversation and above the prompt box, from Claude's task list (TodoWrite), with "3 of 7 done" and a bar; screen-reader text for each state |
-| O-5 | The everyday features of the Claude and ChatGPT apps | partial: Retry and Edit done (Phase 91); find in a chat next | Retry a reply and edit-and-resend (fork at a message: SDK resume, resumeSessionAt, forkSession); find in a chat; more from the familiarity research prompt when its report comes |
+| O-5 | The everyday features of the Claude and ChatGPT apps | partial: Retry and Edit (Phase 91) and find in a chat (Phase 94) done | Retry a reply and edit-and-resend (fork at a message: SDK resume, resumeSessionAt, forkSession); find in a chat; more from the familiarity research prompt when its report comes |
 
 ## Wave 0: the safety seam
 

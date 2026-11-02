@@ -2376,3 +2376,24 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   align-items: center;
   gap: 6px;
 }
+
+/* Find in this conversation: the bar over the transcript, and the lines that match (the shown one outlined). */
+.find-bar {
+  position: absolute;
+  top: 8px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}
+.pane-item.find-hit {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--c-acc) 45%, transparent);
+}
+.pane-item.find-current {
+  outline: 2px solid var(--c-acc);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
