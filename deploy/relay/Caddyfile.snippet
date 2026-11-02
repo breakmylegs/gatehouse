@@ -1,0 +1,20 @@
+# Optional. Only needed if you put the Relay behind your own Caddy instead of a tunnel (see docs/relay-local.md).
+# Merge into an existing Caddyfile, do not replace it.
+# The phone app and its API go through Authentik forward auth as an extra layer, on top of the
+# passkey login the Relay requires anyway. If Authentik's login does not survive in the iPhone Home
+# Screen app (see docs/runbook.md), remove the forward_auth block from the second handle and keep
+# it for admin pages only.
+gatehouse.example.com {
+	@device path /api/device/*
+	handle @device {
+		reverse_proxy 127.0.0.1:8087
+	}
+	handle {
+		forward_auth authentik:9000 {
+			uri /outpost.goauthentik.io/auth/caddy
+			copy_headers X-Authentik-Username X-Authentik-Groups
+			trusted_proxies private_ranges
+		}
+		reverse_proxy 127.0.0.1:8087
+	}
+}

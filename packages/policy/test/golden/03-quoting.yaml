@@ -1,0 +1,41 @@
+# Quoting tricks, escapes, assignments, wrappers and redirections.
+- { t: Bash, cmd: "git \"status\"", o: allow, r: safe-shell }
+- { t: Bash, cmd: "\"git\" status", o: allow, r: safe-shell }
+- { t: Bash, cmd: "g''it status", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git st\\atus", o: allow, r: safe-shell }
+- { t: Bash, cmd: "cat .e\"\"nv", o: deny, r: secrets-files }
+- { t: Bash, cmd: "cat '.env'", o: deny, r: secrets-files }
+- { t: Bash, cmd: "cat \".env\"", o: deny, r: secrets-files }
+- { t: Bash, cmd: "cat .en\\v", o: deny, r: secrets-files }
+- { t: Bash, cmd: "cat $'\\x2eenv'", o: escalate, r: no-rule, note: "ANSI-C escapes are not decoded, so the call escalates rather than being allowed" }
+- { t: Bash, cmd: "git status # cat .env", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git log --format=\"%H %s\"", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git log --format=\"$(whoami)\"", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "git  status", o: allow, r: safe-shell }
+- { t: Bash, cmd: "GIT_PAGER=cat git status", o: escalate, r: no-rule }
+- { t: Bash, cmd: "FOO=$(cat .env) git status", o: deny, r: secrets-files }
+- { t: Bash, cmd: "git status --porcelain=v1", o: allow, r: safe-shell }
+- { t: Bash, cmd: "rm -rf \"/\"", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "rm -rf '/'", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "rm  -rf   /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "rm -rf ~", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "rm -rf \"$HOME\"", o: escalate, r: dynamic-segment }
+- { t: Bash, cmd: "RM -RF /", o: escalate, r: no-rule }
+- { t: Bash, cmd: "\\rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "command rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "env rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "sudo rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "nohup rm -rf / &", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "rm -r -f /", o: escalate, r: no-rule, note: "reordered flags are not recognised as the deny pattern, so they escalate" }
+- { t: Bash, cmd: "rm -fr /", o: escalate, r: no-rule }
+- { t: Bash, cmd: "echo hi > out.txt", o: escalate, r: shell-redirect-write }
+- { t: Bash, cmd: "git log > log.txt", o: escalate, r: shell-redirect-write }
+- { t: Bash, cmd: "git log > /dev/null", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git log 2>/dev/null", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git log 2>&1", o: allow, r: safe-shell }
+- { t: Bash, cmd: "git log >> x", o: escalate, r: shell-redirect-write }
+- { t: Bash, cmd: "git status 2> err.txt", o: escalate, r: shell-redirect-write }
+- { t: Bash, cmd: "rm -rf /*", o: deny, r: critical-paths, note: "the glob expands to C:/Windows and C:/Program Files, so the floor decides before the deny rule" }
+- { t: Bash, cmd: "rm -rf ~/*", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "env -i git status", o: escalate, r: no-rule }
+- { t: Bash, cmd: "git status\\\n --short", o: allow, r: safe-shell }

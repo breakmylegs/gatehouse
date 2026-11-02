@@ -1,0 +1,36 @@
+version: 1
+id: git-read
+title: Git, looking only
+description: Lets Claude look at the repository without changing it. Status, diffs, history, branches and blame. Pushing and remotes still ask you.
+allow:
+  - id: git-read-inspect
+    everySegmentMustMatch: true
+    commands:
+      - "git show*"
+      - "git branch"
+      - "git branch -a*"
+      - "git branch --list*"
+      - "git branch -v*"
+      - "git blame *"
+      - "git rev-parse *"
+      - "git ls-files*"
+      - "git stash list*"
+      - "git tag"
+      - "git tag --list*"
+      - "git tag -l*"
+      - "git describe*"
+      - "git shortlog*"
+      - "git reflog*"
+      - "git config --get *"
+      - "git config --list*"
+      - "git grep *"
+      - "git cat-file *"
+      - "git merge-base *"
+      - "git worktree list*"
+cases:
+  - { tool: Bash, input: { command: "git show HEAD~1 --stat" }, expect: allow, rule: git-read-inspect }
+  - { tool: Bash, input: { command: "git branch -a" }, expect: allow }
+  - { tool: Bash, input: { command: "git blame src/a.ts" }, expect: allow }
+  - { tool: Bash, input: { command: "git log --oneline -5" }, expect: allow, note: already allowed by safe-shell }
+  - { tool: Bash, input: { command: "git push origin main" }, expect: escalate, note: remotes still ask }
+  - { tool: Bash, input: { command: "git branch -D old" }, expect: escalate, note: deleting a branch is not looking }

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gatehouse approval card prototype</title>
+<style>
+:root{--bg:oklch(97% .005 250);--s1:oklch(100% 0 0);--s2:oklch(94.5% .007 250);--line:oklch(86% .01 250);--tx:oklch(24% .02 255);--mut:oklch(45% .02 255);--acc:oklch(45% .15 255);--acc-tx:#fff;--hi:oklch(93% .07 85);--hi-line:oklch(55% .13 70);--sev:oklch(42% .17 25);--r:6px}
+:root[data-theme=dark]{--bg:oklch(19% .01 255);--s1:oklch(23% .012 255);--s2:oklch(27% .014 255);--line:oklch(36% .016 255);--tx:oklch(93% .008 255);--mut:oklch(72% .015 255);--acc:oklch(72% .13 255);--acc-tx:oklch(18% .02 255);--hi:oklch(33% .07 80);--hi-line:oklch(78% .12 85);--sev:oklch(76% .13 25)}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.5 "Segoe UI Variable","Segoe UI",system-ui,sans-serif}
+.mono,code,pre{font-family:"Cascadia Mono",Consolas,ui-monospace,monospace}
+header.bar{display:flex;gap:12px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);background:var(--s1)}
+header.bar h1{font-size:13px;margin:0 auto 0 0;font-weight:600}
+button{font:inherit;color:inherit;background:var(--s1);border:1px solid var(--line);border-radius:var(--r);padding:6px 12px;min-height:32px;cursor:pointer}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+button[aria-pressed=true]{background:var(--acc);color:var(--acc-tx);border-color:var(--acc)}
+.layout{display:grid;grid-template-columns:260px 1fr;min-height:calc(100vh - 49px)}
+nav.queue{border-right:1px solid var(--line);background:var(--s1);padding:8px}
+nav.queue h2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:8px 8px 4px}
+.q{display:block;width:100%;text-align:left;border:0;border-left:3px solid transparent;border-radius:0;padding:6px 8px;background:none}
+.q[aria-current=true]{background:var(--s2);border-left-color:var(--acc)}
+.q small{display:block;color:var(--mut)}
+main{padding:24px;max-width:980px}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:var(--r)}
+.band{display:inline-flex;gap:6px;align-items:center;font-weight:600;border:1px solid currentColor;border-radius:99px;padding:1px 10px 1px 6px;color:var(--sev)}
+.band svg{width:14px;height:14px}
+pre.cmd{margin:0;padding:12px 14px;background:var(--s2);border:1px solid var(--line);border-radius:var(--r);white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.6}
+mark{background:var(--hi);color:inherit;border-bottom:2px solid var(--hi-line);padding:0 1px}
+.legend{color:var(--mut);font-size:12px;margin:6px 0 0}
+dl{display:grid;grid-template-columns:90px 1fr;gap:4px 12px;margin:0}dt{color:var(--mut)}dd{margin:0;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.allow{background:var(--acc);color:var(--acc-tx);border-color:var(--acc);font-weight:600}
+.deny{font-weight:600;border-color:var(--sev);color:var(--sev)}
+kbd{font:11px "Cascadia Mono",monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;background:var(--s2);color:var(--tx)}
+.muted{color:var(--mut)}
+.v{display:none}.v.on{display:block}
+/* A: stacked */
+.a .card{padding:20px;display:grid;gap:16px}
+.a .head{display:flex;gap:12px;align-items:center}.a .head strong{font-size:16px}.a .head .band{margin-left:auto}
+/* B: split with decision rail */
+.b .card{display:grid;grid-template-columns:1fr 240px}
+.b .body{padding:20px;display:grid;gap:16px;align-content:start}
+.b .rail{border-left:1px solid var(--line);background:var(--s2);padding:20px;display:grid;gap:10px;align-content:start}
+.b .rail button{width:100%;text-align:left}
+/* C: ledger, command dominant */
+.c .card{overflow:hidden}
+.c .strip{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line)}
+.c .strip div{padding:10px 14px;border-right:1px solid var(--line)}.c .strip div:last-child{border:0}
+.c .strip span{display:block;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.c .cmdwrap{padding:20px}.c pre.cmd{font-size:16px;padding:18px}
+.c .why{padding:0 20px 16px}.c .foot{padding:14px 20px;border-top:1px solid var(--line);background:var(--s2)}
+@media (prefers-reduced-motion:no-preference){button{transition:background-color .12s ease-out}}
+@media (max-width:900px){.layout{grid-template-columns:1fr}.b .card{grid-template-columns:1fr}.c .strip{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1>Gatehouse prototype: approval card</h1>
+  <span class="muted">Variant</span>
+  <button data-v="a" aria-pressed="true">A Stacked <kbd>1</kbd></button>
+  <button data-v="b" aria-pressed="false">B Decision rail <kbd>2</kbd></button>
+  <button data-v="c" aria-pressed="false">C Command first <kbd>3</kbd></button>
+  <button id="theme" aria-pressed="false">Dark</button>
+</header>
+<div class="layout">
+  <nav class="queue" aria-label="Pending approvals">
+    <h2>Waiting on you (3)</h2>
+    <button class="q" aria-current="true">Run shell command<small>atlas-migration · 2 min</small></button>
+    <button class="q">Edit file<small>proposal-q4 · 6 min</small></button>
+    <button class="q">Question from Claude<small>gatehouse · 9 min</small></button>
+  </nav>
+  <main id="root">
+    <template id="tpl-risk"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 15 14H1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8 6v4M8 12v.01" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></template>
+    <!-- A -->
+    <section class="v a on" data-v="a">
+      <article class="card" aria-labelledby="a-t">
+        <div class="head"><strong id="a-t">Run shell command</strong><span class="muted">atlas-migration · 2 min ago</span><span class="band" data-risk>High risk 82</span></div>
+        <div><pre class="cmd" tabindex="0" aria-label="Command to run"><mark>git push --force origin main</mark> &amp;&amp; npm publish --access public</pre>
+        <p class="legend">Underlined: the part that caused the escalation.</p></div>
+        <dl><dt>Where</dt><dd class="mono">C:\dev\atlas-migration</dd><dt>Why</dt><dd><span class="mono">force-push-protected</span>. A force push to a protected branch can overwrite shared history.</dd><dt>Status</dt><dd>Phone notified 14:01. Phone expires 14:11. Desktop times out 14:31.</dd></dl>
+        <div class="actions"><button class="deny">Deny <kbd>Esc</kbd></button><button>Deny with message</button><button>Edit then allow</button><button>Remember…</button><button>Stop session</button><button class="allow" style="margin-left:auto">Allow once <kbd>Ctrl</kbd>+<kbd>Enter</kbd></button></div>
+      </article>
+    </section>
+    <!-- B -->
+    <section class="v b" data-v="b">
+      <article class="card" aria-labelledby="b-t">
+        <div class="body">
+          <div style="display:flex;gap:12px;align-items:center"><strong id="b-t" style="font-size:16px">Run shell command</strong><span class="muted">atlas-migration · 2 min ago</span></div>
+          <pre class="cmd" tabindex="0" aria-label="Command to run"><mark>git push --force origin main</mark> &amp;&amp; npm publish --access public</pre>
+          <p class="legend" style="margin:-8px 0 0">Underlined: the part that caused the escalation.</p>
+          <dl><dt>Where</dt><dd class="mono">C:\dev\atlas-migration</dd><dt>Rule</dt><dd class="mono">force-push-protected</dd><dt>Why</dt><dd>A force push to a protected branch can overwrite shared history.</dd></dl>
+        </div>
+        <aside class="rail" aria-label="Decision">
+          <span class="band" data-risk>High risk 82</span>
+          <button class="deny">Deny <kbd>Esc</kbd></button>
+          <button>Deny with message</button>
+          <button>Edit then allow</button>
+          <button>Remember…</button>
+          <button>Stop session</button>
+          <button class="allow">Allow once <kbd>Ctrl</kbd>+<kbd>Enter</kbd></button>
+          <p class="muted" style="margin:4px 0 0;font-size:12px">Phone notified 14:01, expires 14:11. Desktop times out 14:31.</p>
+        </aside>
+      </article>
+    </section>
+    <!-- C -->
+    <section class="v c" data-v="c">
+      <article class="card" aria-labelledby="c-t">
+        <div class="strip"><div><span>Request</span><strong id="c-t">Run shell command</strong></div><div><span>Project</span>atlas-migration</div><div><span>Risk</span><span class="band" data-risk style="display:inline-flex;color:var(--sev);font-size:13px;text-transform:none;letter-spacing:0">High risk 82</span></div><div><span>Age</span>2 min</div></div>
+        <div class="cmdwrap"><pre class="cmd" tabindex="0" aria-label="Command to run"><mark>git push --force origin main</mark> &amp;&amp; npm publish --access public</pre>
+        <p class="legend">Underlined: the part that caused the escalation. Working directory <span class="mono">C:\dev\atlas-migration</span></p></div>
+        <div class="why"><strong class="mono">force-push-protected</strong> <span class="muted">A force push to a protected branch can overwrite shared history. Phone notified 14:01, expires 14:11. Desktop times out 14:31.</span></div>
+        <div class="foot actions"><button class="deny">Deny <kbd>Esc</kbd></button><button>Deny with message</button><button>Edit then allow</button><button>Remember…</button><button>Stop session</button><button class="allow" style="margin-left:auto">Allow once <kbd>Ctrl</kbd>+<kbd>Enter</kbd></button></div>
+      </article>
+    </section>
+  </main>
+</div>
+<script>
+const R=document.getElementById('root'),t=document.getElementById('tpl-risk');
+document.querySelectorAll('[data-risk]').forEach(b=>b.prepend(t.content.cloneNode(true)));
+function show(v){document.querySelectorAll('.v').forEach(e=>e.classList.toggle('on',e.dataset.v===v));document.querySelectorAll('header button[data-v]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===v));}
+document.querySelectorAll('header button[data-v]').forEach(b=>b.onclick=()=>show(b.dataset.v));
+document.addEventListener('keydown',e=>{if(e.target.closest('input,textarea'))return;const m={1:'a',2:'b',3:'c'}[e.key];if(m)show(m)});
+const th=document.getElementById('theme');th.onclick=()=>{const d=document.documentElement.dataset.theme==='dark';document.documentElement.dataset.theme=d?'':'dark';th.setAttribute('aria-pressed',!d);th.textContent=d?'Dark':'Light'};
+</script>
+</body>
+</html>

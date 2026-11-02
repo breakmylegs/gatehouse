@@ -1,0 +1,10 @@
+version: 1
+id: edit-workspace
+title: Edit any file in your folders
+description: Lets Claude edit and create any file inside your workspace folders, not only source, tests and docs. Secrets files stay blocked by the floor, and nothing outside your folders can be written.
+allow:
+  - { id: edit-workspace-any, tools: [Edit, Write, MultiEdit, NotebookEdit], pathInside: workspaceRoots }
+cases:
+  - { tool: Edit, input: { file_path: "package.json", old_string: "a", new_string: "b" }, expect: allow, rule: edit-workspace-any }
+  - { tool: Write, input: { file_path: "lib/util.js", content: "x" }, expect: allow }
+  - { tool: Write, input: { file_path: ".env", content: "x" }, expect: deny, note: the floor still blocks secrets }

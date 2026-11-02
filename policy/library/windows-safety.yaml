@@ -1,0 +1,33 @@
+version: 1
+id: windows-safety
+title: Extra caution on Windows
+description: Asks you before commands that change Windows itself, the registry, services, scheduled tasks or the network, and before recursive deletes. It only adds caution; it never allows anything.
+escalate:
+  - id: windows-safety-system
+    commands:
+      - "reg add *"
+      - "reg delete *"
+      - "reg import *"
+      - "schtasks *"
+      - "sc config *"
+      - "sc delete *"
+      - "sc create *"
+      - "netsh *"
+      - "bcdedit*"
+      - "Set-Service *"
+      - "New-Service *"
+      - "Stop-Service *"
+      - "Register-ScheduledTask *"
+      - "Unregister-ScheduledTask *"
+      - "Set-ItemProperty HKLM*"
+      - "New-NetFirewallRule *"
+    risk: 90
+    message: "Changes Windows settings, services or the network."
+  - id: windows-safety-recursive
+    commands: ["rm -r *", "rm -rf *", "rmdir /s *", "rd /s *", "del /s *", "Remove-Item * -Recurse*"]
+    risk: 85
+    message: "Deletes a folder and everything in it."
+cases:
+  - { tool: Bash, input: { command: "schtasks /query" }, expect: escalate, rule: windows-safety-system }
+  - { tool: Bash, input: { command: "rm -r build" }, expect: escalate, rule: windows-safety-recursive }
+  - { tool: Bash, input: { command: "git status" }, expect: allow, note: ordinary commands are unaffected }

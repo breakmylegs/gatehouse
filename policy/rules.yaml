@@ -1,0 +1,58 @@
+version: 1
+workspaceRoots: ["C:/dev", "C:/Users/<you>/source"]
+defaults:
+  unknownTool: escalate
+  parseError: escalate
+  judge: { enabled: false, model: haiku, maxInputChars: 4000 }
+quietHours: { start: "22:00", end: "07:00", tz: "Europe/London", phone: false }
+
+floor:
+  - id: secrets-files
+    tools: [Read, Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Grep, Glob]
+    pathGlobs: ["**/.env", "**/.env.*", "**/*.pem", "**/*.pfx", "**/*.key", "**/id_rsa*", "**/id_ed25519*",
+                "**/.aws/**", "**/.azure/**", "**/.ssh/**", "**/.claude/.credentials.json",
+                "**/.credentials.json", "**/Gatehouse/accounts/**"]
+    message: "Secrets files are blocked by policy. Ask the user to provide the values instead."
+  - id: obfuscated-shell
+    powershell: { encodedCommand: true, invokeExpression: true, dynamicInvocation: true }
+    bash: { evalDynamic: true, pipeToShell: true }
+  - id: critical-paths
+    pathGlobs: ["C:/Windows/**", "C:/Program Files/**", "C:/Program Files (x86)/**"]
+    tools: [Edit, Write, MultiEdit, Bash, PowerShell]
+
+deny:
+  - id: outside-workspace-write
+    tools: [Edit, Write, MultiEdit, NotebookEdit]
+    pathOutside: workspaceRoots
+  - id: destructive-shell
+    commands: ["rm -rf /*", "rm -rf ~*", "Remove-Item * -Recurse -Force*", "format *", "diskpart*",
+               "git push --force*", "git push -f*", "git reset --hard*", "git clean -fdx*"]
+
+escalate:
+  - { id: package-install, commands: ["npm install*", "npm i *", "pip install*", "winget*", "choco*"], risk: 70 }
+  - { id: network, tools: [WebFetch, WebSearch], commands: ["curl*", "Invoke-WebRequest*", "Invoke-RestMethod*"], risk: 60 }
+  - { id: git-remote, commands: ["git push*", "git remote*", "gh *"], risk: 80 }
+  - { id: mcp-external, tools: ["mcp__*"], exceptTools: ["mcp__companion__*"], risk: 60 }
+  - { id: unc-path, pathUnc: true, risk: 90 }
+
+allow:
+  - { id: read-workspace, tools: [Read, Glob, Grep], pathInside: workspaceRoots }
+  - { id: edit-workspace-source, tools: [Edit, Write, MultiEdit], pathInside: workspaceRoots,
+      pathGlobs: ["src/**", "test/**", "tests/**", "docs/**", "*.md"] }
+  - { id: safe-shell, everySegmentMustMatch: true,
+      commands: ["git status*", "git diff*", "git log*", "npm test*", "npm run lint*", "npx tsc --noEmit*",
+                 "Get-ChildItem*", "Get-Content*"] }
+  - { id: companion-tools, tools: ["mcp__companion__notify_user", "mcp__companion__create_checkpoint",
+                                   "mcp__companion__get_policy_summary"], mcpSource: [sdk] }
+  # Claude Code's own housekeeping (owner decision 1 Nov, CLAUDE.md invariant 2): the floor hook now asks in Manual
+  # mode too, so these reach the Approver where Claude Code used to allow them by itself. None does anything outside
+  # the session on its own: whatever a subagent, a skill or a slash command then does goes through the hook again.
+  - { id: claude-code-internal, tools: [TodoWrite, Task, Agent, BashOutput, TaskOutput, KillShell, TaskStop, Skill,
+                                        SlashCommand, ToolSearch, LS, NotebookRead] }
+  # A chat's memory (W1-08): Codehouse's own store, redacted and audited by the Host, only through the in-process Companion.
+  # A chat's artifacts (W1-09): kept, redacted and audited by the Host, shown only in a sandbox with no network.
+  - { id: artifact-tools, tools: ["mcp__companion__save_artifact"], mcpSource: [sdk] }
+  - { id: memory-tools, tools: ["mcp__companion__remember", "mcp__companion__recall", "mcp__companion__forget"],
+      mcpSource: [sdk] }
+
+judgeEligible: [network]

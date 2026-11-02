@@ -1,0 +1,44 @@
+version: 1
+id: node-dev
+title: Node and npm, building and testing
+description: Lets Claude build, test, lint and type-check a Node project with its own scripts. Installing packages still asks you, and so does npm ci.
+allow:
+  - id: node-dev-scripts
+    everySegmentMustMatch: true
+    commands:
+      - "npm run build"
+      - "npm run build *"
+      - "npm run lint*"
+      - "npm run typecheck*"
+      - "npm run test*"
+      - "npm run format*"
+      - "npm run check*"
+      - "npx tsc*"
+      - "npx eslint *"
+      - "npx prettier --check *"
+      - "npx vitest run*"
+      - "npx jest*"
+      - "node --version"
+      - "npm --version"
+      - "npm ls*"
+      - "npm view *"
+      - "pnpm run *"
+      - "pnpm test*"
+      - "yarn test*"
+      - "yarn run *"
+escalate:
+  - id: node-dev-ci
+    commands: ["npm ci*", "pnpm install*", "yarn install*", "yarn add *", "pnpm add *"]
+    risk: 70
+    message: "Installs packages from the network and runs their install scripts."
+  - id: node-dev-publish
+    commands: ["npm publish*", "pnpm publish*", "yarn publish*"]
+    risk: 90
+    message: "Publishing a package is visible to others and cannot be undone."
+cases:
+  - { tool: Bash, input: { command: "npm run build" }, expect: allow, rule: node-dev-scripts }
+  - { tool: Bash, input: { command: "npx vitest run src" }, expect: allow }
+  - { tool: Bash, input: { command: "npx tsc -p tsconfig.json" }, expect: allow }
+  - { tool: Bash, input: { command: "npm ci" }, expect: escalate, rule: node-dev-ci }
+  - { tool: Bash, input: { command: "npm publish" }, expect: escalate, rule: node-dev-publish }
+  - { tool: Bash, input: { command: "npm install left-pad" }, expect: escalate, note: installing still asks }

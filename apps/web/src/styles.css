@@ -1,0 +1,2308 @@
+@import "tailwindcss";
+
+/*
+ * Tokens from the Stitch design (owner, 1 Nov; docs/plan/remake.md). Dark is obsidian and slate layers with steel
+ * blue actions, light is the Fluent Control Matrix: calm slate on white with cobalt actions. Amber only for what
+ * needs you, red and teal or green for state. Segoe UI Variable and Cascadia Mono, named and never bundled.
+ */
+:root {
+  --c-bg: #f8fafc;
+  --c-s1: #ffffff;
+  --c-s2: #f1f5f9;
+  --c-line: #d9e0ea;
+  --c-tx: #0f172a;
+  --c-mut: #475569;
+  --c-acc: #1d4ed8;
+  --c-acc-tx: #ffffff;
+  --c-hi: #fef3c7;
+  --c-hi-line: #b45309;
+  --c-sev: #b91c1c;
+  --c-ok: #15803d;
+  --c-warn: #a14a07;
+  --c-sign: #f59e0b;
+  --c-sign-tx: #1c1100;
+  --c-lit: #fff7e0;
+  /* The command deck and the navigation. */
+  --c-shell: #eef2f7;
+  --c-shell-2: #e2e8f0;
+  --c-shell-line: #cbd5e1;
+  --c-shell-tx: #0f172a;
+  --c-shell-mut: #475569;
+}
+:root[data-theme="dark"] {
+  --c-bg: #0e1217;
+  --c-s1: #161c24;
+  --c-s2: #1e2631;
+  --c-line: #2a3647;
+  --c-tx: #e0e2ea;
+  --c-mut: #a3aab8;
+  --c-acc: #a9c7ff;
+  --c-acc-tx: #002957;
+  --c-hi: #3b2f12;
+  --c-hi-line: #ffb77d;
+  --c-sev: #ff9a8f;
+  --c-ok: #5eead4;
+  --c-warn: #fbbf24;
+  --c-sign: #f59e0b;
+  --c-sign-tx: #1c1100;
+  --c-lit: #2e2410;
+  --c-shell: #0b0e12;
+  --c-shell-2: #161c24;
+  --c-shell-line: #222b38;
+  --c-shell-tx: #e0e2ea;
+  --c-shell-mut: #a3aab8;
+}
+
+@theme inline {
+  --color-bg: var(--c-bg);
+  --color-s1: var(--c-s1);
+  --color-s2: var(--c-s2);
+  --color-line: var(--c-line);
+  --color-tx: var(--c-tx);
+  --color-mut: var(--c-mut);
+  --color-acc: var(--c-acc);
+  --color-acc-tx: var(--c-acc-tx);
+  --color-hi: var(--c-hi);
+  --color-hi-line: var(--c-hi-line);
+  --color-sev: var(--c-sev);
+  --color-ok: var(--c-ok);
+  --color-warn: var(--c-warn);
+  --color-sign: var(--c-sign);
+  --color-sign-tx: var(--c-sign-tx);
+  --color-lit: var(--c-lit);
+  --color-shell: var(--c-shell);
+  --color-shell-2: var(--c-shell-2);
+  --color-shell-line: var(--c-shell-line);
+  --color-shell-tx: var(--c-shell-tx);
+  --color-shell-mut: var(--c-shell-mut);
+  --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-sign: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  --font-code: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-tx);
+  font: 14px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+h1,
+h2,
+h3,
+legend,
+.sign {
+  font-family: var(--font-sign);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+h1 {
+  font-size: 26px;
+  line-height: 1.15;
+  font-stretch: 92%;
+}
+::selection {
+  background: var(--c-sign);
+  color: var(--c-sign-tx);
+}
+* {
+  scrollbar-color: color-mix(in oklch, var(--c-mut) 45%, transparent) transparent;
+  scrollbar-width: thin;
+  caret-color: var(--c-acc);
+}
+a {
+  color: var(--c-acc);
+  text-underline-offset: 3px;
+}
+[hidden] {
+  display: none !important;
+}
+/* the Codehouse look: one faint picture behind everything. It is below all content, never over text. */
+html[data-scene="on"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--scene-img, none) no-repeat right 3% bottom / auto 90%;
+  opacity: 0.08;
+  filter: grayscale(0.6);
+  mask-image: linear-gradient(to left, #000 35%, transparent 95%);
+}
+html[data-scene="on"][data-theme="dark"] body::before {
+  opacity: 0.11;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+:focus-visible {
+  outline: 2px solid var(--c-acc);
+  outline-offset: 2px;
+}
+.mono {
+  font-family: var(--font-code);
+}
+/* A key, in the Stitch chord style: small code type in a chip. A button shows its key at its end. */
+kbd {
+  font: 600 11px/1.4 var(--font-code);
+  letter-spacing: 0.03em;
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  padding: 0 5px;
+  background: var(--c-s2);
+  color: var(--c-tx);
+  white-space: nowrap;
+}
+.btn kbd {
+  margin-left: 6px;
+  background: color-mix(in oklch, currentColor 12%, transparent);
+  border-color: color-mix(in oklch, currentColor 30%, transparent);
+  color: inherit;
+}
+
+/* Risk (Stitch): a shape, the word and the number in code type; a tint for Medium and High, solid for Severe. */
+.risk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: 600 12px/1.5 var(--font-code);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.risk-low {
+  color: var(--c-ok);
+}
+.risk-moderate {
+  color: var(--c-warn);
+  background: color-mix(in oklch, var(--c-warn) 10%, transparent);
+}
+.risk-high {
+  color: var(--c-sev);
+  background: color-mix(in oklch, var(--c-sev) 10%, transparent);
+}
+.risk-severe {
+  color: var(--c-bg);
+  background: var(--c-sev);
+  border-color: var(--c-sev);
+  outline: 2px solid var(--c-sev);
+  outline-offset: 1px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-s1);
+  cursor: pointer;
+  font-family: var(--font-sign);
+  font-size: 14px;
+  font-weight: 500;
+}
+.btn:hover {
+  background: var(--c-s2);
+}
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  border-color: var(--c-acc);
+  font-weight: 600;
+}
+.btn-primary:hover {
+  background: var(--c-acc);
+  filter: brightness(1.08);
+}
+.btn-strong {
+  border-color: var(--c-acc);
+  color: var(--c-acc);
+  font-weight: 600;
+}
+.btn-deny {
+  border-color: var(--c-sev);
+  color: var(--c-sev);
+  font-weight: 600;
+}
+::placeholder {
+  color: var(--c-mut);
+  opacity: 1;
+}
+.field {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-s1);
+}
+.field:hover {
+  border-color: color-mix(in oklch, var(--c-mut) 55%, var(--c-line));
+}
+select.field {
+  font-family: var(--font-sign);
+}
+.panel {
+  background: var(--c-s1);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+}
+.cmd {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--c-s2);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 14px/1.6 var(--font-code);
+}
+mark.seg {
+  background: var(--c-hi);
+  color: inherit;
+  border-bottom: 2px solid var(--c-hi-line);
+  padding: 0 1px;
+}
+
+/* Small field labels, as on a pass: a quiet word above the value it names. */
+.lbl {
+  display: block;
+  font: 500 11.5px/1.2 var(--font-sign);
+  color: var(--c-mut);
+}
+.val {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 600 16px/1.25 var(--font-sign);
+  color: var(--c-tx);
+}
+
+/* Shell: the header and the rail, light in the light theme and slate in the dark one. */
+.shell {
+  background: var(--c-shell);
+  color: var(--c-shell-tx);
+  --c-line: var(--c-shell-line);
+  --c-mut: var(--c-shell-mut);
+}
+.shell .btn {
+  background: transparent;
+  border-color: var(--c-shell-line);
+  color: var(--c-shell-tx);
+}
+.shell .btn:hover {
+  background: var(--c-shell-2);
+}
+.shell .btn-deny {
+  border-color: var(--c-sev);
+  color: var(--c-sev);
+}
+:root[data-theme="dark"] .shell .btn-deny {
+  border-color: oklch(70% 0.15 27);
+  color: oklch(84% 0.1 27);
+}
+.shell :focus-visible {
+  outline-color: var(--c-acc);
+}
+:root[data-theme="dark"] .shell :focus-visible {
+  outline-color: var(--c-sign);
+}
+.rail-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-shell-mut);
+  font: 500 15px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.rail-item:hover {
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+}
+.rail-item[aria-current="page"] {
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--c-sign);
+}
+
+/* What needs you: signage yellow, and nothing else is. */
+.sign-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 2px 4px 2px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+  font: 600 14px var(--font-sign);
+  cursor: pointer;
+}
+.sign-pill .n {
+  min-width: 26px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: var(--c-shell);
+  color: var(--c-shell-tx);
+  text-align: center;
+}
+.sign-pill[data-on] {
+  background: var(--c-sign);
+  color: var(--c-sign-tx);
+}
+.sign-pill[data-on] .n {
+  background: var(--c-sign-tx);
+  color: var(--c-sign);
+}
+.count {
+  min-width: 24px;
+  padding: 0 7px;
+  border-radius: 3px;
+  background: var(--c-sign);
+  color: var(--c-sign-tx);
+  font: 600 13px/22px var(--font-sign);
+  text-align: center;
+}
+
+/* The board: rows of waiting requests and sessions, set like a departures board. */
+.board-row {
+  display: grid;
+  align-items: center;
+  column-gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--c-line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font-family: var(--font-sign);
+  cursor: pointer;
+}
+.board-row:hover {
+  background: var(--c-s2);
+}
+.board-row[aria-current="true"] {
+  background: color-mix(in srgb, var(--c-acc) 10%, var(--c-s1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-acc) 45%, transparent);
+}
+.board-row[data-lit] {
+  background: var(--c-lit);
+}
+.board-row[data-lit][aria-current="true"] {
+  background: color-mix(in srgb, var(--c-acc) 10%, var(--c-lit));
+}
+.board-time {
+  display: grid;
+  place-items: center;
+  min-width: 54px;
+  height: 32px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--c-s2);
+  font: 600 15px var(--font-sign);
+  color: var(--c-tx);
+}
+.board-row[data-lit] .board-time {
+  background: var(--c-sign);
+  color: var(--c-sign-tx);
+}
+.board-head {
+  display: grid;
+  column-gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--c-line);
+  font: 500 12px var(--font-sign);
+  color: var(--c-mut);
+}
+
+/*
+ * Tabs. The open one is marked by its own rule on aria-selected, not by utility classes: border-transparent is
+ * written after border-acc in the built CSS, so a class pair left every open tab without its underline (29 Oct).
+ */
+.tab {
+  margin-bottom: -1px;
+  padding: 9px 14px 7px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 15px var(--font-sign);
+  cursor: pointer;
+}
+.tab:hover {
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.tab[aria-selected="true"] {
+  border-bottom-color: var(--c-acc);
+  color: var(--c-tx);
+  font-weight: 700;
+}
+
+/* The Policy page's levels (Stitch, R6): three columns, each a card with a top edge that fills when chosen, and
+   what the level does with everyday requests under it. */
+.level-col {
+  display: grid;
+  align-content: start;
+  border: 1px solid var(--c-line);
+  border-top: 3px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+  overflow: hidden;
+}
+.level-col[data-on] {
+  border-color: var(--c-acc);
+  border-top-color: var(--c-acc);
+}
+.level-examples {
+  display: grid;
+  gap: 4px;
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--c-line);
+  font-size: 13px;
+}
+.level-examples ul {
+  display: grid;
+  gap: 2px;
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+.level-ex-h {
+  color: var(--c-mut);
+  font: 600 11.5px var(--font-code);
+  letter-spacing: 0.03em;
+}
+.level-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 0;
+  background: var(--c-s1);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.level-card:hover {
+  background: var(--c-s2);
+}
+.level-card[aria-checked="true"] {
+  border-color: var(--c-acc);
+  box-shadow: inset 0 0 0 1px var(--c-acc);
+  background: color-mix(in srgb, var(--c-acc) 8%, var(--c-s1));
+}
+.level-card:disabled {
+  cursor: progress;
+}
+
+/* A choice's options side by side, the chosen one filled. */
+.seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--c-line);
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--c-s1);
+}
+.seg > button {
+  padding: 5px 12px;
+  border: 0;
+  border-left: 1px solid var(--c-line);
+  background: transparent;
+  color: inherit;
+  font: 500 14px var(--font-sign);
+  cursor: pointer;
+}
+.seg > button:first-child {
+  border-left: 0;
+}
+.seg > button:hover {
+  background: var(--c-s2);
+}
+.seg > button[aria-checked="true"] {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  font-weight: 600;
+}
+.seg > button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* A request decided in the workspace of the session that asked, above the prompt box. */
+.quick-decision {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--c-line);
+  border-top: 3px solid var(--c-sign);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+/* The same edges as the full card (Stitch, R5): red at High and Severe, Severe also outlined. */
+.quick-decision[data-risk="high"] {
+  border-top-color: var(--c-sev);
+}
+.quick-decision[data-risk="severe"] {
+  border-color: var(--c-sev);
+  border-top-color: var(--c-sev);
+  outline: 1px solid var(--c-sev);
+  outline-offset: 2px;
+}
+
+/* What a running session is doing, above the prompt box. */
+.activity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.activity-dot {
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-acc);
+  animation: activity-pulse 1.4s ease-in-out infinite;
+}
+@keyframes activity-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .activity-dot {
+    animation: none;
+  }
+}
+
+/* A session's code and its ribbon colour, like a flight number. */
+.code {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 13px var(--font-sign);
+  white-space: nowrap;
+}
+.code i {
+  display: inline-block;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--ribbon, var(--c-mut));
+}
+
+/* The approval pass: details, a perforated edge, then the decision stub. */
+/* The request card (Stitch, R3): one stacked module. A coloured top edge by risk, the header, a red band when
+   Allow needs a deliberate key, the body, and one bar of actions with their keys, Allow at the far end. */
+.pass {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--c-s1);
+  border: 1px solid var(--c-line);
+  border-top: 3px solid var(--c-line);
+  border-radius: 6px;
+}
+.pass[data-risk="moderate"] {
+  border-top-color: var(--c-warn);
+}
+.pass[data-risk="high"] {
+  border-top-color: var(--c-sev);
+}
+.pass[data-risk="severe"] {
+  border-color: var(--c-sev);
+  border-top-color: var(--c-sev);
+  outline: 1px solid var(--c-sev);
+  outline-offset: 2px;
+}
+.pass-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s2);
+  border-radius: 3px 3px 0 0;
+}
+.pass-state {
+  padding: 1px 7px;
+  border: 1px solid var(--c-sign);
+  border-radius: 3px;
+  color: var(--c-tx);
+  font: 600 11.5px/1.5 var(--font-code);
+  letter-spacing: 0.02em;
+}
+.pass-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--c-sev);
+  background: color-mix(in oklch, var(--c-sev) 12%, var(--c-s1));
+  color: var(--c-tx);
+  font-weight: 600;
+}
+.pass-alert-icon {
+  color: var(--c-sev);
+}
+.pass-cmd {
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pass-cmd-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s2);
+  color: var(--c-mut);
+  font: 600 11.5px var(--font-code);
+  letter-spacing: 0.04em;
+}
+.pass-cmd .cmd {
+  border: 0;
+  border-radius: 0;
+}
+/* The note under the command and its Copy, as the block's own footer. */
+.pass-cmd > div:last-child {
+  margin: 0 !important;
+  padding: 4px 12px;
+  border-top: 1px solid var(--c-line);
+}
+.pass-bar {
+  display: grid;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--c-line);
+  background: var(--c-s2);
+  border-radius: 0 0 6px 6px;
+}
+.pass-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.pass-actions .pass-allow {
+  margin-left: auto;
+}
+
+/* The dashboard (Stitch, R4): the condition line, then a main column and the Lately feed beside it when wide. */
+.dash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  max-width: 1480px;
+  padding: 20px 24px;
+}
+@media (min-width: 1200px) {
+  .dash {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    align-items: start;
+  }
+  .dash-top {
+    grid-column: 1 / -1;
+  }
+}
+.dash-main {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.dash-condition {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-s1);
+  color: var(--c-tx);
+}
+.dash-condition-meta {
+  margin-left: auto;
+  color: var(--c-mut);
+  font: 500 12px var(--font-code);
+}
+.dash-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-size: 17px;
+}
+.dash-tag {
+  padding: 0 7px;
+  border: 1px solid var(--c-line);
+  border-radius: 3px;
+  color: var(--c-mut);
+  font: 600 11.5px/1.6 var(--font-code);
+  letter-spacing: 0.02em;
+}
+.dash-alerts {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-sev);
+  border-left: 4px solid var(--c-sev);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dash-tile {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+.dash-tile:hover {
+  border-top-color: var(--c-acc);
+}
+.dash-tile[data-state="waiting"] {
+  border-left: 3px solid var(--c-sign);
+}
+.dash-tile[data-state="error"] {
+  border-left: 3px solid var(--c-sev);
+}
+.dash-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dash-state {
+  color: var(--c-mut);
+  font: 600 11.5px var(--font-code);
+  letter-spacing: 0.02em;
+}
+.dash-tile[data-state="waiting"] .dash-state {
+  color: var(--c-warn);
+}
+.dash-tile[data-state="error"] .dash-state {
+  color: var(--c-sev);
+}
+.dash-tile-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  color: var(--c-mut);
+  font-size: 12.5px;
+}
+.dash-metric {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+.dash-metric-label {
+  color: var(--c-mut);
+  font: 600 11.5px var(--font-code);
+  letter-spacing: 0.03em;
+}
+.dash-metric-value {
+  font: 600 26px/1.2 var(--font-sign);
+  font-variant-numeric: tabular-nums;
+}
+.dash-feed {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+.dash-feed-item {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-line);
+  font-size: 13.5px;
+}
+.dash-feed-item:last-child {
+  border-bottom: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn,
+  .board-row,
+  .rail-item,
+  .sign-pill {
+    transition:
+      background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  /* A new request arrives like a changed line on a departures board: its time flips in, then stays lit. */
+  .board-row[data-lit] .board-time {
+    animation: flap 0.46s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes flap {
+    0% {
+      transform: perspective(240px) rotateX(-88deg);
+      filter: brightness(0.7);
+    }
+    60% {
+      transform: perspective(240px) rotateX(10deg);
+    }
+    100% {
+      transform: perspective(240px) rotateX(0);
+      filter: none;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Settings read as a sheet: the section name in its own column on the left, its fields on the right. */
+.sheet > h1 {
+  margin-bottom: 18px;
+}
+.sheet fieldset {
+  grid-template-columns: 220px minmax(0, 1fr);
+  column-gap: 36px;
+  row-gap: 0;
+  padding: 20px 0 22px;
+  border-top: 1px solid var(--c-line);
+}
+.sheet fieldset > legend {
+  float: left;
+  grid-column: 1;
+  grid-row: 1 / span 30;
+  margin: 0;
+  padding: 0;
+  font-size: 16px;
+}
+.sheet fieldset > :not(legend) {
+  grid-column: 2;
+}
+.sheet fieldset > :not(legend) ~ :not(legend) {
+  margin-top: 12px;
+}
+@media (max-width: 900px) {
+  .sheet fieldset {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sheet fieldset > legend {
+    grid-row: auto;
+    margin-bottom: 6px;
+  }
+  .sheet fieldset > :not(legend) {
+    grid-column: 1;
+  }
+}
+
+/* Help: the pane on the right of every page, and the user guide. */
+.help-pane {
+  width: 380px;
+}
+@media (max-width: 1200px) {
+  .help-pane {
+    width: 320px;
+  }
+}
+.help-body {
+  max-width: 72ch;
+  line-height: 1.6;
+}
+.help-body p,
+.help-body ul,
+.help-body ol {
+  margin: 0 0 12px;
+}
+.help-body ul,
+.help-body ol {
+  padding-left: 20px;
+}
+.help-body ul {
+  list-style: disc;
+}
+.help-body ol {
+  list-style: decimal;
+}
+.help-body li + li {
+  margin-top: 4px;
+}
+.help-body strong {
+  font-weight: 600;
+}
+
+/* A workspace pane. When it is narrow (split view, or a small window) the files rail folds behind a button, and an
+   open file takes the transcript's place rather than squeezing it. */
+.pane {
+  container-type: inline-size;
+}
+/* The conversation's own text size and spacing, per session (owner, 31 Oct). Only text that has no size of its own scales. */
+.pane-transcript {
+  font-size: calc(14px * var(--pane-scale, 1));
+}
+.pane-item {
+  padding: 6px 20px;
+}
+.pane[data-density="compact"] .pane-item {
+  padding: 2px 20px;
+}
+.pane-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+.pane[data-viewer] .pane-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) 290px;
+}
+.pane-rail {
+  display: grid;
+}
+.pane-rail-close {
+  display: none;
+}
+@container (max-width: 980px) {
+  .pane-body,
+  .pane[data-viewer] .pane-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pane[data-viewer] .pane-transcript {
+    display: none;
+  }
+  .pane-rail {
+    display: none;
+  }
+  .pane-rail-close {
+    display: inline-flex;
+  }
+  .pane[data-rail="open"] .pane-rail {
+    display: grid;
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 5;
+    width: min(320px, 92%);
+    box-shadow: -8px 0 24px color-mix(in srgb, #000 18%, transparent);
+  }
+}
+
+/*
+ * The app: the rail on the left, the page on the right (owner, 30 Oct: arranged like the desktop coding apps,
+ * in Codehouse's own colours and type). Ctrl+B hides the rail.
+ */
+.app-shell {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--rail-w, 272px) minmax(0, 1fr);
+  min-height: 0;
+}
+.app-shell[data-rail="hidden"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  border-right: 1px solid var(--c-shell-line);
+}
+.rail-sessions {
+  flex: 1 1 auto;
+}
+/* The sidebar's edge, a few pixels wide over the border, dragged to resize (owner, 31 Oct). */
+.rail-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--rail-w, 272px) - 3px);
+  z-index: 5;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.rail-resizer:hover,
+.rail-resizer:focus-visible {
+  background: var(--c-acc);
+  opacity: 0.55;
+}
+.rail-session {
+  position: relative;
+}
+.rail-session-menu {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  opacity: 0;
+}
+.rail-session:hover .rail-session-menu,
+.rail-session:focus-within .rail-session-menu,
+.rail-session-menu:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+.rail-session[data-state="ended"] .rail-item {
+  opacity: 0.6;
+}
+.rail-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-shell-mut);
+  font: 600 14px var(--font-sign);
+  cursor: pointer;
+}
+.rail-icon:hover {
+  background: var(--c-shell-line);
+  color: var(--c-shell-tx);
+}
+.rail-profile {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-shell-tx);
+  font: 500 14px var(--font-sign);
+  cursor: pointer;
+}
+.rail-profile:hover,
+.rail-profile[aria-expanded="true"] {
+  background: var(--c-shell-2);
+  border-color: var(--c-shell-line);
+}
+/* The command deck (Stitch): one 46px band across the window, the darkest layer, with the wordmark, the live
+   sessions, the phone, the kill switch and your profile. */
+.deck {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 46px;
+  padding: 4px 10px 4px 14px;
+  border-bottom: 1px solid var(--c-shell-line);
+  background: var(--c-shell);
+  color: var(--c-shell-tx);
+}
+.deck-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.deck-brand strong {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-stretch: 85%;
+}
+.deck-sub {
+  font: 500 12px var(--font-sign);
+  color: var(--c-shell-mut);
+}
+.deck-claude {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--c-shell-line);
+  border-radius: 3px;
+  font: 600 10.5px/1.6 var(--font-code);
+  letter-spacing: 0.04em;
+}
+.deck-sessions {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.deck-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 2px 9px;
+  border: 1px solid var(--c-shell-line);
+  border-radius: 4px;
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+  font: 500 12.5px var(--font-sign);
+  cursor: pointer;
+}
+.deck-chip:hover {
+  border-color: var(--c-acc);
+}
+.deck-state {
+  font: 600 11px var(--font-code);
+  letter-spacing: 0.02em;
+  color: var(--c-shell-mut);
+}
+.deck-state.is-warn {
+  color: var(--c-warn);
+}
+.deck-state.is-run {
+  color: var(--c-acc);
+}
+.deck-state.is-sev {
+  color: var(--c-sev);
+}
+.deck-none {
+  font-size: 12.5px;
+  color: var(--c-shell-mut);
+}
+.deck-end {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 10px;
+}
+.deck-phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--c-shell-mut);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.deck-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.deck-dot.is-ok {
+  border-color: var(--c-ok);
+  background: var(--c-ok);
+}
+/* The kill switch: garnet inside a hatched warning edge, square corners, never a pill. White on #7f1d1d is 9:1. */
+.kill-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 3px solid transparent;
+  border-radius: 2px;
+  background:
+    linear-gradient(#7f1d1d, #7f1d1d) padding-box,
+    repeating-linear-gradient(45deg, #ef4444 0 4px, #450a0a 4px 8px) border-box;
+  color: #ffffff;
+  font: 700 13px var(--font-sign);
+  cursor: pointer;
+}
+.kill-switch:hover {
+  background:
+    linear-gradient(#991b1b, #991b1b) padding-box,
+    repeating-linear-gradient(45deg, #ef4444 0 4px, #450a0a 4px 8px) border-box;
+}
+.kill-switch kbd {
+  border-color: rgb(255 255 255 / 0.35);
+  background: rgb(0 0 0 / 0.25);
+  color: #ffffff;
+}
+.kill-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+.kill-confirm {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: grid;
+  gap: 8px;
+  width: 320px;
+  padding: 14px;
+  border: 1px solid var(--c-sev);
+  border-top: 3px solid var(--c-sev);
+  border-radius: 8px;
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
+}
+.deck-profile {
+  display: inline-flex;
+  max-width: 220px;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--c-shell-tx);
+  font: 500 13px var(--font-sign);
+  cursor: pointer;
+}
+.deck-profile:hover,
+.deck-profile[aria-expanded="true"] {
+  background: var(--c-shell-2);
+  border-color: var(--c-shell-line);
+}
+.deck-avatar {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  font: 700 13px var(--font-sign);
+}
+@media (max-width: 1280px) {
+  .deck-sub,
+  .deck-phone {
+    display: none;
+  }
+}
+
+/* In the shell, not the window, so the update bar above never covers it. */
+.show-rail {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
+}
+
+/* Menus float above everything, placed by their button. */
+.menu {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  min-width: 220px;
+  max-width: min(360px, calc(100vw - 8px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  box-shadow: 0 10px 30px color-mix(in srgb, #000 22%, transparent);
+}
+.menu-shell {
+  border-color: var(--c-shell-line);
+  background: var(--c-shell-2);
+  color: var(--c-shell-tx);
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 500 14px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--c-s2);
+  outline: none;
+}
+.menu-shell .menu-item:hover,
+.menu-shell .menu-item:focus-visible {
+  background: var(--c-shell-line);
+}
+.menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.menu-danger {
+  color: var(--c-sev);
+}
+.menu-hint {
+  font-size: 12px;
+  opacity: 0.75;
+}
+.menu-sep {
+  width: 100%;
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--c-line);
+}
+.menu-shell .menu-sep {
+  border-top-color: var(--c-shell-line);
+}
+.menu-heading {
+  padding: 6px 10px 4px;
+  font: 500 12.5px var(--font-sign);
+  opacity: 0.75;
+}
+
+/* A session pane: its name with a menu, and the side panels it can open. */
+.pane-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s1);
+}
+/* The side panels as one segmented control (Stitch, R5): the open one filled. */
+.pane-head [role="group"][aria-label="Side panels"] {
+  gap: 2px !important;
+  padding: 2px;
+  border: 1px solid var(--c-line);
+  border-radius: 5px;
+  background: var(--c-s2);
+}
+.pane-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: 600 17px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.pane-title:hover > span:first-child {
+  text-decoration: underline;
+}
+.pane-tool {
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 13.5px var(--font-sign);
+  cursor: pointer;
+}
+.pane-tool:hover {
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.pane-tool[aria-pressed="true"] {
+  border-color: var(--c-acc);
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  font-weight: 600;
+}
+.pane[data-side="none"] .pane-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.pane[data-side="none"][data-viewer] .pane-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+.pane[data-side="none"] .pane-rail {
+  display: none;
+}
+
+/* Model, effort and mode under the prompt box. */
+.composer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 6px;
+}
+.composer-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: 500 12.5px var(--font-sign);
+  color: var(--c-mut);
+}
+.composer-select {
+  min-height: 26px;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-tx);
+  font: 500 13px var(--font-sign);
+  cursor: pointer;
+}
+.composer-select:hover {
+  border-color: var(--c-line);
+}
+main[data-rail="hidden"] {
+  padding-top: 44px;
+}
+
+/* A newer version is out: one thin bar across the top of the window. */
+.update-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-height: 36px;
+  padding: 3px 12px;
+  border-bottom: 1px solid var(--c-shell-line);
+  font: 500 13.5px var(--font-sign);
+}
+.update-bar .btn {
+  min-height: 26px;
+  padding: 1px 10px;
+  font-size: 13px;
+}
+/* After .shell .btn, which would otherwise empty the main button. */
+.update-bar .btn-primary {
+  border-color: var(--c-acc);
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+}
+
+/* Back to the latest, when you have scrolled up the conversation. */
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 16%, transparent);
+  cursor: pointer;
+}
+.jump-latest:hover {
+  background: var(--c-s2);
+}
+/* Why a session stopped, above its prompt box. */
+.pane-stopped {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-sev);
+  border-radius: 6px;
+  color: var(--c-sev);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+/* A run of tool calls folded into one line. */
+/* A ledger row (Stitch, R5): a quiet box with the tools it ran, what is waiting or blocked, and the arrow. */
+.tool-group-line {
+  display: inline-flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--c-line);
+  border-left: 3px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-s1);
+  color: var(--c-mut);
+  font: 500 13.5px var(--font-sign);
+  text-align: left;
+  cursor: pointer;
+}
+.tool-group-line:hover {
+  border-left-color: var(--c-acc);
+  color: var(--c-tx);
+}
+.tool-group-line[aria-expanded="true"] {
+  border-left-color: var(--c-acc);
+  color: var(--c-tx);
+}
+.activity[data-stuck] .activity-dot {
+  background: var(--c-sev);
+  animation: none;
+}
+
+/*
+ * Terminal and Changes need more room than Files and Plan: a wider column in a wide pane, a wider panel over a
+ * narrow one. Inside container queries, so the wide rule never squeezes a narrow pane's transcript.
+ */
+@container (min-width: 981px) {
+  .pane[data-side="terminal"] .pane-body,
+  .pane[data-side="changes"] .pane-body,
+  .pane[data-side="artifacts"] .pane-body {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr);
+  }
+  .pane[data-side="terminal"][data-viewer] .pane-body,
+  .pane[data-side="changes"][data-viewer] .pane-body,
+  .pane[data-side="artifacts"][data-viewer] .pane-body {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr) minmax(340px, 0.9fr);
+  }
+}
+@container (max-width: 980px) {
+  .pane[data-rail="open"][data-side="terminal"] .pane-rail,
+  .pane[data-rail="open"][data-side="changes"] .pane-rail,
+  .pane[data-rail="open"][data-side="artifacts"] .pane-rail {
+    width: min(560px, 96%);
+  }
+}
+
+/* The terminal pane's output. */
+.term-out {
+  min-height: 0;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  background: var(--c-s2);
+  color: var(--c-tx);
+  font: 12.5px/1.5 var(--font-code);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.term-cmd {
+  font-weight: 600;
+}
+.term-err {
+  color: var(--c-sev);
+}
+.term-note {
+  color: var(--c-mut);
+}
+
+/* Pictures waiting to be sent, above the prompt box. */
+.pic-chip {
+  position: relative;
+}
+.pic-thumb,
+.pic-sent {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s2);
+  cursor: zoom-in;
+}
+.pic-thumb {
+  width: 64px;
+  height: 64px;
+}
+.pic-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pic-chip[data-busy] .pic-thumb img {
+  opacity: 0.45;
+}
+.pic-busy {
+  position: absolute;
+  inset: auto 0 4px;
+  font: 600 10.5px var(--font-sign);
+  text-align: center;
+  pointer-events: none;
+}
+.pic-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  font: 600 15px/1 var(--font-sign);
+  cursor: pointer;
+}
+.pic-remove:hover {
+  background: var(--c-s2);
+}
+/* A picture a tool gave back, small at the end of its line; and one of yours that could not be loaded. */
+.tool-group-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tool-pics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.pic-tool {
+  display: block;
+  width: 46px;
+  height: 32px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s2);
+  cursor: zoom-in;
+}
+.pic-tool img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.pic-missing {
+  padding: 6px 10px;
+  color: var(--c-mut);
+  font-size: 12.5px;
+  cursor: default;
+}
+/* Pictures in your message in the transcript. */
+.pic-sent img {
+  display: block;
+  max-width: 240px;
+  max-height: 180px;
+  object-fit: contain;
+}
+/* A picture shown large. */
+.picture-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  align-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, #000 72%, transparent);
+  cursor: zoom-out;
+}
+.picture-viewer img {
+  max-width: 92vw;
+  max-height: 82vh;
+  object-fit: contain;
+  border-radius: 4px;
+  background: var(--c-s1);
+  cursor: default;
+}
+
+/* The time beside each message. */
+.msg-time {
+  display: block;
+  margin-top: 2px;
+  color: var(--c-mut);
+  font: 500 11.5px var(--font-sign);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Copying (owner, 1 Nov): a quiet Copy under each message, on code blocks, commands and outputs. Always shown,
+   so it can be found and reached by keyboard; it says Copied for a moment. */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 12px var(--font-sign);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.copy-btn:hover {
+  border-color: var(--c-line);
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.copy-btn.is-done {
+  color: var(--c-tx);
+}
+.copy-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+.msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  margin-top: 2px;
+}
+.msg-actions .msg-time {
+  display: inline;
+  margin: 0 0 0 4px;
+}
+.code-block {
+  margin: 0.5em 0;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 4px 2px 10px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s2);
+}
+.code-block pre {
+  margin: 0;
+  border-radius: 0 !important;
+}
+.copyable {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.copyable > :first-child {
+  justify-self: stretch;
+}
+
+/* How much of the plan's limits the account has used, beside Stop. */
+.plan-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 12.5px var(--font-ui);
+  cursor: pointer;
+}
+.plan-meter:hover,
+.plan-meter[aria-expanded="true"] {
+  border-color: var(--c-line);
+  color: var(--c-tx);
+}
+.plan-ring-track {
+  fill: none;
+  stroke: var(--c-line);
+  stroke-width: 2.5;
+}
+.plan-ring-fill {
+  fill: none;
+  stroke: var(--c-acc);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+.plan-ring-high {
+  stroke: var(--c-warn);
+}
+.plan-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 20;
+  display: grid;
+  gap: 12px;
+  width: 320px;
+  padding: 14px;
+}
+.plan-bar {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--c-s2);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.plan-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--c-acc);
+}
+.plan-bar-fill.plan-ring-high {
+  background: var(--c-warn);
+}
+
+/* How full the conversation is, under the prompt box. */
+.ctx-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 1px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-tx);
+  font: 500 13px var(--font-sign);
+  cursor: pointer;
+}
+.ctx-meter:hover,
+.ctx-meter[aria-expanded="true"] {
+  border-color: var(--c-line);
+}
+.ctx-track {
+  display: inline-block;
+  width: 44px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--c-s2);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.ctx-fill {
+  display: block;
+  height: 100%;
+  background: var(--c-acc);
+}
+.ctx-fill.ctx-high {
+  background: var(--c-sign);
+}
+/* Past the point where compacting is worth it: the meter says so in words, not only by its fill. */
+.ctx-advice {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--c-acc);
+}
+.ctx-panel {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 8px;
+  width: 300px;
+  padding: 12px;
+}
+
+/*
+ * The Usage page's charts. One hue for a single series: the accent teal in light, a step of it inside the dark chart
+ * band in dark. The 30 Oct values were checked with the dataviz validator; these follow the accent and have been checked
+ * for contrast only (31 Oct, W1-02).
+ */
+:root {
+  --c-viz: #1d4ed8;
+}
+:root[data-theme="dark"] {
+  --c-viz: #7fa9f0;
+}
+/* An earlier session being resumed: the row you chose lights up while it starts. */
+li[data-resuming] {
+  background: var(--c-s2);
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+
+.usage-chart {
+  overflow: visible;
+  font: 11px var(--font-sign);
+}
+.usage-grid {
+  stroke: var(--c-line);
+  stroke-width: 1;
+}
+.usage-base {
+  stroke: var(--c-mut);
+  stroke-width: 1;
+}
+.usage-axis {
+  fill: var(--c-mut);
+}
+.usage-bar {
+  fill: var(--c-viz);
+}
+.usage-slot {
+  outline: none;
+  cursor: default;
+}
+.usage-slot[data-on] .usage-bar {
+  filter: brightness(1.15);
+}
+.usage-slot:focus-visible rect {
+  stroke: var(--c-acc);
+  stroke-width: 2;
+}
+.usage-tip {
+  position: absolute;
+  top: 4px;
+  display: grid;
+  gap: 2px;
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.usage-track {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--c-s2);
+}
+.usage-fill {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 4px;
+  background: var(--c-viz);
+}
+.usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.usage-table th,
+.usage-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--c-line);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.usage-table th:first-child,
+.usage-table td:first-child {
+  text-align: left;
+}
+
+/*
+ * Windows high contrast. The system colours replace the palette, so every surface, line and word is one the person
+ * chose in Windows. Focus and the current item keep an outline, since a fill is not drawn.
+ */
+@media (forced-colors: active) {
+  :root,
+  :root[data-theme="dark"] {
+    --c-bg: Canvas;
+    --c-s1: Canvas;
+    --c-s2: Canvas;
+    --c-line: CanvasText;
+    --c-tx: CanvasText;
+    --c-mut: CanvasText;
+    --c-acc: LinkText;
+    --c-acc-tx: Canvas;
+    --c-hi: Canvas;
+    --c-hi-line: Highlight;
+    --c-sev: CanvasText;
+    --c-ok: CanvasText;
+    --c-warn: CanvasText;
+    --c-sign: Highlight;
+    --c-sign-tx: HighlightText;
+    --c-lit: Canvas;
+    --c-shell: Canvas;
+    --c-shell-2: Canvas;
+    --c-shell-line: CanvasText;
+    --c-shell-tx: CanvasText;
+    --c-shell-mut: CanvasText;
+    --c-viz: CanvasText;
+  }
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+  .btn,
+  .btn-primary,
+  .rail-item,
+  .rail-icon,
+  .panel {
+    border: 1px solid CanvasText;
+  }
+  [aria-current="page"],
+  [aria-expanded="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+/* Settings: the list of sections beside the settings (W1-04). */
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--c-mut);
+  font: 500 14px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.settings-nav button:hover {
+  background: var(--c-s2);
+  color: var(--c-tx);
+}
+.settings-nav button[aria-current="page"] {
+  background: var(--c-s2);
+  color: var(--c-tx);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--c-acc);
+}
+
+/* The audit log (Stitch, R7): the chain badge, the quick views, and a dense table with risk first. */
+.audit-chain {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border: 1px solid var(--c-ok);
+  border-radius: 3px;
+  color: var(--c-ok);
+  font: 600 12px/1.6 var(--font-code);
+}
+.audit-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: fit-content;
+  margin: 0 24px 10px;
+  padding: 2px;
+  border: 1px solid var(--c-line);
+  border-radius: 5px;
+  background: var(--c-s2);
+}
+.audit-head th {
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s1);
+  color: var(--c-mut);
+  font: 600 11.5px var(--font-code);
+  letter-spacing: 0.03em;
+  text-align: left;
+}
+.audit-cell {
+  padding: 5px 12px;
+  border-bottom: 1px solid var(--c-line);
+  vertical-align: top;
+}
+tr:has(> .audit-cell[data-outcome="deny"]) {
+  background: color-mix(in oklch, var(--c-sev) 7%, transparent);
+}
+
+/* An artifact in the reply that made it (Stitch, R8): a card with its kind, and Open beside the chat. */
+.artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 560px;
+  margin-top: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--c-line);
+  border-left: 3px solid var(--c-acc);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+.artifact-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--c-s2);
+  color: var(--c-acc);
+  font-size: 18px;
+}
+
+/* First-run setup (Stitch, R9): the steps as tiles in a row, then the step itself in a card with a top edge. */
+.setup-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-s1);
+  list-style: none;
+}
+@media (max-width: 760px) {
+  .setup-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.setup-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--c-mut);
+  font: 500 13px var(--font-sign);
+}
+.setup-steps li[data-done] {
+  color: var(--c-tx);
+}
+.setup-steps li[aria-current="step"] {
+  border-color: var(--c-acc);
+  border-bottom-width: 3px;
+  background: var(--c-s2);
+  color: var(--c-tx);
+  font-weight: 600;
+}
+.setup-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--c-line);
+  border-radius: 50%;
+  font: 600 11px var(--font-code);
+}
+.setup-steps li[data-done] .setup-mark {
+  border-color: var(--c-ok);
+  color: var(--c-ok);
+}
+.setup-steps li[aria-current="step"] .setup-mark {
+  border-color: var(--c-acc);
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+}
+.setup-step-n {
+  font: 600 10.5px var(--font-code);
+  letter-spacing: 0.04em;
+  opacity: 0.8;
+}
+.setup-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px 24px;
+  border: 1px solid var(--c-line);
+  border-top: 3px solid var(--c-acc);
+  border-radius: 6px;
+  background: var(--c-s1);
+}
+/* The sessions the kill switch would stop, in its question. */
+.kill-list {
+  display: grid;
+  gap: 4px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.kill-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+/* A file held over the prompt row (owner, 1 Nov): the row says it will take it. */
+.composer-row[data-drop] {
+  border-radius: 8px;
+  outline: 2px dashed var(--c-acc);
+  outline-offset: 4px;
+}
+
+/* Up to four sessions side by side (owner, 1 Nov): lines between them, and the pane with focus marked on top. */
+.panes > .pane-slot {
+  border-left: 1px solid var(--c-line);
+  border-top: 1px solid var(--c-line);
+}
+.panes > .pane-slot:first-child,
+.panes[data-count="4"] > .pane-slot:nth-child(3) {
+  border-left: 0;
+}
+.panes:not([data-count="4"]) > .pane-slot,
+.panes[data-count="4"] > .pane-slot:nth-child(-n + 2) {
+  border-top: 0;
+}
+.pane-slot[data-focus] .pane-head {
+  box-shadow: inset 0 3px 0 var(--c-acc);
+}
+
+/* What the processor and memory level means, beside its picker. */
+.level-note {
+  color: var(--c-mut);
+  font-size: 12px;
+}
+
+/* A chat's sources (W1-10): numbered as Claude cites them, each marked as from the web. */
+.source-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+.source-n {
+  display: grid;
+  height: 22px;
+  place-items: center;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  font: 600 12px var(--font-code);
+}

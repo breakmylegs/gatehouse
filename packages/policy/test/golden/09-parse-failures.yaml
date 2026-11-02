@@ -1,0 +1,22 @@
+# Text the parsers reject. Parse errors escalate. The floor still reads the raw words, so secrets are denied.
+- { t: Bash, cmd: "git status &&", o: escalate, r: parse-error }
+- { t: Bash, cmd: "echo \"unterminated", o: escalate, r: parse-error }
+- { t: Bash, cmd: "if then fi", o: escalate, r: parse-error }
+- { t: Bash, cmd: "git status && && git diff", o: escalate, r: parse-error }
+- { t: Bash, cmd: "for x in", o: escalate, r: parse-error }
+- { t: Bash, cmd: "echo $(", o: escalate, r: parse-error }
+- { t: Bash, cmd: "if true; then", o: escalate, r: parse-error }
+- { t: Bash, cmd: "echo `", o: escalate, r: parse-error }
+- { t: Bash, cmd: "(((", o: escalate, r: parse-error }
+- { t: Bash, cmd: ")", o: escalate, r: parse-error }
+- { t: Bash, cmd: "git status )", o: escalate, r: parse-error }
+- { t: Bash, cmd: "case x in", o: escalate, r: parse-error }
+- { t: Bash, cmd: "{ echo hi", o: escalate, r: parse-error }
+- { t: Bash, cmd: "cat .env &&", o: deny, r: secrets-files }
+- { t: Bash, cmd: "echo \"unterminated .env", o: deny, r: secrets-files }
+- { t: PowerShell, cmd: "Get-ChildItem {", o: escalate, r: parse-error }
+- { t: PowerShell, cmd: "Get-Content \"unterminated", o: escalate, r: parse-error }
+- { t: PowerShell, cmd: "if (", o: escalate, r: parse-error }
+- { t: PowerShell, cmd: "Get-ChildItem | | x", o: escalate, r: parse-error }
+- { t: PowerShell, cmd: "Get-ChildItem )", o: escalate, r: parse-error }
+- { t: PowerShell, cmd: "Get-Content .env \"", o: deny, r: secrets-files }

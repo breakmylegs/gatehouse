@@ -1,0 +1,36 @@
+version: 1
+id: python-dev
+title: Python, building and testing
+description: Lets Claude run tests, linters and type checks in a Python project. Installing packages still asks you.
+allow:
+  - id: python-dev-check
+    everySegmentMustMatch: true
+    commands:
+      - "python --version"
+      - "python -V"
+      - "py --version"
+      - "python -m pytest*"
+      - "pytest*"
+      - "py -m pytest*"
+      - "python -m pip list*"
+      - "python -m pip show *"
+      - "python -m pip freeze*"
+      - "pip list*"
+      - "pip show *"
+      - "pip freeze*"
+      - "ruff check*"
+      - "ruff format --check*"
+      - "black --check *"
+      - "mypy *"
+      - "python -m mypy *"
+      - "uv run pytest*"
+escalate:
+  - id: python-dev-install
+    commands: ["uv add *", "uv sync*", "poetry add *", "poetry install*", "python -m pip install*"]
+    risk: 70
+    message: "Installs packages from the network."
+cases:
+  - { tool: Bash, input: { command: "python -m pytest -q" }, expect: allow, rule: python-dev-check }
+  - { tool: Bash, input: { command: "ruff check src" }, expect: allow }
+  - { tool: Bash, input: { command: "pip install requests" }, expect: escalate }
+  - { tool: Bash, input: { command: "poetry add httpx" }, expect: escalate, rule: python-dev-install }

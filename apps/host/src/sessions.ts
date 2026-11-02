@@ -1,0 +1,1777 @@
+import { EventEmitter } from "node:events"
+import crypto from "node:crypto"
+import os from "node:os"
+import { Effort, type Verdict } from "@gatehouse/shared"
+import { execFile } from "node:child_process"
+import fs from "node:fs"
+import path from "node:path"
+import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import {
+  findProjectRoot,
+  redactString,
+  type Policy,
+  type PwshWorker,
+  type PolicyEngine,
+} from "@gatehouse/policy"
+import { projectName, sanitiseEnv, uuidv7 } from "@gatehouse/shared"
+import type { GatehouseConfig } from "@gatehouse/shared/node"
+import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
+import type { ApproverClient } from "./approver-client.js"
+import type { Broker } from "./broker.js"
+import { createCanUseTool } from "./canuse.js"
+import type { CheckpointManager } from "./checkpoints.js"
+import {
+  createEventHook,
+  createFloorHook,
+  createPostToolHook,
+  type SessionHookDeps,
+} from "./hooks.js"
+import type { HostAudit } from "./hostaudit.js"
+import type { HostKillSwitch } from "./kill.js"
+import {
+  assertSafeOptions,
+  isAllowedMode,
+  isShadowWarning,
+  outOfProcessServers,
+  SafetyError,
+  type SessionMode,
+} from "./safety.js"
+import type { UsageStore } from "./usage.js"
+import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
+import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
+import {
+  CARRY_ON_PROMPT,
+  CarryOn,
+  carryOnLimits,
+  LIMIT_RESUME_PROMPT,
+  RESUME_PROMPT,
+  type CarryOnStatus,
+} from "./carry-on.js"
+import { planLimits, type PlanUsage } from "./plan-usage.js"
+import { composeInstructions, type ProjectStore } from "./projects.js"
+import type { ArtifactStore } from "./artifacts.js"
+import type { MemoryStore } from "./memory.js"
+import { CRASH_RESUME_PROMPT, CrashRestarts, describeStop, isProcessCrash } from "./crash.js"
+
+export class OrgGuardError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+  }
+}
+/** The folder for a new session cannot be used or made. */
+export class SessionFolderError extends Error {}
+
+/** A chat stays in Plan mode: it can read and search, never change files or run commands. */
+export class ChatModeError extends Error {
+  constructor() {
+    super(
+      "A chat stays in Plan mode, so it never changes files or runs commands. Start a coding session for that.",
+    )
+  }
+}
+
+/**
+ * Makes sure the project folder exists. A folder that is missing is created, with any parent folders it needs, so
+ * a whole new path can be typed in. A relative path, a path that is a file, or a drive that is not there is
+ * refused with a plain message (a missing folder otherwise shows up as a misleading "program failed to launch").
+ */
+export function ensureFolder(cwd: string, log: (line: string) => void = () => undefined): void {
+  if (!path.isAbsolute(cwd))
+    throw new SessionFolderError(
+      `"${cwd}" is not a full folder path. Type the whole path, for example C:\\dev\\my-project.`,
+    )
+  let stat: fs.Stats | undefined
+  try {
+    stat = fs.statSync(cwd)
+  } catch {
+    stat = undefined
+  }
+  if (stat) {
+    if (!stat.isDirectory()) throw new SessionFolderError(`"${cwd}" is a file, not a folder.`)
+    return
+  }
+  const root = path.parse(path.resolve(cwd)).root
+  if (!fs.existsSync(root))
+    throw new SessionFolderError(
+      `The drive ${root} does not exist, so the folder cannot be created.`,
+    )
+  try {
+    fs.mkdirSync(cwd, { recursive: true })
+  } catch (e) {
+    throw new SessionFolderError(
+      `The folder "${cwd}" could not be created: ${(e as Error).message}`,
+    )
+  }
+  log(`created the project folder ${cwd}`)
+}
+
+/** cwd, or cwd-2, cwd-3 and so on: the first that does not exist, or (unless emptyIsFree is false) is empty. */
+export function freeFolder(cwd: string, emptyIsFree = true): string {
+  const free = (p: string) => {
+    if (!fs.existsSync(p)) return true
+    if (!emptyIsFree) return false
+    try {
+      return fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0
+    } catch {
+      return false
+    }
+  }
+  if (free(cwd)) return cwd
+  for (let n = 2; n < 100; n++) if (free(`${cwd}-${n}`)) return `${cwd}-${n}`
+  throw new SessionFolderError(
+    `There are already 99 projects called ${path.basename(cwd)}. Choose another name.`,
+  )
+}
+
+const sameFolder = (a: string, b: string) =>
+  path
+    .resolve(a)
+    .replace(/[\\/]+$/, "")
+    .toLowerCase() ===
+  path
+    .resolve(b)
+    .replace(/[\\/]+$/, "")
+    .toLowerCase()
+
+/** git init, so checkpoints work from the first edit. A failure is logged; the project still starts. */
+function gitInit(cwd: string, log: (line: string) => void): Promise<void> {
+  return new Promise((resolve) =>
+    execFile("git", ["init", "--quiet"], { cwd, windowsHide: true, timeout: 30_000 }, (e) => {
+      if (e)
+        log(`git init failed in ${cwd} (${e.message.split("\n")[0]}); checkpoints are off there`)
+      resolve()
+    }),
+  )
+}
+
+export class KillSwitchEngagedError extends Error {
+  constructor() {
+    super("The kill switch is engaged. Re-arm it on the desktop before starting a session.")
+  }
+}
+
+export type SessionState = "starting" | "idle" | "running" | "waiting" | "error" | "ended"
+
+export interface SessionInfo {
+  id: string
+  cwd: string
+  project: string
+  /** Absent for a coding session. */
+  kind?: "code" | "chat"
+  model?: string
+  mode: SessionMode
+  effort?: Effort
+  extreme?: boolean
+  state: SessionState
+  sdkSessionId?: string
+  pendingApprovals: number
+  createdAt: string
+  error?: string
+  /** Yours: a title, a pin, archived. */
+  title?: string
+  pinned?: boolean
+  archived?: boolean
+  /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
+  historyFrom?: string
+  /**
+   * Brought back after Codehouse restarted or updated, after you force-stopped it, or after its Claude Code crashed, and
+   * whether a turn was cut off.
+   */
+  restarted?: { wasRunning: boolean; forced?: boolean; crashed?: boolean }
+  /** What is still working in the background after the turn ended, by description. */
+  background?: string[]
+  /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
+  carryOn?: CarryOnStatus
+  /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
+  resources?: ResourceLevel
+  /** Which signed-in account it runs on. Absent for the main one. */
+  account?: string
+  /** You asked to compact while a turn ran: it compacts when the turn ends. */
+  compactPending?: boolean
+  /** The chat project this chat belongs to. */
+  chatProject?: string
+  /** The instructions given for this session alone. */
+  instructions?: string
+  /** A research chat (W1-10). */
+  research?: boolean
+  /** Runs on a model on this computer, not Claude (ADR 0011). */
+  local?: boolean
+  /** Where its words go: "On this computer", or a provider through your gateway (ADR 0010). */
+  localLabel?: string
+  /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
+  paused?: { until?: string; percent: number; wasRunning: boolean }
+}
+
+export interface SessionEvents {
+  message: [SDKMessage]
+  state: [SessionInfo]
+  event: [
+    {
+      type:
+        | "notification"
+        | "stop"
+        | "subagent_start"
+        | "subagent_stop"
+        | "decision"
+        | "interrupted"
+        | "paused"
+        | "resumed"
+        | "carry_on"
+        | "carry_on_end"
+      data: Record<string, unknown>
+    },
+  ]
+  /** Its Claude Code process crashed (not a stop Codehouse made), and whether it was working then. */
+  crashed: [{ wasRunning: boolean; message: string }]
+}
+
+/**
+ * The longest a session may take to start. Seen on this laptop (31 Oct): 40 s to 2 min 43 s each when several came
+ * back together, so five minutes is past any slow start and short of a start that is never going to finish.
+ */
+export const START_TIMEOUT_MS = 300_000
+
+export interface SessionDeps {
+  queryFn: QueryFn
+  /** Your title, pin and archive for a Claude Code session id. Absent where they are not kept. */
+  sessionMeta?: (sdkSessionId: string | undefined) => {
+    title?: string
+    pinned?: boolean
+    archived?: boolean
+  }
+  /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
+  resumeSettings?: (sdkSessionId: string) => {
+    model?: string
+    effort?: string
+    mode?: SessionMode
+    extreme?: boolean
+    resources?: ResourceLevel
+  }
+  /** Where chats get their folders: %LOCALAPPDATA%\Gatehouse\chats. Absent where chats are not offered. */
+  chatsDir?: string
+  /** Runs each session inside a job object with its resource limits. Absent where that is not possible. */
+  limiter?: Limiter
+  /** The accounts signed in beside the main one. Absent where there is only the main one. */
+  accounts?: Accounts
+  /** The chat projects: their instructions and knowledge files. Absent where chats have none. */
+  projects?: ProjectStore
+  /** What chats remember. Absent where chats have no memory. */
+  memory?: MemoryStore
+  /**
+   * Models on this computer (ADR 0011): checks the runtime and the model before a chat starts on one (throws with the
+   * reason), and the query that runs it. Absent where other providers are off.
+   */
+  local?: {
+    check: (model: string) => Promise<void>
+    queryFn: (model: string) => QueryFn
+    /** Where its chats send their words: "On this computer", or a provider through your gateway. */
+    label?: () => string
+  }
+  /** Free memory in bytes, for the warm chat; os.freemem when absent. */
+  freeMemory?: () => number
+  /** Keeps a chat's first message as its title, by its Claude Code id, so it is named the same after a restart. */
+  nameChat?: (sdkSessionId: string, title: string) => Promise<unknown>
+  /** What chats show in a sandbox. Absent where chats have no artifacts. */
+  artifacts?: ArtifactStore
+  /** How long a session may take to start before Codehouse stops waiting. START_TIMEOUT_MS when absent. */
+  startTimeoutMs?: number
+  config: () => GatehouseConfig
+  policy: () => Policy | undefined
+  engine: PolicyEngine
+  pwsh: PwshWorker | undefined
+  audit: HostAudit
+  broker: Broker
+  approver: ApproverClient
+  kill: HostKillSwitch
+  usage: UsageStore
+  checkpoints: CheckpointManager
+  account: AccountMonitor
+  /** Builds the in-process Companion for a session. */
+  companion: (s: {
+    sessionId: string
+    cwd: string
+    kind?: "chat"
+    chatProject?: string
+  }) => Record<string, unknown>
+  managedDetected: () => Promise<boolean | undefined>
+  localRulesPath?: string
+  /** Tells the phone about a request that Extreme approval mode approved. */
+  notifyAutoApproved?: (toolName: string, project: string) => void
+  log: (line: string) => void
+}
+
+export interface StartSessionOptions {
+  cwd: string
+  model?: string
+  mode?: SessionMode
+  effort?: Effort
+  extreme?: boolean
+  resume?: string
+  fork?: boolean
+  /** A new project in the projects folder: the folder must be new (a number is added if the name is taken). */
+  freshFolder?: boolean
+  /** A chat, not a coding session: it gets a folder of its own under the data folder, named from title. */
+  kind?: "code" | "chat"
+  /** The first thing said in a chat, which names its folder. */
+  title?: string
+  /** A chat project: its instructions and knowledge files go with this chat. */
+  chatProject?: string
+  /** Instructions for this one session, added to the global and project ones. */
+  instructions?: string
+  /** A research chat (W1-10): it is given the research instruction. Ignored for a coding session. */
+  research?: boolean
+  /**
+   * Brought back after Codehouse restarted: the same id, so the screen finds its panes again, and its original start
+   * time. A chat keeps its folder.
+   */
+  restore?: {
+    id: string
+    createdAt: string
+    wasRunning: boolean
+    forced?: boolean
+    /** Started again because its Claude Code crashed while it was working. */
+    crashed?: boolean
+    /** It was paused at the plan limit when Codehouse closed: it comes back still paused, until the limit resets. */
+    paused?: NonNullable<SessionInfo["paused"]>
+  }
+  /** How much of this computer it may use; High (no limits) when not given. */
+  resources?: ResourceLevel
+  /** The account to run it on; the main one when not given. */
+  account?: string
+  /** A chat with a model on this computer instead of Claude (ADR 0011). */
+  localModel?: string
+}
+
+/**
+ * Claude's instructions in a chat (owner, 31 Oct, screenshot d3b9c0): a plain conversation with Claude, not a coding
+ * session, so this replaces the coding preset altogether. A chat folder is outside your workspace folders and the
+ * session is in Plan mode, so nothing can change; this keeps it talking and looking things up.
+ */
+export const CHAT_PROMPT =
+  "You are Claude, made by Anthropic, in a conversation with someone using Codehouse on their Windows computer. This is a chat, not a coding session. Answer in plain, warm, clear language. Look things up on the web when that would help, and say where the information came from. You can read files in your working folder: what the person attaches (mentioned as @ and a path, kept in .codehouse/attachments) and a project's knowledge files. Read a file before answering about it. To show data as a chart or table, make an artifact from it (an svg picture or an html page). You cannot change files or run commands here; if someone wants something built or changed, suggest they start a coding session for it."
+
+/**
+ * The built-in tools a chat has: the web, and reading (W1-11: attachments and a project's knowledge files are in its own
+ * folder). Nothing that changes a file or runs a command exists in a chat at all.
+ */
+export const CHAT_TOOLS = ["WebSearch", "WebFetch", "Read", "Glob", "Grep"]
+
+/** The chat's instructions with today's date, which the coding preset would have given Claude. */
+export const chatPrompt = (now: Date = new Date()): string =>
+  `${CHAT_PROMPT} Today's date is ${now.toISOString().slice(0, 10)}.`
+
+/** A prompt stream the Host pushes user messages into. It makes interrupt, mode and model changes possible. */
+class InputQueue implements AsyncIterable<SDKUserMessage> {
+  #items: SDKUserMessage[] = []
+  #waiting: ((r: IteratorResult<SDKUserMessage>) => void) | undefined
+  #closed = false
+
+  push(text: string): void {
+    const msg: SDKUserMessage = {
+      type: "user",
+      message: { role: "user", content: text },
+      parent_tool_use_id: null,
+    }
+    if (this.#waiting) {
+      const w = this.#waiting
+      this.#waiting = undefined
+      w({ value: msg, done: false })
+    } else this.#items.push(msg)
+  }
+
+  end(): void {
+    this.#closed = true
+    this.#waiting?.({ value: undefined, done: true })
+    this.#waiting = undefined
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
+    return {
+      next: () => {
+        const item = this.#items.shift()
+        if (item) return Promise.resolve({ value: item, done: false })
+        if (this.#closed) return Promise.resolve({ value: undefined, done: true })
+        return new Promise((resolve) => (this.#waiting = resolve))
+      },
+    }
+  }
+}
+
+export class Session extends EventEmitter<SessionEvents> {
+  readonly id: string
+  readonly cwd: string
+  readonly project: string
+  readonly createdAt: string
+  readonly #deps: SessionDeps
+  readonly #input = new InputQueue()
+  readonly #decided = new Set<string>()
+  /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
+  readonly #verdicts = new Map<string, Verdict>()
+  /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
+  readonly #background = new Map<string, string>()
+  /** Extreme approval's run of automatic turns since your last message. */
+  readonly #carry = new CarryOn(() => carryOnLimits(this.#deps.config().extremeCarryOn))
+  /** The session's total cost after its last turn, so a run counts only what it spends. */
+  #lastCost = 0
+  /** You asked to compact while a turn ran: it compacts when the turn ends. */
+  #compactAfterTurn = false
+  /** Paused at the plan limit: nothing carries on by itself until it starts again. */
+  #paused: SessionInfo["paused"]
+  #resources: ResourceLevel = "high"
+  readonly #account: string
+  /** Its job object's name, unique to this start, for changing the limits while it runs. */
+  readonly #job = `Local\\Codehouse-${uuidv7()}`
+  /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
+  readonly #tellDecision = (toolUseId: string, v: Verdict) => {
+    try {
+      this.emit("event", {
+        type: "decision",
+        data: {
+          toolUseId,
+          outcome: v.outcome,
+          decidedBy: v.decidedBy,
+          ruleId: v.ruleId,
+          reason: v.reason,
+          risk: v.risk,
+        },
+      })
+    } catch {
+      // A problem showing the decision never changes it.
+    }
+  }
+  #q: Query | undefined
+  #state: SessionState = "starting"
+  /** A chat's name until its title is kept: its first message. */
+  #label: string | undefined
+  /** Whether anything has been sent to Claude yet. */
+  #said = false
+  /** For a chat on a local runtime or gateway: where its words go, fixed when it starts. */
+  readonly #localLabel: string | undefined
+  #mode: SessionMode
+  #model: string | undefined
+  #effort: Effort | undefined
+  #extreme: boolean
+  #sdkSessionId: string | undefined
+  #error: string | undefined
+  #running = false
+  readonly #opts: StartSessionOptions
+  readonly #onBrokerChange: () => void
+
+  constructor(deps: SessionDeps, opts: StartSessionOptions) {
+    super()
+    this.#deps = deps
+    this.#opts = opts
+    this.id = opts.restore?.id ?? uuidv7()
+    this.createdAt = opts.restore?.createdAt ?? new Date().toISOString()
+    // Resuming carries on in the same conversation, unless it forks; the first message says for certain.
+    this.#sdkSessionId = opts.resume !== undefined && opts.fork !== true ? opts.resume : undefined
+    this.cwd = opts.cwd
+    this.project = path.basename(findProjectRoot(opts.cwd))
+    this.#mode = opts.mode ?? "default"
+    this.#model = opts.localModel ?? opts.model
+    this.#effort = opts.effort
+    this.#extreme = opts.extreme === true
+    this.#resources = opts.resources ?? "high"
+    this.#account = opts.account ?? MAIN_ACCOUNT
+    if (opts.kind === "chat" && opts.title) this.#label = chatTitle(opts.title)
+    this.#localLabel = opts.localModel !== undefined ? deps.local?.label?.() : undefined
+    this.#onBrokerChange = () => this.#refreshWaiting()
+    deps.broker.on("created", this.#onBrokerChange)
+    deps.broker.on("resolved", this.#onBrokerChange)
+  }
+
+  info(): SessionInfo {
+    return {
+      id: this.id,
+      cwd: this.cwd,
+      project: this.project,
+      ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
+      ...(this.#model !== undefined ? { model: this.#model } : {}),
+      mode: this.#mode,
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
+      extreme: this.#extreme,
+      state: this.#state,
+      ...(this.#sdkSessionId !== undefined ? { sdkSessionId: this.#sdkSessionId } : {}),
+      pendingApprovals: this.#deps.broker.countFor(this.id),
+      createdAt: this.createdAt,
+      ...(this.#error !== undefined ? { error: this.#error } : {}),
+      ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
+      ...(this.#opts.restore
+        ? {
+            restarted: {
+              wasRunning: this.#opts.restore.wasRunning,
+              ...(this.#opts.restore.forced ? { forced: true } : {}),
+              ...(this.#opts.restore.crashed ? { crashed: true } : {}),
+            },
+          }
+        : {}),
+      ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
+      ...(this.#deps.limiter ? { resources: this.#resources } : {}),
+      ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
+      ...(this.#compactAfterTurn ? { compactPending: true } : {}),
+      ...(this.#paused ? { paused: this.#paused } : {}),
+      ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
+      ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
+      ...(this.#opts.kind === "chat" && this.#opts.research ? { research: true } : {}),
+      ...(this.#opts.localModel !== undefined
+        ? { local: true, ...(this.#localLabel ? { localLabel: this.#localLabel } : {}) }
+        : {}),
+      ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
+        ? { carryOn: this.#carry.status() }
+        : {}),
+      ...(this.#label ? { title: this.#label } : {}),
+      ...this.#deps.sessionMeta?.(this.#sdkSessionId),
+    }
+  }
+
+  #setState(state: SessionState): void {
+    if (this.#state === state) return
+    // An error is final. A result or an end-of-stream that arrives afterwards must not hide it.
+    if (this.#state === "error") return
+    this.#state = state
+    this.emit("state", this.info())
+  }
+
+  #refreshWaiting(): void {
+    if (this.#state === "running" || this.#state === "waiting") {
+      this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
+    } else if (this.#state === "idle") {
+      this.emit("state", this.info()) // the pending count changed
+    }
+  }
+
+  /**
+   * The person's own instructions for this session: everyone's, the chat project's and this session's. For a chat in a
+   * project, its knowledge folder is made to match the project first, so Claude reads what the project holds now.
+   */
+  async #instructionsText(): Promise<string> {
+    const project = this.#opts.chatProject
+    let files: string[] = []
+    if (project) {
+      if (!this.#deps.projects) throw new Error("Chat projects are not available here.")
+      files = this.#deps.projects.sync(project, this.cwd)
+    }
+    const info = project ? this.#deps.projects?.get(project) : undefined
+    // A chat starts knowing what chats remember, and the use is recorded by the entries, never their words.
+    const memory =
+      this.#opts.kind === "chat" && this.#deps.memory
+        ? this.#deps.memory.forChat(project)
+        : undefined
+    if (memory?.length)
+      await this.#deps.audit
+        .record({
+          session: this.id,
+          event: "memory_used",
+          channel: "host",
+          tool: "memory",
+          cwd: this.cwd,
+          project: this.project,
+          input: { entries: memory.map((m) => ({ id: m.id, scope: m.scope, topic: m.topic })) },
+          verdict: {
+            outcome: "allow",
+            ruleId: "memory-used",
+            reason: "What chats remember was given to this chat when it started.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: this.#deps.policy()?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+        .catch(() => undefined)
+    return composeInstructions({
+      global: this.#deps.config().globalInstructions,
+      ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
+      session: this.#opts.instructions,
+      ...(memory ? { memory } : {}),
+      artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
+      tidy: this.#opts.kind !== "chat",
+      research: this.#opts.kind === "chat" && this.#opts.research === true,
+    })
+  }
+
+  /** Before each message to a chat in a project: a file added or removed since is added or removed here too. */
+  #syncKnowledge(): void {
+    const project = this.#opts.chatProject
+    if (!project || !this.#deps.projects) return
+    try {
+      this.#deps.projects.sync(project, this.cwd)
+    } catch (e) {
+      this.#deps.log(`session ${this.id}: knowledge files not updated: ${(e as Error).message}`)
+    }
+  }
+
+  /** Builds the options and starts the SDK process. Fails if the options are unsafe or the organisation is wrong. */
+  async start(): Promise<void> {
+    const d = this.#deps
+    const hookDeps: SessionHookDeps = {
+      sessionId: this.id,
+      cwd: this.cwd,
+      policy: d.policy,
+      pwsh: d.pwsh,
+      audit: d.audit,
+      kill: () => d.kill.isEngaged(),
+      checkpoints: d.checkpoints,
+      decided: this.#decided,
+      onEvent: (type, data) => this.emit("event", { type, data }),
+      onDecision: this.#tellDecision,
+      log: d.log,
+      mode: () => this.#mode,
+      approver: d.approver,
+      verdicts: this.#verdicts,
+    }
+    // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
+    const onStderr = (data: string) => {
+      if (isShadowWarning(data))
+        this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
+    }
+    const eventHook = createEventHook(hookDeps)
+    const postHook = createPostToolHook(hookDeps)
+    // What the person told every session, this project and this session, in that order (owner, 31 Oct).
+    const instructions = await this.#instructionsText()
+    const options: Options = {
+      cwd: this.cwd,
+      ...(this.#model !== undefined ? { model: this.#model } : {}),
+      permissionMode: this.#mode,
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
+      // A chat is a plain conversation: its own instructions, no CLAUDE.md or project settings, and only the web.
+      // `tools` limits what exists; it is not `allowedTools`, so every call still goes through the Approver.
+      ...(this.#opts.kind === "chat"
+        ? {
+            systemPrompt: [chatPrompt(), instructions].filter(Boolean).join("\n\n"),
+            settingSources: [],
+            tools: CHAT_TOOLS,
+            // One memory to edit: Codehouse's own, not Claude Code's (ADR 0006). The only inline setting allowed.
+            ...(d.memory ? { settings: { autoMemoryEnabled: false } } : {}),
+          }
+        : {
+            systemPrompt: {
+              type: "preset",
+              preset: "claude_code",
+              snapshot: true,
+              ...(instructions ? { append: instructions } : {}),
+            },
+            settingSources: ["user", "project", "local"],
+          }),
+      includePartialMessages: true,
+      // Its account's own Claude Code folder, and never a credential (invariant 6).
+      env: d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env),
+      canUseTool: createCanUseTool({
+        sessionId: this.id,
+        cwd: this.cwd,
+        project: this.project,
+        approver: d.approver,
+        broker: d.broker,
+        audit: d.audit,
+        kill: () => d.kill.isEngaged(),
+        policy: d.policy,
+        engine: d.engine,
+        pwsh: d.pwsh,
+        checkpoints: d.checkpoints,
+        ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
+        decided: this.#decided,
+        verdicts: this.#verdicts,
+        extreme: () => this.#extreme,
+        mode: () => this.#mode,
+        ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
+        onDecision: this.#tellDecision,
+        log: d.log,
+      }),
+      hooks: {
+        PreToolUse: [{ hooks: [createFloorHook(hookDeps)] }],
+        PostToolUse: [{ hooks: [postHook] }],
+        PostToolUseFailure: [{ hooks: [postHook] }],
+        Notification: [{ hooks: [eventHook] }],
+        Stop: [{ hooks: [eventHook] }],
+        SubagentStart: [{ hooks: [eventHook] }],
+        SubagentStop: [{ hooks: [eventHook] }],
+      },
+      mcpServers: d.companion({
+        sessionId: this.id,
+        cwd: this.cwd,
+        ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
+        ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
+      }) as Options["mcpServers"],
+      stderr: onStderr,
+      // Inside a job object with the session's limits, when Codehouse can make one. Its stderr comes back to onStderr.
+      ...(d.limiter
+        ? { spawnClaudeCodeProcess: d.limiter.spawn(this.#job, () => this.#resources, onStderr) }
+        : {}),
+      ...(this.#opts.resume !== undefined
+        ? { resume: this.#opts.resume, forkSession: this.#opts.fork === true }
+        : {}),
+    }
+    assertSafeOptions(options)
+
+    // A chat on a model on this computer runs Codehouse's own loop with these same options: the floor hook, canUseTool and
+    // the audit are the ones above.
+    const queryFn =
+      this.#opts.localModel !== undefined ? d.local?.queryFn(this.#opts.localModel) : d.queryFn
+    if (!queryFn) throw new Error("Models on this computer are not switched on.")
+    const query = queryFn({ prompt: this.#input, options })
+    this.#q = query
+    const checkStart = async (): Promise<void> => {
+      const init = await query.initializationResult()
+      const managed = await d.managedDetected().catch(() => undefined)
+      // Invariant 14, per account: this account must still belong to the organisation confirmed for it.
+      const snapshot = (d.accounts?.monitor(this.#account) ?? d.account).note(init.account, managed)
+      if (!snapshot.org.ok) {
+        // Invariant 14: nothing is sent to a session on the wrong account.
+        throw new OrgGuardError(snapshot.org.code, snapshot.org.message)
+      }
+      // Owner, 31 Oct: only in-process MCP servers in a session. Nothing is sent to one that has another.
+      const q = query as unknown as { mcpServerStatus?: () => Promise<unknown> }
+      if (q.mcpServerStatus) {
+        const outside = outOfProcessServers(await q.mcpServerStatus())
+        if (outside.length)
+          throw new SafetyError(
+            17,
+            `MCP servers outside the process are not allowed in a session: ${outside.join(", ")}`,
+          )
+      }
+    }
+    const began = Date.now()
+    try {
+      // Fail closed (invariant 1): a start that never finishes is an error with a way to try again, never a wait
+      // with no end. Claude Code can take minutes on a busy computer with a long conversation to read back.
+      const limit = d.startTimeoutMs ?? START_TIMEOUT_MS
+      const waited =
+        limit >= 120_000
+          ? `${Math.round(limit / 60_000)} minutes`
+          : `${Math.round(limit / 1000)} seconds`
+      let timer: NodeJS.Timeout | undefined
+      const done = checkStart()
+      done.catch(() => undefined) // when the time runs out first, its late failure is not news
+      try {
+        await Promise.race([
+          done,
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `Claude Code had not finished starting after ${waited}, so Codehouse stopped waiting. Start again tries once more.`,
+                  ),
+                ),
+              limit,
+            )
+          }),
+        ])
+      } finally {
+        clearTimeout(timer)
+      }
+      d.log(
+        `session ${this.id} (${this.project}) started in ${Math.round((Date.now() - began) / 1000)} s`,
+      )
+    } catch (e) {
+      this.#q.close()
+      this.#input.end()
+      d.broker.off("created", this.#onBrokerChange)
+      d.broker.off("resolved", this.#onBrokerChange)
+      // Closed by you while it started: it is ended, not failed.
+      if (this.#state === "ended") throw e
+      this.#error = describeStop((e as Error).message)
+      this.#setState("error")
+      throw e
+    }
+    this.#setState("idle")
+    void this.#pump()
+    // Paused at the plan limit when Codehouse closed: still paused, and starting again waits for the reset.
+    if (this.#opts.restore?.paused && !this.#opts.restore.forced) {
+      this.#paused = this.#opts.restore.paused
+      this.emit("state", this.info())
+      return
+    }
+    // Brought back mid-run in Extreme approval: it carries on where it was, as you asked it to.
+    if (this.#opts.restore?.wasRunning && !this.#opts.restore.forced) {
+      this.#carry.started()
+      void this.#carryOnNow({
+        restart: true,
+        ...(this.#opts.restore.crashed ? { crashed: true } : {}),
+      })
+    }
+  }
+
+  async #pump(): Promise<void> {
+    const q = this.#q
+    if (!q) return
+    try {
+      for await (const msg of q) {
+        this.#onMessage(msg)
+        this.emit("message", msg)
+      }
+      if (this.#state !== "error") this.#setState("ended")
+    } catch (e) {
+      this.#fatal(e as Error)
+    } finally {
+      this.#deps.broker.off("created", this.#onBrokerChange)
+      this.#deps.broker.off("resolved", this.#onBrokerChange)
+    }
+  }
+
+  #onMessage(msg: SDKMessage): void {
+    const m = msg as unknown as Record<string, unknown>
+    if (typeof m.session_id === "string" && m.session_id !== this.#sdkSessionId) {
+      this.#sdkSessionId = m.session_id
+      this.emit("state", this.info())
+    }
+    if (msg.type === "system") {
+      if (isShadowWarning(JSON.stringify(m)))
+        this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
+      if ((m.subtype as string) === "init" && typeof m.model === "string") this.#model = m.model
+      this.#noteBackground(m)
+    }
+    if (msg.type === "result") {
+      this.#deps.usage.record(this.id, this.project, m)
+      this.#running = false
+      this.#setState("idle")
+      if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      if (this.#compactAfterTurn) {
+        // Asked for while the turn ran: it compacts now, and Extreme approval carries on after that.
+        this.#compactAfterTurn = false
+        try {
+          this.#send("/compact")
+          return
+        } catch {
+          this.emit("state", this.info())
+        }
+      }
+      if (this.#extreme) void this.#afterTurn(m)
+    }
+  }
+
+  /**
+   * Work that carries on after a turn ends. Claude Code sends the whole list when it changes; a task that ends also
+   * says so on its own. Watchers it marks ambient are not work, so they do not count.
+   */
+  #noteBackground(m: Record<string, unknown>): void {
+    const sub = m.subtype as string
+    if (sub === "background_tasks_changed" && Array.isArray(m.tasks)) {
+      this.#background.clear()
+      for (const t of m.tasks as Array<Record<string, unknown>>)
+        if (typeof t.task_id === "string" && t.ambient !== true)
+          this.#background.set(t.task_id, typeof t.description === "string" ? t.description : "")
+      this.emit("state", this.info())
+    } else if (
+      sub === "task_notification" &&
+      typeof m.task_id === "string" &&
+      this.#background.delete(m.task_id)
+    )
+      this.emit("state", this.info())
+  }
+
+  #fatal(e: Error): void {
+    const before = this.#state
+    // Working: a turn, or background work that carries on after one.
+    const wasRunning = this.#running || this.#background.size > 0
+    // In words a person can use (owner, 1 Nov); the log keeps what Claude Code said.
+    this.#error = describeStop(e.message)
+    this.#deps.log(`session ${this.id} (${this.project}) stopped with an error: ${e.message}`)
+    this.#deps.broker.cancelSession(this.id, "The session stopped with an error")
+    this.#setState("error")
+    this.#q?.close()
+    this.#input.end()
+    // Only the process crashing: never a stop Codehouse made for safety, nor one after it had already ended or failed.
+    if (before === "error" || before === "ended") return
+    if (e instanceof SafetyError || e instanceof OrgGuardError || !isProcessCrash(e.message)) return
+    this.emit("crashed", { wasRunning, message: e.message })
+  }
+
+  /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
+  prompt(text: string): void {
+    this.#syncKnowledge()
+    this.#send(text)
+    this.#carry.started(this.#lastCost)
+    // Your own message is you starting it again; the pause is over.
+    if (this.#paused) void this.#endPause("you")
+  }
+
+  #send(text: string): void {
+    this.#said = true
+    if (this.#state === "error" || this.#state === "ended")
+      throw new Error(`The session has ${this.#state}`)
+    if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
+    this.#running = true
+    this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
+    this.#input.push(text)
+  }
+
+  /**
+   * Summarises the older conversation to make room: now between turns, or straight after the turn that is running
+   * (owner, 31 Oct). The screen shows it waiting.
+   */
+  compact(): void {
+    if (this.#running) {
+      this.#compactAfterTurn = true
+      this.emit("state", this.info())
+      return
+    }
+    this.#send("/compact")
+  }
+
+  /** Which signed-in account it runs on. */
+  get account(): string {
+    return this.#account
+  }
+
+  /** Paused at the plan limit, and when it should start again. */
+  get paused(): SessionInfo["paused"] {
+    return this.#paused
+  }
+
+  /** Names a warm chat from the first message it is given, as a chat started then would be named. */
+  label(title: string): void {
+    this.#label = chatTitle(title)
+  }
+
+  /** Waiting for its first message: started, nothing said yet, nothing running. */
+  get fresh(): boolean {
+    return this.live && this.#state === "idle" && !this.#said
+  }
+
+  /** Open and able to answer: started, and neither ended nor failed. */
+  get live(): boolean {
+    return this.#q !== undefined && this.#state !== "error" && this.#state !== "ended"
+  }
+
+  /**
+   * The account's plan limits, from Claude Code's own /usage data. The SDK marks the call experimental, so anything
+   * missing or unexpected is nothing (docs/sdk-notes.md). Asks no question of Claude and touches no token.
+   */
+  async planUsage(): Promise<PlanUsage | undefined> {
+    type Read = (o: { skipBehaviors: boolean }) => Promise<unknown>
+    const q = this.#q as unknown as
+      { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?: Read } | undefined
+    const read = q?.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET?.bind(q)
+    if (!read) return undefined
+    const first = planLimits(await read({ skipBehaviors: true }))
+    if (first) return first
+    // The first answer can come before Claude Code has fetched the numbers (probe, 31 Oct).
+    await new Promise((r) => setTimeout(r, PLAN_RETRY_MS))
+    return planLimits(await read({ skipBehaviors: true }))
+  }
+
+  /** How full the conversation is, from the last response and local estimates (no extra token counting). */
+  async contextUsage(): Promise<unknown> {
+    if (!this.#q) throw new Error("The session has not started")
+    const q = this.#q as unknown as {
+      getContextUsage?: (o: { detail: "summary" }) => Promise<unknown>
+    }
+    if (!q.getContextUsage) throw new Error("This version of Claude Code cannot report its context")
+    return await q.getContextUsage({ detail: "summary" })
+  }
+
+  /** Stops the running turn. The screen hears first, so the result that follows reads as stopped, not failed. */
+  async interrupt(by: "you" | "kill-switch" | "plan-limit" = "you"): Promise<void> {
+    // Stopping a turn stops Extreme carrying on, until your next message, and a compact that was to follow it.
+    this.#carry.stopped()
+    this.#compactAfterTurn = false
+    if (this.#running) this.emit("event", { type: "interrupted", data: { by } })
+    this.#deps.broker.cancelSession(this.id)
+    await this.#q?.interrupt()
+    if (this.#state === "running" || this.#state === "waiting") {
+      this.#running = false
+      this.#setState("idle")
+    }
+  }
+
+  /**
+   * Extreme approval: after a turn, carry on by itself until Claude says the build queue is empty, a limit is
+   * reached, a turn fails or you stop it (CLAUDE.md invariant 3, owner 30 Oct).
+   */
+  async #afterTurn(m: Record<string, unknown>): Promise<void> {
+    if (this.#paused) return
+    const step = this.#carry.next({
+      text: typeof m.result === "string" ? m.result : "",
+      isError: m.is_error === true || String(m.subtype ?? "").startsWith("error"),
+      ...(typeof m.total_cost_usd === "number" ? { costUsd: m.total_cost_usd } : {}),
+      ...(typeof m.num_turns === "number" ? { steps: m.num_turns } : {}),
+    })
+    if (!step) return
+    if (!step.go) {
+      this.emit("event", {
+        type: "carry_on_end",
+        data: { why: step.why, turns: step.turns, spentUsd: step.spentUsd },
+      })
+      this.emit("state", this.info())
+      return
+    }
+    await this.#carryOnNow({ turn: step.turn, ...(step.of !== undefined ? { of: step.of } : {}) })
+  }
+
+  /** Sends the carry-on message, once it is in the audit log. Nothing carries on that cannot be recorded. */
+  async #carryOnNow(data: Record<string, unknown>): Promise<void> {
+    if (this.#deps.kill.isEngaged() || this.#running || this.#paused) return
+    if (this.#state === "error" || this.#state === "ended") return
+    const written = await this.#deps.audit.record({
+      session: this.id,
+      event: "extreme_carry_on",
+      channel: "host",
+      tool: "session",
+      cwd: this.cwd,
+      project: this.project,
+      input: data,
+      verdict: {
+        outcome: "allow",
+        ruleId: "extreme-carry-on",
+        reason:
+          data.crashed === true
+            ? "Claude Code crashed while the session was working, so it was started again and carried on where it was."
+            : data.restart === true
+              ? "Codehouse restarted while the session was working, so it carried on where it was."
+              : "Extreme approval is on, so the session carried on with its build queue by itself.",
+        risk: 0,
+        decidedBy: "extreme-mode",
+        policyHash: this.#deps.policy()?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!written) {
+      this.#carry.stopped()
+      return
+    }
+    this.emit("event", { type: "carry_on", data })
+    this.#send(
+      data.restart !== true || this.#extreme
+        ? CARRY_ON_PROMPT
+        : data.crashed === true
+          ? CRASH_RESUME_PROMPT
+          : RESUME_PROMPT,
+    )
+    this.emit("state", this.info())
+  }
+
+  /** Stops everything now: the running turn and every background task. */
+  async stop(by: "you" | "kill-switch" | "plan-limit" = "you"): Promise<void> {
+    await this.interrupt(by)
+    const q = this.#q as unknown as { stopTask?: (id: string) => Promise<void> } | undefined
+    await Promise.allSettled([...this.#background.keys()].map((id) => q?.stopTask?.(id)))
+  }
+
+  /**
+   * Pauses the session because the plan's 5-hour limit reached its pause point (owner, 31 Oct): the turn and the
+   * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
+   * when you start it.
+   */
+  async pause(percent: number, until?: string): Promise<void> {
+    if (!this.live || this.#paused) return
+    const wasRunning = this.#running || this.#background.size > 0
+    this.#paused = { percent, wasRunning, ...(until ? { until } : {}) }
+    await this.#auditLimit(
+      "limit_pause",
+      "limit-pause",
+      {
+        percent,
+        wasRunning,
+        ...(until ? { until } : {}),
+      },
+      `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
+      "rules",
+    )
+    this.emit("event", { type: "paused", data: { percent, ...(until ? { until } : {}) } })
+    await this.stop("plan-limit").catch((e: Error) => this.#deps.log(`pause: ${e.message}`))
+    this.emit("state", this.info())
+  }
+
+  /**
+   * Starts a paused session again, when the limit resets or when you ask. One that was working carries on where it
+   * stopped; one that was idle simply becomes ready. Nothing changes if it is not paused.
+   */
+  async resume(by: "you" | "limit-reset"): Promise<boolean> {
+    const p = this.#paused
+    if (!p) return false
+    if (p.wasRunning) {
+      // Sent first: if it cannot be (the kill switch), it stays paused and is tried again.
+      this.#send(LIMIT_RESUME_PROMPT)
+      this.#carry.started(this.#lastCost)
+    }
+    await this.#endPause(by)
+    return true
+  }
+
+  async #endPause(by: "you" | "limit-reset"): Promise<void> {
+    if (!this.#paused) return
+    const p = this.#paused
+    this.#paused = undefined
+    await this.#auditLimit(
+      "limit_resume",
+      "limit-resume",
+      { by, wasRunning: p.wasRunning },
+      by === "you"
+        ? "You started this paused session again."
+        : "The plan's 5-hour limit reset, so Codehouse started this paused session again.",
+      by === "you" ? "human-desktop" : "rules",
+    )
+    this.emit("event", { type: "resumed", data: { by } })
+    this.emit("state", this.info())
+  }
+
+  async #auditLimit(
+    event: string,
+    ruleId: string,
+    input: Record<string, unknown>,
+    reason: string,
+    decidedBy: "rules" | "human-desktop",
+  ): Promise<void> {
+    await this.#deps.audit
+      .record({
+        session: this.id,
+        event,
+        channel: decidedBy === "rules" ? "host" : "desktop",
+        tool: "session",
+        cwd: this.cwd,
+        project: this.project,
+        input,
+        verdict: {
+          outcome: "allow",
+          ruleId,
+          reason,
+          risk: 0,
+          decidedBy,
+          policyHash: this.#deps.policy()?.hash ?? "",
+        },
+        latencyMs: 0,
+      })
+      .catch(() => undefined)
+  }
+
+  /** What it takes to start this session again on the same conversation. */
+  restartOptions(): StartSessionOptions {
+    return {
+      cwd: this.cwd,
+      ...(this.#opts.kind ? { kind: this.#opts.kind } : {}),
+      mode: this.#mode,
+      ...(this.#model !== undefined ? { model: this.#model } : {}),
+      ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
+      extreme: this.#extreme,
+      resources: this.#resources,
+      ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
+      ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
+      ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
+      ...(this.#opts.research ? { research: true } : {}),
+      ...(this.#sdkSessionId !== undefined ? { resume: this.#sdkSessionId } : {}),
+    }
+  }
+
+  /**
+   * How much of this computer the session may use: applied at once to it and everything it started, and recorded.
+   * If the running job cannot be changed, the level still applies from its next start.
+   */
+  async setResources(level: ResourceLevel): Promise<void> {
+    const limiter = this.#deps.limiter
+    if (!limiter) throw new Error("Codehouse cannot limit sessions here")
+    if (this.#q)
+      await limiter
+        .set(this.#job, level)
+        .catch((e: Error) => this.#deps.log(`resource limits not changed now: ${e.message}`))
+    this.#resources = level
+    await this.#deps.audit.record({
+      session: this.id,
+      event: "resources_changed",
+      channel: "desktop",
+      tool: "session",
+      cwd: this.cwd,
+      project: this.project,
+      input: { level, ...LEVELS[level] },
+      verdict: {
+        outcome: "allow",
+        ruleId: "resources-changed",
+        reason: `Resources for this session set to ${level} from the desktop.`,
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    this.emit("state", this.info())
+  }
+
+  /** Only default and plan are ever accepted (invariant 3). */
+  async setMode(mode: SessionMode): Promise<void> {
+    if (this.#opts.kind === "chat" && mode !== "plan") throw new ChatModeError()
+    if (!isAllowedMode(mode))
+      throw new SafetyError(
+        3,
+        `permission mode "${String(mode)}" is not allowed, only default, plan, acceptEdits and auto`,
+      )
+    await this.#q?.setPermissionMode(mode)
+    this.#mode = mode
+    this.emit("state", this.info())
+  }
+
+  /** Reasoning effort. Applied to the running session as a flag setting that carries only this one key. */
+  async setEffort(effort: Effort): Promise<void> {
+    await this.#q?.applyFlagSettings({ effortLevel: effort })
+    this.#effort = effort
+    this.emit("state", this.info())
+  }
+
+  /** Extreme approval for this session only. Written to the audit log, because it changes what gets asked. */
+  async setExtreme(on: boolean): Promise<void> {
+    if (this.#opts.kind === "chat" && on) throw new ChatModeError()
+    this.#extreme = on
+    await this.#deps.audit.record({
+      session: this.id,
+      event: "settings_changed",
+      channel: "desktop",
+      tool: "extreme-approval",
+      cwd: this.cwd,
+      project: this.project,
+      input: { on },
+      verdict: {
+        outcome: "allow",
+        ruleId: on ? "extreme-on" : "extreme-off",
+        reason: on
+          ? "Extreme approval turned on for this session from the desktop."
+          : "Extreme approval turned off for this session from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    this.emit("state", this.info())
+  }
+
+  async setModel(model?: string): Promise<void> {
+    await this.#q?.setModel(model)
+    this.#model = model
+    this.emit("state", this.info())
+  }
+
+  get running(): boolean {
+    return this.#running
+  }
+
+  async close(): Promise<void> {
+    this.#deps.broker.cancelSession(this.id, "The session was closed")
+    this.#input.end()
+    this.#q?.close()
+    this.#deps.broker.off("created", this.#onBrokerChange)
+    this.#deps.broker.off("resolved", this.#onBrokerChange)
+    if (this.#state !== "error") this.#setState("ended")
+  }
+}
+
+export interface ManagerEvents {
+  session: [SessionInfo]
+  message: [{ sessionId: string; message: SDKMessage }]
+  event: [{ sessionId: string; type: string; data: Record<string, unknown> }]
+}
+
+/** A chat's name from what was said first: one line, at most 80 characters. */
+export const chatTitle = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 80)
+
+/**
+ * The warm chat (owner, 1 Nov): a plain chat started while New chat or the quick prompt is open, so the first message
+ * does not wait for Claude Code to start. It is a whole chat, made exactly as one started then would be (its own
+ * folder, the floor hook, canUseTool, the Companion, its job object, the organisation checked), only hidden until it
+ * is claimed. It is put away after this long without being asked for, or at once when free memory is short.
+ */
+export const WARM_IDLE_MS = 3 * 60_000
+export const WARM_MIN_FREE_BYTES = 2 * 1024 ** 3
+
+/** Starts, finds and stops sessions. One SDK query() per session. */
+/** How long the plan limits are kept before an open session is asked again, and the wait for unfetched numbers. */
+const PLAN_FRESH_MS = 60_000
+const PLAN_RETRY_MS = 2000
+
+export class SessionManager extends EventEmitter<ManagerEvents> {
+  readonly #deps: SessionDeps
+  readonly #sessions = new Map<string, Session>()
+  /**
+   * Sessions coming back after a restart, listed as starting from the first moment so none looks lost (owner, 31 Oct),
+   * and kept with the reason if one cannot come back, so Start again can try once more and Close can put it away.
+   */
+  readonly #coming = new Map<string, { info: SessionInfo; opts: StartSessionOptions }>()
+  /** Sessions whose Claude Code is still starting, so closing one (or Codehouse) does not wait for it to finish. */
+  readonly #starting = new Map<string, Session>()
+  /** Closed while coming back: a start that has not reached it yet, or is still running, gives it up. */
+  readonly #dismissed = new Set<string>()
+  readonly #plan = new Map<
+    string,
+    { at: number; value?: PlanUsage; pending?: Promise<PlanUsage | undefined> }
+  >()
+  /** Starts after a crash, so one that keeps crashing stops being started again. */
+  readonly #crashes = new CrashRestarts()
+  /** The warm chat: started hidden, and what it was started with, to check it still fits when it is claimed. */
+  #warm:
+    | {
+        session: Session
+        key: string
+        ready: Promise<boolean>
+        seen: number
+        timer: NodeJS.Timeout
+      }
+    | undefined
+  /** Chats whose first message is to be kept as their title once Claude Code gives them an id. */
+  readonly #toName = new Map<string, string>()
+
+  constructor(deps: SessionDeps) {
+    super()
+    this.#deps = deps
+  }
+
+  /** A session about to be brought back: shown at once, as starting, with what it had. */
+  expect(opts: StartSessionOptions): void {
+    const r = opts.restore
+    if (!r || this.#sessions.has(r.id)) return
+    const info: SessionInfo = {
+      id: r.id,
+      cwd: opts.cwd,
+      project: path.basename(findProjectRoot(opts.cwd)),
+      ...(opts.kind === "chat" ? { kind: "chat" as const } : {}),
+      ...(opts.model !== undefined ? { model: opts.model } : {}),
+      mode: opts.mode ?? "default",
+      ...(opts.effort !== undefined ? { effort: opts.effort } : {}),
+      extreme: opts.extreme === true,
+      state: "starting",
+      ...(opts.resume !== undefined ? { sdkSessionId: opts.resume, historyFrom: opts.resume } : {}),
+      pendingApprovals: 0,
+      createdAt: r.createdAt,
+      restarted: { wasRunning: r.wasRunning, ...(r.crashed ? { crashed: true } : {}) },
+      ...(r.paused ? { paused: r.paused } : {}),
+      ...(opts.resources !== undefined && this.#deps.limiter ? { resources: opts.resources } : {}),
+      ...(opts.account !== undefined && opts.account !== MAIN_ACCOUNT
+        ? { account: opts.account }
+        : {}),
+      ...this.#deps.sessionMeta?.(opts.resume),
+    }
+    this.#coming.set(r.id, { info, opts })
+    this.emit("session", info)
+  }
+
+  async start(opts: StartSessionOptions): Promise<Session> {
+    const id = opts.restore?.id
+    try {
+      if (id && this.#dismissed.has(id)) throw new Error("It was closed before it started")
+      const s = await this.#start(opts)
+      if (id) this.#coming.delete(id)
+      return s
+    } catch (e) {
+      const c = id ? this.#coming.get(id) : undefined
+      if (id && this.#dismissed.delete(id)) {
+        // Closed by you: nothing is kept, and nothing is shown as failed.
+        this.#coming.delete(id)
+      } else if (id && c) {
+        const info: SessionInfo = {
+          ...c.info,
+          state: "error",
+          error: `Codehouse could not bring this session back: ${describeStop((e as Error).message)}`,
+        }
+        this.#coming.set(id, { ...c, info })
+        this.emit("session", info)
+      }
+      throw e
+    }
+  }
+
+  async #start(opts: StartSessionOptions): Promise<Session> {
+    if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
+    // Resume starts a conversation with what it last ran with, for anything the screen did not choose (owner, 31 Oct).
+    // The mode is checked again with every other option before Claude Code starts (invariant 3).
+    if (opts.resume !== undefined && !opts.restore) {
+      const was = this.#deps.resumeSettings?.(opts.resume) ?? {}
+      const effort = Effort.safeParse(was.effort)
+      opts = {
+        ...(was.model !== undefined ? { model: was.model } : {}),
+        ...(effort.success ? { effort: effort.data } : {}),
+        ...(was.mode !== undefined ? { mode: was.mode } : {}),
+        ...(was.extreme !== undefined ? { extreme: was.extreme } : {}),
+        ...(was.resources !== undefined ? { resources: was.resources } : {}),
+        ...opts,
+      }
+    }
+    const config = this.#deps.config()
+    // Checked again inside Session.start with the live account. This early check gives a clear message
+    // when there is nothing to compare against.
+    // Each account has the organisation confirmed for it; an account Codehouse does not know never starts.
+    const accountId = opts.account ?? MAIN_ACCOUNT
+    if (accountId !== MAIN_ACCOUNT && !this.#deps.accounts?.get(accountId))
+      throw new OrgGuardError("no-expected-org", "That account is not signed in to Codehouse.")
+    const monitor =
+      accountId === MAIN_ACCOUNT
+        ? this.#deps.account
+        : (this.#deps.accounts?.monitor(accountId) ?? this.#deps.account)
+    const early = checkOrg(
+      monitor.last()?.organization ? { organization: monitor.last()?.organization } : undefined,
+      accountId === MAIN_ACCOUNT
+        ? config.expectedOrg
+        : this.#deps.accounts?.get(accountId)?.expectedOrg,
+    )
+    if (!early.ok && early.code === "no-expected-org")
+      throw new OrgGuardError(early.code, early.message)
+    if (opts.localModel !== undefined) {
+      if (opts.kind !== "chat")
+        throw new SessionFolderError("Only a chat can run on a model on this computer.")
+      if (opts.research)
+        throw new SessionFolderError(
+          "Research needs web search, which models on this computer do not have.",
+        )
+      if (!this.#deps.local)
+        throw new SessionFolderError("Models on this computer are not switched on.")
+      try {
+        await this.#deps.local.check(opts.localModel)
+      } catch (e) {
+        throw new SessionFolderError((e as Error).message)
+      }
+    }
+    // A plain chat takes the warm one when it is ready and still fits; anything else is started as before.
+    const warm = await this.#claimWarm(opts)
+    if (warm) return warm
+    // After the checks above, so a refused start leaves nothing behind.
+    if (opts.kind === "chat" && opts.restore) {
+      // A chat brought back keeps its own folder, and only a folder Codehouse made for chats.
+      const dir = this.#deps.chatsDir
+      if (!dir || !sameFolder(path.dirname(path.resolve(opts.cwd)), dir))
+        throw new SessionFolderError("That chat's folder is not one Codehouse made for chats.")
+      opts = { ...opts, mode: "plan", extreme: false, freshFolder: false }
+    } else if (opts.kind === "chat") {
+      // The folder the screen sent is ignored: a chat always gets a new one of its own.
+      const dir = this.#deps.chatsDir
+      if (!dir) throw new SessionFolderError("Chats are not available here.")
+      fs.mkdirSync(dir, { recursive: true })
+      const name = projectName(opts.title ?? "")
+      // Plan mode, whatever was asked: the folder keeps a chat away from your projects, Plan mode keeps it from
+      // changing anything at all, including in your workspace folders, which the rules would otherwise let it edit.
+      opts = {
+        ...opts,
+        mode: "plan",
+        extreme: false,
+        freshFolder: false,
+        // Every chat a folder of its own, even when an earlier one with the same name is still empty.
+        cwd: freeFolder(path.join(dir, name === "project" ? "chat" : name), false),
+      }
+    } else if (opts.freshFolder) {
+      const root = config.projectsFolder
+      if (!root || !sameFolder(path.dirname(path.resolve(opts.cwd)), root))
+        throw new SessionFolderError(
+          "A new project goes straight into your projects folder. Set it in Settings, then try again.",
+        )
+      opts = { ...opts, cwd: freeFolder(path.resolve(opts.cwd)) }
+    }
+    // A project belongs to a chat only, and must exist.
+    if (opts.chatProject) {
+      if (opts.kind !== "chat") throw new SessionFolderError("Only a chat can belong to a project.")
+      if (!this.#deps.projects?.get(opts.chatProject))
+        throw new SessionFolderError("There is no project with that name.")
+    }
+    ensureFolder(opts.cwd, this.#deps.log)
+    if (opts.freshFolder) await gitInit(opts.cwd, this.#deps.log)
+    const session = new Session(this.#deps, opts)
+    this.#wire(session)
+    if (opts.kind === "chat" && opts.title && !opts.restore)
+      this.#toName.set(session.id, opts.title)
+    this.#starting.set(session.id, session)
+    try {
+      await session.start()
+    } finally {
+      this.#starting.delete(session.id)
+    }
+    this.#sessions.set(session.id, session)
+    this.emit("session", session.info())
+    return session
+  }
+
+  get(id: string): Session | undefined {
+    return this.#sessions.get(id)
+  }
+
+  /** Sends a session's state, messages and events on, except a warm chat's, which no one sees until it is claimed. */
+  #wire(session: Session): void {
+    const hidden = () => this.#warm?.session === session
+    session.on("state", (info) => {
+      if (hidden()) return
+      this.emit("session", info)
+      const title = this.#toName.get(session.id)
+      if (title && info.sdkSessionId) {
+        this.#toName.delete(session.id)
+        // Redacted before it is kept (invariant 12).
+        const kept = chatTitle(redactString(title, { terms: this.#deps.config().redactTerms }))
+        void this.#deps
+          .nameChat?.(info.sdkSessionId, kept)
+          ?.then(() => this.announce(info.sdkSessionId as string))
+          .catch(() => undefined)
+      }
+    })
+    session.on("message", (message) => {
+      if (!hidden()) this.emit("message", { sessionId: session.id, message })
+    })
+    session.on("event", (e) => {
+      if (!hidden()) this.emit("event", { sessionId: session.id, type: e.type, data: e.data })
+    })
+    session.on("crashed", (c) => {
+      if (hidden()) void this.#dropWarm("its Claude Code stopped")
+      else void this.#afterCrash(session, c)
+    })
+  }
+
+  /** What a plain chat is started with now; a warm chat started with anything else is not used. */
+  #chatKey(): string {
+    const c = this.#deps.config()
+    const memory = this.#deps.memory?.forChat() ?? []
+    return crypto
+      .createHash("sha256")
+      .update(
+        JSON.stringify({
+          day: new Date().toISOString().slice(0, 10),
+          global: c.globalInstructions ?? "",
+          memory: memory.map((m) => [m.id, m.at]),
+          policy: this.#deps.policy()?.hash ?? "",
+        }),
+      )
+      .digest("hex")
+  }
+
+  /**
+   * Asked for while New chat or the quick prompt is open: starts the warm chat if there is none, or keeps the one there
+   * is from being put away. Never with the kill switch on, without chats, or with free memory short; a warm chat that
+   * cannot start is dropped quietly and the next chat starts as before.
+   */
+  warmChat(): void {
+    const w = this.#warm
+    if (w) {
+      w.seen = Date.now()
+      return
+    }
+    const d = this.#deps
+    const dir = d.chatsDir
+    if (!dir || d.kill.isEngaged()) return
+    if ((d.freeMemory ?? os.freemem)() < WARM_MIN_FREE_BYTES) return
+    // Only once the account has been checked and found in the right organisation (invariant 14 is checked again at start).
+    if (d.account.last()?.org.ok !== true) return
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      const cwd = freeFolder(path.join(dir, "chat"), false)
+      ensureFolder(cwd, d.log)
+      const session = new Session(d, {
+        cwd,
+        kind: "chat",
+        mode: "plan",
+        extreme: false,
+        freshFolder: false,
+      })
+      const timer = setInterval(() => {
+        const now = this.#warm
+        if (now?.session !== session) return clearInterval(timer)
+        if (Date.now() - now.seen > WARM_IDLE_MS) void this.#dropWarm("it was not used")
+        else if ((d.freeMemory ?? os.freemem)() < WARM_MIN_FREE_BYTES / 2)
+          void this.#dropWarm("free memory is short")
+      }, 30_000)
+      timer.unref()
+      this.#wire(session)
+      const ready = session.start().then(
+        () => true,
+        (e: Error) => {
+          d.log(`warm chat not started: ${e.message}`)
+          if (this.#warm?.session === session) void this.#dropWarm("it could not start")
+          return false
+        },
+      )
+      this.#warm = { session, key: this.#chatKey(), ready, seen: Date.now(), timer }
+    } catch (e) {
+      d.log(`warm chat not started: ${(e as Error).message}`)
+    }
+  }
+
+  /** Puts the warm chat away and removes its empty folder. */
+  async #dropWarm(why: string): Promise<void> {
+    const w = this.#warm
+    if (!w) return
+    this.#warm = undefined
+    clearInterval(w.timer)
+    this.#deps.log(`warm chat put away: ${why}`)
+    await w.session.close().catch(() => undefined)
+    try {
+      fs.rmdirSync(w.session.cwd)
+    } catch {
+      // not empty or already gone: left as it is
+    }
+  }
+
+  /** The warm chat for a plain chat that fits it, named from the first message, or undefined to start as before. */
+  async #claimWarm(opts: StartSessionOptions): Promise<Session | undefined> {
+    const w = this.#warm
+    if (!w) return undefined
+    const plain =
+      opts.kind === "chat" &&
+      !opts.restore &&
+      !opts.resume &&
+      !opts.chatProject &&
+      !opts.instructions &&
+      !opts.research &&
+      opts.model === undefined &&
+      opts.effort === undefined &&
+      opts.resources === undefined &&
+      opts.localModel === undefined &&
+      (opts.account ?? MAIN_ACCOUNT) === MAIN_ACCOUNT
+    if (!plain) return undefined
+    const started = await w.ready
+    if (this.#warm !== w) return undefined
+    if (!started || !w.session.fresh || w.key !== this.#chatKey() || this.#deps.kill.isEngaged()) {
+      await this.#dropWarm("it no longer fits")
+      return undefined
+    }
+    this.#warm = undefined
+    clearInterval(w.timer)
+    const s = w.session
+    if (opts.title) {
+      s.label(opts.title)
+      this.#toName.set(s.id, opts.title)
+    }
+    this.#sessions.set(s.id, s)
+    this.emit("session", s.info())
+    return s
+  }
+
+  /** The sessions that are open and able to answer. */
+  liveSessions(): Session[] {
+    return [...this.#sessions.values()].filter((s) => s.live)
+  }
+
+  /** A notify_user from the Companion: shown on the desktop as a session event. The phone path comes later. */
+  notify(sessionId: string, text: string): void {
+    this.emit("event", { sessionId, type: "notify_user", data: { text } })
+  }
+
+  list(): SessionInfo[] {
+    const coming = [...this.#coming.values()]
+      .filter((c) => !this.#sessions.has(c.info.id))
+      .map((c) => c.info)
+    return [...[...this.#sessions.values()].map((s) => s.info()), ...coming]
+  }
+
+  /**
+   * Puts away a session that could not come back, or one still starting (owner, 31 Oct: End did nothing on a session
+   * that sat on Starting). True when there was one.
+   */
+  dismiss(id: string): boolean {
+    const c = this.#coming.get(id)
+    if (!c || this.#sessions.has(id)) return false
+    this.#coming.delete(id)
+    if (c.info.state === "starting") {
+      this.#dismissed.add(id)
+      void this.#starting.get(id)?.close()
+    }
+    this.emit("session", { ...c.info, state: "ended" })
+    return true
+  }
+
+  /** Tells the window again about every open session with this Claude Code id, after its title or pin changed. */
+  announce(sdkSessionId: string): void {
+    for (const s of this.#sessions.values()) {
+      const info = s.info()
+      if (info.sdkSessionId === sdkSessionId) this.emit("session", info)
+    }
+  }
+
+  /**
+   * The account's plan limits, read on one of its open sessions, at most once a minute unless asked fresh. Nothing
+   * when the account has no session open, since starting one only to ask would start Claude Code.
+   */
+  async planUsage(account = MAIN_ACCOUNT, fresh = false): Promise<PlanUsage | undefined> {
+    const c = this.#plan.get(account)
+    if (c?.pending) return c.pending
+    if (c && !fresh && Date.now() - c.at < PLAN_FRESH_MS) return c.value
+    const s = [...this.#sessions.values()].find((x) => x.account === account && x.live)
+    if (!s) return c?.value
+    const pending = s
+      .planUsage()
+      .catch(() => undefined)
+      .then((value) => {
+        const kept = value ?? c?.value
+        this.#plan.set(account, { at: Date.now(), ...(kept ? { value: kept } : {}) })
+        return kept
+      })
+    this.#plan.set(account, { ...(c ?? { at: 0 }), pending })
+    return pending
+  }
+
+  /** The kill switch: every turn and every background task stops. */
+  async interruptAll(): Promise<void> {
+    await this.#dropWarm("the kill switch")
+    await Promise.allSettled([...this.#sessions.values()].map((s) => s.stop("kill-switch")))
+  }
+
+  /**
+   * Ends a session's Claude Code process at once, for a session that does not stop when asked, and starts it again
+   * on the same conversation under the same id, so its pane and transcript stay.
+   */
+  async forceStop(id: string): Promise<Session> {
+    const s = this.#sessions.get(id)
+    const c = this.#coming.get(id)
+    if (!s && c?.info.state === "error" && c.opts.restore) {
+      // One that could not come back: Start again tries once more, without carrying on by itself.
+      const info: SessionInfo = { ...c.info, state: "starting" }
+      delete info.error
+      this.#coming.set(id, { ...c, info })
+      this.emit("session", info)
+      return await this.start({ ...c.opts, restore: { ...c.opts.restore, forced: true } })
+    }
+    if (!s) throw new Error("That session is not open")
+    const again = s.restartOptions()
+    const wasRunning = s.running
+    const createdAt = s.createdAt
+    await s.close()
+    this.#sessions.delete(id)
+    return await this.start({ ...again, restore: { id, createdAt, wasRunning, forced: true } })
+  }
+
+  /**
+   * A session that was working when its Claude Code crashed is started again on the same conversation and carries on
+   * where it was (owner, 1 Nov: a crash when Windows ran out of memory stopped a build session). At most twice in 30
+   * minutes, never with the kill switch engaged, and only once it is in the audit log. One that was not working, or
+   * that has crashed too often, stays stopped with the reason in words, and Start again is yours.
+   */
+  async #afterCrash(s: Session, c: { wasRunning: boolean; message: string }): Promise<void> {
+    if (!c.wasRunning || this.#deps.kill.isEngaged() || this.#sessions.get(s.id) !== s) return
+    if (!this.#crashes.take(s.id)) {
+      this.#deps.log(`session ${s.id} (${s.project}) crashed again; not started again by itself`)
+      return
+    }
+    const written = await this.#deps.audit.record({
+      session: s.id,
+      event: "session_restarted_after_crash",
+      channel: "host",
+      tool: "session",
+      cwd: s.cwd,
+      project: s.project,
+      input: { exit: c.message },
+      verdict: {
+        outcome: "allow",
+        ruleId: "session-restarted-after-crash",
+        reason:
+          "Claude Code crashed while the session was working, so Codehouse started it again on the same conversation.",
+        risk: 0,
+        decidedBy: "rules",
+        policyHash: this.#deps.policy()?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    // Checked again after the wait: you may have closed it, or engaged the kill switch, meanwhile.
+    if (!written || this.#deps.kill.isEngaged() || this.#sessions.get(s.id) !== s) return
+    const opts: StartSessionOptions = {
+      ...s.restartOptions(),
+      restore: { id: s.id, createdAt: s.createdAt, wasRunning: true, crashed: true },
+    }
+    this.#sessions.delete(s.id)
+    await s.close()
+    // Listed as coming back, so if it cannot start it stays on screen with the reason and Start again.
+    this.expect(opts)
+    try {
+      await this.start(opts)
+      this.#deps.log(`session ${s.id} (${s.project}) started again after a crash`)
+    } catch (e) {
+      this.#deps.log(`session ${s.id} could not start again after a crash: ${(e as Error).message}`)
+    }
+  }
+
+  async closeAll(): Promise<void> {
+    await this.#dropWarm("Codehouse is closing")
+    await Promise.allSettled(
+      [...this.#sessions.values(), ...this.#starting.values()].map((s) => s.close()),
+    )
+  }
+}

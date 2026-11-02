@@ -1,0 +1,134 @@
+# Codehouse
+
+**Run Claude agent sessions on your Windows computer, and stay in charge of what they do.**
+
+Claude asks permission before it runs a command, edits a file or uses a tool. Codehouse answers the routine requests for you, by rules you can read and change. Anything it cannot be sure about waits for you, on this computer and on your phone at the same time. Every decision, automatic or yours, goes into a tamper-evident audit log.
+
+
+## Download
+
+For Windows 10 and 11 (64-bit). Download one:
+
+- **[Codehouse-Setup-exe.zip](https://github.com/breakmylegs/gatehouse/releases/latest/download/Codehouse-Setup-exe.zip)**: the installer in a zip. Use this one if your browser will not keep a .exe download.
+- **[Codehouse-Setup.exe](https://github.com/breakmylegs/gatehouse/releases/latest/download/Codehouse-Setup.exe)**: the installer on its own.
+
+Then:
+
+1. If you downloaded the zip, open it and run **Codehouse-Setup.exe** from inside it (or drag it out first).
+2. If Windows says it protected your PC, choose **More info**, then **Run anyway**: the installer is not code-signed yet.
+3. It installs Codehouse in your own Programs folder. You do not need administrator rights.
+4. Open **Codehouse** from the Start menu. The setup wizard signs you in to Claude and checks your organisation.
+5. Start a session on a scratch folder first, and watch what Codehouse decides.
+
+You only run the installer once. After that Codehouse updates itself: see [Updates](#updates).
+
+### Installing from the source
+
+If you have this repository and Node, you can skip the installer: this builds what is in your copy and installs it in the same place as the installer, with a Start menu shortcut.
+
+```
+git clone https://github.com/breakmylegs/gatehouse.git
+cd gatehouse
+npm ci
+npm run install:local
+```
+
+You need Node 24 and Git. Quit Codehouse from its tray icon before running it over a copy you already have: it then switches the way an update does, keeps your rules, and goes back by itself if the new copy does not start. Codehouse still updates itself from GitHub afterwards.
+
+### What you need
+
+- Windows 10 or 11, 64-bit, with Microsoft's WebView2 runtime (it is part of Windows 11).
+- A Claude account you can use with Claude Code. Codehouse signs you in through Claude Code's own sign-in in your browser. It never sees your password and never reads your tokens.
+- PowerShell 7 (`pwsh`) for the PowerShell command checker. Without it, PowerShell commands simply wait for you.
+- About 1.5 GB of disk: Codehouse is about 470 MB, and an update keeps the version before it so you can go back.
+
+## What it does
+
+### Sessions you can watch
+
+
+- Your sessions sit in a sidebar, grouped by folder, with those that need you first. Every other page, the theme and help are in the profile menu at its foot, beside the kill switch.
+- **Start a new project from what you want to build.** Choose where new projects go in Settings, then say what you want: Codehouse names a folder from it, makes it a git repository and sends your words as the first prompt. Or start a session on a folder you choose.
+- Pick the model, the effort and the mode under the prompt box: **Manual** (asks before edits and commands), **Plan**, **Accept edits** or **Auto**. Codehouse never uses the modes that skip permission checks.
+- Watch up to three sessions side by side, each with its own transcript, plan, files and browser panels, and composer. A line under the transcript says what Claude is doing, how long it has taken and when anything last arrived, and says so if a turn looks stuck.
+- Runs of tool calls fold into one readable line ("Ran 2 commands, read schema.ts") that opens to each call.
+- See the files a session made or changed, browse its folder, and open files in a viewer (code, markdown, pictures, HTML) or a local dev server in a built-in browser.
+- Add files, photos, folders, slash commands and skills from the **+** menu, or paste a picture into the prompt.
+
+### An Approver that decides by your rules
+
+Every permission request goes to the **Approver**, which answers in this order:
+
+1. **The floor.** Things that are never allowed, whatever any rule says: reading secrets and credentials, destructive commands, writing outside your folders.
+2. **Deny rules**, then **decisions you asked it to remember**.
+3. **Allow rules** for what is safe and routine: reading code, running the tests, `git status`.
+4. **You**, for everything else.
+
+Shell commands are parsed properly (Bash with tree-sitter, PowerShell with its own parser), so a safe command chained to a dangerous one is caught. If anything goes wrong while deciding, the request waits for you. It is never allowed by mistake.
+
+**What Claude may do**, in plain words: choose Careful, Balanced (for building an app) or Hands-off, or set each switch yourself, such as letting Claude install packages for your project without asking. Every change saves at once and can be undone. It shows what is always blocked, offers rules learned from what you keep allowing, and answers "what would happen if Claude wanted to...".
+
+
+Under **Advanced**, the rule library has packs for git, package managers, build tools, running your app, the web, cloud command lines, containers and extra caution on Windows. Switch packs on and off, write your own rules, and replay a change against your past decisions before you save it.
+
+### You decide the rest, here or on your phone
+
+- A request that needs you appears in its session, above the prompt box, with Allow once and Deny, and on the board with the exact command or diff, the rule that held it, a risk score and why. Allow, deny, deny with a message, edit then allow (the edit is checked again), or remember the choice.
+- Windows tells you when something is waiting, even with Codehouse closed to the tray.
+- **On your iPhone:** pair it once with a passkey. Requests reach it end to end encrypted through a Relay that runs inside Codehouse or on a server of yours, and your answer only counts after Codehouse has checked the passkey signature.
+- **Through ntfy or Slack:** a short, redacted summary with single-use Allow and Deny codes. Severe requests can never be allowed this way.
+- The **kill switch** denies everything and stops new sessions at once.
+
+### Everything on the record
+
+- Each decision is written to an audit log in which every record carries the hash of the one before, so an edited or deleted record shows. Check it any time.
+- Checkpoints: Codehouse snapshots your folder in git before risky steps, so you can look back and restore.
+- Insights and usage: what was decided automatically, what waited for you, and what sessions cost.
+
+## Updates
+
+
+- Codehouse looks for a new version every 30 minutes. Change that, or turn it off, in **Settings, Updates**.
+- When one is out, an **Update** button appears in the header with what is new. Choose **Update now**: Codehouse closes, switches to the new version and opens again by itself, usually within a minute.
+- It downloads only the parts that changed (usually a few megabytes), in the background, while you work.
+- **Skip this version** and it is not offered again; a newer one still is. You can skip any number of versions and go straight to the newest.
+- The version before is kept. **Go back** in Settings switches to it, and if a new version ever fails to start, Codehouse goes back by itself and tells you.
+- Every update is signed. Codehouse refuses anything not signed with its release key, any download that does not match, and any address that is not GitHub's.
+
+
+## Your data
+
+- **Settings, audit log, usage and phone pairing** are in `%LOCALAPPDATA%\Gatehouse`. Updates never touch them. Secrets such as the Slack tokens are encrypted for your Windows account.
+- **Your rules** are in the install folder under `app\policy`, and are carried over on every update. Only the shipped rule library is replaced.
+- Codehouse is in `%LOCALAPPDATA%\Programs\Codehouse`. Uninstall it from Windows Settings like any other app.
+
+## Security, in short
+
+- Everything Codehouse listens on is bound to this computer only (127.0.0.1) and needs a token, and it refuses requests from other web pages.
+- Credentials are never read, logged or sent. Sign-in only ever happens in Claude Code's own flow.
+- Text is redacted (your list of client names and the like) before anything is saved or sent.
+- The threat model lists each attack Codehouse defends against and the test that proves it: [docs/threat-model.md](docs/threat-model.md).
+
+## Build it yourself
+
+You need Node 24, Git and, for the installer, [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+
+```
+npm ci
+npm test
+npm run package          builds dist-app\Codehouse\Codehouse.exe with its runtime
+npm run package:check    the same, then starts it and checks it works
+npm run installer        builds dist-app\Codehouse-Setup.exe
+```
+
+`npm run release` publishes a release (maintainers only: it needs the release signing key and the GitHub CLI). [docs/packaging.md](docs/packaging.md) explains the package, the installer and how updates work.
+
+The code is TypeScript (a Fastify Host, the Approver as an MCP server, a React interface) with a small C# window that hosts the interface in WebView2. Sessions run through the Claude Agent SDK.
+
+## Contributing
+
+This repository does not take outside contributions; you are welcome to fork it. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Credits
+
+Codehouse is an independent project. It is not made or endorsed by Anthropic, or by the roadhouse Codehouse. Powered by Claude.

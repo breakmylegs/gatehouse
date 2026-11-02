@@ -1,0 +1,818 @@
+// Codehouse.exe: the Gatehouse window. A native Windows window that shows the Gatehouse interface with
+// Microsoft's WebView2 (the same engine Edge uses, installed with Windows 11). It is not a browser tab: it has
+// its own icon, its own taskbar button, no address bar, and a tray icon so approvals still reach you when the
+// window is closed.
+//
+// It starts the Host (which starts the Approver) from the folder around it:
+//   Codehouse.exe, runtime\node.exe, app\  (see docs/packaging.md)
+//
+// Options: --check (start, check, stop, exit code), --browser (use the default browser instead of this
+// window), --relay [--public-url URL], --help.
+//
+// Written in C# 5 so the compiler that ships with Windows can build it (no SDK needed).
+
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Windows.Forms;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+
+internal sealed class MainForm : Form
+{
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FlashInfo
+    {
+        public uint cbSize;
+        public IntPtr hwnd;
+        public uint dwFlags;
+        public uint uCount;
+        public uint dwTimeout;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool FlashWindowEx(ref FlashInfo info);
+
+    private readonly bool check;
+    private readonly bool withRelay;
+    private readonly bool startInTray;
+    private readonly string relayArgs;
+    private readonly WebView2 web = new WebView2();
+    private readonly Panel splash = new Panel();
+    private readonly Label splashTitle = new Label();
+    private readonly Label splashText = new Label();
+    // The start-up progress: a band across the foot of the picture with what is happening and a moving bar.
+    private readonly Panel splashBand = new Panel();
+    private readonly ProgressBar splashBar = new ProgressBar();
+    private readonly System.Windows.Forms.Timer splashClock = new System.Windows.Forms.Timer();
+    private readonly DateTime startedAt = DateTime.Now;
+    // What it is doing now and since when, and the steps already done with how long each took. UI thread only.
+    private string stage = "Starting Codehouse";
+    private DateTime stageSince = DateTime.Now;
+    private readonly System.Collections.Generic.List<string> stepsDone = new System.Collections.Generic.List<string>();
+    private readonly NotifyIcon tray = new NotifyIcon();
+    private readonly StringBuilder log = new StringBuilder();
+    private readonly string dataDir;
+    private Process host;
+    private Process relay;
+    private string url;
+    private string hostOrigin;
+    private bool hostReady;
+    private bool webReady;
+    private bool navigated;
+    private bool quitting;
+    private bool toldAboutTray;
+    private int checkExit = 1;
+    private System.Windows.Forms.Timer timeout;
+    // The quick prompt (W1-15): its window, made hidden once the interface has loaded, and its shortcut.
+    private CoreWebView2Environment env;
+    private QuickOverlay quick;
+    private ToolStripMenuItem quickItem;
+    private uint hotkeyMods, hotkeyVk;
+    private bool hotkeyOn;
+    private const int HotkeyId = 1;
+    private const int WM_HOTKEY = 0x0312;
+
+    internal MainForm(bool check, bool withRelay, string relayArgs, bool startInTray)
+    {
+        this.check = check;
+        this.startInTray = startInTray && !check;
+        this.withRelay = withRelay;
+        this.relayArgs = relayArgs;
+        dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Gatehouse");
+        Text = "Codehouse";
+        MinimumSize = new Size(900, 600);
+        Size = new Size(1360, 860);
+        StartPosition = FormStartPosition.CenterScreen;
+        try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch (Exception) { }
+        BackColor = Color.FromArgb(244, 246, 249);
+
+        web.Dock = DockStyle.Fill;
+        web.DefaultBackgroundColor = Color.FromArgb(244, 246, 249);
+        Controls.Add(web);
+
+        splash.Dock = DockStyle.Fill;
+        splash.BackColor = Color.FromArgb(11, 11, 12);
+        try
+        {
+            string pic = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "splash.png");
+            if (File.Exists(pic))
+            {
+                using (MemoryStream ms = new MemoryStream(File.ReadAllBytes(pic))) splash.BackgroundImage = Image.FromStream(ms);
+                splash.BackgroundImageLayout = ImageLayout.Zoom;
+            }
+        }
+        catch (Exception) { }
+        splashBand.Dock = DockStyle.Bottom;
+        splashBand.Height = 176;
+        splashBand.BackColor = Color.FromArgb(18, 22, 30);
+        splashBand.Padding = new Padding(28, 16, 28, 18);
+        splashTitle.Text = "Codehouse";
+        splashTitle.Font = new Font("Bahnschrift", 20f, FontStyle.Bold);
+        splashTitle.ForeColor = Color.White;
+        splashTitle.BackColor = Color.Transparent;
+        splashTitle.AutoSize = false;
+        splashTitle.Dock = DockStyle.Top;
+        splashTitle.Height = 38;
+        splashText.Text = "Starting Codehouse. The first start can take a minute.";
+        splashText.Font = new Font("Segoe UI", 11f);
+        splashText.ForeColor = Color.FromArgb(214, 220, 232);
+        splashText.BackColor = Color.Transparent;
+        splashText.AutoSize = false;
+        splashText.Dock = DockStyle.Fill;
+        splashBar.Style = ProgressBarStyle.Marquee;
+        splashBar.MarqueeAnimationSpeed = 28;
+        splashBar.Dock = DockStyle.Bottom;
+        splashBar.Height = 10;
+        splashBand.Controls.Add(splashText);
+        splashBand.Controls.Add(splashBar);
+        splashBand.Controls.Add(splashTitle);
+        splash.Controls.Add(splashBand);
+        // Each second: what it is doing now, and for how long, so a slow first start never looks stuck.
+        splashClock.Interval = 1000;
+        splashClock.Tick += delegate
+        {
+            splashText.Text = SplashText();
+        };
+        splashClock.Start();
+        Controls.Add(splash);
+        splash.BringToFront();
+
+        tray.Icon = Icon;
+        tray.Text = "Codehouse";
+        ContextMenuStrip menu = new ContextMenuStrip();
+        menu.Items.Add("Open Codehouse", null, delegate { ShowWindow(); });
+        quickItem = new ToolStripMenuItem("Quick prompt", null, delegate { OpenQuick(); });
+        menu.Items.Add(quickItem);
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Quit Codehouse", null, delegate { Quit(); });
+        tray.ContextMenuStrip = menu;
+        tray.MouseClick += delegate(object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowWindow(); };
+        tray.BalloonTipClicked += delegate { ShowWindow(); };
+        tray.Visible = !check;
+
+        if (check)
+        {
+            // Check mode shows nothing: a window that exists but is off screen and not in the taskbar.
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.Manual;
+            Location = new Point(-32000, -32000);
+            timeout = new System.Windows.Forms.Timer();
+            timeout.Interval = 240000;
+            timeout.Tick += delegate { Say("Check failed: it did not finish in 4 minutes."); Finish(1); };
+            timeout.Start();
+        }
+        else LoadBounds();
+    }
+
+    private static void Say(string text)
+    {
+        try { Console.WriteLine("[gatehouse] " + text); } catch (Exception) { }
+    }
+
+    // ---- window position ----
+
+    private string BoundsFile { get { return Path.Combine(dataDir, "window.txt"); } }
+
+    private void LoadBounds()
+    {
+        try
+        {
+            if (!File.Exists(BoundsFile)) return;
+            string[] p = File.ReadAllText(BoundsFile).Trim().Split(' ');
+            Rectangle r = new Rectangle(int.Parse(p[0]), int.Parse(p[1]), int.Parse(p[2]), int.Parse(p[3]));
+            bool visible = false;
+            foreach (Screen s in Screen.AllScreens) if (s.WorkingArea.IntersectsWith(r)) visible = true;
+            if (!visible || r.Width < 600 || r.Height < 400) return;
+            StartPosition = FormStartPosition.Manual;
+            Bounds = r;
+            if (p.Length > 4 && p[4] == "1") WindowState = FormWindowState.Maximized;
+        }
+        catch (Exception) { }
+    }
+
+    private void SaveBounds()
+    {
+        try
+        {
+            if (check || WindowState == FormWindowState.Minimized) return;
+            Rectangle r = WindowState == FormWindowState.Normal ? Bounds : base.RestoreBounds;
+            Directory.CreateDirectory(dataDir);
+            File.WriteAllText(BoundsFile, r.X + " " + r.Y + " " + r.Width + " " + r.Height + " " + (WindowState == FormWindowState.Maximized ? "1" : "0"));
+        }
+        catch (Exception) { }
+    }
+
+    // ---- starting ----
+
+    protected override async void OnShown(EventArgs e)
+    {
+        base.OnShown(e);
+        // Started at sign-in: sit in the tray until a request needs you or you open it.
+        if (startInTray) Hide();
+        string root = Hosting.Root();
+        string appDir = Hosting.AppDir(root);
+        string hostEntry = Hosting.Entry(appDir, "host");
+        string node = Hosting.FindNode(root);
+        if (!File.Exists(hostEntry)) { Fail("The application files were not found at " + appDir + ". Keep Codehouse.exe next to its app folder."); return; }
+        if (node == null) { Fail("No Node was found. Codehouse needs runtime\\node.exe next to it."); return; }
+
+        Step("Checking Codehouse's files");
+        // Off the window's thread, so the picture and its bar keep moving while it runs.
+        string linkNote = await System.Threading.Tasks.Task.Run(() => Hosting.FixLinks(node, appDir));
+        if (linkNote != null) Remember(linkNote);
+        Step("Loading Codehouse's code");
+        try
+        {
+            host = Hosting.StartChild(node, appDir, hostEntry, "", true);
+            host.OutputDataReceived += delegate(object s, DataReceivedEventArgs ev)
+            {
+                if (ev.Data == null) return;
+                Match m = Hosting.ReadyLine.Match(ev.Data);
+                if (m.Success) OnUi(delegate { OnHostReady(m.Groups[1].Value); });
+                else if (ev.Data.Contains("\"event\":\"attention\"")) OnUi(delegate { Attention(); });
+                else if (Hosting.ApplyLine.IsMatch(ev.Data)) { string line = ev.Data; OnUi(delegate { ApplyUpdate(line); }); }
+                else if (Hosting.RestartLine.IsMatch(ev.Data)) OnUi(delegate { Restart(); });
+                else if (Hosting.ProgressLine.IsMatch(ev.Data)) { string text = Hosting.JsonField(ev.Data, "text"); OnUi(delegate { Step(text); }); }
+                else Remember(ev.Data);
+            };
+            host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
+            host.Exited += delegate { OnUi(delegate { OnHostExited(); }); };
+            host.EnableRaisingEvents = true;
+            host.BeginOutputReadLine();
+            host.BeginErrorReadLine();
+            if (withRelay)
+            {
+                relay = Hosting.StartChild(node, appDir, Hosting.Entry(appDir, "relay"), relayArgs);
+                relay.OutputDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember("[relay] " + ev.Data); };
+                relay.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember("[relay] " + ev.Data); };
+                relay.BeginOutputReadLine();
+                relay.BeginErrorReadLine();
+            }
+        }
+        catch (Exception ex) { Fail("Could not start the Host: " + ex.Message); return; }
+
+        try
+        {
+            string userData = Path.Combine(dataDir, "webview");
+            Directory.CreateDirectory(userData);
+            env = await CoreWebView2Environment.CreateAsync(null, userData, null);
+            await web.EnsureCoreWebView2Async(env);
+            OnWebReady();
+        }
+        catch (Exception ex) { WebViewMissing(ex.Message); }
+    }
+
+    private void OnUi(Action a)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired) { try { BeginInvoke(a); } catch (Exception) { } }
+        else a();
+    }
+
+    /// <summary>Starts a new step on the start-up picture; the one before goes on the done list with its time.</summary>
+    private void Step(string text)
+    {
+        if (string.IsNullOrEmpty(text) || text == stage) return;
+        int took = (int)Math.Round((DateTime.Now - stageSince).TotalSeconds);
+        if (stage != "Starting Codehouse") stepsDone.Add(stage + " (" + took + " s)");
+        stage = text;
+        stageSince = DateTime.Now;
+        splashText.Text = SplashText();
+    }
+
+    private string SplashText()
+    {
+        int secs = (int)(DateTime.Now - startedAt).TotalSeconds;
+        int now = (int)(DateTime.Now - stageSince).TotalSeconds;
+        string text = stage + "  (" + now + " s)";
+        if (stepsDone.Count > 0) text += "\r\nDone: " + string.Join(", ", stepsDone.ToArray());
+        text += "\r\n" + secs + " second" + (secs == 1 ? "" : "s") + " so far.";
+        if (secs > 15) text += " The first start after installing or updating is the slowest: Windows checks each of Codehouse's files once.";
+        return text;
+    }
+
+    private void Remember(string line)
+    {
+        string l = line.ToLowerInvariant();
+        lock (log)
+        {
+            log.AppendLine(line);
+            if (log.Length > 6000) log.Remove(0, log.Length - 4000);
+        }
+        if (check) Say(line);
+    }
+
+    private string Tail()
+    {
+        lock (log)
+        {
+            string[] lines = log.ToString().Split(new char[] { '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            int from = Math.Max(0, lines.Length - 12);
+            return string.Join(Environment.NewLine, lines, from, lines.Length - from).Trim();
+        }
+    }
+
+    private void OnHostReady(string readyUrl)
+    {
+        url = readyUrl;
+        hostReady = true;
+        Step("Opening the window");
+        try { hostOrigin = new Uri(url).GetLeftPart(UriPartial.Authority); } catch (Exception) { hostOrigin = null; }
+        Say("Ready: " + hostOrigin);
+        if (check)
+        {
+            string msg;
+            bool ok = Hosting.CheckHost(url, out msg);
+            if (!ok) { Say("Check failed: " + msg + "."); Finish(1); return; }
+            Say("Host check passed: " + msg + ".");
+        }
+        TryNavigate();
+    }
+
+    private void OnWebReady()
+    {
+        webReady = true;
+        CoreWebView2 core = web.CoreWebView2;
+        core.Settings.AreDevToolsEnabled = false;
+        core.Settings.IsStatusBarEnabled = false;
+        core.Settings.IsZoomControlEnabled = true;
+        core.Settings.IsBuiltInErrorPageEnabled = false;
+        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (!IsOurs(e.Uri)) { e.Cancel = true; OpenExternal(e.Uri); }
+        };
+        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            e.Handled = true;
+            if (!IsOurs(e.Uri)) OpenExternal(e.Uri);
+        };
+        core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
+        {
+            // Only our own page is ever loaded, so notifications are the one thing it may ask for.
+            e.State = e.PermissionKind == CoreWebView2PermissionKind.Notifications ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+        };
+        core.WebMessageReceived += delegate(object s, CoreWebView2WebMessageReceivedEventArgs e)
+        {
+            string m = null;
+            try { m = e.TryGetWebMessageAsString(); } catch (Exception) { }
+            if (m == "attention") Attention();
+            else if (m == "voice") VoiceTyping();
+            else if (m != null && m.StartsWith("hotkey:")) SetHotkey(m.Substring("hotkey:".Length));
+        };
+        core.NavigationCompleted += delegate(object s, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            if (!e.IsSuccess) { Fail("The window could not load the Codehouse interface (" + e.WebErrorStatus + ")."); return; }
+            splash.Visible = false;
+            splashClock.Stop();
+            if (check) CheckPage();
+            else
+            {
+                PrepareQuick();
+                SayIfRestarted();
+            }
+        };
+        TryNavigate();
+    }
+
+    private bool IsOurs(string uri)
+    {
+        if (uri == null) return false;
+        if (uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return true;
+        return hostOrigin != null && uri.StartsWith(hostOrigin, StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static void OpenExternal(string uri)
+    {
+        try
+        {
+            Uri u = new Uri(uri);
+            if (u.Scheme != "http" && u.Scheme != "https") return;
+            ProcessStartInfo psi = new ProcessStartInfo(u.AbsoluteUri);
+            psi.UseShellExecute = true;
+            Process.Start(psi);
+        }
+        catch (Exception) { }
+    }
+
+    private void TryNavigate()
+    {
+        if (!hostReady || !webReady || navigated) return;
+        navigated = true;
+        Step("Opening the window");
+        web.CoreWebView2.Navigate(url);
+    }
+
+    private async void CheckPage()
+    {
+        try
+        {
+            await System.Threading.Tasks.Task.Delay(1500);
+            string result = await web.CoreWebView2.ExecuteScriptAsync(
+                "JSON.stringify({title: document.title, children: (document.getElementById('root')||{children:[]}).children.length, text: document.body.innerText.slice(0,80)})");
+            Say("Window page: " + result);
+            bool ok = result.Contains("Codehouse") && !result.Contains("\\\"children\\\":0");
+            Say(ok ? "Check passed: the window loaded the interface from the packaged Host." : "Check failed: the window did not show the interface.");
+            Finish(ok ? 0 : 1);
+        }
+        catch (Exception ex)
+        {
+            Say("Check failed: " + ex.Message);
+            Finish(1);
+        }
+    }
+
+    private void WebViewMissing(string why)
+    {
+        // Without the WebView2 runtime the interface still works in the default browser. Say so, rather than doing it silently.
+        Say("WebView2 is not available (" + why + ")");
+        if (check) { Finish(1); return; }
+        splashClock.Stop();
+        splashBar.Visible = false;
+        splashText.Text = "The Microsoft Edge WebView2 runtime is not available on this computer, so Codehouse opened in your default browser instead. You can install the runtime from microsoft.com/edge/webview2 to get this window.";
+        if (url != null) OpenExternal(url);
+        else
+        {
+            System.Windows.Forms.Timer t = new System.Windows.Forms.Timer();
+            t.Interval = 500;
+            t.Tick += delegate { if (url != null) { t.Stop(); OpenExternal(url); } };
+            t.Start();
+        }
+    }
+
+    private void OnHostExited()
+    {
+        if (quitting) return;
+        if (check) { Say("Check failed: the Host stopped.\r\n" + Tail()); Finish(1); return; }
+        // How it ended, kept in host.log: a process ended by Windows (out of memory, a native crash) leaves no line of
+        // its own there (owner, 2 Nov: it stopped with nothing to say why).
+        int code = int.MinValue;
+        try { code = host.ExitCode; } catch (Exception) { }
+        string how = code == int.MinValue ? "an unknown code" : "code " + code + " (0x" + code.ToString("X8") + ")";
+        try
+        {
+            File.AppendAllText(Path.Combine(dataDir, "host.log"),
+                DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'") + " the Host stopped unexpectedly with " + how + "\r\n");
+        }
+        catch (Exception) { }
+        // Started again by itself, at most three times in ten minutes: open sessions come back as after an update.
+        bool again = TakeRestart();
+        if (again)
+        {
+            try { File.WriteAllText(RestartedMarker, how); } catch (Exception) { }
+            Restart();
+            // Restart closes this window when the new one has started; if it could not start, say so here.
+            if (quitting) return;
+        }
+        Fail("Codehouse stopped unexpectedly, with " + how + "." + (again
+            ? " It could not start again by itself."
+            : " It started again by itself three times in ten minutes, so it is waiting for you now."));
+    }
+
+    private string RestartedMarker { get { return Path.Combine(dataDir, "restarted-after-stop.txt"); } }
+
+    /// <summary>True, and noted, when fewer than three restarts after a stop happened in the last ten minutes.</summary>
+    private bool TakeRestart()
+    {
+        try
+        {
+            string file = Path.Combine(dataDir, "host-restarts.txt");
+            DateTime now = DateTime.UtcNow;
+            System.Collections.Generic.List<string> recent = new System.Collections.Generic.List<string>();
+            if (File.Exists(file))
+                foreach (string line in File.ReadAllLines(file))
+                {
+                    DateTime t;
+                    if (DateTime.TryParse(line, null, System.Globalization.DateTimeStyles.RoundtripKind, out t) && (now - t).TotalMinutes < 10)
+                        recent.Add(line);
+                }
+            if (recent.Count >= 3) return false;
+            recent.Add(now.ToString("o"));
+            Directory.CreateDirectory(dataDir);
+            File.WriteAllLines(file, recent.ToArray());
+            return true;
+        }
+        catch (Exception) { return false; }
+    }
+
+    /// <summary>After starting again by itself: says so once, in the tray.</summary>
+    private void SayIfRestarted()
+    {
+        try
+        {
+            if (!File.Exists(RestartedMarker)) return;
+            string how = File.ReadAllText(RestartedMarker).Trim();
+            File.Delete(RestartedMarker);
+            tray.ShowBalloonTip(8000, "Codehouse started again",
+                "It stopped unexpectedly (" + how + ") and started again by itself. Open sessions came back.", ToolTipIcon.Info);
+        }
+        catch (Exception) { }
+    }
+
+    private void Fail(string message)
+    {
+        string t = Tail();
+        Say(message + (t.Length > 0 ? "\r\n" + t : ""));
+        if (check) { Finish(1); return; }
+        splash.Visible = true;
+        splash.BringToFront();
+        splashClock.Stop();
+        splashBar.Visible = false;
+        splashBand.Height = Math.Max(260, ClientSize.Height / 2);
+        splashTitle.ForeColor = Color.FromArgb(255, 150, 140);
+        splashText.Text = message + (t.Length > 0 ? "\r\n\r\nWhat it said:\r\n" + t : "") + "\r\n\r\nClose this window to leave.";
+        if (!Visible) ShowWindow();
+        quitting = true; // closing now really closes
+    }
+
+    private void Finish(int code)
+    {
+        checkExit = code;
+        quitting = true;
+        Hosting.StopChildren(relay, host);
+        Application.Exit();
+    }
+
+    // ---- the quick prompt ----
+
+    private async void PrepareQuick()
+    {
+        if (quick != null || env == null || url == null) return;
+        int hash = url.IndexOf('#');
+        string quickUrl = hash < 0 ? url + "?view=quick" : url.Substring(0, hash) + "?view=quick" + url.Substring(hash);
+        quick = new QuickOverlay(IsOurs, OpenExternal, delegate(string sent)
+        {
+            // What the quick prompt sent: show the main window on that session, with your words in it.
+            ShowWindow();
+            try { web.CoreWebView2.PostWebMessageAsString("open-session:" + sent); } catch (Exception) { }
+        });
+        try { await quick.Prepare(env, quickUrl); }
+        catch (Exception ex) { Remember("[quick] the quick prompt could not load: " + ex.Message); }
+    }
+
+    /// <summary>The shortcut or the tray: the quick prompt over what you are doing, or the window if it is not ready yet.</summary>
+    private void OpenQuick()
+    {
+        if (quick != null && quick.Ready) quick.Open();
+        else ShowWindow();
+    }
+
+    private void Tell(string message)
+    {
+        try { web.CoreWebView2.PostWebMessageAsString(message); } catch (Exception) { }
+    }
+
+    /// <summary>
+    /// The page says which shortcut you chose (empty for none). It is registered with Windows; if another program has
+    /// it, the one before stays and the page is offered three free ones.
+    /// </summary>
+    private void SetHotkey(string text)
+    {
+        if (text.Trim().Length == 0)
+        {
+            if (hotkeyOn) Hotkey.UnregisterHotKey(Handle, HotkeyId);
+            hotkeyOn = false;
+            quickItem.Text = "Quick prompt";
+            Tell("hotkey-off");
+            return;
+        }
+        uint mods, vk;
+        string error;
+        if (!Hotkey.Parse(text, out mods, out vk, out error)) { Tell("hotkey-bad:" + error); return; }
+        if (hotkeyOn && mods == hotkeyMods && vk == hotkeyVk) { Tell("hotkey-ok:" + Hotkey.Format(mods, vk)); return; }
+        if (hotkeyOn) Hotkey.UnregisterHotKey(Handle, HotkeyId);
+        if (Hotkey.RegisterHotKey(Handle, HotkeyId, mods | Hotkey.ModNoRepeat, vk))
+        {
+            hotkeyOn = true;
+            hotkeyMods = mods;
+            hotkeyVk = vk;
+            quickItem.Text = "Quick prompt (" + Hotkey.Format(mods, vk) + ")";
+            Tell("hotkey-ok:" + Hotkey.Format(mods, vk));
+            return;
+        }
+        if (hotkeyOn) hotkeyOn = Hotkey.RegisterHotKey(Handle, HotkeyId, hotkeyMods | Hotkey.ModNoRepeat, hotkeyVk);
+        Tell("hotkey-clash:" + Hotkey.Format(mods, vk) + "|" + string.Join("|", Hotkey.Alternatives(text, Hotkey.IsFree)));
+    }
+
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HotkeyId) OpenQuick();
+        base.WndProc(ref m);
+    }
+
+    // A shortcut belongs to the window handle; if Windows makes the handle again, register it again.
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        if (hotkeyOn) Hotkey.RegisterHotKey(Handle, HotkeyId, hotkeyMods | Hotkey.ModNoRepeat, hotkeyVk);
+    }
+
+    // ---- voice typing (W1-16) ----
+
+    [DllImport("user32.dll")]
+    private static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+
+    /// <summary>
+    /// The microphone button: presses Win+H for you, which starts Windows voice typing in the box that has the focus
+    /// (the page focuses the prompt box first). Windows does the listening and typing; Codehouse hears nothing.
+    /// </summary>
+    private void VoiceTyping()
+    {
+        if (!ContainsFocus) return; // only for this window, never typed into another program
+        const byte win = 0x5B, h = 0x48;
+        const uint up = 0x2;
+        keybd_event(win, 0, 0, UIntPtr.Zero);
+        keybd_event(h, 0, 0, UIntPtr.Zero);
+        keybd_event(h, 0, up, UIntPtr.Zero);
+        keybd_event(win, 0, up, UIntPtr.Zero);
+    }
+
+    // ---- being a good Windows citizen ----
+
+    internal void ShowWindow()
+    {
+        if (!Visible) Show();
+        ShowInTaskbar = true;
+        if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
+        Activate();
+        TopMost = true;
+        TopMost = false;
+    }
+
+    private DateTime lastAttention = DateTime.MinValue;
+
+    private void Attention()
+    {
+        if (ContainsFocus && Visible && WindowState != FormWindowState.Minimized) return;
+        // The Host's line and the page can both report the same request; show one notification for it.
+        if ((DateTime.UtcNow - lastAttention).TotalSeconds < 3) return;
+        lastAttention = DateTime.UtcNow;
+        try
+        {
+            FlashInfo fi = new FlashInfo();
+            fi.cbSize = (uint)Marshal.SizeOf(typeof(FlashInfo));
+            fi.hwnd = Handle;
+            fi.dwFlags = 0x0000000F; // FLASHW_ALL | FLASHW_TIMERNOFG
+            fi.uCount = 5;
+            if (Visible) FlashWindowEx(ref fi);
+        }
+        catch (Exception) { }
+        // No detail in the balloon: it can show on a locked screen or be mirrored.
+        tray.ShowBalloonTip(8000, "Codehouse: a decision is waiting", "Open Codehouse from the tray icon to decide. Your phone was told too if one is paired.", ToolTipIcon.Warning);
+    }
+
+    // The Host has the new version ready and you chose to switch: hand over to Codehouse-Update.exe and close.
+    private void ApplyUpdate(string line)
+    {
+        string message;
+        if (Hosting.StartUpdater(line, out message)) Quit();
+        else Remember("[update] " + message);
+    }
+
+    /// <summary>
+    /// Restart now, after a setting that needs it: a fresh Codehouse starts, waits for this one to close (--after), and
+    /// opens as usual. If it cannot start, this one keeps running and says why.
+    /// </summary>
+    private void Restart()
+    {
+        try
+        {
+            string args = "--after " + Process.GetCurrentProcess().Id + (withRelay ? " --relay " + relayArgs : "");
+            ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, args);
+            psi.UseShellExecute = false;
+            psi.WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath);
+            Process.Start(psi);
+            Quit();
+        }
+        catch (Exception ex)
+        {
+            Remember("[restart] Codehouse could not start again: " + ex.Message);
+        }
+    }
+
+    private void Quit()
+    {
+        quitting = true;
+        SaveBounds();
+        tray.Visible = false;
+        Hosting.StopChildren(relay, host);
+        Application.Exit();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        if (!quitting && e.CloseReason == CloseReason.UserClosing && !check)
+        {
+            // Closing the window keeps Gatehouse running in the tray so approvals still reach you.
+            e.Cancel = true;
+            SaveBounds();
+            Hide();
+            if (!toldAboutTray)
+            {
+                toldAboutTray = true;
+                tray.ShowBalloonTip(5000, "Codehouse is still running", "Approvals still reach you. Use the tray icon to open it or quit.", ToolTipIcon.Info);
+            }
+            return;
+        }
+        base.OnFormClosing(e);
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        if (hotkeyOn) Hotkey.UnregisterHotKey(Handle, HotkeyId);
+        tray.Visible = false;
+        tray.Dispose();
+        Hosting.StopChildren(relay, host);
+        base.OnFormClosed(e);
+    }
+
+    internal int CheckExit { get { return checkExit; } }
+}
+
+internal static class Program
+{
+    [DllImport("kernel32.dll")]
+    private static extern bool AttachConsole(int pid);
+
+    [STAThread]
+    private static int Main(string[] args)
+    {
+        AttachConsole(-1); // so --check and --help print in the terminal you ran them from
+        bool check = false, browser = false, relay = false, help = false, inTray = false;
+        int afterPid = 0;
+        string relayArgs = "";
+        for (int i = 0; i < args.Length; i++)
+        {
+            string a = args[i];
+            if (a == "--check") check = true;
+            else if (a == "--browser") browser = true;
+            else if (a == "--relay") relay = true;
+            else if (a == "--help" || a == "-h" || a == "/?") help = true;
+            else if (a == "--tray") inTray = true;
+            else if (a == "--no-browser") { }
+            else if (a == "--after" && i + 1 < args.Length) int.TryParse(args[++i], out afterPid);
+            else if (a == "--public-url" && i + 1 < args.Length) relayArgs = "--public-url \"" + args[++i] + "\"";
+            else
+            {
+                Console.WriteLine("[gatehouse] Unknown option " + a + ". Try --help.");
+                return 2;
+            }
+        }
+        if (help)
+        {
+            Console.WriteLine("Codehouse");
+            Console.WriteLine("  Codehouse.exe                 open the Codehouse window");
+            Console.WriteLine("  --check                       start, check the window and Host, stop (exit code 0 or 1)");
+            Console.WriteLine("  --relay [--public-url URL]    also start the phone Relay (docs\\relay-local.md)");
+            Console.WriteLine("  --tray                        start hidden in the tray (what start at sign-in uses)");
+            Console.WriteLine("  --browser                     use the default browser instead of this window");
+            Console.WriteLine("Use Codehouse-Console.exe for a console window with the Host's messages.");
+            return 0;
+        }
+        if (browser)
+        {
+            // The console launcher does exactly this.
+            string console = Path.Combine(Hosting.Root(), "Codehouse-Console.exe");
+            if (!File.Exists(console)) { Console.WriteLine("[gatehouse] Codehouse-Console.exe was not found."); return 1; }
+            Process p = Process.Start(console, relay ? "--relay " + relayArgs : "");
+            p.WaitForExit();
+            return p.ExitCode;
+        }
+
+        // Restarting: the Codehouse that started this one is closing. Wait for it, so this one is the only one.
+        if (afterPid > 0)
+        {
+            try { Process.GetProcessById(afterPid).WaitForExit(30000); }
+            catch (Exception) { }
+        }
+        bool created;
+        Mutex single = new Mutex(true, "Local\\Gatehouse.App", out created);
+        if (!created && !check)
+        {
+            // Already running: bring that window forward instead of starting a second Host.
+            try { EventWaitHandle.OpenExisting("Local\\Gatehouse.Show").Set(); } catch (Exception) { }
+            return 0;
+        }
+        EventWaitHandle show = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\Gatehouse.Show");
+
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        MainForm form = new MainForm(check, relay, relayArgs, inTray);
+        Thread watcher = new Thread(delegate()
+        {
+            while (show.WaitOne())
+            {
+                try { form.BeginInvoke((Action)delegate { form.ShowWindow(); }); } catch (Exception) { }
+            }
+        });
+        watcher.IsBackground = true;
+        watcher.Start();
+        Application.Run(form);
+        return check ? form.CheckExit : 0;
+    }
+}

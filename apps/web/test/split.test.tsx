@@ -1,0 +1,93 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { Workspace } from "../src/surfaces/Workspace"
+import { useStore } from "../src/store"
+
+vi.mock("../src/lib/api", () => ({
+  api: vi.fn(async () => ({ ok: false, status: 404, error: "no route" })),
+}))
+
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as never
+
+const session = (id: string, project: string) => ({
+  id,
+  cwd: `C:/dev/${project}`,
+  project,
+  mode: "default" as const,
+  state: "idle" as const,
+  pendingApprovals: 0,
+  createdAt: `2026-10-28T10:0${id.slice(1)}:00Z`,
+})
+
+beforeEach(() => {
+  useStore.setState({
+    sessions: {
+      s1: session("s1", "atlas"),
+      s2: session("s2", "beacon"),
+      s3: session("s3", "comet"),
+    },
+    transcripts: {},
+    pending: {},
+    panes: [],
+    selectedSession: "s1",
+  })
+})
+afterEach(cleanup)
+
+const panes = () => screen.getAllByLabelText(/^Session (atlas|beacon|comet)$/)
+/** A pane's name, which opens its menu: show another session here, open one beside, close. */
+const menuOf = (pane: HTMLElement) =>
+  within(pane).getByRole("button", { name: /: switch, open beside/ })
+
+describe("split view", () => {
+  it("shows one session, then opens another beside it", () => {
+    render(<Workspace />)
+    expect(panes()).toHaveLength(1)
+    fireEvent.click(menuOf(panes()[0]!))
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Open .* beacon beside$/ }))
+    expect(panes().map((p) => p.getAttribute("aria-label"))).toEqual([
+      "Session atlas",
+      "Session beacon",
+    ])
+    // Each pane has its own composer.
+    expect(screen.getAllByRole("textbox", { name: /prompt/i }).length).toBeGreaterThanOrEqual(2)
+  })
+
+  // At most four (owner, 1 Nov) is in panes.test.tsx; here every session is on screen, so none is offered beside.
+  it("offers nothing to open beside when every session is shown, and closes a pane", () => {
+    useStore.setState({ panes: ["s1", "s2", "s3"] })
+    render(<Workspace />)
+    expect(panes()).toHaveLength(3)
+    fireEvent.click(menuOf(panes()[2]!))
+    expect(screen.queryByRole("menuitem", { name: / beside$/ })).toBeNull()
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+    fireEvent.click(menuOf(panes()[1]!))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Close this pane" }))
+    expect(panes().map((p) => p.getAttribute("aria-label"))).toEqual([
+      "Session atlas",
+      "Session comet",
+    ])
+  })
+
+  it("switching a pane to a session already on screen swaps the two", () => {
+    useStore.setState({ panes: ["s1", "s2"] })
+    render(<Workspace />)
+    fireEvent.click(menuOf(panes()[0]!))
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Show .* beacon here$/ }))
+    expect(useStore.getState().panes).toEqual(["s2", "s1"])
+  })
+
+  it("opening a session from elsewhere focuses it if shown, and otherwise fills the focused pane (owner, 1 Nov)", () => {
+    useStore.setState({ panes: ["s1", "s2"], focusPane: 0 })
+    useStore.getState().selectSession("s2")
+    expect(useStore.getState().panes).toEqual(["s1", "s2"])
+    expect(useStore.getState().focusPane).toBe(1)
+    useStore.getState().selectSession("s3")
+    expect(useStore.getState().panes).toEqual(["s1", "s3"])
+  })
+})

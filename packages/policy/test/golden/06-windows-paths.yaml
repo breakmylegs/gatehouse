@@ -1,0 +1,46 @@
+# Windows path handling: separators, case, dot-dot, UNC and device paths, junctions, trailing dots,
+# 8.3 names and the project root being the git root, not the cwd.
+- { t: Read, p: "${WSW}\\src\\a.ts", o: allow, r: read-workspace }
+- { t: Read, p: "${WS}/SRC/A.TS", o: allow, r: read-workspace }
+- { t: Read, p: "src/../src/a.ts", o: allow, r: read-workspace }
+- { t: Read, p: "../out/notes.md", o: escalate, r: no-rule }
+- { t: Read, p: "//server/share/file", o: escalate, r: unc-path }
+- { t: Read, p: '\\server\share\f', o: escalate, r: unc-path }
+- { t: Read, p: '\\?\C:\dev\x', o: escalate, r: unc-path }
+- { t: Read, p: '\\.\PhysicalDrive0', o: escalate, r: unc-path }
+- { t: Write, p: "//server/share/x", o: deny, r: outside-workspace-write }
+- { t: Write, p: '\\?\C:\dev\x', o: deny, r: outside-workspace-write }
+- { t: Read, p: "link/notes.md", o: escalate, r: no-rule, needs: junction }
+- { t: Read, p: "link/.env", o: deny, r: secrets-files, needs: junction }
+- { t: Write, p: "link/new.txt", o: deny, r: outside-workspace-write, needs: junction }
+- { t: Edit, p: "link/notes.md", o: deny, r: outside-workspace-write, needs: junction }
+- { t: Write, p: "link/../x.md", o: deny, r: outside-workspace-write, needs: junction, note: "dot-dot after a junction is resolved physically" }
+- { t: Grep, p: "link", o: escalate, r: no-rule, needs: junction }
+- { t: Write, p: "src/new.ts", o: allow, r: edit-workspace-source }
+- { t: Write, p: "src/deep/new/dir/file.ts", o: allow, r: edit-workspace-source }
+- { t: Write, p: "lib/util.js", o: escalate, r: no-rule }
+- { t: Write, p: "README.md", o: allow, r: edit-workspace-source }
+- { t: Write, p: "docs/guide.md", o: allow, r: edit-workspace-source }
+- { t: Write, p: "docs/sub/x.md", o: allow, r: edit-workspace-source }
+- { t: Write, p: "package.json", o: escalate, r: no-rule }
+- { t: Write, p: "src/a.ts.", o: allow, r: edit-workspace-source }
+- { t: Write, p: "src/a.ts ", o: allow, r: edit-workspace-source }
+- { t: Write, p: ".env.", o: deny, r: secrets-files }
+- { t: Write, p: ".env ", o: deny, r: secrets-files }
+- { t: Read, p: "${WS}/${SHORT}/file.txt", o: allow, r: read-workspace, needs: short }
+- { t: Read, p: "${ENV8}", o: deny, r: secrets-files, needs: env8 }
+- { t: Write, p: "${WS}/${LONG}/x.txt", o: escalate, r: no-rule }
+- { t: Write, p: "C:/other/place.txt", o: deny, r: outside-workspace-write }
+- { t: Write, p: "${OUT}/file.txt", o: deny, r: outside-workspace-write }
+- { t: Edit, p: "${OUT}/.env", o: deny, r: secrets-files }
+- { t: Read, p: "${OUT}/notes.md", o: escalate, r: no-rule }
+- { t: Read, p: "~/notes.md", o: escalate, r: no-rule }
+- { t: Write, p: "~/x.md", o: deny, r: outside-workspace-write }
+- { t: NotebookEdit, p: "src/a.ipynb", o: escalate, r: no-rule }
+- { t: NotebookEdit, p: "../out/x.ipynb", o: deny, r: outside-workspace-write }
+- { t: Read, p: "notes.md", cwd: "${OUT}", o: escalate, r: no-rule }
+- { t: Glob, g: "*.ts", p: "src", o: allow, r: read-workspace }
+- { t: Read, p: "src/a.ts", cwd: "${WS}/src", o: allow, r: read-workspace }
+- { t: Write, p: "a.ts", cwd: "${WS}/src", o: allow, r: edit-workspace-source, note: "globs are relative to the git root, not the cwd" }
+- { t: Write, p: "docs/new.md", cwd: "${WS}/lib", o: escalate, r: no-rule }
+- { t: Read, p: "C:/dev/some/file", o: escalate, r: no-rule }
