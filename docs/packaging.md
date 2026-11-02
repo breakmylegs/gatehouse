@@ -66,7 +66,7 @@ It runs the same Host as `pwsh scripts/start.ps1`, so everything in `docs/runboo
 
 `npm run installer` runs Inno Setup on `packaging/installer.iss` and writes `dist-app\Codehouse-Setup.exe` (about 135 MB). It finds `ISCC.exe` in the usual Inno Setup folders or on the PATH; give another path with `--iscc <path>` or `GATEHOUSE_ISCC`. It builds the package first if needed.
 
-The installer puts Codehouse in `%LOCALAPPDATA%\Programs\Codehouse` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start Codehouse when I sign in" choice. Compiling it works, and it has not been run through an install on this machine. Try it on a spare account or machine first.
+The installer puts Codehouse in `%LOCALAPPDATA%\Programs\Codehouse` (no administrator needed), adds a Start menu shortcut and an uninstaller, keeps `app\policy` on upgrade, and offers an unticked "start Codehouse when I sign in" choice. It has been run through a silent install on this machine with a test AppId (`scripts/installer-move-check.mjs`).
 
 A single-file exe was judged not worth it: Codehouse also needs the WebView2 libraries, its WebAssembly files, the Agent SDK's binary and the PowerShell scripts at run time, so a single file would unpack them next to itself anyway.
 
@@ -115,6 +115,14 @@ The version is `major.minor` from package.json and the number of commits (`npm r
 - It needs the same things as the source: you signed in to Claude Code on this computer, and PowerShell 7 (`pwsh`) installed for the PowerShell parser.
 - Notifications from the page itself (Settings, browser notification) are allowed in the window, but the taskbar flash and balloon are the dependable signal.
 
-## The rename to Codehouse (31 Oct 2026)
+## Moving over from an install made before the rename (2 Nov 2026)
 
-Releases from 1.0.116 ship `Codehouse.exe` and `Codehouse-Update.exe` as copies of `Codehouse.exe` and `Codehouse-Update.exe`. An install from 1.0.115 or before needs them: its Host looks for `Codehouse-Update.exe` to switch, and its shortcuts start `Codehouse.exe`. Remove the copies (in `scripts/package.mjs`) only once no install from before the rename is left. The updater renames the old shortcuts itself once the new version runs. To check the path from an old install: unpack an old release's three zips and its `release.json` and `release.sig` into one folder, run `npm run package`, then `E2E_FROM=<that folder> node node_modules/tsx/dist/cli.mjs scripts/update-e2e.ts`.
+An install from before the rename cannot take a Codehouse update by itself: its updater only accepts a release made under its own product name, and Codehouse releases are not. Rather than bring the old name back into the releases, the move is a one-time run of **Codehouse-Setup.exe** from the newest release:
+
+1. Quit the earlier version from its tray icon (right-click, Quit). Sessions that were working carry on when Codehouse opens again, because they live in `%LOCALAPPDATA%\Gatehouse`, which both versions use.
+2. Run Codehouse-Setup.exe. If the earlier version is still running, it says so and waits (Retry) rather than installing beside it.
+3. It installs into `%LOCALAPPDATA%\Programs\Codehouse` and then removes the earlier install: its folder and the folders its updater kept beside it, and the Start menu, desktop and sign-in shortcuts that started it. Shortcuts that start anything else are kept.
+
+The installer finds the earlier install from Windows' record of this app (the same AppId), never by its name, and only removes a folder directly under `%LOCALAPPDATA%\Programs` that holds the earlier uninstaller. A file Windows still holds is removed at the next sign-in. Your settings, policy, audit log and sessions are not touched.
+
+`node scripts/installer-move-check.mjs` rehearses all of this with a test AppId and stand-in folders, never touching a real install: setup waits while something runs from the earlier folder, then installs, removes the earlier folder, its backup and its shortcuts, keeps an unrelated shortcut, and Windows records the new folder. Run it after changing `packaging/installer.iss`.
