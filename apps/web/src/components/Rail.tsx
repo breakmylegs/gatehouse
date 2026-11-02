@@ -3,6 +3,7 @@ import clsx from "clsx"
 import { useEffect, useState } from "react"
 import {
   groupByFolder,
+  groupChats,
   isHiddenEnded,
   notifyLine,
   RAIL_PAGES,
@@ -11,6 +12,7 @@ import {
   saveHideEnded,
   saveRailPages,
 } from "../lib/rail"
+import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { openExport } from "./ExportDialog"
 import { Menu, type MenuItem } from "./Menu"
@@ -82,6 +84,20 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
   const [renaming, setRenaming] = useState<SessionInfo>()
+  const mode = useRailMode()
+  // The switch follows what you open: a chat shows the Chat side, a coding session the Code side.
+  const selectedKind = sessions.find((s) => s.id === selected)?.kind
+  useEffect(() => {
+    if (route === "chat" || route === "projects" || route === "memory" || route === "prompts")
+      setRailMode("chat")
+    else if (route === "sessions" || route === "dashboard") setRailMode("code")
+    else if (route === "workspace" && selected)
+      setRailMode(selectedKind === "chat" ? "chat" : "code")
+  }, [route, selected, selectedKind])
+  const choose = (m: RailMode) => {
+    setRailMode(m)
+    setRoute(m === "chat" ? "chat" : "sessions")
+  }
 
   const go = (r: Route) => setRoute(r)
   const open = (id: string) => {
@@ -90,9 +106,14 @@ export function Rail({ onHide }: { onHide: () => void }) {
   }
   const shown = new Set(route === "workspace" ? (panes.length ? panes : [selected]) : [])
   // An ended session you have open stays in the list, so the pane you are reading never loses its entry.
-  const groups = groupByFolder(sessions, { ended: hideEnded, keep: shown })
-  const hiddenEnded = hideEnded ? sessions.filter((s) => isHiddenEnded(s, shown)).length : 0
-  const endedAll = sessions.filter((s) => isHiddenEnded(s)).length
+  // Each side lists only its own: chats on Chat, coding sessions on Code.
+  const listed = sessions.filter((s) => (mode === "chat" ? s.kind === "chat" : s.kind !== "chat"))
+  const groups =
+    mode === "chat"
+      ? groupChats(listed, { ended: hideEnded, keep: shown })
+      : groupByFolder(listed, { ended: hideEnded, keep: shown })
+  const hiddenEnded = hideEnded ? listed.filter((s) => isHiddenEnded(s, shown)).length : 0
+  const endedAll = listed.filter((s) => isHiddenEnded(s)).length
   const chooseHide = (on: boolean) => {
     setHideEnded(on)
     saveHideEnded(on)
@@ -130,64 +151,38 @@ export function Rail({ onHide }: { onHide: () => void }) {
         </button>
       </div>
 
-      <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
-        <li>
+      <div role="radiogroup" aria-label="Chats or coding" className="rail-switch mx-3 mt-3">
+        {(["chat", "code"] as const).map((m) => (
           <button
-            className="rail-item"
-            aria-current={route === "dashboard" ? "page" : undefined}
-            onClick={() => go("dashboard")}
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={mode === m}
+            className="rail-switch-option"
+            onClick={() => choose(m)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+                e.preventDefault()
+                choose(m === "chat" ? "code" : "chat")
+              }
+            }}
           >
-            <span>
-              <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                &#8962;
-              </span>
-              Dashboard
-            </span>
+            <span aria-hidden="true">{m === "chat" ? "\u{1F4AC}\uFE0E" : "</>"}</span>
+            {m === "chat" ? "Chat" : "Code"}
           </button>
-        </li>
-        <li>
-          <button
-            className="rail-item"
-            aria-current={route === "sessions" ? "page" : undefined}
-            onClick={() => go("sessions")}
-          >
-            <span>
-              <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                +
-              </span>
-              New session
-            </span>
-          </button>
-        </li>
-        <li>
-          <button
-            className="rail-item"
-            aria-current={route === "chat" ? "page" : undefined}
-            onClick={() => go("chat")}
-          >
-            <span>
-              <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                +
-              </span>
-              New chat
-            </span>
-          </button>
-        </li>
-        <li>
-          <button className="rail-item" onClick={openPalette}>
-            <span>
-              <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                /
-              </span>
-              Search
-            </span>
-            <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
-          </button>
-        </li>
-        {pinned.map((r) => {
-          const page = RAIL_PAGES.find((p) => p.route === r)
-          if (!page || r === "approvals") return null
-          return (
+        ))}
+      </div>
+
+      {mode === "chat" ? (
+        <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
+          {(
+            [
+              ["chat", "+", "New chat"],
+              ["projects", "\u2261", "Projects"],
+              ["memory", "\u25CB", "Memory"],
+              ["prompts", "\u275D", "Prompts"],
+            ] as const
+          ).map(([r, mark, label]) => (
             <li key={r}>
               <button
                 className="rail-item"
@@ -195,31 +190,118 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 onClick={() => go(r)}
               >
                 <span>
-                  <span aria-hidden="true" className="mr-2 inline-block w-3" />
-                  {page.label}
+                  <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                    {mark}
+                  </span>
+                  {label}
                 </span>
               </button>
             </li>
-          )
-        })}
-        <li>
-          <Menu
-            label="More pages"
-            className="rail-item"
-            placement="right"
-            tone="shell"
-            button={
+          ))}
+          <li>
+            <button className="rail-item" onClick={openPalette}>
               <span>
                 <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
-                  &middot;&middot;&middot;
+                  /
                 </span>
-                More
+                Search
               </span>
-            }
-            items={more}
-          />
-        </li>
-      </ul>
+              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
+            </button>
+          </li>
+        </ul>
+      ) : (
+        <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
+          <li>
+            <button
+              className="rail-item"
+              aria-current={route === "dashboard" ? "page" : undefined}
+              onClick={() => go("dashboard")}
+            >
+              <span>
+                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                  &#8962;
+                </span>
+                Dashboard
+              </span>
+            </button>
+          </li>
+          <li>
+            <button
+              className="rail-item"
+              aria-current={route === "sessions" ? "page" : undefined}
+              onClick={() => go("sessions")}
+            >
+              <span>
+                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                  +
+                </span>
+                New session
+              </span>
+            </button>
+          </li>
+          <li>
+            <button
+              className="rail-item"
+              aria-current={route === "chat" ? "page" : undefined}
+              onClick={() => go("chat")}
+            >
+              <span>
+                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                  +
+                </span>
+                New chat
+              </span>
+            </button>
+          </li>
+          <li>
+            <button className="rail-item" onClick={openPalette}>
+              <span>
+                <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                  /
+                </span>
+                Search
+              </span>
+              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
+            </button>
+          </li>
+          {pinned.map((r) => {
+            const page = RAIL_PAGES.find((p) => p.route === r)
+            if (!page || r === "approvals") return null
+            return (
+              <li key={r}>
+                <button
+                  className="rail-item"
+                  aria-current={route === r ? "page" : undefined}
+                  onClick={() => go(r)}
+                >
+                  <span>
+                    <span aria-hidden="true" className="mr-2 inline-block w-3" />
+                    {page.label}
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+          <li>
+            <Menu
+              label="More pages"
+              className="rail-item"
+              placement="right"
+              tone="shell"
+              button={
+                <span>
+                  <span aria-hidden="true" className="mr-2 inline-block w-3 text-center">
+                    &middot;&middot;&middot;
+                  </span>
+                  More
+                </span>
+              }
+              items={more}
+            />
+          </li>
+        </ul>
+      )}
 
       {editing ? (
         <EditSidebar
@@ -238,7 +320,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
       >
         <div className="flex items-center justify-between px-2 pb-1">
           <span className="text-[12px] font-semibold uppercase tracking-wide text-shell-mut">
-            Sessions
+            {mode === "chat" ? "Chats" : "Sessions"}
           </span>
           <Menu
             label="Sessions list options"
@@ -260,7 +342,9 @@ export function Rail({ onHide }: { onHide: () => void }) {
         </div>
         {groups.length === 0 && hiddenEnded === 0 ? (
           <p className="m-0 px-2 text-[13.5px] text-shell-mut">
-            No sessions yet. Choose New session to start one.
+            {mode === "chat"
+              ? "No chats yet. Choose New chat to start one."
+              : "No sessions yet. Choose New session to start one."}
           </p>
         ) : null}
         {groups.map((g) => (

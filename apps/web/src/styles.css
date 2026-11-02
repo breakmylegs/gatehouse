@@ -2306,3 +2306,36 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   border-radius: 4px;
   font: 600 12px var(--font-code);
 }
+
+/* The Chat | Code switch at the top of the sidebar (owner, 2 Nov): two halves, the chosen one raised. */
+.rail-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--c-shell-2);
+  border: 1px solid var(--c-shell-line);
+}
+.rail-switch-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-shell-mut);
+  font: 600 13.5px var(--font-sign);
+  cursor: pointer;
+}
+.rail-switch-option[aria-checked="true"] {
+  background: var(--c-shell);
+  color: var(--c-shell-tx);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+}
+.rail-switch-option:focus-visible {
+  outline: 2px solid var(--c-acc);
+  outline-offset: 1px;
+}

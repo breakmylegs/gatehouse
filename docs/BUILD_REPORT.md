@@ -106,6 +106,13 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Kept working without the old names:** an ntfy topic made before (its prefix was the old short name) is still recognised: any short lower-case prefix followed by the twenty random letters is accepted, since the random part is what makes a topic private. Pictures attached under an earlier attachments folder still show as pictures (any short dot-folder of attachments in the session folder). The release key now lives in %USERPROFILE%.codehouse-release (the folder was renamed; the key itself was not opened).
 - **The repository:** its history, every branch, tag and release carried the earlier name and the stills, so it was replaced by one clean commit; the old history is kept only in a local backup outside the repository. GitHub may keep cached copies of old commits reachable by their direct links until its own clean-up; GitHub Support can purge them.
 - Tests: the full suite (1,908 tests) with the rename; the picture test now checks the public folder holds only the drawn scenes.
+- **Release 2.0.1** published 2 Nov (the first Codehouse release). Its full run failed four tests (two in server.test.ts, one checkpoint test and the PowerShell audit verifier) that pass on their own and passed in the full run before the spelling fix, which touched none of them; published with `--skip-tests` on that basis.
+
+## Phase 89: the Chat | Code switch (2 Nov, owner, with screenshots of the layout wanted)
+
+- **What it does:** a two-way switch at the top of the sidebar. **Chat** lists chats only: pinned first, then each project with its chats (by name), then **Chats** for those in no project, with New chat, Projects, Memory, Prompts and Search above. **Code** lists coding sessions only, by folder, with the Dashboard, New session, Search and your pages above, as before. Choosing a side opens its start page; the choice is kept; and the switch turns to the right side when you open a chat or a session from anywhere (Search, Ctrl+1 to 9, a link).
+- **Look:** Codehouse's own sidebar colours, two halves with the chosen one raised; the behaviour follows the reference, the look does not copy it (invariant 16). Keyboard: Tab to it, left and right arrows switch.
+- Tests: `apps/web/test/rail-switch.test.tsx` (new). Three break checks fail as they should.
 
 ## Owner to-do list (running)
 

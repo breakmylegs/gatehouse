@@ -75,6 +75,39 @@ export function saveHideEnded(on: boolean): void {
 const CHATS = "chats:"
 const PINNED = "pinned:"
 
+/**
+ * Chats for the Chat side of the sidebar: pinned first, then one group for each project that has chats (by name), then
+ * Chats for those in no project. Archived ones leave it, and ended ones when you hide them, as on the Code side.
+ */
+export function groupChats(
+  list: SessionInfo[],
+  hide?: { ended: boolean; keep?: ReadonlySet<string | undefined> },
+): FolderGroup[] {
+  const pinned: SessionInfo[] = []
+  const loose: SessionInfo[] = []
+  const byProject = new Map<string, SessionInfo[]>()
+  for (const s of list) {
+    if (s.kind !== "chat" || s.archived) continue
+    if (hide?.ended && isHiddenEnded(s, hide.keep)) continue
+    if (s.pinned) pinned.push(s)
+    else if (s.chatProject)
+      byProject.set(s.chatProject, [...(byProject.get(s.chatProject) ?? []), s])
+    else loose.push(s)
+  }
+  const newest = (a: SessionInfo, b: SessionInfo) => b.createdAt.localeCompare(a.createdAt)
+  return [
+    ...(pinned.length ? [{ folder: PINNED, label: "Pinned", sessions: pinned.sort(newest) }] : []),
+    ...[...byProject]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, sessions]) => ({
+        folder: `project:${name}`,
+        label: name,
+        sessions: sessions.sort(newest),
+      })),
+    ...(loose.length ? [{ folder: CHATS, label: "Chats", sessions: loose.sort(newest) }] : []),
+  ]
+}
+
 export function groupByFolder(
   list: SessionInfo[],
   /** Ended sessions leave the list, except ones you have open (owner, 31 Oct). */

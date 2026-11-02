@@ -73,6 +73,8 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.
 
+**Chat and Code** at the top of the sidebar switch between the two sides of Codehouse. Chat lists your chats: each project with its chats, then **Chats** for those in no project, with New chat, Projects, Memory and Prompts above. Code lists your coding sessions by folder, with New session and your pages above. It remembers the side you chose, and turns to the right side when you open a chat or a session from Search.
+
 **Ended sessions in the sidebar** are hidden by default, so the list shows what is working or needs you. A line at the bottom says how many are hidden and **Show** brings them back. The ... menu above the list switches this on or off, and **Archive all ended** puts every ended session away at once; they stay under Earlier sessions. A session that stopped with an error is never hidden, and neither is an ended one you have open.
 
 **Earlier sessions**
@@ -84,7 +86,7 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
     title: "Chats",
     body: `A chat is a conversation with Claude that is not about one of your projects: questions, explanations, ideas and writing.
 
-- Say what you want to talk about and choose **Start the chat**. It opens like a session, and your chats are listed under **Chats** in the sidebar.
+- Say what you want to talk about and choose **Start the chat**. It opens like a session, and your chats are listed on the **Chat** side of the sidebar, under their project or under **Chats**.
 - Each chat gets a folder of its own in Codehouse's data folder, outside your projects, and always runs in Plan mode, so nothing on your computer changes.
 - **Research**: tick it when you start a chat and Claude plans the questions, searches the web, reads the best sources in full and puts a numbered citation after each claim. **Sources** at the top of any chat lists every search result it was shown and every page it read, numbered as Claude cites them, each opening in your browser and marked as from the web and untrusted. A search or web address that contains a term on your redaction list (Settings, Privacy) is refused before it leaves this computer, and Claude is asked to try again without it.
 - **Artifacts**: ask a chat for a page, a chart or a small tool and it can make one to show you. Each one shows as a card in the reply that made it, with **Open**; **Artifacts** at the top of the chat opens them all, newest first. Each save is a new version: choose a version, **Compare with the one before** to see what changed, or **Export** it as a file. An artifact runs in a sandbox: it can run its own scripts, but it cannot reach the internet, read your files, open windows or change Codehouse.
