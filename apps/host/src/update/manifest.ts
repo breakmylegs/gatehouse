@@ -19,7 +19,22 @@ export const RELEASE_KEYS: readonly string[] = [
   "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4hHePojIPLyz/XfXlXpO08RV/gTjRGzPNfYjar7SHbM=\n-----END PUBLIC KEY-----\n",
 ]
 
+/**
+ * What every release says it is a release of. The internal name, which never changes with a rename (see UPDATE_FILE
+ * in tree.ts): an installed copy refuses a release for any other product.
+ */
+export const PRODUCT = "gatehouse"
+
 const Hex64 = z.string().regex(/^[0-9a-f]{64}$/)
+
+/** The installer of the same version, which finishes moving an install that arrived by an old route. */
+const Installer = z
+  .object({
+    name: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.exe$/),
+    size: z.number().int().positive().max(2_000_000_000),
+    sha256: Hex64,
+  })
+  .loose()
 
 const Part = z
   .object({
@@ -37,25 +52,30 @@ const Part = z
   })
   .loose()
 
-export const ReleaseManifest = z
-  .object({
-    format: z.number().int().positive(),
-    product: z.literal("codehouse"),
-    version: z.string().refine((v) => parseVersion(v) !== undefined, "not a Codehouse version"),
-    commit: z
-      .string()
-      .regex(/^[0-9a-f]{7,40}$/)
-      .optional(),
-    publishedAt: z.string().max(40).optional(),
-    notes: z.string().max(50_000).default(""),
-    parts: z
-      .array(Part)
-      .refine(
-        (ps) => PART_NAMES.every((n) => ps.filter((p) => p.name === n).length === 1),
-        "a release has each part exactly once",
-      ),
-  })
-  .loose()
+/** A release's description for a given product: this one's, or an old route's (scripts/release.ts). */
+export const manifestFor = (product: string) =>
+  z
+    .object({
+      format: z.number().int().positive(),
+      product: z.literal(product),
+      version: z.string().refine((v) => parseVersion(v) !== undefined, "not a Codehouse version"),
+      commit: z
+        .string()
+        .regex(/^[0-9a-f]{7,40}$/)
+        .optional(),
+      publishedAt: z.string().max(40).optional(),
+      notes: z.string().max(50_000).default(""),
+      installer: Installer.optional(),
+      parts: z
+        .array(Part)
+        .refine(
+          (ps) => PART_NAMES.every((n) => ps.filter((p) => p.name === n).length === 1),
+          "a release has each part exactly once",
+        ),
+    })
+    .loose()
+
+export const ReleaseManifest = manifestFor(PRODUCT)
 export type ReleaseManifest = z.infer<typeof ReleaseManifest>
 export type ReleasePart = ReleaseManifest["parts"][number]
 
@@ -66,6 +86,7 @@ export function verifyRelease(
   bytes: Buffer,
   signature: string,
   keys: readonly string[] = RELEASE_KEYS,
+  product: string = PRODUCT,
 ): Verified {
   const sig = Buffer.from(signature.trim(), "base64")
   const signed =
@@ -88,7 +109,7 @@ export function verifyRelease(
   } catch {
     return { ok: false, error: "The update's description could not be read." }
   }
-  const parsed = ReleaseManifest.safeParse(raw)
+  const parsed = manifestFor(product).safeParse(raw)
   if (!parsed.success)
     return {
       ok: false,

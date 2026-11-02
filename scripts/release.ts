@@ -14,13 +14,24 @@
 // here. The signing key is the Ed25519 private key (PEM): CODEHOUSE_RELEASE_KEY holds it, or CODEHOUSE_RELEASE_KEY_FILE names
 // its file, or it is %USERPROFILE%\.codehouse-release\release-key.pem. Its public half is in apps/host/src/update/manifest.ts.
 //
+// Update routes (owner, 2 Nov: "We cant have a breaking change ever"). Installs made before a rename read their updates
+// under other names and another product id. Each release also publishes a route for each of them, so they update in
+// the app and then move into their own folder. The routes name those earlier names, so they are kept out of the
+// repository: release-channels.local.json at the top of this checkout (ignored by git), or channels.json beside the
+// release key. publish and ship refuse without one. Never remove a route: an install can come back to it at any time.
+//
 // A version is major.minor from package.json and the number of commits, so every push to main is higher than the
 // one before. A working copy with uncommitted changes builds as -dev, which sorts before the release of that number.
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { makeRelease, stampInstall } from "../apps/host/src/update/publish.js"
+import {
+  checkRoute,
+  makeRelease,
+  stampInstall,
+  type LegacyRoute,
+} from "../apps/host/src/update/publish.js"
 import { writeZip } from "../apps/host/src/update/zip.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -86,6 +97,23 @@ function releaseKey(): string {
   return fs.readFileSync(file, "utf8")
 }
 
+const NO_ROUTES =
+  "No update routes file (release-channels.local.json here, or channels.json beside the release key). Without it, installs made before the rename cannot update. See scripts/release.ts."
+
+/** The update routes for installs made before a rename, or undefined when there is no routes file here. */
+function loadRoutes(): LegacyRoute[] | undefined {
+  const files = [
+    path.join(root, "release-channels.local.json"),
+    path.join(process.env.USERPROFILE ?? "", ".codehouse-release", "channels.json"),
+  ]
+  const file = files.find((f) => fs.existsSync(f))
+  if (!file) return undefined
+  const routes = (JSON.parse(fs.readFileSync(file, "utf8")) as { legacy?: LegacyRoute[] }).legacy
+  if (!Array.isArray(routes)) throw new Error(`${file} has no "legacy" list of update routes.`)
+  for (const route of routes) checkRoute(route)
+  return routes
+}
+
 function step(
   label: string,
   cmd: string,
@@ -118,6 +146,9 @@ if (cmd === "version") {
     throw new Error(`${v.version} has uncommitted changes and cannot be published.`)
   const list = changes()
   const notes = list.map((s) => `- ${s}`).join("\n")
+  const routes = loadRoutes()
+  if (!routes) throw new Error(NO_ROUTES)
+  const setup = path.join(root, "dist-app", "Codehouse-Setup.exe")
   const made = await makeRelease({
     dir: path.resolve(a),
     out: path.resolve(b),
@@ -125,7 +156,14 @@ if (cmd === "version") {
     notes,
     ...(v.commit ? { commit: v.commit } : {}),
     privateKeyPem: key,
+    ...(fs.existsSync(setup) ? { installer: setup } : {}),
+    routes,
   })
+  // The routes' file names, for ship to upload (the names are not written down anywhere else in the repository).
+  fs.writeFileSync(
+    path.join(path.resolve(b), "routes.txt"),
+    routes.flatMap((r) => [r.manifest, r.signature]).join("\n") + "\n",
+  )
   const dl = (f: string) => `https://github.com/${REPO}/releases/download/v${v.version}/${f}`
   fs.writeFileSync(
     path.join(path.resolve(b), "notes.md"),
@@ -146,7 +184,7 @@ if (cmd === "version") {
       "",
       "## The other files",
       "",
-      "`release.json`, `release.sig` and the `codeh-*.zip` files are what Codehouse's updater downloads: only the parts that changed, checked against a signature. You do not need them.",
+      "`update.json`, `update.sig`, the other `.json` and `.sig` files and the `codeh-*.zip` files are what Codehouse's updater downloads, for this version and for copies installed before a rename: only the parts that changed, checked against a signature. You do not need them.",
       "",
     ].join("\n"),
   )
@@ -155,6 +193,8 @@ if (cmd === "version") {
   const key = releaseKey()
   const v = currentVersion()
   if (v.version.includes("-")) throw new Error(`${v.version}: commit your changes first.`)
+  // Before anything long runs: a release without the routes would strand installs made before the rename.
+  if (!loadRoutes()) throw new Error(NO_ROUTES)
   git("fetch", "origin", "main")
   if (git("rev-parse", "HEAD") !== git("rev-parse", "origin/main"))
     throw new Error(
@@ -219,8 +259,9 @@ if (cmd === "version") {
   const files = [
     "Codehouse-Setup.exe",
     "Codehouse-Setup-exe.zip",
-    "release.json",
-    "release.sig",
+    "update.json",
+    "update.sig",
+    ...fs.readFileSync(path.join(out, "routes.txt"), "utf8").split(/\r?\n/).filter(Boolean),
     ...fs.readdirSync(out).filter((f) => /^codeh-.*\.zip$/.test(f)),
   ].map((f) => path.join(out, f))
   step("publish", "gh", [

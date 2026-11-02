@@ -65,6 +65,15 @@ export function registerUpdateRoutes(app: FastifyInstance, ctx: AdminContext): v
       return fail(reply, e)
     }
   })
+  // A copy that arrived by an old update route and could not move into its own folder by itself tries again.
+  app.post("/api/update/move-over", async (_req, reply) => {
+    try {
+      await u.check()
+      return await u.moveOver()
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
   app.post("/api/update/dismiss", async () => u.dismissResult())
   // The token is write-only: saved sealed, never sent back.
   app.put("/api/update/token", async (req, reply) => {

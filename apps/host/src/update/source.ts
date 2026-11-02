@@ -6,8 +6,9 @@
  */
 import crypto from "node:crypto"
 import fs from "node:fs"
-import { MANIFEST_FILE, SIGNATURE_FILE } from "./tree.js"
+import { UPDATE_FILE, UPDATE_SIGNATURE } from "./tree.js"
 
+/** Like UPDATE_FILE, never changed by a rename: every installed copy looks here. */
 export const UPDATE_REPO = "breakmylegs/gatehouse"
 const MAX_MANIFEST = 256 * 1024
 const MAX_SIGNATURE = 1024
@@ -124,7 +125,7 @@ export class GitHubSource implements UpdateSource {
   async latest(): Promise<LatestRelease | undefined> {
     if (this.#token()) return this.#latestApi()
     const bytes = await this.#small(
-      this.#web(`releases/latest/download/${MANIFEST_FILE}`),
+      this.#web(`releases/latest/download/${UPDATE_FILE}`),
       "application/octet-stream",
       MAX_MANIFEST,
     )
@@ -133,7 +134,7 @@ export class GitHubSource implements UpdateSource {
     // cannot pair one release's description with another's signature.
     const version = versionIn(bytes)
     const sig = await this.#small(
-      this.#web(`releases/download/v${version}/${SIGNATURE_FILE}`),
+      this.#web(`releases/download/v${version}/${UPDATE_SIGNATURE}`),
       "application/octet-stream",
       MAX_SIGNATURE,
     )
@@ -154,11 +155,11 @@ export class GitHubSource implements UpdateSource {
     }
     const assets = new Map<string, string>()
     for (const a of rel.assets ?? []) if (a.name && a.url) assets.set(a.name, a.url)
-    const m = assets.get(MANIFEST_FILE)
-    const s = assets.get(SIGNATURE_FILE)
+    const m = assets.get(UPDATE_FILE)
+    const s = assets.get(UPDATE_SIGNATURE)
     if (!m || !s)
       throw new UpdateError(
-        `Release ${rel.tag_name ?? ""} has no ${!m ? MANIFEST_FILE : SIGNATURE_FILE}.`,
+        `Release ${rel.tag_name ?? ""} has no ${!m ? UPDATE_FILE : UPDATE_SIGNATURE}.`,
       )
     const bytes = await this.#small(m, "application/octet-stream", MAX_MANIFEST)
     const sig = await this.#small(s, "application/octet-stream", MAX_SIGNATURE)

@@ -1,7 +1,7 @@
 import { useId, useState } from "react"
 import { toast } from "sonner"
 import { useStore } from "../store"
-import { INTERVALS, noteLines, updateCall, when } from "../lib/update"
+import { INTERVALS, moveOverLine, noteLines, updateCall, when } from "../lib/update"
 
 /** Settings, Updates: the version you have, how often Codehouse looks for a newer one, skipped versions and going back. */
 export function UpdatesPanel() {
@@ -33,6 +33,21 @@ export function UpdatesPanel() {
         {status}
       </p>
       {!u.canInstall && u.why ? <p className="m-0 text-xs text-mut">{u.why}</p> : null}
+      {u.moveOver ? (
+        <div className="grid gap-2" role={u.moveOver.phase === "failed" ? "alert" : "status"}>
+          <p className="m-0 text-sm font-semibold">{moveOverLine(u.moveOver)}</p>
+          {u.moveOver.phase === "failed" ? (
+            <div>
+              <button
+                className="btn btn-primary"
+                onClick={() => void updateCall("POST", "/api/update/move-over")}
+              >
+                Finish the move
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {u.available && target && u.latest?.notes ? (
         <ul className="m-0 max-h-32 overflow-auto pl-5 text-xs">
           {noteLines(u.latest.notes).map((l, i) => (

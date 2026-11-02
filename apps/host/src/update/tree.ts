@@ -15,6 +15,20 @@ export const REUSABLE: readonly PartName[] = ["modules", "runtime"]
 /** The signed description of a release, kept next to Codehouse.exe. Not part of any tree. */
 export const MANIFEST_FILE = "release.json"
 export const SIGNATURE_FILE = "release.sig"
+/**
+ * The update a release publishes for this version and every later one, and its signature. These two names and the
+ * product id in manifest.ts never change, whatever the app is called: every installed copy finds its updates by them,
+ * so changing one strands every copy out there (owner, 2 Nov: "We cant have a breaking change ever"). A rename
+ * changes what people see, never these. Copies from before these names existed are served by the release script's
+ * update routes (scripts/release.ts).
+ */
+export const UPDATE_FILE = "update.json"
+export const UPDATE_SIGNATURE = "update.sig"
+/**
+ * In an install that arrived by an old route (an install made before a rename, updated by its own updater): it still
+ * has to move to its own folder, which the installer does (service.ts). Part of the app part, so it is signed.
+ */
+export const MOVE_OVER_FILE = "move-over.json"
 /** Written last into a finished staging folder, holding the version, so a restart knows it is ready. */
 export const STAGED_MARKER = ".codehouse-staged"
 

@@ -31,6 +31,17 @@ export interface UpdateStatus {
     reason?: string
     at?: string
   }
+  /** This copy arrived by an update route for installs made before a rename and is moving into its own folder. */
+  moveOver?: { phase: "waiting" | "preparing" | "applying" | "failed"; error?: string }
+}
+
+/** What the move into Codehouse's own folder is doing, in words. */
+export function moveOverLine(m: NonNullable<UpdateStatus["moveOver"]>): string {
+  if (m.phase === "failed")
+    return `Codehouse could not finish moving into its own folder: ${m.error ?? "the installer did not finish."} Your data and sessions are safe.`
+  if (m.phase === "applying")
+    return "Codehouse is moving into its own folder. It closes and opens again by itself in a minute."
+  return "Codehouse is finishing its update: it moves into its own folder, then opens again by itself. Your data and sessions stay as they are."
 }
 
 export const INTERVALS = [

@@ -32,9 +32,32 @@ class Stub {
 }
 `
 
+/**
+ * A stand-in for Codehouse-Setup.exe: notes its arguments, then fails with SETUP_EXIT, or installs the stand-in app
+ * into /DIR= as version SETUP_VERSION and, with /START, starts it.
+ */
+const SETUP = String.raw`
+using System; using System.Diagnostics; using System.IO;
+class Setup {
+  static int Main(string[] args) {
+    File.AppendAllText(Environment.GetEnvironmentVariable("SETUP_LOG"), String.Join("|", args) + "\n");
+    string code = Environment.GetEnvironmentVariable("SETUP_EXIT");
+    if (!String.IsNullOrEmpty(code) && code != "0") return Int32.Parse(code);
+    string dir = null; bool start = false;
+    foreach (string a in args) { if (a.StartsWith("/DIR=")) dir = a.Substring(5); if (a == "/START") start = true; }
+    Directory.CreateDirectory(dir);
+    File.Copy(Environment.GetEnvironmentVariable("SETUP_APP"), Path.Combine(dir, "Codehouse.exe"), true);
+    File.WriteAllText(Path.Combine(dir, "release.json"), "{\"version\":\"" + Environment.GetEnvironmentVariable("SETUP_VERSION") + "\"}");
+    if (start) Process.Start(Path.Combine(dir, "Codehouse.exe"));
+    return 0;
+  }
+}
+`
+
 let root: string
 let updater: string
 let stub: string
+let setupExe: string
 let n = 0
 
 beforeAll(() => {
@@ -44,6 +67,9 @@ beforeAll(() => {
   stub = path.join(root, "stub.exe")
   fs.writeFileSync(path.join(root, "stub.cs"), STUB)
   execFileSync(csc, ["/nologo", "/target:exe", `/out:${stub}`, path.join(root, "stub.cs")])
+  setupExe = path.join(root, "setup-stub.exe")
+  fs.writeFileSync(path.join(root, "setup.cs"), SETUP)
+  execFileSync(csc, ["/nologo", "/target:exe", `/out:${setupExe}`, path.join(root, "setup.cs")])
   execFileSync(csc, [
     "/nologo",
     "/target:winexe",
@@ -253,5 +279,111 @@ describe.skipIf(!csc)("Codehouse-Update.exe", () => {
     expect(c.result()).toMatch(/not beside/)
     // Codehouse had closed, so the version in place is started again.
     expect(c.stubLog()).toBe("1.0.1 ok\n")
+  })
+
+  /** A copy that arrived by an old update route, in its old folder, and a plan to move it with the installer. */
+  function moving(o: { setupExit?: number; setupAt?: string; target?: string } = {}) {
+    const base = path.join(root, `move${n++}`)
+    const install = path.join(base, "Programs", "Oldname")
+    const target = o.target ?? path.join(base, "Programs", "Codehouse")
+    const data = path.join(base, "data")
+    const setup = o.setupAt ?? path.join(data, "downloads", "2.1.20", "Codehouse-Setup.exe")
+    fs.mkdirSync(data, { recursive: true })
+    fs.mkdirSync(path.dirname(setup), { recursive: true })
+    fs.copyFileSync(setupExe, setup)
+    version(install, "2.1.19")
+    const plan = path.join(data, "plan.txt")
+    fs.writeFileSync(
+      plan,
+      [
+        "mode=moveover",
+        `install=${install}`,
+        `setup=${setup}`,
+        `target=${target}`,
+        "from=2.1.19",
+        "to=2.1.20",
+        `health=${path.join(data, "started.json")}`,
+        `result=${path.join(data, "result.txt")}`,
+        "timeout=20",
+      ].join("\r\n"),
+    )
+    const status = spawnSync(updater, ["--plan", plan, "--quiet"], {
+      env: {
+        ...process.env,
+        STUB_HEALTH: path.join(data, "started.json"),
+        STUB_LOG: path.join(data, "stub.log"),
+        SETUP_LOG: path.join(data, "setup.log"),
+        SETUP_APP: stub,
+        SETUP_VERSION: "2.1.20",
+        SETUP_EXIT: String(o.setupExit ?? 0),
+      },
+      timeout: 120_000,
+    }).status
+    const text = (file: string) =>
+      fs.existsSync(path.join(data, file)) ? fs.readFileSync(path.join(data, file), "utf8") : ""
+    return {
+      install,
+      target,
+      status,
+      text,
+      said: () => text("result.txt") + " | " + text("update.log"),
+    }
+  }
+
+  it("moves a copy that arrived by an old route: runs the installer silently into its own folder and waits for it to start", () => {
+    const m = moving()
+    expect(m.status, m.said()).toBe(0)
+    const args = m.text("setup.log").trim().split("|")
+    expect(args).toEqual(
+      expect.arrayContaining([
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/START",
+        `/DIR=${m.target}`,
+        `/EARLIER=${m.install}`,
+      ]),
+    )
+    expect(m.text("result.txt")).toMatch(/ok=true[\s\S]*mode=moveover[\s\S]*to=2\.1\.20/)
+    // The installer started Codehouse in its own folder, and it said so.
+    expect(m.text("stub.log")).toBe("2.1.20 ok\n")
+    expect(versionIn(m.target)).toBe("2.1.20")
+  })
+
+  it("starts the copy in place again when the installer stops, so you are never left without Codehouse", () => {
+    const m = moving({ setupExit: 7 })
+    expect(m.status, m.said()).toBe(1)
+    expect(m.text("result.txt")).toMatch(/ok=false[\s\S]*mode=moveover[\s\S]*exit code 7/)
+    expect(m.text("stub.log")).toBe("2.1.19 ok\n")
+    expect(fs.existsSync(m.target)).toBe(false)
+  })
+
+  it("refuses an installer from anywhere but its own updates folder, or a folder not beside this one", () => {
+    const outside = moving({ setupAt: path.join(root, `stray${n}`, "Codehouse-Setup.exe") })
+    expect(outside.status).toBe(1)
+    expect(outside.text("setup.log")).toBe("")
+    expect(outside.text("result.txt")).toMatch(/not Codehouse's own/)
+    expect(outside.text("stub.log")).toBe("2.1.19 ok\n")
+    const away = moving({ target: path.join(root, `away${n}`, "Codehouse") })
+    expect(away.status).toBe(1)
+    expect(away.text("setup.log")).toBe("")
+    expect(away.text("result.txt")).toMatch(/not beside/)
+  })
+
+  it("goes back to an install made before a rename and starts it by its own name, learnt from the route", () => {
+    const c = setup("apply", { folder: "Oldname" })
+    version(c.install, "1.0.170", { exes: ["Oldname.exe"] })
+    version(`${c.install}.next`, "2.1.20", {
+      behaviour: "crash",
+      exes: ["Codehouse.exe", "Oldname.exe"],
+      extra: {
+        "move-over.json": JSON.stringify({ programs: { "Codehouse.exe": ["Oldname.exe"] } }),
+      },
+    })
+    c.write("1.0.170", "2.1.20")
+    expect(c.run(), c.said()).toBe(1)
+    expect(versionIn(c.install)).toBe("1.0.170")
+    expect(c.stubLog()).toBe("2.1.20 crash\n1.0.170 ok\n")
+    expect(fs.readFileSync(path.join(c.install, "launched.txt"), "utf8")).toContain("Oldname.exe")
   })
 })

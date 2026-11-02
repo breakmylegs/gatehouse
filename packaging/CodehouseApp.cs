@@ -759,6 +759,27 @@ internal static class Program
     [DllImport("kernel32.dll")]
     private static extern bool AttachConsole(int pid);
 
+    /// <summary>
+    /// One Codehouse per data folder. A real install uses the usual data folder and the usual lock, the same in every
+    /// version, so an older and a newer copy always see each other. A copy given its own data folder (the update
+    /// checks do this) has a lock of its own, so it can never bring forward, or be blocked by, the Codehouse you use.
+    /// </summary>
+    internal static string SingleInstanceName()
+    {
+        string data = Environment.GetEnvironmentVariable("GATEHOUSE_DATA_DIR");
+        if (string.IsNullOrEmpty(data)) return "";
+        string usual = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Gatehouse");
+        string full;
+        try { full = Path.GetFullPath(data).TrimEnd(Path.DirectorySeparatorChar); }
+        catch (Exception) { full = data; }
+        if (string.Equals(full, usual, StringComparison.OrdinalIgnoreCase)) return "";
+        using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+        {
+            byte[] h = sha.ComputeHash(Encoding.UTF8.GetBytes(full.ToLowerInvariant()));
+            return "." + BitConverter.ToString(h, 0, 8).Replace("-", "");
+        }
+    }
+
     [STAThread]
     private static int Main(string[] args)
     {
@@ -811,14 +832,15 @@ internal static class Program
             catch (Exception) { }
         }
         bool created;
-        Mutex single = new Mutex(true, "Local\\Gatehouse.App", out created);
+        string lockName = SingleInstanceName();
+        Mutex single = new Mutex(true, "Local\\Gatehouse.App" + lockName, out created);
         if (!created && !check)
         {
             // Already running: bring that window forward instead of starting a second Host.
-            try { EventWaitHandle.OpenExisting("Local\\Gatehouse.Show").Set(); } catch (Exception) { }
+            try { EventWaitHandle.OpenExisting("Local\\Gatehouse.Show" + lockName).Set(); } catch (Exception) { }
             return 0;
         }
-        EventWaitHandle show = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\Gatehouse.Show");
+        EventWaitHandle show = new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\Gatehouse.Show" + lockName);
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);

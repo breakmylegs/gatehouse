@@ -18,6 +18,10 @@ const EARLIER = path.join(PROGRAMS, "CodehouseEarlierTest")
 const NEW = path.join(PROGRAMS, "CodehouseTest")
 const GROUP = path.join(START, "CodehouseEarlierTestGroup")
 const TOP = path.join(START, "CodehouseEarlierTest.lnk")
+// The sign-in folder: a shortcut there that starts the earlier version, and the one setup makes in its place.
+const SIGNIN = path.join(START, "Startup")
+const SIGNIN_EARLIER = path.join(SIGNIN, "CodehouseEarlierTest.lnk")
+const SIGNIN_NEW = path.join(SIGNIN, "CodehouseTest.lnk")
 const ISCC = path.join(LAD, "Programs", "Inno Setup 6", "ISCC.exe")
 let sleeper
 const results = []
@@ -55,6 +59,8 @@ function cleanup() {
   ])
     fs.rmSync(p, { recursive: true, force: true })
   fs.rmSync(TOP, { force: true })
+  fs.rmSync(SIGNIN_EARLIER, { force: true })
+  fs.rmSync(SIGNIN_NEW, { force: true })
 }
 
 try {
@@ -106,12 +112,15 @@ try {
   link(path.join(GROUP, "Earlier.lnk"), path.join(EARLIER, "sleeper.exe"))
   link(path.join(GROUP, "Other.lnk"), "C:\\Windows\\notepad.exe")
   link(TOP, path.join(EARLIER, "sleeper.exe"))
+  link(SIGNIN_EARLIER, path.join(EARLIER, "sleeper.exe"))
 
-  // While something runs from the earlier folder, setup stops and changes nothing.
-  sleeper = spawn(path.join(EARLIER, "sleeper.exe"), ["-n", "120", "127.0.0.1"], {
+  // While something runs from the earlier folder, setup waits (two minutes with no one to ask), then stops and
+  // changes nothing.
+  sleeper = spawn(path.join(EARLIER, "sleeper.exe"), ["-n", "400", "127.0.0.1"], {
     stdio: "ignore",
   })
   spawnSync("powershell", ["-c", "Start-Sleep -m 800"])
+  const began = Date.now()
   let r = spawnSync(setup, [
     "/VERYSILENT",
     "/SUPPRESSMSGBOXES",
@@ -119,6 +128,10 @@ try {
     `/LOG=${path.join(HERE, "run1.log")}`,
   ])
   check(`setup stops while the earlier version runs (exit ${r.status})`, r.status !== 0)
+  check(
+    `it waited for it first (${Math.round((Date.now() - began) / 1000)} s)`,
+    Date.now() - began > 100_000,
+  )
   check("the earlier folder is untouched", fs.existsSync(path.join(EARLIER, "unins000.exe")))
   check("nothing was installed", !fs.existsSync(path.join(NEW, "one.txt")))
   sleeper.kill()
@@ -140,6 +153,10 @@ try {
     !fs.existsSync(path.join(GROUP, "Earlier.lnk")) && !fs.existsSync(TOP),
   )
   check("an unrelated shortcut is kept", fs.existsSync(path.join(GROUP, "Other.lnk")))
+  check(
+    "it starts when you sign in, as the earlier version did",
+    fs.existsSync(SIGNIN_NEW) && !fs.existsSync(SIGNIN_EARLIER),
+  )
   const app = spawnSync("reg", ["query", KEY, "/v", "Inno Setup: App Path"], {
     encoding: "utf8",
   }).stdout
@@ -156,6 +173,8 @@ try {
         .slice(0, 5),
     )
   cleanup()
-  results.push(`cleaned: ${![EARLIER, NEW, GROUP, TOP, HERE].some((p) => fs.existsSync(p))}`)
+  results.push(
+    `cleaned: ${![EARLIER, NEW, GROUP, TOP, SIGNIN_EARLIER, SIGNIN_NEW, HERE].some((p) => fs.existsSync(p))}`,
+  )
   console.log(results.join("\n"))
 }

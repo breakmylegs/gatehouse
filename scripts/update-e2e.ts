@@ -7,8 +7,8 @@
 //   4. waits for Codehouse-Update.exe to switch folders and for the new version to say it started, then checks the result
 //
 // Usage: npm run package, then: node node_modules/tsx/dist/cli.mjs scripts/update-e2e.ts
-// With E2E_FROM=<folder of an older install> it installs that instead and updates it to the package. Used for the
-// rename (31 Oct): an install from 1.0.115 or before, in Programs\Codehouse with Codehouse.exe, must still update.
+// With E2E_FROM=<folder of an older install since 2.1> it installs that instead and updates it to the package. An
+// install from before a rename is checked by scripts/update-route-e2e.ts.
 // It opens the Codehouse window of the new version for a moment, and closes it at the end.
 import { execFileSync, spawn } from "node:child_process"
 import fs from "node:fs"
@@ -30,8 +30,7 @@ const versionIn = (dir: string) =>
 if (!fs.existsSync(path.join(dist, "release.json"))) throw new Error("Run npm run package first.")
 const original = fs.readFileSync(path.join(dist, "release.json"))
 const from = process.env.E2E_FROM ? path.resolve(process.env.E2E_FROM) : dist
-// An install from before the rename (31 Oct) has the old names.
-const oldName = fs.existsSync(path.join(from, "Codehouse.exe")) ? "Codehouse" : "Codehouse"
+const oldName = "Codehouse"
 const v1 = versionIn(from)
 const v2 = "1.0.900"
 const t = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "codeh-e2e-")))
@@ -169,11 +168,7 @@ try {
   )
   check(versionIn(install) === v2, `the install folder is now ${v2}`)
   check(versionIn(`${install}.previous`) === v1, `${v1} is kept beside it`)
-  check(
-    fs.existsSync(path.join(install, "Codehouse.exe")) &&
-      fs.existsSync(path.join(install, "Codehouse.exe")),
-    "the new version has Codehouse.exe, and Codehouse.exe for shortcuts made before the rename",
-  )
+  check(fs.existsSync(path.join(install, "Codehouse.exe")), "the new version has Codehouse.exe")
   const started = JSON.parse(
     fs.readFileSync(path.join(data, "updates", "started.json"), "utf8"),
   ) as { version: string }

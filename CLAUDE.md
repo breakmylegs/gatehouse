@@ -55,6 +55,8 @@ Every phase must keep these true. Write an automated test for every invariant th
     - No Anthropic logos.
     - Owner decision, 28 Oct: the product is shown to the user under its own pun name, not as Claude Code. Owner decision, 2 Nov (copyright): that name is "Codehouse", a pun on a roadhouse, in the window, tray, header, installer, phone app and the product's own file names (Codehouse.exe, Codehouse-Update.exe, Codehouse-Setup.exe), with no trace of any earlier name in the app, its files or the repository. Its pictures are original artwork drawn for it (a roadhouse at night, a highway, a bar, a parking lot), never film stills, actors' likenesses or film logos. Env vars, packages and `%LOCALAPPDATA%\Gatehouse` keep the internal name Gatehouse. Do not imitate Claude Code or claude.ai visuals.
 
+    Owner decision, 2 Nov (updates never break): "We cant have a breaking change ever that means people cant follow the in app upgrade." Every installed copy must be able to update in the app to the newest version, in several steps if need be. The update's repository, its file names (`update.json`, `update.sig`) and its product id (`gatehouse`) never change with a rename. Copies released before these existed are served by update routes, whose release files must carry their earlier product id and program names (the one place an earlier name may appear); the routes are kept out of the repository (`release-channels.local.json`, ignored by git, or beside the release key), and the release refuses to publish without them. See `docs/packaging.md`, "Updates never break".
+
 ## Commands
 
 | Command | Purpose |
@@ -94,3 +96,4 @@ Machine facts that shape the design (details in `docs/sdk-notes.md`): the manage
 - Impeccable hooks are not enabled. Run `npx impeccable detect` manually after UI tasks.
 - No GitHub Actions (owner, 29 Oct: the account has few minutes). Actions are switched off for the repository; never add a workflow. Releases are made locally with `npm run release`.
 - Settings and other data files are read by older and newer versions alike, because an update can be undone. Read them tolerantly (keep what you do not know) and change them only by adding.
+- Never break the in-app update (owner, 2 Nov). Before a change to updating, packaging, the installer or the program names, check that an install of the last release still updates to it: `scripts/update-e2e.ts`, and `scripts/update-route-e2e.ts` with an install from before a rename.

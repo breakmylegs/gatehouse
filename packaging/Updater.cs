@@ -6,6 +6,9 @@
 //   Codehouse-Update.exe --rollback                                   by hand, from the install folder: back to the
 //                                                                version kept beside it (Codehouse.previous)
 //
+// A plan's mode is apply, rollback, or moveover: a copy that arrived by an update route for installs made before a
+// rename runs the installer Codehouse downloaded and checked, which moves it into its own folder (service.ts).
+//
 // Written in C# 5 so the compiler that ships with Windows can build it. It does not use WebView2.
 
 using System;
@@ -104,7 +107,7 @@ internal sealed class Switch
 {
     private readonly Dictionary<string, string> plan;
     private readonly int waitPid;
-    private readonly string mode, install, candidate, previous, from, health, result;
+    private readonly string mode, install, candidate, previous, from, health, result, setup, target;
     private readonly int timeoutSeconds;
     private readonly string log;
     internal readonly string To;
@@ -117,8 +120,16 @@ internal sealed class Switch
         this.waitPid = waitPid;
         mode = Need("mode");
         install = Full(Need("install"));
-        candidate = Full(Need("candidate"));
-        previous = Full(Need("previous"));
+        if (mode == "moveover")
+        {
+            setup = Full(Need("setup"));
+            target = Full(Need("target"));
+        }
+        else
+        {
+            candidate = Full(Need("candidate"));
+            previous = Full(Need("previous"));
+        }
         from = Need("from");
         To = Need("to");
         health = Full(Need("health"));
@@ -126,7 +137,29 @@ internal sealed class Switch
         int t;
         timeoutSeconds = plan.ContainsKey("timeout") && int.TryParse(plan["timeout"], out t) && t > 0 ? t : 240;
         log = Path.Combine(Path.GetDirectoryName(result), "update.log");
+        // A version that comes by an update route for installs made before a rename says what that install calls its
+        // window app, so the install can be started again if the switch has to go back to it.
+        foreach (string dir in new string[] { candidate, install })
+            if (dir != null) LearnOlderNames(dir);
     }
+
+    /// <summary>Window app names from a route's move-over.json in a folder: the names given to copies of Codehouse.exe.</summary>
+    internal static void LearnOlderNames(string dir)
+    {
+        try
+        {
+            string file = Path.Combine(dir, "move-over.json");
+            if (!File.Exists(file)) return;
+            Match m = Regex.Match(File.ReadAllText(file), "\"Codehouse\\.exe\"\\s*:\\s*\\[([^\\]]*)\\]");
+            if (!m.Success) return;
+            foreach (Match n in Regex.Matches(m.Groups[1].Value, "\"([A-Za-z0-9][A-Za-z0-9._-]{0,80}\\.exe)\""))
+                if (!OlderNames.Contains(n.Groups[1].Value)) OlderNames.Add(n.Groups[1].Value);
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>What installs made before a rename call the window app, learnt from a route (never written here).</summary>
+    internal static readonly List<string> OlderNames = new List<string>();
 
     private string Need(string key)
     {
@@ -214,13 +247,19 @@ internal sealed class Switch
             // Codehouse has already closed: whatever happened, start the version that is in place, so it is never left off.
             Log("stopped: " + ex.Message);
             WriteResult(false, "The switch stopped: " + ex.Message);
-            try { if (WindowApp(install) != null) Launch(); } catch (Exception) { }
+            try
+            {
+                if (WindowApp(install) != null) Launch();
+                else if (target != null && WindowApp(target) != null) LaunchFrom(target);
+            }
+            catch (Exception) { }
             return 1;
         }
     }
 
     private int RunInner()
     {
+        if (mode == "moveover") return MoveOver();
         Log(mode + " " + from + " -> " + To + " in " + install);
         // Only folders beside the install folder, named after it, are ever moved.
         string parent = Path.GetDirectoryName(install);
@@ -294,6 +333,63 @@ internal sealed class Switch
         Launch();
         WriteResult(false, why);
         return 1;
+    }
+
+    /// <summary>
+    /// Moves a copy that arrived by an old update route into its own folder: once Codehouse has closed, runs the
+    /// installer it downloaded and checked, silently, into the folder beside this one. The installer removes the old
+    /// folder and its shortcuts and starts Codehouse from the new one. If the installer stops, nothing has moved, and
+    /// the copy in place is started again.
+    /// </summary>
+    private int MoveOver()
+    {
+        Log("moveover " + from + " -> " + To + ": " + install + " -> " + target);
+        string updates = Path.GetDirectoryName(result);
+        // Only an installer in Codehouse's own updates folder, and only into a folder beside this one.
+        if (!setup.StartsWith(updates + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+            !setup.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) || !File.Exists(setup))
+            throw new InvalidDataException("The move names an installer that is not Codehouse's own: " + setup);
+        if (!string.Equals(Path.GetDirectoryName(target), Path.GetDirectoryName(install), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The move names a folder that is not beside " + install + ": " + target);
+        if (WindowApp(install) == null) throw new InvalidDataException("There is no Codehouse.exe in " + install + ".");
+
+        Say("Waiting for Codehouse to close.");
+        WaitForExit(waitPid, 60);
+        Say("Moving Codehouse into its own folder. It opens again by itself.");
+        try { File.Delete(health); } catch (Exception) { }
+        ProcessStartInfo psi = new ProcessStartInfo(setup,
+            "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /START /DIR=\"" + target + "\" /EARLIER=\"" + install +
+            "\" /LOG=\"" + Path.Combine(updates, "move-over-setup.log") + "\"");
+        psi.UseShellExecute = false;
+        psi.WorkingDirectory = updates;
+        Process p = Process.Start(psi);
+        if (!p.WaitForExit(15 * 60 * 1000))
+        {
+            try { p.Kill(); } catch (Exception) { }
+            throw new TimeoutException("The installer did not finish within 15 minutes.");
+        }
+        if (p.ExitCode != 0)
+        {
+            string why = "The installer stopped (exit code " + p.ExitCode + "), so Codehouse stayed where it was.";
+            Log(why);
+            if (WindowApp(install) != null) Launch();
+            else if (WindowApp(target) != null) LaunchFrom(target);
+            WriteResult(false, why);
+            return 1;
+        }
+        Started();
+        // The installer started Codehouse in its new folder: it is healthy once its Host says so.
+        string reason;
+        if (!WaitHealthy(null, out reason) && WindowApp(target) != null)
+        {
+            Log("not started by the installer (" + reason + "): starting it");
+            Process again = LaunchFrom(target);
+            if (WaitHealthy(again, out reason)) reason = null;
+        }
+        else reason = null;
+        Log(reason == null ? "moved and started" : "moved, but " + reason);
+        WriteResult(reason == null, reason);
+        return reason == null ? 0 : 1;
     }
 
     private static void WaitForExit(int pid, int seconds)
@@ -387,6 +483,11 @@ internal sealed class Switch
             string p = Path.Combine(dir, n[0]);
             if (File.Exists(p)) return p;
         }
+        foreach (string n in OlderNames)
+        {
+            string p = Path.Combine(dir, n);
+            if (File.Exists(p)) return p;
+        }
         return null;
     }
 
@@ -402,6 +503,14 @@ internal sealed class Switch
         foreach (string[] n in Names)
             if (string.Equals(n[0], file, StringComparison.OrdinalIgnoreCase)) return n[1];
         return "Codehouse";
+    }
+
+    private Process LaunchFrom(string dir)
+    {
+        ProcessStartInfo psi = new ProcessStartInfo(WindowApp(dir) ?? Path.Combine(dir, "Codehouse.exe"));
+        psi.WorkingDirectory = dir;
+        psi.UseShellExecute = false;
+        return Process.Start(psi);
     }
 
     private Process Launch()
@@ -427,7 +536,7 @@ internal sealed class Switch
                 }
             }
             catch (IOException) { }
-            if (p.HasExited)
+            if (p != null && p.HasExited)
             {
                 why = "It closed before it was ready (exit code " + p.ExitCode + ").";
                 return false;

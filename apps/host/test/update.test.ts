@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import http from "node:http"
 import type { AddressInfo } from "node:net"
@@ -5,13 +6,32 @@ import os from "node:os"
 import path from "node:path"
 import zlib from "node:zlib"
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
-import { verifyRelease, MANIFEST_FORMAT, signRelease } from "../src/update/manifest.js"
-import { makeRelease, newReleaseKey, stampInstall } from "../src/update/publish.js"
-import { UpdateService, parseResult, type UpdateSettings } from "../src/update/service.js"
-import { GitHubSource, UpdateError } from "../src/update/source.js"
+import { verifyRelease, MANIFEST_FORMAT, PRODUCT, signRelease } from "../src/update/manifest.js"
+import {
+  checkRoute,
+  makeRelease,
+  newReleaseKey,
+  stampInstall,
+  type LegacyRoute,
+} from "../src/update/publish.js"
+import {
+  OWN_FOLDER,
+  UpdateService,
+  parseResult,
+  type UpdateSettings,
+} from "../src/update/service.js"
+import { GitHubSource, UPDATE_REPO, UpdateError } from "../src/update/source.js"
 import { readInstalled, stageRelease } from "../src/update/stage.js"
 import { extractZip, writeZip } from "../src/update/zip.js"
-import { listFiles, partOf, partTrees, treeHash } from "../src/update/tree.js"
+import {
+  listFiles,
+  MOVE_OVER_FILE,
+  partOf,
+  partTrees,
+  treeHash,
+  UPDATE_FILE,
+  UPDATE_SIGNATURE,
+} from "../src/update/tree.js"
 import { compareVersions, isNewer, parseVersion } from "../src/update/version.js"
 
 const key = newReleaseKey()
@@ -85,7 +105,7 @@ describe("signed release descriptions", () => {
     Buffer.from(
       JSON.stringify({
         format: MANIFEST_FORMAT,
-        product: "codehouse",
+        product: PRODUCT,
         version: "1.0.5",
         notes: "n",
         parts: ["app", "modules", "runtime"].map((name) => ({
@@ -275,7 +295,7 @@ describe("fetching and staging a release", () => {
       ok: true,
       manifest: { version: "1.0.2" },
     })
-    expect(gh.seen.map((s) => s.url)).toContain("/o/r/releases/download/v1.0.2/release.sig")
+    expect(gh.seen.map((s) => s.url)).toContain("/o/r/releases/download/v1.0.2/update.sig")
   })
 
   it("refuses a redirect that leaves GitHub", async () => {
@@ -677,6 +697,276 @@ describe("the update service", () => {
     expect(JSON.parse(fs.readFileSync(path.join(s.dir, "started.json"), "utf8"))).toMatchObject({
       version: "1.0.6",
       pid: 1234,
+    })
+  })
+})
+
+describe("the names every installed copy finds its updates by", () => {
+  it("never change with a rename", () => {
+    // Changing any of these strands every copy already installed (owner, 2 Nov: "We cant have a breaking change
+    // ever"). A rename changes the names people see; these stay. Copies from before them are served by update routes.
+    expect(PRODUCT).toBe("gatehouse")
+    expect(UPDATE_FILE).toBe("update.json")
+    expect(UPDATE_SIGNATURE).toBe("update.sig")
+    expect(UPDATE_REPO).toBe("breakmylegs/gatehouse")
+  })
+})
+
+describe("update routes for installs made before a rename", () => {
+  // A route with made-up names: the real ones are kept out of the repository.
+  const route: LegacyRoute = {
+    manifest: "old.json",
+    signature: "old.sig",
+    product: "oldname",
+    aliases: { "Codehouse.exe": ["Oldname.exe"], "Codehouse-Update.exe": ["Oldname-Update.exe"] },
+  }
+  async function release(version: string, routes = [route]) {
+    const dir = makeBuild(path.join(root, `route-build-${version}`), { app: version })
+    const out = path.join(root, `route-out-${version}`)
+    fs.rmSync(out, { recursive: true, force: true })
+    const setup = path.join(root, `Codehouse-Setup-${version}.exe`)
+    fs.writeFileSync(setup, `installer ${version}`)
+    const made = await makeRelease({
+      dir,
+      out,
+      version,
+      notes: "n",
+      privateKeyPem: key.privatePem,
+      installer: setup,
+      routes,
+    })
+    return { dir, out, made, setup }
+  }
+
+  it("publish this version's update, and one in each old route's own format, both naming the installer", async () => {
+    const { out, made, setup } = await release("2.1.10")
+    const read = (f: string) => fs.readFileSync(path.join(out, f))
+    const sig = (f: string) => read(f).toString("utf8")
+    expect(verifyRelease(read("update.json"), sig("update.sig"), [key.publicPem])).toMatchObject({
+      ok: true,
+      manifest: { product: PRODUCT, version: "2.1.10" },
+    })
+    // An old install reads only its own product: this version's description is not one, the route's is.
+    expect(
+      verifyRelease(read("update.json"), sig("update.sig"), [key.publicPem], "oldname").ok,
+    ).toBe(false)
+    const old = verifyRelease(read("old.json"), sig("old.sig"), [key.publicPem], "oldname")
+    expect(old).toMatchObject({ ok: true, manifest: { product: "oldname", version: "2.1.10" } })
+    expect(verifyRelease(read("old.json"), sig("old.sig"), [key.publicPem]).ok).toBe(false)
+    const installer = {
+      name: path.basename(setup),
+      size: fs.statSync(setup).size,
+      sha256: crypto.createHash("sha256").update(fs.readFileSync(setup)).digest("hex"),
+    }
+    expect(made.manifest.installer).toEqual(installer)
+    expect(made.routes[0]!.installer).toEqual(installer)
+    // The large parts are shared; only the app part is the route's own.
+    const part = (m: { parts: Array<{ name: string; archive?: string }> }, n: string) =>
+      m.parts.find((p) => p.name === n)!.archive
+    expect(part(made.routes[0]!, "modules")).toBe(part(made.manifest, "modules"))
+    expect(part(made.routes[0]!, "app")).toBe("codeh-2.1.10-route1-app.zip")
+    expect(made.files.map((f) => path.basename(f))).toEqual(
+      expect.arrayContaining([
+        "update.json",
+        "update.sig",
+        "old.json",
+        "old.sig",
+        "codeh-2.1.10-route1-app.zip",
+      ]),
+    )
+  })
+
+  it("give an old install the programs under the names it starts, and the note to move, all signed", async () => {
+    const { dir, made } = await release("2.1.11")
+    const gh = await fakeGitHub()
+    try {
+      const out = path.join(root, "route-out-2.1.11")
+      gh.releases.set("2.1.11", out)
+      gh.latest = "2.1.11"
+      // What an old install does: stage the route's description, which checks every part against its signed tree.
+      const installDir = makeBuild(path.join(root, "old-install", "Oldname"), { app: "old" })
+      await stampInstall(installDir, { version: "1.0.170" })
+      const bytes = fs.readFileSync(path.join(out, "old.json"))
+      await stageRelease({
+        manifest: made.routes[0]!,
+        manifestBytes: bytes,
+        signature: fs.readFileSync(path.join(out, "old.sig"), "utf8"),
+        installDir,
+        stagedDir: `${installDir}.next`,
+        downloadsDir: path.join(root, "old-install", "downloads"),
+        installed: readInstalled(installDir),
+        source: new GitHubSource({ repo: "o/r", base: gh.base, testOrigins: [gh.blob] }),
+      })
+      const staged = `${installDir}.next`
+      for (const [from, names] of Object.entries(route.aliases))
+        for (const n of names)
+          expect(fs.readFileSync(path.join(staged, n)), n).toEqual(
+            fs.readFileSync(path.join(dir, from)),
+          )
+      expect(fs.existsSync(path.join(staged, MOVE_OVER_FILE))).toBe(true)
+      // This version's own update has neither.
+      expect(fs.existsSync(path.join(dir, MOVE_OVER_FILE))).toBe(false)
+      expect(fs.existsSync(path.join(dir, "Oldname.exe"))).toBe(false)
+    } finally {
+      await gh.close()
+    }
+  })
+
+  it("refuse a route that could overwrite a release file, use this product, or copy outside the folder", () => {
+    for (const bad of [
+      { ...route, manifest: UPDATE_FILE },
+      { ...route, signature: UPDATE_SIGNATURE },
+      { ...route, product: PRODUCT },
+      { ...route, manifest: "../x.json" },
+      { ...route, aliases: { "Codehouse.exe": ["..\\Oldname.exe"] } },
+      { ...route, aliases: { "Codehouse.exe": ["Oldname.dll"] } },
+    ])
+      expect(() => checkRoute(bad), JSON.stringify(bad)).toThrow()
+    expect(() => checkRoute(route)).not.toThrow()
+  })
+})
+
+describe("moving a copy that arrived by an old route into its own folder", () => {
+  let gh: FakeGitHub
+  beforeAll(async () => {
+    gh = await fakeGitHub()
+  })
+  afterAll(async () => gh.close())
+
+  async function arrived(o: { installer?: boolean; drops?: number } = {}) {
+    const base = fs.mkdtempSync(path.join(root, "moved-"))
+    const dir = makeBuild(path.join(base, "build"), { app: "a9" })
+    const out = path.join(base, "out")
+    const setup = path.join(base, "Codehouse-Setup.exe")
+    fs.writeFileSync(setup, "installer 2.1.20")
+    await makeRelease({
+      dir,
+      out,
+      version: "2.1.20",
+      notes: "n",
+      privateKeyPem: key.privatePem,
+      ...(o.installer === false ? {} : { installer: setup }),
+    })
+    fs.copyFileSync(setup, path.join(out, "Codehouse-Setup.exe"))
+    gh.releases.set("2.1.20", out)
+    gh.latest = "2.1.20"
+    // The copy as an old install's updater left it: in the old folder, with the note to move.
+    const installDir = makeBuild(path.join(base, "Programs", "Oldname"), { app: "a8" })
+    await stampInstall(installDir, { version: "2.1.19" })
+    fs.writeFileSync(path.join(installDir, MOVE_OVER_FILE), "{}")
+    const audited: string[] = []
+    const real = new GitHubSource({ repo: "o/r", base: gh.base, testOrigins: [gh.blob] })
+    let drops = o.drops ?? 0
+    const svc = new UpdateService({
+      installDir,
+      sourceVersion: "0.0.0",
+      dir: path.join(base, "data", "updates"),
+      // A connection that drops the first downloads, as fetch reports it.
+      source: {
+        describe: () => real.describe(),
+        latest: () => real.latest(),
+        download: async (...a) => {
+          if (drops-- > 0) throw new TypeError("terminated")
+          return real.download(...a)
+        },
+      },
+      keys: [key.publicPem],
+      settings: () => ({ checkEveryMinutes: 30, downloadInBackground: false, skipped: [] }),
+      saveSettings: async () => undefined,
+      audit: async (event) => void audited.push(event),
+      log: () => undefined,
+      firstCheckDelayMs: 3_600_000,
+    })
+    return { svc, installDir, base, audited, updates: path.join(base, "data", "updates") }
+  }
+
+  it("downloads the checked installer and hands over to Codehouse-Update.exe to run it, into the Codehouse folder", async () => {
+    const a = await arrived()
+    expect(a.svc.status().moveOver).toEqual({ phase: "waiting" })
+    const handed = new Promise<{ updater: string; plan: string }>((r) => a.svc.once("apply", r))
+    await a.svc.check()
+    const { updater, plan } = await handed
+    const text = fs.readFileSync(plan, "utf8")
+    expect(text).toContain("mode=moveover")
+    expect(text).toContain(`install=${a.installDir}`)
+    expect(text).toContain(`target=${path.join(a.base, "Programs", OWN_FOLDER)}`)
+    expect(text).toContain("to=2.1.20")
+    const setup = /setup=(.+)\r\n/.exec(text)![1]!
+    expect(setup.startsWith(a.updates + path.sep)).toBe(true)
+    expect(fs.readFileSync(setup, "utf8")).toBe("installer 2.1.20")
+    // The updater runs from Codehouse's own folder, not the one the installer will remove.
+    expect(path.dirname(updater)).toBe(a.updates)
+    expect(a.svc.status().moveOver).toEqual({ phase: "applying" })
+    expect(a.audited).toContain("update_move_over_started")
+  })
+
+  it("refuses an installer that does not match the signed description", async () => {
+    const a = await arrived()
+    gh.tamper.add("Codehouse-Setup.exe")
+    try {
+      let handed = false
+      a.svc.once("apply", () => (handed = true))
+      await a.svc.check()
+      await new Promise((r) => setTimeout(r, 200))
+      expect(handed).toBe(false)
+      expect(a.svc.status().moveOver).toMatchObject({ phase: "failed" })
+    } finally {
+      gh.tamper.delete("Codehouse-Setup.exe")
+    }
+  })
+
+  it("after a failed move it waits for you, so a problem cannot close Codehouse over and over", async () => {
+    const a = await arrived()
+    fs.mkdirSync(a.updates, { recursive: true })
+    fs.writeFileSync(
+      path.join(a.updates, "result.txt"),
+      "ok=false\r\nmode=moveover\r\nfrom=2.1.19\r\nto=2.1.20\r\nreason=The installer stopped (exit code 7).\r\n",
+    )
+    const again = await (async () => {
+      const b = new UpdateService({
+        installDir: a.installDir,
+        sourceVersion: "0.0.0",
+        dir: a.updates,
+        source: new GitHubSource({ repo: "o/r", base: gh.base, testOrigins: [gh.blob] }),
+        keys: [key.publicPem],
+        settings: () => ({ checkEveryMinutes: 30, downloadInBackground: false, skipped: [] }),
+        saveSettings: async () => undefined,
+        audit: async () => undefined,
+        log: () => undefined,
+        firstCheckDelayMs: 3_600_000,
+      })
+      return b
+    })()
+    expect(again.status().moveOver).toMatchObject({
+      phase: "failed",
+      error: expect.stringMatching(/exit code 7/),
+    })
+    let handed = false
+    again.once("apply", () => (handed = true))
+    await again.check()
+    expect(handed).toBe(false)
+    // Finish the move tries once more, on your word.
+    const go = new Promise((r) => again.once("apply", r))
+    await again.moveOver()
+    await go
+    expect(again.status().moveOver).toEqual({ phase: "applying" })
+  })
+
+  it("tries a dropped download of the installer again", async () => {
+    const a = await arrived({ drops: 1 })
+    const handed = new Promise((r) => a.svc.once("apply", r))
+    await a.svc.check()
+    await handed
+    expect(a.svc.status().moveOver).toEqual({ phase: "applying" })
+  }, 20_000)
+
+  it("says so when the newest release has no installer to move with", async () => {
+    const a = await arrived({ installer: false })
+    await a.svc.check()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(a.svc.status().moveOver).toMatchObject({
+      phase: "failed",
+      error: expect.stringMatching(/no installer/),
     })
   })
 })

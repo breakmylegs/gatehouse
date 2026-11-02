@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from "react"
 import { createPortal } from "react-dom"
 import { useStore } from "../store"
-import { noteLines, updateCall, type UpdateStatus } from "../lib/update"
+import { moveOverLine, noteLines, updateCall, type UpdateStatus } from "../lib/update"
 
 /** The version you chose Later for. It shows again when Codehouse next opens. */
 let laterFor = ""
@@ -22,6 +22,29 @@ export function UpdateNotice() {
   }, [conn])
 
   const target = update?.latest?.version
+  // A copy that arrived by an old update route says it is finishing the move, and offers to try again if it failed.
+  if (update?.moveOver)
+    return (
+      <div
+        role="region"
+        aria-label="Codehouse is finishing its update"
+        className="update-bar shell"
+      >
+        <span aria-live="polite" className="min-w-0">
+          {moveOverLine(update.moveOver)}
+        </span>
+        {update.moveOver.phase === "failed" ? (
+          <span className="ml-auto flex flex-wrap gap-2">
+            <button
+              className="btn btn-primary"
+              onClick={() => void updateCall("POST", "/api/update/move-over")}
+            >
+              Finish the move
+            </button>
+          </span>
+        ) : null}
+      </div>
+    )
   if (!update || !update.available || !update.canInstall || target === undefined) return null
   // The Host keeps "Update now": it switches as soon as the version is ready.
   const wanted = update.applyWhenReady === target
@@ -81,11 +104,16 @@ export function UpdateNotice() {
 export function UpdateResult() {
   const r = useStore((s) => s.update?.lastResult)
   if (!r) return null
-  const text = r.ok
-    ? r.mode === "rollback"
-      ? `Codehouse went back to ${r.to}. Version ${r.from} is skipped; you can offer it again in Settings.`
-      : `Codehouse was updated to ${r.to}.`
-    : `The update to ${r.to} did not start, so Codehouse went back to ${r.from}. ${r.reason ?? ""} It will not be offered again until a newer version comes out.`
+  const text =
+    r.mode === "moveover"
+      ? r.ok
+        ? `Codehouse ${r.to} is installed in its own folder now, and updates itself from here on.`
+        : `Codehouse could not move into its own folder, so it stayed where it was. ${r.reason ?? ""} Your data and sessions are safe.`
+      : r.ok
+        ? r.mode === "rollback"
+          ? `Codehouse went back to ${r.to}. Version ${r.from} is skipped; you can offer it again in Settings.`
+          : `Codehouse was updated to ${r.to}.`
+        : `The update to ${r.to} did not start, so Codehouse went back to ${r.from}. ${r.reason ?? ""} It will not be offered again until a newer version comes out.`
   return (
     <div
       role="status"

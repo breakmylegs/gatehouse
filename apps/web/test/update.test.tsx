@@ -194,3 +194,38 @@ describe("Settings, Updates", () => {
     await waitFor(() => expect(field.value).toBe(""))
   })
 })
+
+describe("a copy that arrived by an update route for installs made before a rename", () => {
+  it("says it is finishing the update by moving, with nothing to click while it goes", () => {
+    useStore.setState({ update: base({ available: false, moveOver: { phase: "applying" } }) })
+    render(<UpdateNotice />)
+    const bar = screen.getByRole("region", { name: "Codehouse is finishing its update" })
+    expect(bar.textContent).toMatch(
+      /moving into its own folder\. It closes and opens again by itself/,
+    )
+    expect(within(bar).queryByRole("button")).toBeNull()
+  })
+
+  it("after a failed move, says your data is safe and offers Finish the move", async () => {
+    useStore.setState({
+      update: base({
+        moveOver: { phase: "failed", error: "The installer stopped (exit code 7)." },
+      }),
+    })
+    render(<UpdateNotice />)
+    const bar = screen.getByRole("region", { name: "Codehouse is finishing its update" })
+    expect(bar.textContent).toMatch(/exit code 7.*Your data and sessions are safe/)
+    fireEvent.click(within(bar).getByRole("button", { name: "Finish the move" }))
+    await waitFor(() => expect(calls.map((c) => c.url)).toEqual(["/api/update/move-over"]))
+  })
+
+  it("says once that it is in its own folder now", () => {
+    useStore.setState({
+      update: base({ lastResult: { ok: true, mode: "moveover", from: "2.1.19", to: "2.1.20" } }),
+    })
+    render(<UpdateResult />)
+    expect(screen.getByRole("status").textContent).toMatch(
+      /Codehouse 2\.1\.20 is installed in its own folder now/,
+    )
+  })
+})

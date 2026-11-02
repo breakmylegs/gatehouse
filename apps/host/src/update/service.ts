@@ -13,7 +13,7 @@ import { UPDATE_INTERVALS } from "@gatehouse/shared/node"
 import { RELEASE_KEYS, verifyRelease, type ReleaseManifest } from "./manifest.js"
 import { UpdateError, type UpdateSource } from "./source.js"
 import { readInstalled, stageRelease, type StageProgress } from "./stage.js"
-import { MANIFEST_FILE, STAGED_MARKER } from "./tree.js"
+import { MANIFEST_FILE, MOVE_OVER_FILE, STAGED_MARKER } from "./tree.js"
 import { compareVersions, isNewer, parseVersion } from "./version.js"
 
 export interface UpdateSettings {
@@ -56,7 +56,15 @@ export interface UpdateStatus {
   /** You chose Update now for this version: Codehouse switches as soon as it is ready, whatever the screen does. */
   applyWhenReady?: string
   lastResult?: UpdateResult
+  /**
+   * This copy arrived by an old update route (an install made before a rename) and still has to move into its own
+   * folder: Codehouse closes, its installer runs by itself, and Codehouse opens again there.
+   */
+  moveOver?: { phase: "waiting" | "preparing" | "applying" | "failed"; error?: string }
 }
+
+/** The folder a copy that arrived by an old route moves into, beside the one it is in. */
+export const OWN_FOLDER = "Codehouse"
 
 export interface UpdateServiceOptions {
   /** The folder Codehouse.exe is in. Undefined when Codehouse runs from its source folder. */
@@ -97,6 +105,7 @@ export class UpdateService extends EventEmitter<{
   #applyWhenReady: string | undefined
   #why: string | undefined
   #busy: Promise<unknown> = Promise.resolve()
+  #moveOver: UpdateStatus["moveOver"]
 
   constructor(o: UpdateServiceOptions) {
     super()
@@ -104,6 +113,8 @@ export class UpdateService extends EventEmitter<{
     this.#installed = o.installDir ? readInstalled(o.installDir) : undefined
     fs.mkdirSync(o.dir, { recursive: true })
     this.#why = this.#whyNot()
+    if (o.installDir && fs.existsSync(path.join(o.installDir, MOVE_OVER_FILE)))
+      this.#moveOver = { phase: "waiting" }
     this.#readResult()
     // A version built before a restart is still ready if it is complete and newer.
     const marker = this.#staged && path.join(this.#staged, STAGED_MARKER)
@@ -151,11 +162,23 @@ export class UpdateService extends EventEmitter<{
     const r = parseResult(fs.readFileSync(file, "utf8"))
     fs.renameSync(file, path.join(this.#o.dir, "result.seen.txt"))
     this.#lastResult = r
-    const event = r.ok
-      ? r.mode === "rollback"
-        ? "update_rolled_back"
-        : "update_installed"
-      : "update_failed"
+    const event =
+      r.mode === "moveover"
+        ? r.ok
+          ? "update_moved_over"
+          : "update_move_over_failed"
+        : r.ok
+          ? r.mode === "rollback"
+            ? "update_rolled_back"
+            : "update_installed"
+          : "update_failed"
+    // A move-over that failed is not tried again by itself, so a problem cannot close Codehouse over and over:
+    // Settings, Updates has Finish the move.
+    if (r.mode === "moveover" && !r.ok && this.#moveOver)
+      this.#moveOver = {
+        phase: "failed",
+        error: r.reason ?? "The installer did not finish the move.",
+      }
     void this.#o.audit(event, { from: r.from, to: r.to, reason: r.reason }).catch(() => undefined)
     // A version that would not start here is not offered again until a newer one comes out.
     if (!r.ok && r.to && r.mode === "apply") void this.skip(r.to).catch(() => undefined)
@@ -195,6 +218,7 @@ export class UpdateService extends EventEmitter<{
       ...(this.#ready ? { ready: this.#ready } : {}),
       ...(this.#applyWhenReady ? { applyWhenReady: this.#applyWhenReady } : {}),
       ...(this.#lastResult ? { lastResult: this.#lastResult } : {}),
+      ...(this.#moveOver ? { moveOver: this.#moveOver } : {}),
     }
   }
 
@@ -203,7 +227,10 @@ export class UpdateService extends EventEmitter<{
   }
 
   start(): void {
-    this.#schedule(this.#o.firstCheckDelayMs ?? 60_000)
+    // A copy that still has to move looks at once, so the move follows straight on from the update that brought it.
+    this.#schedule(
+      this.#moveOver?.phase === "waiting" ? 3_000 : (this.#o.firstCheckDelayMs ?? 60_000),
+    )
     void this.#cleanUp()
   }
 
@@ -245,6 +272,10 @@ export class UpdateService extends EventEmitter<{
       if (!v.ok) throw new UpdateError(v.error)
       this.#latest = { manifest: v.manifest, bytes: got.bytes, signature: got.signature }
       this.#checkError = undefined
+      if (this.#moveOver?.phase === "waiting") {
+        void this.moveOver().catch(() => undefined)
+        return this.status()
+      }
       const st = this.status()
       if (
         st.available &&
@@ -410,6 +441,95 @@ export class UpdateService extends EventEmitter<{
       to,
     })
     this.emit("apply", { updater, plan })
+  }
+
+  /**
+   * Finishes moving a copy that arrived by an old update route: downloads the newest release's installer, checks it
+   * against the signed description, and hands over to Codehouse-Update.exe, which runs it once Codehouse has closed.
+   * The installer installs into the Codehouse folder beside this one, removes this folder and its shortcuts, and
+   * starts Codehouse there. Your data is not in either folder.
+   */
+  async moveOver(): Promise<UpdateStatus> {
+    if (!this.#moveOver)
+      throw new UpdateError("This copy of Codehouse is already in its own folder.")
+    if (this.#moveOver.phase === "preparing" || this.#moveOver.phase === "applying")
+      return this.status()
+    if (this.#why) throw new UpdateError(this.#why)
+    const l = this.#latest
+    const inst = l?.manifest.installer
+    if (!l || !inst) {
+      this.#moveOver = {
+        phase: "failed",
+        error: l
+          ? `Release ${l.manifest.version} has no installer to finish the move with.`
+          : "Check for updates first: the move uses the newest release's installer.",
+      }
+      this.#changed()
+      return this.status()
+    }
+    this.#moveOver = { phase: "preparing" }
+    this.#changed()
+    try {
+      const dl = path.join(this.#o.dir, "downloads", l.manifest.version)
+      await fs.promises.mkdir(dl, { recursive: true })
+      const setup = path.join(dl, inst.name)
+      // A dropped connection is tried again a few times; a file that does not match is refused at once.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await this.#o.source.download(
+            l.manifest.version,
+            inst.name,
+            { size: inst.size, sha256: inst.sha256 },
+            setup,
+            () => undefined,
+          )
+          break
+        } catch (e) {
+          if (e instanceof UpdateError || attempt >= 4) throw e
+          this.#o.log(`installer download dropped (${(e as Error).message}), trying again`)
+          await new Promise((r) => setTimeout(r, 2000 * attempt))
+        }
+      }
+      const updater = updaterIn(this.#o.installDir as string)
+      if (!updater) throw new UpdateError("Codehouse-Update.exe is missing from this version.")
+      await this.#busy
+      const copy = path.join(this.#o.dir, "Codehouse-Update.exe")
+      fs.copyFileSync(updater, copy)
+      const plan = path.join(this.#o.dir, "plan.txt")
+      fs.writeFileSync(
+        plan,
+        [
+          "mode=moveover",
+          `install=${this.#o.installDir}`,
+          `setup=${setup}`,
+          `target=${path.join(path.dirname(this.#o.installDir as string), OWN_FOLDER)}`,
+          `from=${this.current}`,
+          `to=${l.manifest.version}`,
+          `health=${path.join(this.#o.dir, "started.json")}`,
+          `result=${path.join(this.#o.dir, "result.txt")}`,
+          "timeout=300",
+          "",
+        ].join("\r\n"),
+      )
+      this.#moveOver = { phase: "applying" }
+      this.#changed()
+      await this.#o.audit("update_move_over_started", {
+        from: this.current,
+        to: l.manifest.version,
+      })
+      this.emit("apply", { updater: copy, plan })
+    } catch (e) {
+      this.#moveOver = {
+        phase: "failed",
+        error:
+          e instanceof UpdateError
+            ? e.message
+            : `The move could not start: ${(e as Error).message}`,
+      }
+      this.#o.log(`move-over not started: ${(e as Error).message}`)
+      this.#changed()
+    }
+    return this.status()
   }
 
   /** Called once the Host is ready, so Codehouse-Update.exe knows the version it started really works. */
