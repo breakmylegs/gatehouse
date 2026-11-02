@@ -73,6 +73,8 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.
 
+**Retry and Edit** on any of your messages carry the conversation on from just before it: **Retry** sends the same words again, **Edit** lets you change them in place (Enter sends, Esc cancels). The new version takes the old one's place, and the old one is kept under Earlier sessions. Wait for Claude to finish first, or stop it. In a coding session, files changed after that point stay as they are.
+
 **Progress**: while Claude works through a plan, a card above the prompt box shows each step, ticked when done, glowing while in progress, an empty circle before, with how many are done. A long plan shows the steps around the current one; **Show all** opens it all. Each update to the plan in the conversation says how far it was.
 
 **Chat and Code** at the top of the sidebar switch between the two sides of Codehouse. Chat lists your chats: each project with its chats, then **Chats** for those in no project, with New chat, Projects, Memory and Prompts above. Code lists your coding sessions by folder, with New session and your pages above. It remembers the side you chose, and turns to the right side when you open a chat or a session from Search.

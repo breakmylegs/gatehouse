@@ -667,7 +667,8 @@ function loadHistory(info: SessionInfo): void {
   historyAsked.add(info.id)
   // Started again under the same id while this window was open (Force stop): what was said is on screen already.
   const shown = useStore.getState().transcripts[info.id]
-  if (shown?.items.length) {
+  // A fork (Retry, Edit) shows your message at once; its earlier conversation still comes before it.
+  if (shown?.items.length && !info.historyUntil) {
     if (info.restarted)
       useStore.setState((s) => ({
         transcripts: { ...s.transcripts, [info.id]: addSystem(shown, restartLine(info)) },
@@ -680,7 +681,11 @@ function loadHistory(info: SessionInfo): void {
   ).then((r) => {
     if (!r.ok || !Array.isArray(r.data)) return
     let past = emptyTranscript()
-    for (const m of r.data as unknown[]) past = reduceHistory(past, m)
+    for (const m of r.data as unknown[]) {
+      past = reduceHistory(past, m)
+      // A fork carries on from this message: what came after it belongs to the version left behind.
+      if (info.historyUntil && (m as { uuid?: unknown }).uuid === info.historyUntil) break
+    }
     if (info.restarted) past = addSystem(past, restartLine(info))
     useStore.setState((s) => ({
       transcripts: { ...s.transcripts, [info.id]: withHistory(s.transcripts[info.id], past) },

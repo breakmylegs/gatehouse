@@ -29,6 +29,7 @@ import { usePictures } from "../lib/pictures"
 import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise, summaryItems } from "../lib/groups"
 import { ProgressCard, StepList } from "../components/ProgressCard"
+import { carryOnFrom } from "../lib/redo"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -1770,12 +1771,17 @@ function UserMessage({
   text,
   images,
   sessionId,
+  point,
 }: {
   text: string
   images?: Shown[]
   sessionId?: string
+  /** Where Retry and Edit carry on from. */
+  point?: { before?: string; first?: boolean }
 }) {
   const [viewing, setViewing] = useState<{ url: string; name: string }>()
+  const [editing, setEditing] = useState<string>()
+  const canFork = Boolean(sessionId && point && (point.before || point.first))
   const { shown, retry } = usePictures(sessionId, images)
   return (
     <div className="ml-auto grid max-w-[80%] justify-items-end gap-1.5">
@@ -1800,7 +1806,41 @@ function UserMessage({
           )}
         </div>
       ) : null}
-      {text ? (
+      {editing !== undefined && sessionId && point ? (
+        <form
+          className="grid w-full min-w-[min(520px,100%)] gap-1.5"
+          aria-label="Edit your message"
+          onSubmit={(e) => {
+            e.preventDefault()
+            const said = editing.trim()
+            if (said)
+              void carryOnFrom(sessionId, point, said).then((ok) => ok && setEditing(undefined))
+          }}
+        >
+          <textarea
+            className="field"
+            rows={Math.min(10, Math.max(2, editing.split("\n").length))}
+            autoFocus
+            value={editing}
+            onChange={(e) => setEditing(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setEditing(undefined)
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                e.currentTarget.form?.requestSubmit()
+              }
+            }}
+          />
+          <span className="flex justify-end gap-2">
+            <button type="button" className="btn !min-h-7" onClick={() => setEditing(undefined)}>
+              Cancel
+            </button>
+            <button className="btn btn-primary !min-h-7" disabled={!editing.trim()}>
+              Send
+            </button>
+          </span>
+        </form>
+      ) : text ? (
         <div className="whitespace-pre-wrap rounded-md border border-line bg-s2 px-3 py-2 [overflow-wrap:anywhere]">
           <span className="sr-only">You: </span>
           {text}
@@ -1809,12 +1849,29 @@ function UserMessage({
       {text ? (
         <div className="msg-actions">
           <CopyButton text={text} what="your message" />
+          {sessionId && canFork && point ? (
+            <button
+              type="button"
+              className="copy-btn"
+              aria-label="Retry: carry on from just before this message, sending it again"
+              onClick={() => void carryOnFrom(sessionId, point, text)}
+            >
+              <span aria-hidden="true" className="copy-icon">
+                ↻
+              </span>
+              Retry
+            </button>
+          ) : null}
           {sessionId ? (
             <button
               type="button"
               className="copy-btn"
-              aria-label="Edit your message in the prompt box"
-              onClick={() => composeIn(sessionId, text)}
+              aria-label={
+                canFork
+                  ? "Edit your message and carry on from it"
+                  : "Edit your message in the prompt box"
+              }
+              onClick={() => (canFork ? setEditing(text) : composeIn(sessionId, text))}
             >
               <span aria-hidden="true" className="copy-icon">
                 ✎
@@ -1910,7 +1967,15 @@ export const ItemView = memo(function ItemView({
     case "user":
       return (
         <>
-          <UserMessage text={item.text} images={item.images} sessionId={sessionId} />
+          <UserMessage
+            text={item.text}
+            images={item.images}
+            sessionId={sessionId}
+            point={{
+              ...(item.before ? { before: item.before } : {}),
+              ...(item.first ? { first: true } : {}),
+            }}
+          />
           {item.queued ? (
             <p className="m-0 mt-1 flex flex-wrap items-center justify-end gap-2 text-[13px] text-mut">
               Queued: Claude reads it at its next step.

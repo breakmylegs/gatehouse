@@ -201,6 +201,8 @@ export interface SessionInfo {
   local?: boolean
   /** Where its words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel?: string
+  /** A fork from a point: its earlier conversation is shown up to this message only. */
+  historyUntil?: string
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
   paused?: { until?: string; percent: number; wasRunning: boolean }
 }
@@ -343,6 +345,8 @@ export interface StartSessionOptions {
   account?: string
   /** A chat with a model on this computer instead of Claude (ADR 0011). */
   localModel?: string
+  /** With resume and fork: carry on from this message (its uuid), for Retry and Edit. */
+  resumeAt?: string
 }
 
 /**
@@ -499,6 +503,7 @@ export class Session extends EventEmitter<SessionEvents> {
       createdAt: this.createdAt,
       ...(this.#error !== undefined ? { error: this.#error } : {}),
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
+      ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
       ...(this.#opts.restore
         ? {
             restarted: {
@@ -700,7 +705,11 @@ export class Session extends EventEmitter<SessionEvents> {
         ? { spawnClaudeCodeProcess: d.limiter.spawn(this.#job, () => this.#resources, onStderr) }
         : {}),
       ...(this.#opts.resume !== undefined
-        ? { resume: this.#opts.resume, forkSession: this.#opts.fork === true }
+        ? {
+            resume: this.#opts.resume,
+            forkSession: this.#opts.fork === true,
+            ...(this.#opts.resumeAt !== undefined ? { resumeSessionAt: this.#opts.resumeAt } : {}),
+          }
         : {}),
     }
     assertSafeOptions(options)
@@ -1422,8 +1431,9 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     const warm = await this.#claimWarm(opts)
     if (warm) return warm
     // After the checks above, so a refused start leaves nothing behind.
-    if (opts.kind === "chat" && opts.restore) {
-      // A chat brought back keeps its own folder, and only a folder Codehouse made for chats.
+    if (opts.kind === "chat" && (opts.restore || opts.resume !== undefined)) {
+      // A chat brought back, or carried on in a fork (Retry, Edit), keeps its own folder, where Claude Code finds the
+      // conversation; and only a folder Codehouse made for chats.
       const dir = this.#deps.chatsDir
       if (!dir || !sameFolder(path.dirname(path.resolve(opts.cwd)), dir))
         throw new SessionFolderError("That chat's folder is not one Codehouse made for chats.")

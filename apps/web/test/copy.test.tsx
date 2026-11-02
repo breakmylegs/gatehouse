@@ -126,12 +126,13 @@ describe("copying", () => {
     await waitFor(() => expect(copied.at(-1)?.["text/plain"]).toBe("npm run gate\n"))
   })
 
-  it("copies your own message, and Edit puts it in the prompt box to change and send again", async () => {
+  it("copies your own message, and Edit opens it in place to change and send again", async () => {
     show()
     fireEvent.click(screen.getByRole("button", { name: "Copy your message" }))
     await waitFor(() => expect(copied.at(-1)?.["text/plain"]).toBe("How do I check it?"))
-    fireEvent.click(screen.getByRole("button", { name: "Edit your message in the prompt box" }))
-    const box = screen.getByRole("textbox", { name: /prompt|message/i }) as HTMLTextAreaElement
+    fireEvent.click(screen.getByRole("button", { name: /^Edit your message/ }))
+    const form = screen.getByRole("form", { name: "Edit your message" })
+    const box = form.querySelector("textarea") as HTMLTextAreaElement
     await waitFor(() => expect(box.value).toBe("How do I check it?"))
   })
 

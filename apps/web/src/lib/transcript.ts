@@ -23,6 +23,10 @@ export type Item =
       images?: Picture[]
       /** Sent while Claude worked, and not yet taken in: Claude reads it at its next step. */
       queued?: boolean
+      /** The last message of the conversation before this one: where Retry and Edit carry on from. */
+      before?: string
+      /** The first thing said: Retry and Edit start a new conversation with it. */
+      first?: boolean
     }
   | { id: string; kind: "text"; at?: number; text: string; subagent?: string }
   | { id: string; kind: "thinking"; at?: number; text: string }
@@ -70,6 +74,8 @@ export interface Transcript {
   stopping?: "you" | "kill-switch" | "plan-limit"
   /** A tool result came back after a queued message was sent: Claude's next answer has seen it. */
   pickup?: boolean
+  /** The id (uuid) of the newest message of the conversation seen, for Retry and Edit. */
+  lastUuid?: string
 }
 
 export const MAX_ITEMS = 3000
@@ -192,6 +198,7 @@ export function addUser(
   const { stopping: _done, ...rest } = t
   const { text, images: mentioned } = splitPictures(said)
   const images = [...(attached ?? []), ...mentioned]
+  const first = !t.items.some((i) => i.kind === "user" || i.kind === "text")
   return push(queued ? t : rest, [
     {
       id: `u${t.seq}`,
@@ -199,6 +206,8 @@ export function addUser(
       text,
       ...(images.length ? { images } : {}),
       ...(queued ? { queued: true } : {}),
+      ...(t.lastUuid ? { before: t.lastUuid } : {}),
+      ...(first ? { first: true } : {}),
     },
   ])
 }
@@ -239,6 +248,8 @@ function push(t: Transcript, add: Item[], todos?: Todo[], at: number = Date.now(
 export function reduce(t: Transcript, message: unknown): Transcript {
   const m = obj(message)
   const type = str(m.type)
+  // The conversation's own messages carry an id; the newest is where a Retry or Edit after it would carry on from.
+  if ((type === "assistant" || type === "user") && str(m.uuid)) t = { ...t, lastUuid: str(m.uuid) }
   const sub = typeof m.parent_tool_use_id === "string" ? m.parent_tool_use_id : undefined
   if (type === "assistant" && t.pickup && !sub) t = delivered(t)
   if (type === "assistant") {
@@ -358,7 +369,8 @@ export function reduceHistory(t: Transcript, message: unknown): Transcript {
       // Claude Code's summary after compacting is written as a message from you; it is not one.
       if (said.startsWith("This session is being continued from a previous conversation"))
         return addSystem(t, "Claude Code summarised the earlier conversation to make room.")
-      return addUser(t, said)
+      const added = addUser(t, said)
+      return str(m.uuid) ? { ...added, lastUuid: str(m.uuid) } : added
     }
   }
   return reduce(t, message)
@@ -373,7 +385,13 @@ export function withHistory(t: Transcript | undefined, past: Transcript): Transc
   const earlier = past.items.map(({ at: _at, ...i }) => ({ ...i, id: "h" + i.id }) as Item)
   let items = [...earlier, ...now.items]
   if (items.length > MAX_ITEMS) items = items.slice(items.length - MAX_ITEMS)
-  return { ...now, items, todos: now.todos.length ? now.todos : past.todos, seq: now.seq + 1 }
+  return {
+    ...now,
+    items,
+    todos: now.todos.length ? now.todos : past.todos,
+    seq: now.seq + 1,
+    ...((now.lastUuid ?? past.lastUuid) ? { lastUuid: now.lastUuid ?? past.lastUuid } : {}),
+  }
 }
 
 export function addSystem(t: Transcript, text: string): Transcript {

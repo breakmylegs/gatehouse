@@ -43,6 +43,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
       .string()
       .regex(/^[\w.:/-]{1,100}$/)
       .optional(),
+    /** With resume and fork: carry on from this message of the conversation (Retry and Edit). */
+    resumeAt: z.string().max(100).optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   /** New chat or the quick prompt is open: have a chat ready for the first message (the warm chat). */
@@ -220,6 +222,8 @@ export const SessionInfo = z.object({
   local: z.boolean().optional(),
   /** Where a local chat's words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel: z.string().max(120).optional(),
+  /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */
+  historyUntil: z.string().max(100).optional(),
   /**
    * Paused because the plan's 5-hour limit reached its pause point. It starts again by itself when the limit resets
    * (`until`, when known), or when you start it.

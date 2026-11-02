@@ -262,3 +262,8 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 - Plan mode does not refuse edits: "File edits are never auto-approved in plan mode... They prompt through your canUseTool callback instead." And "While auto mode is available to the session, commands Claude runs during planning don't reach your callback by default... the classifier can also approve read-only calls that would otherwise reach your callback, such as a WebFetch call with no allow rule." Codehouse's floor hook therefore asks in Plan mode as in Manual, and canUseTool denies Write, Edit, MultiEdit and NotebookEdit in Plan mode (Phase 87).
 - With Claude Code 2.1.302 or later, a session starts in `default` unless a mode is set or comes from `permissions.defaultMode` in settings. Codehouse sets the mode on every session (invariant 3).
 - Plugin mods can approve some calls even in `dontAsk`; Codehouse never uses `dontAsk`, and the marketplace refuses plugins it cannot read first (a mods check follows the research backlog, B03).
+
+## Carrying a conversation on from one of its messages (2 Nov, sdk.d.ts 0.3.310)
+
+- `resumeSessionAt` with `resume` and `forkSession: true`: "only resume messages up to and including the message with this UUID". Used for Retry and Edit (Phase 91): the point is the last message of the conversation before the user's message being redone, taken from the uuid on the SDK's assistant and user messages (and on those read back from history). `resumeDropsTurn` (a check that only that turn is dropped) is not used.
+- Claude Code finds a conversation by its folder, so a forked chat keeps its chat folder.

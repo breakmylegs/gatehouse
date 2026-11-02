@@ -120,6 +120,13 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Accessibility:** each step says its state in words to a screen reader ("done", "in progress", "not started"); the bar is a progressbar with its numbers.
 - Tests: `apps/web/test/progress.test.tsx` (new). Three break checks fail as they should.
 
+## Phase 91: Retry and Edit on your messages (2 Nov, the everyday features of the Claude and ChatGPT apps)
+
+- **What it does:** every message of yours has **Retry** (send the same words again from just before it) and **Edit** (change them in place, then send). Either starts a fork of the conversation that carries on from the conversation's last message before yours, takes the old session's place in its pane, and closes the old one, which stays under Earlier sessions. Retry and Edit on the first message start a new conversation with the words. While Claude is working they wait (stop it first). Where a message cannot be forked (one read back without its id), Edit puts it in the prompt box as before.
+- **How:** the SDK's `resume` with `forkSession` and `resumeSessionAt` (recorded in docs/sdk-notes.md). The transcript keeps the id of the newest conversation message and records it on each of your messages. A forked chat keeps its folder, where Claude Code finds the conversation, and only a folder Codehouse made for chats. The fork's earlier conversation is shown up to the fork point only (`historyUntil`), ahead of your message.
+- **In a coding session** files changed after that point stay changed; a checkpoint restore puts them back.
+- Tests: `apps/host/test/redo.test.ts`, `apps/web/test/redo.test.tsx` (new), `restore.test.tsx` (a fork's earlier conversation stops at the point), `copy.test.tsx` (Edit opens in place). Six break checks fail as they should.
+
 ## Owner to-do list (running)
 
 Things that cannot be done from the laptop session. This list is repeated at the end of the report.

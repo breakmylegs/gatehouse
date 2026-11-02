@@ -157,3 +157,50 @@ describe("after a restart", () => {
     )
   })
 })
+
+describe("a fork from one of your messages (Retry, Edit)", () => {
+  it("shows the earlier conversation only up to the fork point, before your message", async () => {
+    const { useStore, startConnection } = await import("../src/store")
+    startConnection()
+    history = [
+      {
+        type: "user",
+        uuid: "u1",
+        message: { role: "user", content: "Plan the launch" },
+        parent_tool_use_id: null,
+      },
+      {
+        type: "assistant",
+        uuid: "a1",
+        message: { content: [{ type: "text", text: "Here is the plan." }] },
+        parent_tool_use_id: null,
+      },
+      {
+        type: "user",
+        uuid: "u2",
+        message: { role: "user", content: "Shorter, please" },
+        parent_tool_use_id: null,
+      },
+      {
+        type: "assistant",
+        uuid: "a2",
+        message: { content: [{ type: "text", text: "The reply being redone." }] },
+        parent_tool_use_id: null,
+      },
+    ]
+    const s = info({ historyFrom: "sdk-a", historyUntil: "a1" })
+    // The fork shows your message at once, before the earlier conversation is read.
+    useStore.getState().addUserText(s.id, "Much shorter")
+    useStore.getState().handleEvent({ type: "session", info: s })
+    release()
+    await vi.waitFor(() =>
+      expect(
+        useStore.getState().transcripts[s.id]?.items.map((i) => [i.kind, "text" in i && i.text]),
+      ).toEqual([
+        ["user", "Plan the launch"],
+        ["text", "Here is the plan."],
+        ["user", "Much shorter"],
+      ]),
+    )
+  })
+})

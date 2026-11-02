@@ -419,6 +419,7 @@ export class HostServer {
           ...(cmd.research ? { research: true } : {}),
           ...(cmd.account ? { account: cmd.account } : {}),
           ...(cmd.localModel ? { localModel: cmd.localModel } : {}),
+          ...(cmd.resumeAt ? { resumeAt: cmd.resumeAt } : {}),
         })
         return { sessionId: s.id, info: s.info() }
       }
