@@ -2415,3 +2415,26 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   color: var(--c-mut);
   font-size: 12px;
 }
+
+/* The read-only views of code (B11, CodeMirror 6): a file, and a changed file before and after. */
+.code-view,
+.diff-view {
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.code-view .cm-editor {
+  max-height: 75vh;
+}
+.diff-view .cm-mergeView,
+.diff-view > .cm-editor {
+  max-height: 60vh;
+}
+.diff-view .cm-changedLine,
+.diff-view .cm-insertedLine {
+  background-color: color-mix(in srgb, var(--c-ok) 14%, transparent);
+}
+.diff-view .cm-deletedLine,
+.diff-view .cm-deletedChunk {
+  background-color: color-mix(in srgb, var(--c-sev) 12%, transparent);
+}

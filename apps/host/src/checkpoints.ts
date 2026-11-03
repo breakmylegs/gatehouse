@@ -1,5 +1,6 @@
 import {
   changesSince,
+  fileVersions,
   createCheckpoint,
   listCheckpoints,
   restoreFiles,
@@ -98,6 +99,11 @@ export class CheckpointManager {
       since: from,
       ...(await changesSince(cwd, from.ref, this.#excludes())),
     }
+  }
+
+  /** One changed file before and after, for the side-by-side diff. Only a file the Changes pane lists. */
+  versions(cwd: string, ref: string, file: string) {
+    return fileVersions(cwd, ref, file, this.#excludes())
   }
 
   /** Puts some files back as they were at a checkpoint, after a safety checkpoint. Needs `confirm: true`. */

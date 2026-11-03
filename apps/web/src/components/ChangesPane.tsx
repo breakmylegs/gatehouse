@@ -2,6 +2,7 @@ import clsx from "clsx"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { clock } from "../lib/format"
+import { DiffView } from "./CodeViews"
 import { send, useStore } from "../store"
 
 interface Checkpoint {
@@ -101,6 +102,7 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
     )
 
   const files = data.files ?? []
+  const since = data.since
   return (
     <div className="grid content-start gap-3">
       <label className="grid gap-1 text-[13px]">
@@ -154,7 +156,13 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
                     Undo
                   </button>
                 </div>
-                {open[f.path] ? <DiffText text={f.diff} /> : null}
+                {open[f.path] ? (
+                  f.binary ? (
+                    <DiffText text={f.diff} />
+                  ) : (
+                    <FileDiff sessionId={sessionId} at={since.ref} file={f} />
+                  )
+                ) : null}
               </li>
             ))}
           </ul>
@@ -203,6 +211,36 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
           </div>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * A changed file before and after in the diff view (B11), read from the checkpoint and from disk. The plain diff stays
+ * when the two sides cannot be read (a very large file).
+ */
+function FileDiff({ sessionId, at, file }: { sessionId: string; at: string; file: FileChange }) {
+  const [sides, setSides] = useState<{ before?: string; after?: string }>()
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let gone = false
+    void send({ type: "change_versions", sessionId, ref: at, path: file.path }).then((r) => {
+      if (gone) return
+      if (r.ok && r.data) setSides(r.data as { before?: string; after?: string })
+      else setFailed(true)
+    })
+    return () => {
+      gone = true
+    }
+  }, [sessionId, at, file.path, file.diff])
+  if (failed) return <DiffText text={file.diff} />
+  if (!sides)
+    return (
+      <p className="m-0 border-t border-line px-2.5 py-2 text-[12.5px] text-mut">Reading it…</p>
+    )
+  return (
+    <div className="border-t border-line p-2">
+      <DiffView path={file.path} before={sides.before ?? ""} after={sides.after ?? ""} />
     </div>
   )
 }

@@ -121,6 +121,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** One changed file as it was at the checkpoint and as it is now, for the side-by-side diff (B11). Read only. */
+  z.object({
+    type: z.literal("change_versions"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500),
+    path: z.string().min(1).max(4096),
+  }),
   /** Puts these files back as they were at the checkpoint, after a safety checkpoint. */
   z.object({
     type: z.literal("undo_files"),

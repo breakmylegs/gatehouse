@@ -533,6 +533,10 @@ export class HostServer {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
       }
+      case "change_versions": {
+        const s = this.#session(cmd.sessionId)
+        return await a.checkpoints.versions(s.cwd, cmd.ref, cmd.path)
+      }
       case "undo_files": {
         const s = this.#session(cmd.sessionId)
         if (!cmd.confirm) throw new CommandError("not-confirmed", "Undoing needs your confirmation")

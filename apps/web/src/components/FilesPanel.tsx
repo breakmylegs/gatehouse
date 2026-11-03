@@ -1,5 +1,5 @@
-import clsx from "clsx"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { CodeView } from "./CodeViews"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
@@ -358,21 +358,7 @@ export function Viewer({
             <Markdown remarkPlugins={[remarkGfm]}>{read.text}</Markdown>
           </div>
         ) : (
-          <pre className="m-0 grid grid-cols-[auto_1fr] text-[13px] leading-[1.55]">
-            <code
-              aria-hidden="true"
-              className="mono select-none border-r border-line bg-s2 px-2 py-2 text-right text-mut"
-            >
-              {read.text.split("\n").map((_, i) => (
-                <span key={i} className="block">
-                  {i + 1}
-                </span>
-              ))}
-            </code>
-            <code className={clsx("mono overflow-x-auto px-3 py-2 whitespace-pre")}>
-              {read.text}
-            </code>
-          </pre>
+          <CodeView text={read.text} label={`${rel}, read only`} />
         )}
         {read?.kind === "text" && read.truncated ? (
           <p className="m-0 px-4 pb-3 text-xs text-mut">Only the first 1 MB is shown.</p>

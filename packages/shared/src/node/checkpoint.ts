@@ -447,3 +447,45 @@ export async function restoreFiles(opts: {
   }
   return { restored: toWrite, deleted, safety }
 }
+
+/** The largest text either side of a file's diff may be: the diff view opens files up to this size. */
+export const MAX_VERSION_BYTES = 5 * 1024 * 1024
+
+/**
+ * One changed file's text as it was at a checkpoint and as it is now, for the side-by-side diff (B11). Only a file
+ * the Changes pane lists (so never an ignored or excluded file such as a secret), only text, and only up to
+ * MAX_VERSION_BYTES on each side. Nothing is changed.
+ */
+export async function fileVersions(
+  cwd: string,
+  ref: string,
+  file: string,
+  excludeGlobs?: readonly string[],
+): Promise<{ path: string; change: FileChange; before?: string; after?: string }> {
+  const { commit, files } = await changesSince(cwd, ref, excludeGlobs)
+  const f = files.find((x) => x.path === file)
+  if (!f)
+    throw new CheckpointError("That file is not one this session changed since the checkpoint.")
+  if (f.binary) throw new CheckpointError("That file is not text, so there is nothing to compare.")
+  const top = await repoTop(cwd)
+  let before: string | undefined
+  if (f.change !== "added") {
+    const size = Number(await git(top, ["cat-file", "-s", `${commit}:${f.path}`]))
+    if (!(size <= MAX_VERSION_BYTES))
+      throw new CheckpointError("That file is too large to compare here.")
+    before = await gitRaw(top, ["cat-file", "blob", `${commit}:${f.path}`])
+  }
+  let after: string | undefined
+  if (f.change !== "deleted") {
+    const full = path.join(top, ...f.path.split("/"))
+    if (fs.statSync(full).size > MAX_VERSION_BYTES)
+      throw new CheckpointError("That file is too large to compare here.")
+    after = fs.readFileSync(full, "utf8")
+  }
+  return {
+    path: f.path,
+    change: f.change,
+    ...(before !== undefined ? { before } : {}),
+    ...(after !== undefined ? { after } : {}),
+  }
+}

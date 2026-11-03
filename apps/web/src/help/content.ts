@@ -192,11 +192,11 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **Files**
 
-Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
+Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, read only, with Ctrl+F to search it, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
 
 **Changes**
 
-What the session changed, file by file, since its first checkpoint (or one you choose), with each diff. **Undo** puts one file back as it was then, and **Undo all of these** puts them all back; Codehouse saves a checkpoint first, so you can go back to how things were before the undo.
+What the session changed, file by file, since its first checkpoint (or one you choose). Choose a file to see it as it was and as it is now, **Side by side** or **Inline** (Codehouse remembers which), with unchanged stretches folded away; it is read only, and Ctrl+F searches it. A file that is not text, or over 5 MB, shows its plain diff instead. **Undo** puts one file back as it was then, and **Undo all of these** puts them all back; Codehouse saves a checkpoint first, so you can go back to how things were before the undo.
 
 **Terminal**
 

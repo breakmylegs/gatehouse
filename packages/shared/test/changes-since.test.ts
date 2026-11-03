@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
   changesSince,
   createCheckpoint,
+  fileVersions,
+  MAX_VERSION_BYTES,
   listCheckpoints,
   restoreFiles,
 } from "../src/node/checkpoint.js"
@@ -52,6 +54,48 @@ describe("what changed since a checkpoint", () => {
     expect(a?.diff).toContain("-two")
     expect(a?.diff).toContain("+TWO")
     expect(JSON.stringify(r)).not.toContain("SECRET")
+  })
+})
+
+describe("a changed file before and after, for the diff view (B11)", () => {
+  it("gives the text at the checkpoint and now, and only one side for a file made or removed", async () => {
+    expect(await fileVersions(repo, ref, "a.txt", SECRETS)).toEqual({
+      path: "a.txt",
+      change: "modified",
+      before: "one\ntwo\n",
+      after: "one\nTWO\n",
+    })
+    expect(await fileVersions(repo, ref, "c.txt", SECRETS)).toEqual({
+      path: "c.txt",
+      change: "added",
+      after: "new\n",
+    })
+    expect(await fileVersions(repo, ref, "b.txt", SECRETS)).toEqual({
+      path: "b.txt",
+      change: "deleted",
+      before: "keep me\n",
+    })
+  })
+
+  it("never gives a secret, a file the session did not change, or a path outside the list", async () => {
+    await expect(fileVersions(repo, ref, ".env", SECRETS)).rejects.toThrow(
+      /not one this session changed/,
+    )
+    await expect(fileVersions(repo, ref, "../outside.txt", SECRETS)).rejects.toThrow(
+      /not one this session changed/,
+    )
+    await expect(fileVersions(repo, ref, "nope.txt", SECRETS)).rejects.toThrow(
+      /not one this session changed/,
+    )
+  })
+
+  it("refuses a file too large to compare", async () => {
+    write("big.txt", "x".repeat(MAX_VERSION_BYTES + 1))
+    try {
+      await expect(fileVersions(repo, ref, "big.txt", SECRETS)).rejects.toThrow(/too large/)
+    } finally {
+      fs.rmSync(path.join(repo, "big.txt"))
+    }
   })
 })
 
