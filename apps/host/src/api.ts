@@ -1313,6 +1313,7 @@ const LIVE_SETTINGS = [
   "extremeCarryOn",
   "planLimitPause",
   "effortCap",
+  "maxSessions",
   "globalInstructions",
   "providers",
 ] as const

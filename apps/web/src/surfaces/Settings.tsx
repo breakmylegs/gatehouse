@@ -47,6 +47,7 @@ interface Config {
   extremeCarryOn?: { turns: number; usd: number; noTurnLimit?: boolean; noSpendLimit?: boolean }
   planLimitPause?: { percent: number; off?: boolean }
   effortCap?: string
+  maxSessions?: number
   globalInstructions?: string
 }
 
@@ -97,6 +98,7 @@ interface Values {
   ecTurns: string
   plPause: string
   effortCap: string
+  maxSessions: string
   ecUsd: string
   /** What every session is told at its start. */
   instr: string
@@ -124,6 +126,7 @@ function valuesOf(d: SettingsData): Values {
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     effortCap: c.effortCap ?? "",
+    maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     instr: c.globalInstructions ?? "",
   }
@@ -161,6 +164,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   }
   if (v.effortCap) body.effortCap = v.effortCap
   else delete body.effortCap
+  if (v.maxSessions) body.maxSessions = Number(v.maxSessions)
+  else delete body.maxSessions
   // Absent is 95%, so the default is not written; a percentage is kept beside off for an older reader.
   const { off: _o, ...pauseKeep } = d.saved.planLimitPause ?? { percent: 95 }
   if (v.plPause === "95" && !d.saved.planLimitPause) delete body.planLimitPause
@@ -194,6 +199,7 @@ export const DEFAULT_VALUES: Values = {
   ecTurns: "200",
   plPause: "95",
   effortCap: "",
+  maxSessions: "",
   ecUsd: "500",
   instr: "",
 }
@@ -415,6 +421,7 @@ export function Settings() {
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause"])
   const effortChanged = differs(v, ["effortCap"])
+  const limitChanged = differs(v, ["maxSessions"])
   const instrChanged = differs(v, ["instr"])
   const privacyChanged = differs(v, ["terms"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
@@ -677,6 +684,26 @@ export function Settings() {
                   </select>
                 </Field>
               </div>
+            </Group>
+
+            <Group section="sessions" title="How many at once" gap="gap-2" changed={limitChanged}>
+              <Field
+                label="Most sessions and chats open at once"
+                help="Each one runs its own Claude Code, which uses processor and memory however its own level is set. At the limit a new one is refused until you close one; those already open are not touched, and ones coming back after a restart still come back."
+              >
+                <select
+                  className="field"
+                  value={v.maxSessions}
+                  onChange={(e) => change({ maxSessions: e.target.value }, "How many at once")}
+                >
+                  <option value="">No limit</option>
+                  {["2", "4", "6", "8", "12", "16"].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </Group>
 
             <Group section="sessions" title="Effort" gap="gap-2" changed={effortChanged}>

@@ -69,6 +69,15 @@ export class OrgGuardError extends Error {
 /** The folder for a new session cannot be used or made. */
 export class SessionFolderError extends Error {}
 
+/** B09: as many sessions are open as Settings allows; another waits until one is closed. */
+export class SessionLimitError extends Error {
+  constructor(readonly limit: number) {
+    super(
+      `${limit} session${limit === 1 ? " is" : "s are"} open, the most Settings allows at once. Close one, or raise the limit in Settings, Sessions.`,
+    )
+  }
+}
+
 /** A chat stays in Plan mode: it can read and search, never change files or run commands. */
 export class ChatModeError extends Error {
   constructor() {
@@ -1472,6 +1481,12 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       }
     }
     const config = this.#deps.config()
+    // B09: the most open at once, over every account and both kinds. A session coming back after a restart is not
+    // counted against it: it was open before.
+    if (config.maxSessions !== undefined && !opts.restore) {
+      const open = [...this.#sessions.values()].filter((s) => s.live && this.#warm?.session !== s)
+      if (open.length >= config.maxSessions) throw new SessionLimitError(config.maxSessions)
+    }
     // Checked again inside Session.start with the live account. This early check gives a clear message
     // when there is nothing to compare against.
     // Each account has the organisation confirmed for it; an account Codehouse does not know never starts.

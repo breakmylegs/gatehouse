@@ -190,6 +190,8 @@ function build(loose: boolean) {
      * The most effort a session may use (B18): low, medium, high, xhigh or max. Absent: no cap. Older versions keep it
      * without using it.
      */
+    /** B09: the most sessions and chats open at once, 1 to 32. Absent: no limit. Older versions keep it unused. */
+    maxSessions: z.number().int().min(1).max(32).optional(),
     effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
     planLimitPause: obj({
       percent: z.number().int().min(50).max(99),

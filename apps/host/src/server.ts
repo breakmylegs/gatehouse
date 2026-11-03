@@ -38,6 +38,7 @@ import {
   ChatModeError,
   OrgGuardError,
   SessionFolderError,
+  SessionLimitError,
   type SessionManager,
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
@@ -728,6 +729,7 @@ function classify(e: unknown): CommandError {
   if (e instanceof OrgGuardError) return new CommandError(`org-guard.${e.code}`, e.message)
   if (e instanceof KillSwitchEngagedError) return new CommandError("kill-switch", e.message)
   if (e instanceof SessionFolderError) return new CommandError("folder-missing", e.message)
+  if (e instanceof SessionLimitError) return new CommandError("session-limit", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)
   return new CommandError("failed", (e as Error).message ?? "The command failed")
