@@ -19,6 +19,8 @@ import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
 import { RenameDialog } from "./RenameDialog"
+import { HandOffDialog } from "./HandOffDialog"
+import { canFork, forkSession, handOff } from "../lib/fork"
 import {
   archiveEnded,
   archiveSession,
@@ -104,6 +106,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
   const [renaming, setRenaming] = useState<SessionInfo>()
+  const [handingOff, setHandingOff] = useState<SessionInfo>()
   const mode = useRailMode()
   // The switch follows what you open: a chat shows the Chat side, a coding session the Code side.
   const selectedKind = sessions.find((s) => s.id === selected)?.kind
@@ -427,6 +430,20 @@ export function Rail({ onHide }: { onHide: () => void }) {
                                 setRoute("workspace")
                               },
                             },
+                            // B13: a copy that carries on separately, or a side task for a new session.
+                            {
+                              label: "Fork",
+                              disabled: !canFork(s),
+                              onSelect: () => void forkSession(s.id),
+                            },
+                            ...(s.kind === "chat" || s.local
+                              ? []
+                              : [
+                                  {
+                                    label: "Hand off a side task...",
+                                    onSelect: () => setHandingOff(s),
+                                  },
+                                ]),
                             { kind: "separator" },
                             { label: "Rename...", onSelect: () => setRenaming(s) },
                             {
@@ -491,6 +508,18 @@ export function Rail({ onHide }: { onHide: () => void }) {
       </div>
 
       <RailFoot />
+      {handingOff ? (
+        <HandOffDialog
+          from={titleOf(handingOff)}
+          worktreeFirst={handingOff.worktree !== undefined}
+          onClose={() => setHandingOff(undefined)}
+          onStart={(task, worktree) => {
+            const from = handingOff
+            setHandingOff(undefined)
+            void handOff(from.id, task, { worktree })
+          }}
+        />
+      ) : null}
       {renaming ? (
         <RenameDialog
           current={renaming.title}
