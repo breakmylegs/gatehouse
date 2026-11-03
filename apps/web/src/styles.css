@@ -2212,6 +2212,49 @@ li[data-resuming] {
  * Windows high contrast. The system colours replace the palette, so every surface, line and word is one the person
  * chose in Windows. Focus and the current item keep an outline, since a fill is not drawn.
  */
+/* Home: the start screen the owner chose, as large as the window allows, its drawn buttons made real. */
+.home-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: 16px;
+  background: #07070f;
+}
+.home-art {
+  position: relative;
+  width: min(100%, calc((100vh - 120px) * 1672 / 941));
+  aspect-ratio: 1672 / 941;
+}
+.home-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+}
+.home-spot {
+  position: absolute;
+  top: 72.3%;
+  width: 13.9%;
+  height: 8.9%;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.home-spot:hover {
+  box-shadow: 0 0 22px 4px rgb(79 240 224 / 0.45);
+}
+.home-spot:focus-visible {
+  outline: 3px solid #4ff0e0;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-spot {
+    transition: none;
+  }
+}
+
 @media (forced-colors: active) {
   :root,
   :root[data-theme="dark"] {
@@ -2635,45 +2678,3 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
 }
 
-/* Home: the start screen the owner chose, as large as the window allows, its drawn buttons made real. */
-.home-screen {
-  display: grid;
-  place-items: center;
-  min-height: 100%;
-  padding: 16px;
-  background: #07070f;
-}
-.home-art {
-  position: relative;
-  width: min(100%, calc((100vh - 120px) * 1672 / 941));
-  aspect-ratio: 1672 / 941;
-}
-.home-art img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: 10px;
-}
-.home-spot {
-  position: absolute;
-  top: 72.3%;
-  width: 13.9%;
-  height: 8.9%;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  cursor: pointer;
-  transition: box-shadow 0.15s;
-}
-.home-spot:hover {
-  box-shadow: 0 0 22px 4px rgb(79 240 224 / 0.45);
-}
-.home-spot:focus-visible {
-  outline: 3px solid #4ff0e0;
-  outline-offset: 3px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-spot {
-    transition: none;
-  }
-}

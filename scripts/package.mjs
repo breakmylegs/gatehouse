@@ -163,8 +163,9 @@ if (!exeOnly) {
     .filter((e) => e.isSymbolicLink())
     .map((e) => ({
       link: path.relative(app, path.join(scope, e.name)).split(path.sep).join("/"),
+      // Where the link points, read from the link itself: following it is refused under Windows' redirection guard.
       target: path
-        .relative(app, fs.realpathSync(path.join(scope, e.name)))
+        .relative(app, path.resolve(scope, fs.readlinkSync(path.join(scope, e.name))))
         .split(path.sep)
         .join("/"),
     }))

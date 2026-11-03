@@ -10,6 +10,9 @@ import { ApproverProcess, freePort, generateToken } from "../src/approver-proces
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const MAIN = path.resolve(here, "../../approver/src/main.ts")
+// Started outside the repository, tsx is told where tsconfig.json is, so it finds the workspace packages
+// in their folders (scripts/workspace-aliases.mjs).
+const TSX_TSCONFIG = path.resolve(import.meta.dirname, "../../../tsconfig.json")
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href
 const REPO = path.resolve(here, "../../..")
 
@@ -136,6 +139,7 @@ describe("the real Approver, killed and restarted", () => {
       args: ["--import", TSX, MAIN],
       cwd: tmp,
       env: {
+        TSX_TSCONFIG_PATH: TSX_TSCONFIG,
         GATEHOUSE_AUDIT_DIR: auditDir,
         GATEHOUSE_DATA_DIR: dataDir,
         GATEHOUSE_RULES_PATH: path.join(REPO, "policy", "rules.yaml"),

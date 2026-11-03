@@ -11,6 +11,21 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@gatehouse/companion": ["./apps/companion/src/index.ts"],
+      "@gatehouse/policy": ["./packages/policy/src/index.ts"],
+      "@gatehouse/shared": ["./packages/shared/src/index.ts"],
+      "@gatehouse/shared/audit": ["./packages/shared/src/audit/index.ts"],
+      "@gatehouse/shared/canonical-json": ["./packages/shared/src/canonical-json.ts"],
+      "@gatehouse/shared/contracts": ["./packages/shared/src/contracts.ts"],
+      "@gatehouse/shared/e2e": ["./packages/shared/src/e2e.ts"],
+      "@gatehouse/shared/highlight": ["./packages/shared/src/highlight.ts"],
+      "@gatehouse/shared/node": ["./packages/shared/src/node/index.ts"],
+      "@gatehouse/shared/phone-protocol": ["./packages/shared/src/phone-protocol.ts"],
+      "@gatehouse/shared/project-name": ["./packages/shared/src/project-name.ts"],
+      "@gatehouse/shared/relay-protocol": ["./packages/shared/src/relay-protocol.ts"],
+      "@gatehouse/shared/ws-protocol": ["./packages/shared/src/ws-protocol.ts"]
+    }
   }
 }

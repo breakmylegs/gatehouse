@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   createCheckpoint,
   hunksOf,
@@ -11,6 +11,10 @@ import {
   revertHunk,
   textHash,
 } from "../src/node/checkpoint.js"
+
+// Every step here starts hidden git processes. Where each hidden start is slow (3 Nov: 1.5 to 3 s on the owner's
+// laptop, against 0.2 s for a visible one), the usual minute is not enough.
+vi.setConfig({ testTimeout: 300_000, hookTimeout: 300_000 })
 
 let repo: string
 let ref: string

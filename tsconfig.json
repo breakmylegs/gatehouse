@@ -1,0 +1,5 @@
+{
+  "//": "For tsx, which reads tsconfig.json where it starts: the paths that find the workspace packages in their folders. Each workspace has its own tsconfig.json for tsc.",
+  "extends": "./tsconfig.base.json",
+  "files": []
+}

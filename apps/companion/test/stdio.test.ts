@@ -13,6 +13,9 @@ import { SEED_RULES } from "../../../packages/policy/test/helpers.js"
 const here = path.dirname(fileURLToPath(import.meta.url))
 const MAIN = path.resolve(here, "../src/main.ts")
 // The child runs in a temp project folder, so the TypeScript loader must be given by absolute URL.
+// Started outside the repository, tsx is told where tsconfig.json is, so it finds the workspace packages
+// in their folders (scripts/workspace-aliases.mjs).
+const TSX_TSCONFIG = path.resolve(import.meta.dirname, "../../../tsconfig.json")
 const TSX = pathToFileURL(createRequire(import.meta.url).resolve("tsx")).href
 
 let root: string
@@ -64,6 +67,7 @@ beforeAll(async () => {
       cwd: repo,
       env: {
         ...(process.env as Record<string, string>),
+        TSX_TSCONFIG_PATH: TSX_TSCONFIG,
         GATEHOUSE_SESSION_ID: "stdio-sess",
         GATEHOUSE_DATA_DIR: dataDir,
         GATEHOUSE_RULES_PATH: rules,
@@ -136,6 +140,7 @@ describe("the Companion over stdio", () => {
         cwd: repo,
         env: {
           ...(process.env as Record<string, string>),
+          TSX_TSCONFIG_PATH: TSX_TSCONFIG,
           GATEHOUSE_SESSION_ID: "s2",
           GATEHOUSE_HOST_URL: "http://127.0.0.1:9",
           GATEHOUSE_DATA_DIR: path.join(root, "data"),

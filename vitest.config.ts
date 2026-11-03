@@ -1,6 +1,9 @@
 import { defineConfig } from "vitest/config"
+import { workspaceAliases } from "./scripts/workspace-aliases.mjs"
 
 export default defineConfig({
+  // The workspace packages from their folders, not through the node_modules links (scripts/workspace-aliases.mjs).
+  resolve: { alias: workspaceAliases() },
   test: {
     include: ["apps/*/test/**/*.test.{ts,tsx}", "packages/*/test/**/*.test.ts"],
     // Many tests spawn git, pwsh or node. On a machine with real-time scanning they are slow, and
