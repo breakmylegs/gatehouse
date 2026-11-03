@@ -33,12 +33,66 @@ export function registerProviderRoutes(
     const local = p?.local as LocalRuntimeConfig | undefined
     return {
       enabled,
+      ...(p?.boundaries ? { boundaries: p.boundaries } : {}),
       ...(local ? { local, label: runtimeLabel(local) } : {}),
       ...(enabled && local ? { check: await checkRuntime(local, ctx.fetchFn) } : {}),
     }
   }
 
   app.get("/api/providers", async () => await view())
+
+  // B17: what a provider does with your words, as you recorded it. Recorded first, then saved by adding.
+  app.put("/api/providers/boundary", async (req, reply) => {
+    const file = ctx.configFile
+    if (!file) return reply.code(404).send({ error: "Settings cannot be saved here." })
+    const b = (req.body ?? {}) as { provider?: unknown; boundary?: unknown }
+    if (b.provider !== "claude" && b.provider !== "local")
+      return reply.code(422).send({ error: "Say which provider: claude or local." })
+    const candidate = GatehouseConfig.shape.providers.safeParse({
+      boundaries: { [b.provider]: b.boundary ?? {} },
+    })
+    if (!candidate.success)
+      return reply.code(422).send({
+        error: "Those details are not valid.",
+        errors: candidate.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+      })
+    const boundary = candidate.data?.boundaries?.[b.provider] ?? {}
+    const recorded = await ctx.audit.record({
+      session: "desktop",
+      event: "provider_boundary_changed",
+      channel: "desktop",
+      tool: "settings",
+      cwd: "",
+      input: { provider: b.provider, ...boundary },
+      verdict: {
+        outcome: "allow",
+        ruleId: "provider-boundary-changed",
+        reason: "What a provider does with your words was recorded from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded)
+      return reply.code(503).send({ error: "It could not be recorded, so it was not saved." })
+    let onDisk: Record<string, unknown> = {}
+    try {
+      onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+    } catch {
+      // no settings file yet
+    }
+    const providers = (onDisk.providers as Record<string, unknown> | undefined) ?? {}
+    const boundaries = (providers.boundaries as Record<string, unknown> | undefined) ?? {}
+    const merged = {
+      ...onDisk,
+      providers: { ...providers, boundaries: { ...boundaries, [b.provider]: boundary } },
+    }
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(merged, null, 2) + "\n")
+    ;(ctx.config() as { providers?: Providers }).providers = merged.providers as Providers
+    return await view()
+  })
 
   app.put("/api/providers", async (req, reply) => {
     const file = ctx.configFile

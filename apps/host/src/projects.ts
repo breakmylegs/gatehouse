@@ -25,15 +25,23 @@ export interface KnowledgeFile {
   name: string
   size: number
 }
+/** The providers a chat may use (B17): Claude, and a model runtime on this computer (or its gateway). */
+export const PROVIDER_IDS = ["claude", "local"] as const
+export type ProviderId = (typeof PROVIDER_IDS)[number]
+
 export interface ProjectInfo {
   name: string
   instructions: string
   files: KnowledgeFile[]
+  /** The providers this project's chats may use; every provider when absent. */
+  providers?: ProviderId[]
 }
 export interface ProjectSummary {
   name: string
   hasInstructions: boolean
   files: number
+  /** The providers its chats may use; every provider when absent. */
+  providers?: ProviderId[]
 }
 
 /** A name that is one plain folder or file name: letters, numbers, spaces, dots, dashes and underscores. */
@@ -87,11 +95,15 @@ export class ProjectStore {
     }
     return entries
       .filter((e) => e.isDirectory() && NAME.test(e.name) && !RESERVED.test(e.name))
-      .map((e) => ({
-        name: e.name,
-        hasInstructions: this.#readInstructions(path.join(this.#dir, e.name)).length > 0,
-        files: this.#files(path.join(this.#dir, e.name)).length,
-      }))
+      .map((e) => {
+        const providers = this.providers(e.name)
+        return {
+          name: e.name,
+          hasInstructions: this.#readInstructions(path.join(this.#dir, e.name)).length > 0,
+          files: this.#files(path.join(this.#dir, e.name)).length,
+          ...(providers ? { providers } : {}),
+        }
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
   }
 
@@ -118,13 +130,45 @@ export class ProjectStore {
     }
   }
 
+  /** project.json in a project folder, read tolerantly: what a newer version wrote there is kept on save. */
+  #meta(folder: string): Record<string, unknown> {
+    try {
+      const v = JSON.parse(fs.readFileSync(path.join(folder, "project.json"), "utf8")) as unknown
+      return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+    } catch {
+      return {}
+    }
+  }
+
+  /** The providers a project allows, or undefined when it allows every one. */
+  providers(name: string): ProviderId[] | undefined {
+    const folder = this.#folder(name)
+    const p = this.#meta(folder).providers
+    if (!Array.isArray(p)) return undefined
+    return PROVIDER_IDS.filter((id) => p.includes(id))
+  }
+
+  /** Sets the providers a project allows: at least one, or every one again with undefined. */
+  async setProviders(name: string, list: ProviderId[] | undefined): Promise<void> {
+    const folder = this.#folder(name)
+    if (!fs.existsSync(folder)) throw new ProjectError("missing", "There is no such project.")
+    if (list && !list.length)
+      throw new ProjectError("invalid", "A project needs at least one provider its chats may use.")
+    const meta = this.#meta(folder)
+    if (list) meta.providers = PROVIDER_IDS.filter((id) => list.includes(id))
+    else delete meta.providers
+    await writeFileAtomic(path.join(folder, "project.json"), JSON.stringify(meta, null, 2) + "\n")
+  }
+
   get(name: string): ProjectInfo | undefined {
     const folder = this.#folder(name)
     if (!fs.existsSync(folder)) return undefined
+    const providers = this.providers(name)
     return {
       name: path.basename(folder),
       instructions: this.#readInstructions(folder),
       files: this.#files(folder),
+      ...(providers ? { providers } : {}),
     }
   }
 

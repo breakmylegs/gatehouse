@@ -18,6 +18,8 @@ export function NewChat() {
   const [error, setError] = useState<string>()
   // The project it starts in, if any, and the instructions for this chat alone (owner's plan, W1-07).
   const [projects, setProjects] = useState<string[]>([])
+  // B17: what each project lets its chats use; a project not in here allows every provider.
+  const [allows, setAllows] = useState<Record<string, Array<"claude" | "local">>>({})
   const [project, setProject] = useState(() => {
     const chosen = useStore.getState().newChatProject ?? ""
     useStore.setState({ newChatProject: undefined })
@@ -27,8 +29,16 @@ export function NewChat() {
   // W1-10: plan, search, read and cite (ADR 0007).
   const [research, setResearch] = useState(false)
   useEffect(() => {
-    void api<{ projects: Array<{ name: string }> }>("GET", "/api/projects").then((r) => {
-      if (r.ok) setProjects((r.data?.projects ?? []).map((p) => p.name))
+    void api<{ projects: Array<{ name: string; providers?: Array<"claude" | "local"> }> }>(
+      "GET",
+      "/api/projects",
+    ).then((r) => {
+      if (!r.ok) return
+      const list = r.data?.projects ?? []
+      setProjects(list.map((p) => p.name))
+      setAllows(
+        Object.fromEntries(list.flatMap((p) => (p.providers ? [[p.name, p.providers]] : []))),
+      )
     })
   }, [])
   // Models on this computer, when other providers are on and the runtime passes its checks (ADR 0011).
@@ -45,6 +55,17 @@ export function NewChat() {
       }
     })
   }, [])
+  const allowed = project ? allows[project] : undefined
+  const offerClaude = !allowed || allowed.includes("claude")
+  const offerLocal = !allowed || allowed.includes("local")
+  const shownLocal = offerLocal ? localModels : []
+  // A model the project does not allow is not kept: the first it does allow is chosen instead.
+  useEffect(() => {
+    const isLocal = model.startsWith("local:")
+    if (isLocal && !offerLocal) setModel("")
+    else if (!isLocal && !offerClaude && shownLocal[0]) setModel(`local:${shownLocal[0]}`)
+  }, [model, offerClaude, offerLocal, shownLocal])
+  const nothingAllowed = !offerClaude && shownLocal.length === 0
   const localModel = model.startsWith("local:") ? model.slice(6) : undefined
   // A chat ready for the first message while this page is open (the warm chat); the Host puts it away after a while.
   useEffect(() => keepChatWarm(), [])
@@ -162,14 +183,16 @@ export function NewChat() {
           <label className="grid w-[200px] grid-cols-[minmax(0,1fr)] gap-1">
             <span>Model</span>
             <select className="field" value={model} onChange={(e) => setModel(e.target.value)}>
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
-              {localModels.length ? (
+              {offerClaude
+                ? MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))
+                : null}
+              {shownLocal.length ? (
                 <optgroup label={localLabel}>
-                  {localModels.map((m) => (
+                  {shownLocal.map((m) => (
                     <option key={m} value={`local:${m}`}>
                       {m}
                     </option>
@@ -178,11 +201,17 @@ export function NewChat() {
               ) : null}
             </select>
           </label>
-          <button className="btn btn-primary" disabled={busy || !text.trim()}>
+          <button className="btn btn-primary" disabled={busy || !text.trim() || nothingAllowed}>
             {busy ? "Starting…" : "Start the chat"}
           </button>
           <span className="text-[13px] text-mut">Ctrl+Enter starts it too.</span>
         </div>
+        {nothingAllowed ? (
+          <p role="alert" className="m-0 text-warn">
+            The project {project} allows only models on this computer, and none is ready. Check
+            Settings, Other AI providers, or choose another project.
+          </p>
+        ) : null}
         {busy ? <StartProgress since={startedAt} chat /> : null}
         {error ? (
           <p role="alert" className="m-0 font-semibold text-sev">

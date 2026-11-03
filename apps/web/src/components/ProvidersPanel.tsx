@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { BoundaryCards, type Boundary, type BoundaryProvider } from "./BoundaryCards"
 
 interface LocalRuntime {
   kind: "ollama" | "openai-compatible" | "gateway"
@@ -16,7 +17,15 @@ interface ProvidersView {
   enabled: boolean
   local?: LocalRuntime
   check?: Check
+  boundaries?: Partial<Record<BoundaryProvider, Boundary>>
 }
+
+/** The providers block as the settings file holds it, for the settings page's next save. */
+const blockOf = (v: ProvidersView) => ({
+  multi: { enabled: v.enabled },
+  ...(v.local ? { local: v.local } : {}),
+  ...(v.boundaries ? { boundaries: v.boundaries } : {}),
+})
 
 /** "name" or "name sha256:digest", one a line. */
 function parseModels(text: string): LocalRuntime["models"] {
@@ -83,10 +92,7 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
       return
     }
     show(r.data)
-    onSaved?.({
-      multi: { enabled: r.data.enabled },
-      ...(r.data.local ? { local: r.data.local } : {}),
-    })
+    onSaved?.(blockOf(r.data))
     toast("Other AI providers saved", { id: "settings" })
   }
 
@@ -187,6 +193,15 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
               }`
             : `Not ready: ${check.reason}`}
         </p>
+      ) : null}
+      {view ? (
+        <BoundaryCards
+          boundaries={view.boundaries}
+          onSaved={(v) => {
+            show(v as ProvidersView)
+            onSaved?.(blockOf(v as ProvidersView))
+          }}
+        />
       ) : null}
     </>
   )

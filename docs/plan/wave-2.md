@@ -44,7 +44,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 
 | Id | Item | Status | Notes and acceptance |
 |---|---|---|---|
-| B17 | Data-boundary card per provider, providers allowed per project | partial | A gateway records what its provider keeps (Phase 86); add the card (retention, training use, region, ZDR, date checked) and a per-project allow list |
+| B17 | Data-boundary card per provider, providers allowed per project | done (Phase 97b, 3 Nov) | A gateway records what its provider keeps (Phase 86); add the card (retention, training use, region, ZDR, date checked) and a per-project allow list |
 | B18 | Normalise and cap effort across providers | todo | Low to Max mapped to each provider's parameter; policy can cap it |
 | B19 | Local model profiles for corporate laptops | todo | Detect RAM and GPU, suggest a profile, show the licence before use, refuse models not on the IT allow list |
 | B20 | Unified cost and limits meter | partial | Claude plan meter exists; add caps per provider and in total that pause and ask |

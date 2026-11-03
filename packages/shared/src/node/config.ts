@@ -19,6 +19,21 @@ const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 function build(loose: boolean) {
   const obj = <T extends z.ZodRawShape>(shape: T) =>
     loose ? z.object(shape).loose() : z.object(shape).strict()
+  /** What one provider does with your words, as you recorded it (B17). */
+  const Boundary = obj({
+    /** How long it keeps what is sent, in your words ("nothing", "30 days"). */
+    keeps: z.string().max(80).optional(),
+    training: z.enum(["no", "yes", "unknown"]).optional(),
+    region: z.string().max(80).optional(),
+    /** Zero data retention: an agreement that nothing is kept. */
+    zdr: z.enum(["yes", "no", "unknown"]).optional(),
+    /** When you checked, and where (a page or a person). */
+    checkedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
+    source: z.string().max(200).optional(),
+  })
   const Checkpoints = obj({
     /** Take a checkpoint before any call that is escalated to a person. */
     beforeEscalation: z.boolean().default(true),
@@ -135,6 +150,14 @@ function build(loose: boolean) {
             }),
           )
           .max(20),
+      }).optional(),
+      /**
+       * Where your words go, for each provider (B17): what it keeps, whether it trains on them, where, whether it has
+       * zero data retention, and when and where you checked. Codehouse cannot see these itself; you record them.
+       */
+      boundaries: obj({
+        claude: Boundary.optional(),
+        local: Boundary.optional(),
       }).optional(),
     }).optional(),
     /** How long a request stays deliverable to the phone. */

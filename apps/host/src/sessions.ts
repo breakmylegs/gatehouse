@@ -1557,6 +1557,13 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       if (opts.kind !== "chat") throw new SessionFolderError("Only a chat can belong to a project.")
       if (!this.#deps.projects?.get(opts.chatProject))
         throw new SessionFolderError("There is no project with that name.")
+      // B17: a project can allow only some providers; a chat in it uses one of them or does not start.
+      const allowed = this.#deps.projects.providers(opts.chatProject)
+      const using = opts.localModel !== undefined ? "local" : "claude"
+      if (allowed && !allowed.includes(using))
+        throw new SessionFolderError(
+          `The project ${opts.chatProject} allows only ${allowed.map((p) => (p === "claude" ? "Claude" : "models on this computer")).join(" and ")}, so this chat cannot use ${using === "claude" ? "Claude" : "a model on this computer"}.`,
+        )
     }
     ensureFolder(opts.cwd, this.#deps.log)
     if (opts.freshFolder) await gitInit(opts.cwd, this.#deps.log)

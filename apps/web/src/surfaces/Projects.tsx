@@ -13,7 +13,14 @@ interface Project {
   name: string
   instructions: string
   files: Array<{ name: string; size: number }>
+  /** The providers its chats may use (B17); every provider when absent. */
+  providers?: Array<"claude" | "local">
 }
+
+const PROVIDERS = [
+  { id: "claude", label: "Claude" },
+  { id: "local", label: "Models on this computer, or your organisation's gateway" },
+] as const
 
 const MAX_INSTRUCTIONS = 8000
 
@@ -75,6 +82,18 @@ export function Projects() {
     await show(made)
   }
 
+  /** The providers this project's chats may use; all of them is saved as none named, so a new one is allowed too. */
+  async function saveProviders(list: Array<"claude" | "local">) {
+    if (!open || !project || list.length === 0) return
+    const every = PROVIDERS.every((p) => list.includes(p.id))
+    const r = await api("PUT", `/api/projects/${encodeURIComponent(open)}/providers`, {
+      providers: every ? null : list,
+    })
+    if (!r.ok) return toast.error(r.error ?? "That was not saved", { id: "project" })
+    const { providers: _old, ...rest } = project
+    setProject(every ? rest : { ...rest, providers: list })
+    toast(every ? "Its chats may use any provider." : "Saved.", { id: "project" })
+  }
   async function saveInstructions() {
     if (!open || !project || text === project.instructions) return
     const r = await api("PUT", `/api/projects/${encodeURIComponent(open)}/instructions`, { text })
@@ -192,6 +211,34 @@ export function Projects() {
                 far.
               </span>
             </label>
+            <fieldset className="m-0 grid gap-1 border-0 p-0">
+              <legend className="mb-1 p-0 font-semibold">Who this project's chats may use</legend>
+              {PROVIDERS.map((p) => {
+                const allowed = project.providers ?? PROVIDERS.map((x) => x.id)
+                const on = allowed.includes(p.id)
+                return (
+                  <label key={p.id} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      // At least one stays: a project with no provider could have no chats.
+                      disabled={on && allowed.length === 1}
+                      onChange={() =>
+                        void saveProviders(
+                          on ? allowed.filter((x) => x !== p.id) : [...allowed, p.id],
+                        )
+                      }
+                    />
+                    {p.label}
+                  </label>
+                )
+              })}
+              <span className="text-xs text-mut">
+                A chat in this project can only start on these. Use it to keep a client's work on
+                the provider whose terms allow it. What each provider keeps is in Settings, Other AI
+                providers.
+              </span>
+            </fieldset>
             <div className="grid gap-2">
               <span className="font-semibold">Knowledge files</span>
               {project.files.length === 0 ? (

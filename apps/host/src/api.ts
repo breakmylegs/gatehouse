@@ -55,7 +55,7 @@ import { localDay, type UsageStore } from "./usage.js"
 import type { PlanUsage } from "./plan-usage.js"
 import { ArtifactError, artifactHeaders, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
-import { ProjectError, type ProjectStore } from "./projects.js"
+import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
 import type { PhoneService } from "./relay/service.js"
 
 /**
@@ -1106,6 +1106,28 @@ function registerProjectRoutes(app: FastifyInstance, ctx: AdminContext): void {
     try {
       projects.remove(nameOf(req))
       await record("project_deleted", { project: nameOf(req) })
+      return { ok: true }
+    } catch (e) {
+      return failure(reply, e)
+    }
+  })
+  // B17: the providers this project's chats may use; null for every one. Recorded, like every project change.
+  app.put("/api/projects/:name/providers", async (req, reply) => {
+    try {
+      const list = (req.body as { providers?: unknown } | null)?.providers
+      if (
+        list !== null &&
+        !(
+          Array.isArray(list) && list.every((p) => (PROVIDER_IDS as readonly unknown[]).includes(p))
+        )
+      )
+        return bad(
+          reply,
+          422,
+          `Send providers as a list of ${PROVIDER_IDS.join(" and ")}, or null.`,
+        )
+      await projects.setProviders(nameOf(req), (list as ProviderId[] | null) ?? undefined)
+      await record("project_providers_changed", { project: nameOf(req), providers: list ?? "all" })
       return { ok: true }
     } catch (e) {
       return failure(reply, e)
