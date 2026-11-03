@@ -80,8 +80,10 @@ describe("Resources in the session bar", () => {
     const pick = screen.getByRole("combobox", { name: /processor and memory/ })
     expect([...pick.querySelectorAll("option")].map((o) => o.textContent)).toEqual([
       "High: no limits",
+      "Higher: three quarters of the processor, 8 GB",
       "Medium: half the processor, 4 GB",
       "Low: a fifth of the processor, 2 GB",
+      "Lowest: a tenth of the processor, 1 GB",
     ])
     expect(pick).toHaveAccessibleDescription(
       /Half the processor and 4 GB, shared by everything it runs at once/,

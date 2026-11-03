@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import { writeFileAtomic } from "@gatehouse/shared/node"
+import { RESOURCE_LEVELS, type ResourceLevel } from "@gatehouse/shared/ws-protocol"
 
 /** What you set on a session: kept by its Claude Code session id, so it holds across restarts and resumes. */
 export interface SessionMeta {
@@ -16,11 +17,12 @@ export interface SessionSettings {
   effort?: string
   mode?: "default" | "plan" | "acceptEdits" | "auto"
   extreme?: boolean
-  resources?: "low" | "medium" | "high"
+  resources?: ResourceLevel
 }
 
 const MODES = ["default", "plan", "acceptEdits", "auto"] as const
-const LEVELS = ["low", "medium", "high"] as const
+// Every level this version knows; one from a newer version is dropped, and the session starts at the default.
+const LEVELS = RESOURCE_LEVELS
 const EFFORT = /^[a-z]{2,10}$/
 
 export const MAX_TITLE = 120

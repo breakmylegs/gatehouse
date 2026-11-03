@@ -1,4 +1,4 @@
-import type { PendingView, SessionInfo } from "@gatehouse/shared/ws-protocol"
+import type { PendingView, ResourceLevel, SessionInfo } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { diffLines } from "diff"
 import {
@@ -867,9 +867,11 @@ function SessionPane({
                   aria-describedby={`lvl-${session.id}`}
                   onChange={(e) => void changeResources(session.id, e.target.value as Level)}
                 >
-                  <option value="high">High: no limits</option>
-                  <option value="medium">Medium: half the processor, 4 GB</option>
-                  <option value="low">Low: a fifth of the processor, 2 GB</option>
+                  {LEVEL_OPTIONS.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </label>
             ) : null}
@@ -938,13 +940,25 @@ function SessionRequest({
   )
 }
 
-type Level = "low" | "medium" | "high"
+type Level = ResourceLevel
+/** Most first, as the picker lists them (owner: five levels). */
+export const LEVEL_OPTIONS: Array<{ id: Level; label: string }> = [
+  { id: "high", label: "High: no limits" },
+  { id: "higher", label: "Higher: three quarters of the processor, 8 GB" },
+  { id: "medium", label: "Medium: half the processor, 4 GB" },
+  { id: "low", label: "Low: a fifth of the processor, 2 GB" },
+  { id: "lowest", label: "Lowest: a tenth of the processor, 1 GB" },
+]
 /** What each level lets the session use, said when you choose it. */
 export const LEVEL_WORDS: Record<Level, string> = {
   high: "High: no limits for this session.",
+  higher:
+    "Higher: this session and the commands it runs may use three quarters of the processor and 8 GB of memory. A command that needs more memory fails.",
   medium:
     "Medium: this session and the commands it runs may use half the processor and 4 GB of memory, and give way to what you are doing. A command that needs more memory fails.",
   low: "Low: this session and the commands it runs may use a fifth of the processor and 2 GB of memory, and give way to what you are doing. A command that needs more memory fails.",
+  lowest:
+    "Lowest: this session and the commands it runs may use a tenth of the processor and 1 GB of memory, and give way to what you are doing. A command that needs more memory fails.",
 }
 
 /**
@@ -954,11 +968,14 @@ export const LEVEL_WORDS: Record<Level, string> = {
  */
 export const LEVEL_NOTES: Record<Level, string> = {
   high: "No limits on processor or memory.",
+  higher: "Three quarters of the processor and 8 GB, shared by everything it runs at once.",
   medium: "Half the processor and 4 GB, shared by everything it runs at once; gives way to you.",
   low: "A fifth of the processor and 2 GB, shared by everything it runs at once; gives way to you.",
+  lowest:
+    "A tenth of the processor and 1 GB, shared by everything it runs at once; gives way to you.",
 }
 
-/** Low, Medium or High for one session, applied at once to it and to everything it started (owner, 30 Oct). */
+/** A level for one session, applied at once to it and to everything it started (owner, 30 Oct). */
 async function changeResources(sessionId: string, level: Level) {
   const r = await send({ type: "set_resources", sessionId, level })
   if (r.ok) toast(LEVEL_WORDS[level], { id: "resources" })

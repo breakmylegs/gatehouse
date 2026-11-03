@@ -2,13 +2,14 @@ import { execFile, execFileSync, spawn } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk"
+import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
 
 /**
  * How much of this computer a session may use (owner, 30 Oct): Low, Medium or High, applied by Codehouse-Limits.exe, which
  * runs the session's Claude Code inside a Windows job object with these caps. They cover everything it starts too,
  * shell commands included, so a build or test run counts against them.
  */
-export type ResourceLevel = "low" | "medium" | "high"
+export type { ResourceLevel }
 
 export const LEVELS: Record<
   ResourceLevel,
@@ -20,6 +21,10 @@ export const LEVELS: Record<
   medium: { cpu: 50, memoryMb: 4096, priority: "below" },
   // A fifth of the processor and 2 GB.
   low: { cpu: 20, memoryMb: 2048, priority: "below" },
+  // A tenth of the processor and 1 GB, for work left to run in the background.
+  lowest: { cpu: 10, memoryMb: 1024, priority: "below" },
+  // Three quarters of the processor and 8 GB, at the usual priority.
+  higher: { cpu: 75, memoryMb: 8192, priority: "normal" },
 }
 
 const levelArgs = (l: ResourceLevel) => [

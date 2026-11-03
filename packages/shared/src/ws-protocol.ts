@@ -11,6 +11,13 @@ const Id = z.string().min(1).max(200)
 const Mode = z.enum(["default", "acceptEdits", "plan", "auto"])
 export const Effort = z.enum(["low", "medium", "high", "xhigh", "max"])
 export type Effort = z.infer<typeof Effort>
+/**
+ * How much of this computer a session may use, least first (owner: five levels). Low, Medium and High keep the
+ * meaning they had when there were three, so a level saved by an older version means the same.
+ */
+export const RESOURCE_LEVELS = ["lowest", "low", "medium", "higher", "high"] as const
+export const ResourceLevel = z.enum(RESOURCE_LEVELS)
+export type ResourceLevel = z.infer<typeof ResourceLevel>
 const Message = z.string().max(500)
 
 export const ClientCommand = z.discriminatedUnion("type", [
@@ -63,7 +70,7 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("set_resources"),
     sessionId: Id,
-    level: z.enum(["low", "medium", "high"]),
+    level: ResourceLevel,
   }),
   z.object({ type: z.literal("set_mode"), sessionId: Id, mode: Mode }),
   z.object({ type: z.literal("set_effort"), sessionId: Id, effort: Effort }),
@@ -230,7 +237,7 @@ export const SessionInfo = z.object({
   /** What is still working in the background after the turn ended (subagents, shell commands), by description. */
   background: z.array(z.string()).optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
-  resources: z.enum(["low", "medium", "high"]).optional(),
+  resources: ResourceLevel.optional(),
   /** Which signed-in account it runs on. Absent for the main one. */
   account: z.string().optional(),
   /** You asked to compact while a turn ran: it compacts when the turn ends. */

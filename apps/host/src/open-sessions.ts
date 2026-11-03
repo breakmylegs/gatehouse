@@ -1,5 +1,10 @@
 import fs from "node:fs"
-import { Effort, type SessionInfo } from "@gatehouse/shared/ws-protocol"
+import {
+  Effort,
+  RESOURCE_LEVELS,
+  type ResourceLevel,
+  type SessionInfo,
+} from "@gatehouse/shared/ws-protocol"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { StartSessionOptions } from "./sessions.js"
 
@@ -17,7 +22,7 @@ export interface OpenSession {
   /** A turn was running, or waiting on you, when this was last written. */
   running: boolean
   createdAt: string
-  resources?: "low" | "medium" | "high"
+  resources?: ResourceLevel
   /** The account it runs on; the main one when absent. */
   account?: string
   /** Paused at the plan limit: it comes back paused, and starts again when the limit resets. */
@@ -68,8 +73,8 @@ function read(e: Record<string, unknown>): OpenSession | undefined {
     extreme: e.extreme === true,
     running: e.running === true,
     createdAt: str(e.createdAt) ?? new Date(0).toISOString(),
-    ...(e.resources === "low" || e.resources === "medium" || e.resources === "high"
-      ? { resources: e.resources }
+    ...((RESOURCE_LEVELS as readonly unknown[]).includes(e.resources)
+      ? { resources: e.resources as ResourceLevel }
       : {}),
     ...(typeof e.account === "string" && /^[0-9a-f]{8}$/.test(e.account)
       ? { account: e.account }
