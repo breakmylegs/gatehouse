@@ -32,7 +32,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 |---|---|---|---|
 | B08 | Agents board | done (Phase 99) | The Dashboard's live sessions are the board: those waiting first, each with state, model, spend, what it is doing, how long it has waited; Decide opens its request; kept up to the second |
 | B09 | More sessions than panes | partial | Sessions run beyond the 4 panes already; add a global cap (CPU, memory, number) on top of per-session limits; kill switch stops all within 2 s |
-| B10 | A git worktree for each session, with a cleanup panel | todo | New session can start in a new worktree from a chosen base, in a sibling folder; cleanup shows disk use, removes after confirmation; merging back is the user's action |
+| B10 | A git worktree for each session, with a cleanup panel | done (Phase 100) | Start a session in a new worktree from a base you name, in <repo>.worktrees beside the repository, on codehouse/<date-id>; the Worktrees panel shows size, commits and work not committed, removes only worktrees Codehouse made, after confirming, keeping the branch; recorded in the audit log |
 | B11 | Monaco editor and diff component | todo | Pure JavaScript; files up to 5 MB in 500 ms; side by side and inline diff; keyboard and ARIA. Bundle size noted |
 | B12 | Live diff panel with per-hunk accept and reject | partial | A changes pane exists; add per-hunk revert (recorded in the audit) and a live refresh within 1 s; Accept all asks first |
 | B13 | Fork a session or hand off a side task | partial | Fork exists from Earlier sessions; add Fork from an open session, into a worktree when B10 lands; policy inherited, never loosened |

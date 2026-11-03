@@ -8,6 +8,7 @@ import { registerExportRoutes } from "./export-api.js"
 import { registerPromptRoutes, type PromptStore } from "./prompts.js"
 import { registerMarketplaceRoutes, type Marketplace } from "./marketplace.js"
 import { registerDoctorRoutes } from "./doctor.js"
+import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
 import { registerHousekeepingRoutes } from "./housekeeping.js"
@@ -127,6 +128,10 @@ export interface AdminContext {
   }
   /** What the Host reports about itself, for the Doctor. */
   health?: () => Health
+  /** The worktrees Codehouse made for sessions (B10). */
+  worktrees?: Worktrees
+  /** Whether a running session works in a folder. */
+  openIn?: (folder: string) => boolean
   /** Whether Claude Code is here, and its version, for the Doctor. */
   claude?: () => Promise<{ found: boolean; version?: string }>
 }
@@ -462,6 +467,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerPromptRoutes(app, ctx)
   registerMarketplaceRoutes(app, ctx)
   registerDoctorRoutes(app, ctx)
+  registerWorktreeRoutes(app, ctx)
   registerProviderRoutes(app, {
     audit: ctx.audit,
     config: ctx.config,

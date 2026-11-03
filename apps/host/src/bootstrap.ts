@@ -18,6 +18,7 @@ import { pickFolderWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { claudeVersion } from "./doctor.js"
+import { Worktrees } from "./worktrees.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
 import { createRequire } from "node:module"
@@ -275,6 +276,7 @@ export function createHost(opts: HostOptions = {}): Host {
     sessionMeta,
   )
   const projects = new ProjectStore(path.join(gatehouseDataDir(env), "projects"))
+  const worktrees = new Worktrees(gatehouseDataDir(env))
   // What chats remember: redacted before it is written, with the same word list as everything else.
   const memory = new MemoryStore(path.join(gatehouseDataDir(env), "memory"), (t) =>
     redact(t, { terms: config.redactTerms }),
@@ -298,6 +300,7 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   const deps: SessionDeps = {
     queryFn,
+    worktrees,
     sessionMeta: (id) => sessionMeta.get(id),
     // A chat's first message becomes its title, unless you already gave it one.
     nameChat: async (id, title) => {
@@ -746,6 +749,16 @@ export function createHost(opts: HostOptions = {}): Host {
       updates,
       health,
       claude: () => claudeVersion(findClaudeBinary),
+      worktrees,
+      // A worktree in use by a running session is not removed from under it.
+      openIn: (folder) =>
+        manager
+          .list()
+          .some(
+            (i) =>
+              i.state !== "ended" &&
+              path.resolve(i.cwd).toLowerCase() === path.resolve(folder).toLowerCase(),
+          ),
       updateToken,
       slack: {
         status: () => slack.status(),

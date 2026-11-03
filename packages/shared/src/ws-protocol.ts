@@ -45,6 +45,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
       .optional(),
     /** With resume and fork: carry on from this message of the conversation (Retry and Edit). */
     resumeAt: z.string().max(100).optional(),
+    /** Start in a new git worktree of the repository cwd is in (B10), from a branch, tag or commit. */
+    worktree: z.object({ base: z.string().max(100).optional() }).optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   /** New chat or the quick prompt is open: have a chat ready for the first message (the warm chat). */
@@ -224,6 +226,8 @@ export const SessionInfo = z.object({
   localLabel: z.string().max(120).optional(),
   /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */
   historyUntil: z.string().max(100).optional(),
+  /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */
+  worktree: z.object({ branch: z.string(), repo: z.string() }).optional(),
   /**
    * Paused because the plan's 5-hour limit reached its pause point. It starts again by itself when the limit resets
    * (`until`, when known), or when you start it.

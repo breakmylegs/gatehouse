@@ -21,6 +21,7 @@ import { titleOf } from "../lib/sessionActions"
 import { SessionCode } from "../components/SessionCode"
 import clsx from "clsx"
 import { EmptyState } from "../components/EmptyState"
+import { WorktreesPanel } from "../components/WorktreesPanel"
 
 export const MODELS: Array<{ id: string; label: string }> = [
   { id: "", label: "Default model" },
@@ -145,6 +146,9 @@ export function Sessions() {
   const freshPath = projects ? `${projects.replace(/[\\/]+$/, "")}\\${name}` : ""
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
+  // B10: a session in a new worktree of the folder's repository, from a branch, tag or commit you name.
+  const [inWorktree, setInWorktree] = useState(false)
+  const [base, setBase] = useState("")
 
   const sorted = [...sessions].sort(
     (a, b) => STATE[a.state].rank - STATE[b.state].rank || b.createdAt.localeCompare(a.createdAt),
@@ -169,6 +173,7 @@ export function Sessions() {
         type: "create_session",
         cwd: fresh ? freshPath : cwd.trim(),
         ...(fresh ? { freshFolder: true } : {}),
+        ...(!fresh && inWorktree ? { worktree: base.trim() ? { base: base.trim() } : {} } : {}),
         ...(model ? { model } : {}),
         ...(effort ? { effort } : {}),
         ...wireOf(mode),
@@ -186,7 +191,10 @@ export function Sessions() {
       )
       return
     }
-    const { sessionId: id, info } = r.data as { sessionId: string; info: { cwd: string } }
+    const { sessionId: id, info } = r.data as {
+      sessionId: string
+      info: { cwd: string; worktree?: { branch: string } }
+    }
     if (fresh) {
       // The first prompt goes straight to the new session, as if you had typed it there.
       useStore.getState().addUserText(id, idea.trim())
@@ -194,7 +202,12 @@ export function Sessions() {
       toast(`Your project is in ${info.cwd}`)
       setIdea("")
       setTypedName(undefined)
-    } else toast("Session started")
+    } else
+      toast(
+        info.worktree
+          ? `Session started in a new worktree, on the branch ${info.worktree.branch}`
+          : "Session started",
+      )
     selectSession(id)
     setRoute("workspace")
   }
@@ -319,7 +332,32 @@ export function Sessions() {
               <StartButton busy={busy} ready={Boolean(idea.trim())} label="Start the project" />
             </div>
           </div>
-        ) : projects === undefined ? null : !projects && !cwd.trim() ? (
+        ) : (
+          <div className="flex flex-wrap items-center gap-3 text-[14px]">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={inWorktree}
+                onChange={(e) => setInWorktree(e.target.checked)}
+              />
+              Work in a new worktree (a separate checkout beside the repository, on a branch of its
+              own)
+            </label>
+            {inWorktree ? (
+              <label className="flex items-center gap-2">
+                From
+                <input
+                  className="field mono w-48"
+                  value={base}
+                  placeholder="the current commit"
+                  spellCheck={false}
+                  onChange={(e) => setBase(e.target.value)}
+                />
+              </label>
+            ) : null}
+          </div>
+        )}
+        {fresh ? null : projects === undefined ? null : !projects && !cwd.trim() ? (
           <p className="m-0 text-[13.5px] text-mut">
             Tip: choose where new projects go in Settings, and you can start one from what you want
             to build, without choosing a folder.
@@ -336,6 +374,8 @@ export function Sessions() {
           </p>
         ) : null}
       </form>
+
+      <WorktreesPanel />
 
       {sorted.length === 0 ? (
         <EmptyState picture="empty-sessions">

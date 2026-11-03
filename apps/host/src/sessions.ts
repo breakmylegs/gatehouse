@@ -30,6 +30,7 @@ import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
 import { pluginsWithMods } from "./marketplace.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
+import type { Worktrees } from "./worktrees.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -205,6 +206,8 @@ export interface SessionInfo {
   localLabel?: string
   /** A fork from a point: its earlier conversation is shown up to this message only. */
   historyUntil?: string
+  /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
+  worktree?: { branch: string; repo: string }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
   paused?: { until?: string; percent: number; wasRunning: boolean }
 }
@@ -287,6 +290,8 @@ export interface SessionDeps {
   engine: PolicyEngine
   pwsh: PwshWorker | undefined
   audit: HostAudit
+  /** The worktrees Codehouse makes for sessions (B10). Absent where there are none (tests). */
+  worktrees?: Worktrees
   broker: Broker
   approver: ApproverClient
   kill: HostKillSwitch
@@ -349,6 +354,10 @@ export interface StartSessionOptions {
   localModel?: string
   /** With resume and fork: carry on from this message (its uuid), for Retry and Edit. */
   resumeAt?: string
+  /** Start in a new git worktree of the repository cwd is in, from this base (its current commit when absent). */
+  worktree?: { base?: string }
+  /** The worktree it works in, once made (set by the manager, not the screen). */
+  inWorktree?: { branch: string; repo: string }
 }
 
 /**
@@ -506,6 +515,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#error !== undefined ? { error: this.#error } : {}),
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
       ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
+      ...(this.#opts.inWorktree ? { worktree: this.#opts.inWorktree } : {}),
       ...(this.#opts.restore
         ? {
             restarted: {
@@ -1488,6 +1498,34 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
           "A new project goes straight into your projects folder. Set it in Settings, then try again.",
         )
       opts = { ...opts, cwd: freeFolder(path.resolve(opts.cwd)) }
+    } else if (opts.worktree) {
+      // B10: a coding session in a worktree of its own, beside the repository, on a new branch. (A chat was dealt
+      // with above: it always gets a folder of its own.)
+      if (!this.#deps.worktrees) throw new SessionFolderError("Worktrees are not available here.")
+      let wt: Awaited<ReturnType<Worktrees["create"]>>
+      try {
+        wt = await this.#deps.worktrees.create(opts.cwd, opts.worktree.base)
+      } catch (e) {
+        throw new SessionFolderError((e as Error).message)
+      }
+      await this.#deps.audit.record({
+        session: "host",
+        event: "worktree_created",
+        channel: "host",
+        tool: "git",
+        cwd: wt.repo,
+        input: { path: wt.path, branch: wt.branch, base: wt.baseName },
+        verdict: {
+          outcome: "allow",
+          ruleId: "worktree-created",
+          reason: "A worktree was made for a new coding session.",
+          risk: 0,
+          decidedBy: "human-desktop",
+          policyHash: "",
+        },
+        latencyMs: 0,
+      })
+      opts = { ...opts, cwd: wt.path, inWorktree: { branch: wt.branch, repo: wt.repo } }
     }
     // A project belongs to a chat only, and must exist.
     if (opts.chatProject) {

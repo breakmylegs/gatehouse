@@ -54,6 +54,8 @@ Your phone gets the same request at the same time if one is paired. The first va
 - **Model**: the Claude model for the session. You can change it later in the workspace.
 - **Effort**: how hard Claude thinks. Higher effort is more thorough but slower and uses your limits faster. Medium suits most work.
 - **Mode**: how permission requests are handled (see below).
+- **Work in a new worktree**: for a folder in a git repository, the session works in a separate checkout of it, in a folder beside the repository, on a branch of its own (codehouse/ and the date), so it never touches the checkout you use. **From** is the branch, tag or commit it starts from; empty means the current commit. Merging its branch back is yours to do.
+- **Worktrees** (below the list, once there is one): each worktree Codehouse made, with its size, its commits and anything changed and not committed. **Remove...** asks first, takes the folder away and keeps the branch; one with work not committed says it will be lost and asks you to choose Remove anyway. One a session is working in cannot be removed until you close it.
 
 **Modes**
 

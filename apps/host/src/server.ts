@@ -420,6 +420,7 @@ export class HostServer {
           ...(cmd.account ? { account: cmd.account } : {}),
           ...(cmd.localModel ? { localModel: cmd.localModel } : {}),
           ...(cmd.resumeAt ? { resumeAt: cmd.resumeAt } : {}),
+          ...(cmd.worktree ? { worktree: cmd.worktree } : {}),
         })
         return { sessionId: s.id, info: s.info() }
       }
