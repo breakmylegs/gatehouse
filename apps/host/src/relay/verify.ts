@@ -65,6 +65,18 @@ const no = (reason: string): Rejected => ({ ok: false, reason })
  * the payload hash matches the request the Host sent. The Relay is not trusted to have checked any of it.
  */
 export async function verifyPhoneDecision(i: VerifyInput): Promise<Accepted | Rejected> {
+  // Whatever it is given, it refuses rather than throws (B05): the caller checks the shape first, and this does not
+  // rely on that.
+  try {
+    return await verify(i)
+  } catch (err) {
+    return no(
+      `The decision could not be read (${String((err as Error)?.message ?? err).slice(0, 80)})`,
+    )
+  }
+}
+
+async function verify(i: VerifyInput): Promise<Accepted | Rejected> {
   const e = i.signed.envelope
   if (e.deviceId !== i.phone.id) return no("The envelope names a different device")
   const issued = Date.parse(e.issuedAt)
