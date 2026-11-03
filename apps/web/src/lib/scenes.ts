@@ -73,6 +73,7 @@ const AUTO: Partial<Record<Route, string>> = {
   prompts: "jukebox",
   marketplace: "front",
   doctor: "dawn",
+  home: "neon",
   usage: "car-park",
   policy: "lot",
   audit: "highway",

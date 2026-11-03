@@ -29,9 +29,17 @@ afterEach(cleanup)
 
 describe("App shell", () => {
   it("renders the queue page without looping", () => {
+    useStore.setState({ route: "approvals" })
     useStore.getState().handleEvent({ type: "hello", sessions: [], pending: [], health, usage: {} })
     render(<App />)
     expect(screen.getByRole("heading", { name: /All clear/ })).toBeInTheDocument()
+  })
+
+  it("renders Home, the start screen, without looping", async () => {
+    useStore.setState({ route: "home" })
+    useStore.getState().handleEvent({ type: "hello", sessions: [], pending: [], health, usage: {} })
+    render(<App />)
+    expect(await screen.findByRole("button", { name: "Projects" })).toBeInTheDocument()
   })
 })
 

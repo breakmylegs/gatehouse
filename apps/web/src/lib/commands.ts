@@ -38,7 +38,8 @@ export interface CommandContext {
 
 /** The pages, with the words the sidebar and menus already use for them. */
 export const PAGES: Array<{ route: Route; label: string; keywords?: string }> = [
-  { route: "dashboard", label: "Dashboard", keywords: "home overview today" },
+  { route: "home", label: "Home", keywords: "start screen chat code projects" },
+  { route: "dashboard", label: "Dashboard", keywords: "overview today" },
   { route: "approvals", label: "Approvals", keywords: "needs you waiting requests" },
   { route: "sessions", label: "New session", keywords: "start earlier resume" },
   { route: "sessions", label: "All sessions", keywords: "list board earlier resume" },

@@ -60,14 +60,15 @@ describe("the Codehouse look", () => {
   })
 
   it("has every picture on disk, all from the Codehouse visual identity pack", () => {
-    // Only the pack's files: its icons, scenes, spot pictures, wordmarks and start-up pictures. No film still.
+    // Only the pack's files: its icons, scenes, spot pictures, wordmarks, start-up picture and the start screen the
+    // owner made with ChatGPT. No film still.
     expect(readdirSync(join(web, "public", "codehouse")).sort()).toEqual([
       "brand",
       "empty",
       "icons.svg",
       "scenes",
-      "splash-1920.png",
       "splash.png",
+      "start-screen.png",
     ])
     for (const p of BUILTIN_PICTURES)
       for (const theme of ["light", "dark"] as const) {
@@ -89,8 +90,8 @@ describe("the start-up picture", () => {
   const html = readFileSync(join(web, "index.html"), "utf8")
   it("is in index.html, not behind the mode or the theme", () => {
     expect(html).toContain('id="boot"')
-    expect(html).toContain("codehouse/splash-1920.png")
-    expect(existsSync(join(web, "public", "codehouse", "splash-1920.png"))).toBe(true)
+    expect(html).toContain("codehouse/start-screen.png")
+    expect(existsSync(join(web, "public", "codehouse", "start-screen.png"))).toBe(true)
     expect(html).not.toMatch(/data-theme|codehouse="on"/)
   })
   it("is named in the title, with the pack's mark as the page icon", () => {

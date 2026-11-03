@@ -391,6 +391,11 @@ Use the sign-in buttons to sign in through Anthropic's own page in your browser.
     title: "Setup",
     body: `The setup wizard runs the first time you open Codehouse. It signs you in, checks your organisation, offers phone alerts, and lets you choose a theme. You can skip it and run it again from Settings.`,
   },
+  home: {
+    id: "home",
+    title: "Home",
+    body: `Home is the Codehouse start screen. Choose Chat to talk with Claude, Code to work in a folder with a coding session, or Projects to keep instructions and files for a set of chats. Codehouse opens on it when it has no page of yours to go back to. Open it again by selecting the Codehouse name at the top left, or search for Home with Ctrl+K.`,
+  },
 }
 
 export const GUIDE: Article[] = [

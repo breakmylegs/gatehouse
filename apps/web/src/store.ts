@@ -49,6 +49,7 @@ export type Route =
   | "prompts"
   | "marketplace"
   | "doctor"
+  | "home"
 
 export interface ResolvedView {
   id: string
@@ -201,6 +202,7 @@ const KEPT_ROUTES: Route[] = [
   "prompts",
   "marketplace",
   "doctor",
+  "home",
 ]
 /** Sessions side by side at most (owner, 1 Nov: "Up to 4 shown at once"); four sit two by two. */
 export const MAX_PANES = 4
@@ -222,7 +224,7 @@ function readView(): { route: Route; panes: string[]; selectedSession?: string; 
             ? v.focus
             : 0
         return {
-          route: KEPT_ROUTES.includes(v.route as Route) ? (v.route as Route) : "approvals",
+          route: KEPT_ROUTES.includes(v.route as Route) ? (v.route as Route) : "home",
           panes,
           focus,
           ...(typeof v.selectedSession === "string" ? { selectedSession: v.selectedSession } : {}),
@@ -232,10 +234,10 @@ function readView(): { route: Route; panes: string[]; selectedSession?: string; 
   } catch {
     // a value from another version, or none
   }
-  return { route: "approvals", panes: [], focus: 0 }
+  return { route: "home", panes: [], focus: 0 }
 }
 const startView = readView()
-/** The page the window opened on: the first-run checks take over from it, as they did from Approvals. */
+/** The page the window opened on (Home when there is none of yours): the first-run checks take over from it, as they did from Approvals. */
 export const START_ROUTE: Route = startView.route
 
 const readFlag = (key: string): boolean => {

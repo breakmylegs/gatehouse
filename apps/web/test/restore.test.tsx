@@ -127,10 +127,10 @@ describe("after a restart", () => {
       selectedSession: "a",
     })
     expect(next.START_ROUTE).toBe("workspace")
-    // A page that is only a step on the way, such as starting a chat, opens Approvals instead.
+    // A page that is only a step on the way, such as starting a chat, opens Home, the start screen, instead.
     next.useStore.setState({ route: "chat" })
     vi.resetModules()
-    expect((await import("../src/store")).useStore.getState().route).toBe("approvals")
+    expect((await import("../src/store")).useStore.getState().route).toBe("home")
   })
 
   it("keeps what you typed and had not sent", async () => {

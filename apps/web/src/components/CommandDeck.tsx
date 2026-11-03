@@ -46,12 +46,19 @@ export function CommandDeck() {
 
   return (
     <header className="deck shell" aria-label="Command deck">
-      <span className="deck-brand">
+      {/* The name goes Home, the start screen, as a name at the top left does in most apps. */}
+      <button
+        type="button"
+        className="deck-brand"
+        title="Home"
+        aria-label="Codehouse, Powered by Claude: go to Home"
+        onClick={() => setRoute("home")}
+      >
         <strong className="sign">Codehouse</strong>
         <span className="deck-sub">
           Codehouse <span className="deck-claude">Powered by Claude</span>
         </span>
-      </span>
+      </button>
 
       <div className="deck-sessions" role="group" aria-label="Live sessions">
         {live.map((s) => {
