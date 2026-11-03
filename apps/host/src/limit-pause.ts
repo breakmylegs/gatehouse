@@ -31,6 +31,8 @@ export interface LimitPauserDeps {
   now?: () => number
   /** Where to pause, read at each look (Settings): a percentage, or undefined for never. Absent: PAUSE_AT_PERCENT. */
   pauseAt?: () => number | undefined
+  /** B26: whether a paused session starts again by itself when the limit resets. Absent: yes (owner, 31 Oct). */
+  autoResume?: () => boolean
   log: (line: string) => void
 }
 
@@ -97,7 +99,9 @@ export class LimitPauser {
       const paused = list.filter((s) => s.paused)
       // Fresh when something is paused, so the reset is seen as soon as it happens.
       const limit = fiveHour(await this.#d.planUsage(account, paused.length > 0))
-      for (const s of paused) {
+      // B26: off, a paused session waits for you to start it, even after the reset. Pausing goes on as before.
+      const resumeByItself = !this.#d.autoResume || this.#d.autoResume()
+      for (const s of resumeByItself ? paused : []) {
         const until = s.paused?.until ? Date.parse(s.paused.until) : NaN
         const reset = Number.isFinite(until) && now >= until
         const below = limit !== undefined && (at === undefined || limit.percent < at)

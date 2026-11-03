@@ -45,7 +45,7 @@ interface Config {
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
   rulesPath?: string
   extremeCarryOn?: { turns: number; usd: number; noTurnLimit?: boolean; noSpendLimit?: boolean }
-  planLimitPause?: { percent: number; off?: boolean }
+  planLimitPause?: { percent: number; off?: boolean; noAutoResume?: boolean }
   effortCap?: string
   maxSessions?: number
   globalInstructions?: string
@@ -97,6 +97,7 @@ interface Values {
   /** A number, or "none" for no limit. */
   ecTurns: string
   plPause: string
+  plResume: boolean
   effortCap: string
   maxSessions: string
   ecUsd: string
@@ -125,6 +126,7 @@ function valuesOf(d: SettingsData): Values {
     cpBurst: c.checkpoints.editBursts,
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
+    plResume: c.planLimitPause?.noAutoResume !== true,
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -168,12 +170,17 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.maxSessions
   // Absent is 95%, so the default is not written; a percentage is kept beside off for an older reader.
   const { off: _o, ...pauseKeep } = d.saved.planLimitPause ?? { percent: 95 }
-  if (v.plPause === "95" && !d.saved.planLimitPause) delete body.planLimitPause
+  const { noAutoResume: _r, ...pauseRest } = pauseKeep as {
+    noAutoResume?: boolean
+    percent: number
+  }
+  if (v.plPause === "95" && v.plResume && !d.saved.planLimitPause) delete body.planLimitPause
   else
-    body.planLimitPause =
-      v.plPause === "off"
-        ? { ...pauseKeep, off: true }
-        : { ...pauseKeep, percent: Number(v.plPause) }
+    body.planLimitPause = {
+      ...pauseRest,
+      ...(v.plPause === "off" ? { off: true } : { percent: Number(v.plPause) }),
+      ...(v.plResume ? {} : { noAutoResume: true }),
+    }
   return body
 }
 
@@ -198,6 +205,7 @@ export const DEFAULT_VALUES: Values = {
   cpBurst: true,
   ecTurns: "200",
   plPause: "95",
+  plResume: true,
   effortCap: "",
   maxSessions: "",
   ecUsd: "500",
@@ -419,7 +427,7 @@ export function Settings() {
   const digestChanged =
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
-  const pauseChanged = differs(v, ["plPause"])
+  const pauseChanged = differs(v, ["plPause", "plResume"])
   const effortChanged = differs(v, ["effortCap"])
   const limitChanged = differs(v, ["maxSessions"])
   const instrChanged = differs(v, ["instr"])
@@ -745,6 +753,18 @@ export function Settings() {
                   ))}
                 </select>
               </Field>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.plResume}
+                  onChange={(e) => change({ plResume: e.target.checked }, "Plan limit")}
+                />
+                Start paused sessions again by themselves when the limit resets
+              </label>
+              <p className="m-0 text-xs text-mut">
+                A session that was working carries on where it stopped. In Extreme approval its turn
+                and spending limits still apply. Off, each waits for you to press Start now.
+              </p>
               {v.plPause === "off" || Number(v.plPause) >= 99 ? (
                 <p role="note" className="m-0 text-[13px] text-warn">
                   Cost: at the limit Claude Code stops the work itself, part way through a turn. If

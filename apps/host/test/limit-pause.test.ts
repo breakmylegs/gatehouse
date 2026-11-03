@@ -89,6 +89,22 @@ describe("pausing at the plan limit", () => {
     ]).toEqual([undefined, 85, 95, 95])
   })
 
+  it("keeps a paused session paused after the reset when starting again by itself is off, and still pauses (B26)", async () => {
+    const a = target("a")
+    const b = target("b")
+    a.paused = { percent: 96, wasRunning: true, until: RESET }
+    const pauser = new LimitPauser({
+      sessions: () => [a, b],
+      planUsage: async () => usage(97),
+      now: () => Date.parse(RESET) + 1000,
+      autoResume: () => false,
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(a.calls).toEqual([])
+    expect(b.calls).toEqual([`pause 97 ${RESET}`])
+  })
+
   it("leaves sessions alone just below the pause point", async () => {
     const a = target("a")
     await setup([a], { main: usage(94.9) }).pauser.check()

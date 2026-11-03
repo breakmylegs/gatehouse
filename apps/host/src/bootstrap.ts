@@ -428,6 +428,7 @@ export function createHost(opts: HostOptions = {}): Host {
     sessions: () => manager.liveSessions(),
     planUsage: (account, fresh) => manager.planUsage(account, fresh),
     pauseAt: () => pausePoint(config.planLimitPause),
+    autoResume: () => config.planLimitPause?.noAutoResume !== true,
     log,
   })
   // The sessions open now, so a restart or an update brings them back (owner, 30 Oct: nothing lost).

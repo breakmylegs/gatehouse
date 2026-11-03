@@ -196,6 +196,8 @@ function build(loose: boolean) {
     planLimitPause: obj({
       percent: z.number().int().min(50).max(99),
       off: z.boolean().optional(),
+      /** B26: true keeps a paused session paused after the reset, until you start it. */
+      noAutoResume: z.boolean().optional(),
     }).optional(),
     extremeCarryOn: z
       .object({
