@@ -7,12 +7,34 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { chatArtifactClient } from "../src/artifact-client.js"
 import {
+  AI_MARK,
   ArtifactError,
   artifactHeaders,
   ArtifactStore,
+  labelArtifact,
   MAX_ARTIFACT_BYTES,
   MAX_VERSIONS,
 } from "../src/artifacts.js"
+
+/** What every page Claude makes carries (B38, EU AI Act Article 50). */
+const MARK = `<meta name="generator" content="${AI_MARK}">`
+
+describe("the AI-generated mark (B38)", () => {
+  it("goes in a page's head, after a doctype, or first; in a picture inside it; and only once", () => {
+    expect(labelArtifact("html", "<html><head><title>t</title></head></html>")).toBe(
+      `<html><head>${MARK}<title>t</title></head></html>`,
+    )
+    expect(labelArtifact("html", "<!doctype html><p>x</p>")).toBe(
+      `<!doctype html>\n${MARK}<p>x</p>`,
+    )
+    const svg = labelArtifact("svg", '<?xml version="1.0"?><svg viewBox="0 0 1 1"><rect/></svg>')
+    expect(svg).toBe(
+      `<?xml version="1.0"?><!-- ${AI_MARK} -->\n<svg viewBox="0 0 1 1"><metadata>${AI_MARK}</metadata><rect/></svg>`,
+    )
+    expect(labelArtifact("svg", svg)).toBe(svg)
+    expect(artifactHeaders("http://127.0.0.1:1", "html")["x-ai-generated"]).toBe(AI_MARK)
+  })
+})
 import { createCompanionSdkServer } from "../src/companion-server.js"
 import { buildStack, type Stack } from "./stack.js"
 import type { HostAudit } from "../src/hostaudit.js"
@@ -37,7 +59,10 @@ describe("keeping artifacts", () => {
     const s = fresh()
     const a = await s.save(SESSION, "Budget chart", "html", "<h1>one</h1>")
     expect(a).toMatchObject({ id: "budget-chart", title: "Budget chart", kind: "html" })
-    expect(a.version).toMatchObject({ version: 1, bytes: 12 })
+    expect(a.version).toMatchObject({
+      version: 1,
+      bytes: Buffer.byteLength(MARK + "\n<h1>one</h1>"),
+    })
     const b = await s.save(SESSION, "Budget  Chart", "html", "<h1>two</h1>")
     expect(b.version.version).toBe(2)
     await s.save(SESSION, "Logo", "svg", "<svg xmlns='http://www.w3.org/2000/svg'/>")
@@ -45,8 +70,12 @@ describe("keeping artifacts", () => {
       ["budget-chart", "html", 2],
       ["logo", "svg", 1],
     ])
-    expect(s.read(SESSION, "budget-chart", 1)?.content).toBe("<h1>one</h1>")
-    expect(s.read(SESSION, "budget-chart", 2)?.content).toBe("<h1>two</h1>")
+    expect(s.read(SESSION, "budget-chart", 1)?.content).toBe(`${MARK}\n<h1>one</h1>`)
+    expect(s.read(SESSION, "budget-chart", 2)?.content).toBe(`${MARK}\n<h1>two</h1>`)
+    // The picture is marked inside itself too, and is still one picture.
+    expect(s.read(SESSION, "logo", 1)?.content).toBe(
+      `<!-- ${AI_MARK} -->\n<svg xmlns='http://www.w3.org/2000/svg'><metadata>${AI_MARK}</metadata></svg>`,
+    )
     expect(s.read(SESSION, "budget-chart", 3)).toBeUndefined()
     expect(s.read(SESSION, "nope", 1)).toBeUndefined()
   })
@@ -54,7 +83,7 @@ describe("keeping artifacts", () => {
   it("redacts before it writes, so a secret never reaches the file", async () => {
     const s = fresh((t) => t.replaceAll("AcmeCorp", "[redacted]"))
     await s.save(SESSION, "Page", "html", "<p>AcmeCorp internal</p>")
-    expect(s.read(SESSION, "page", 1)?.content).toBe("<p>[redacted] internal</p>")
+    expect(s.read(SESSION, "page", 1)?.content).toBe(`${MARK}\n<p>[redacted] internal</p>`)
     const files = fs.readdirSync(path.join(dir, `a-${n}`, SESSION, "page"))
     expect(
       fs.readFileSync(path.join(dir, `a-${n}`, SESSION, "page", files[0]!), "utf8"),

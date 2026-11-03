@@ -7,6 +7,7 @@ import { api } from "../lib/api"
 import { download, exportName, toMarkdown } from "../lib/exportMarkdown"
 import { emptyTranscript, reduceHistory, type Item } from "../lib/transcript"
 import { send, useStore } from "../store"
+import { MODELS } from "../surfaces/Sessions"
 
 /** What to export: a conversation by its Claude Code id, or an open session not yet saved by Claude Code. */
 export interface ExportWhat {
@@ -106,10 +107,12 @@ export function ExportDialog() {
       // Not saved by Claude Code yet (a session still starting): what is on screen.
       if (!items.length && what.sessionId)
         items = useStore.getState().transcripts[what.sessionId]?.items ?? []
+      const model = what.sessionId ? useStore.getState().sessions[what.sessionId]?.model : undefined
       markdown.current = toMarkdown(items, {
         title: what.title,
         ...(what.cwd ? { cwd: what.cwd } : {}),
         at: Date.now(),
+        ...(model ? { model: MODELS.find((m) => m.id === model)?.label ?? model } : {}),
       })
       const p = await api<{ text: string; masked: number }>("POST", "/api/export/redact", {
         text: markdown.current,

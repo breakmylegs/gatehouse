@@ -93,6 +93,10 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
       {artifact && chosen ? (
         <>
           <div className="flex flex-wrap items-center gap-2">
+            {/* B38 (EU AI Act Article 50): what Claude made says so where you see it, and inside the file. */}
+            <span className="sign rounded border border-line px-1.5 text-[12px] text-mut">
+              AI-generated
+            </span>
             <label className="flex items-center gap-2 text-[13px]">
               <span className="text-mut">Version</span>
               <select

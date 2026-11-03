@@ -54,8 +54,40 @@ const slug = (title: string) =>
  * origin, forms, pop-ups or top navigation. Nothing can be fetched, so it cannot reach the Host, the network or your
  * files, even when Claude writes a call to. The window may frame it and nothing else may.
  */
+/** The words of the mark, in every artifact (B38, EU AI Act Article 50). */
+export const AI_MARK = "AI-generated with Claude in Codehouse"
+
+/**
+ * Marks an artifact as made by AI where a program can read it (B38): a meta tag in a page's head (or a comment after
+ * its doctype when it has no head), and a comment and a metadata element in a picture. Marked once: a second save of
+ * marked content is left as it is.
+ */
+export function labelArtifact(kind: ArtifactKind, content: string): string {
+  if (content.includes(AI_MARK)) return content
+  if (kind === "svg") {
+    const comment = `<!-- ${AI_MARK} -->`
+    const at = content.search(/<svg[\s>]/i)
+    if (at < 0) return `${comment}\n${content}`
+    const open = content.indexOf(">", at)
+    if (open < 0) return `${comment}\n${content}`
+    const metadata = `<metadata>${AI_MARK}</metadata>`
+    // A picture with nothing inside (<svg/>) is opened up, so the metadata sits within it.
+    if (content[open - 1] === "/")
+      return `${content.slice(0, at)}${comment}\n${content.slice(at, open - 1).trimEnd()}>${metadata}</svg>${content.slice(open + 1)}`
+    return `${content.slice(0, at)}${comment}\n${content.slice(at, open + 1)}${metadata}${content.slice(open + 1)}`
+  }
+  const meta = `<meta name="generator" content="${AI_MARK}">`
+  const head = /<head[^>]*>/i.exec(content)
+  if (head) return content.replace(head[0], `${head[0]}${meta}`)
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(content)
+  if (doctype) return content.replace(doctype[0], `${doctype[0]}\n${meta}`)
+  return `${meta}\n${content}`
+}
+
 export function artifactHeaders(frameAncestor: string, kind: ArtifactKind): Record<string, string> {
   return {
+    // Machine-readable for anything that fetches it (B38).
+    "x-ai-generated": AI_MARK,
     "content-type": TYPE[kind],
     "content-security-policy": [
       "sandbox allow-scripts",
@@ -130,9 +162,11 @@ export class ArtifactStore {
     const t = title.replace(/\s+/g, " ").trim().slice(0, 80)
     const id = slug(t)
     if (!t || !id) throw new ArtifactError("invalid", "An artifact needs a title.")
-    const body = this.#redact(content)
+    const redacted = this.#redact(content)
+    // Empty is refused before the mark is added, which would make it look like content.
+    if (!redacted.trim()) throw new ArtifactError("invalid", "An artifact needs content.")
+    const body = labelArtifact(k, redacted)
     const bytes = Buffer.byteLength(body, "utf8")
-    if (!body.trim()) throw new ArtifactError("invalid", "An artifact needs content.")
     if (bytes > MAX_ARTIFACT_BYTES)
       throw new ArtifactError(
         "too-big",

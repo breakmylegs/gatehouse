@@ -11,12 +11,14 @@ type Tool = Extract<Item, { kind: "tool" }>
  */
 export function toMarkdown(
   items: Item[],
-  about: { title: string; cwd?: string; at?: number },
+  about: { title: string; cwd?: string; at?: number; model?: string },
 ): string {
   const out: string[] = [`# ${about.title}`, ""]
   const facts = [
     about.cwd ? `Folder: \`${about.cwd}\`` : undefined,
     `Exported from Codehouse ${about.at ? `on ${stamp(about.at, about.at)}` : ""}`.trim(),
+    // B38 (EU AI Act Article 50): what an AI wrote is labelled as such, with the model where it is known.
+    `AI-assisted: the parts headed Claude were written by an AI model${about.model ? ` (${about.model})` : ""} and may contain mistakes.`,
   ].filter(Boolean)
   out.push(...facts.map((f) => `${f}  `), "")
   let run: Tool[] = []

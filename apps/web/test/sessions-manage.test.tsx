@@ -257,5 +257,8 @@ describe("an export", () => {
     expect(md).toContain("Fix the login")
     expect(md).toContain("> npm test")
     expect(md).not.toContain("SECRET OUTPUT")
+    // B38 (EU AI Act Article 50): it says what an AI wrote, naming the model when it is known.
+    expect(md).toContain("AI-assisted: the parts headed Claude were written by an AI model and")
+    expect(toMarkdown([], { title: "t", model: "Opus 5.5" })).toContain("an AI model (Opus 5.5)")
   })
 })
