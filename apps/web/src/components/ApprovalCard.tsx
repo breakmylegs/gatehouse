@@ -163,12 +163,22 @@ export function ApprovalCard({ view }: { view: PendingView }) {
 
   const hardDeadline = clock(view.hardDeadline)
   const phoneExpiry = req.expiresAt ? clock(req.expiresAt) : ""
+  // B06: a connected server asking you to open a page (to sign in, usually). Codehouse never opens it itself.
+  const openUrl =
+    req.toolName === "McpOpenUrl" && typeof view.rawInput.url === "string"
+      ? {
+          url: view.rawInput.url,
+          server: typeof view.rawInput.server === "string" ? view.rawInput.server : "A server",
+        }
+      : undefined
   const title =
     req.kind === "plan"
       ? "Plan ready for approval"
-      : isShell(req.toolName)
-        ? "Run shell command"
-        : req.toolName
+      : openUrl
+        ? `${openUrl.server} asks you to open a page`
+        : isShell(req.toolName)
+          ? "Run shell command"
+          : req.toolName
   const planText =
     req.kind === "plan" && typeof view.rawInput.plan === "string" ? view.rawInput.plan : undefined
 
@@ -219,6 +229,12 @@ export function ApprovalCard({ view }: { view: PendingView }) {
           <h2 id={`t-${req.id}`} className="m-0 text-[22px]">
             {title}
           </h2>
+          {openUrl ? (
+            <p className="m-0 text-[14px]">
+              Allow tells the server you will open this address; Codehouse does not open it. Check
+              the whole address below is one you expect, then open it yourself in your browser.
+            </p>
+          ) : null}
 
           {planText ? (
             <div className="copyable">

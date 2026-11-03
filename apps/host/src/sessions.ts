@@ -41,6 +41,7 @@ import {
 } from "./safety.js"
 import type { UsageStore } from "./usage.js"
 import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
+import { decideElicitation } from "./elicitation.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import {
   CARRY_ON_PROMPT,
@@ -659,6 +660,28 @@ export class Session extends EventEmitter<SessionEvents> {
     const postHook = createPostToolHook(hookDeps)
     // What the person told every session, this project and this session, in that order (owner, 31 Oct).
     const instructions = await this.#instructionsText()
+    // One permission path for tool calls and for a server's request to open a page (B06).
+    const canUse = createCanUseTool({
+      sessionId: this.id,
+      cwd: this.cwd,
+      project: this.project,
+      approver: d.approver,
+      broker: d.broker,
+      audit: d.audit,
+      kill: () => d.kill.isEngaged(),
+      policy: d.policy,
+      engine: d.engine,
+      pwsh: d.pwsh,
+      checkpoints: d.checkpoints,
+      ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
+      decided: this.#decided,
+      verdicts: this.#verdicts,
+      extreme: () => this.#extreme,
+      mode: () => this.#mode,
+      ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
+      onDecision: this.#tellDecision,
+      log: d.log,
+    })
     const options: Options = {
       cwd: this.cwd,
       ...(this.#model !== undefined ? { model: this.#model } : {}),
@@ -686,27 +709,10 @@ export class Session extends EventEmitter<SessionEvents> {
       includePartialMessages: true,
       // Its account's own Claude Code folder, and never a credential (invariant 6).
       env: d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env),
-      canUseTool: createCanUseTool({
-        sessionId: this.id,
-        cwd: this.cwd,
-        project: this.project,
-        approver: d.approver,
-        broker: d.broker,
-        audit: d.audit,
-        kill: () => d.kill.isEngaged(),
-        policy: d.policy,
-        engine: d.engine,
-        pwsh: d.pwsh,
-        checkpoints: d.checkpoints,
-        ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
-        decided: this.#decided,
-        verdicts: this.#verdicts,
-        extreme: () => this.#extreme,
-        mode: () => this.#mode,
-        ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
-        onDecision: this.#tellDecision,
-        log: d.log,
-      }),
+      canUseTool: canUse,
+      // B06: a server asking you to open a page is decided like a tool call; Codehouse never opens it itself.
+      onElicitation: (req, o) =>
+        decideElicitation(req, { canUse, extreme: () => this.#extreme, log: d.log }, o.signal),
       hooks: {
         PreToolUse: [{ hooks: [createFloorHook(hookDeps)] }],
         PostToolUse: [{ hooks: [postHook] }],

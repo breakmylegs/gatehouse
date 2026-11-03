@@ -268,3 +268,7 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 
 - `resumeSessionAt` with `resume` and `forkSession: true`: "only resume messages up to and including the message with this UUID". Used for Retry and Edit (Phase 91): the point is the last message of the conversation before the user's message being redone, taken from the uuid on the SDK's assistant and user messages (and on those read back from history). `resumeDropsTurn` (a check that only that turn is dropped) is not used.
 - Claude Code finds a conversation by its folder, so a forked chat keeps its chat folder.
+
+## onElicitation (used from 3 Nov, B06)
+
+`Options.onElicitation(request, { signal })` is called when an MCP server asks for user input and no hook answered it; without it the SDK declines. `request` has `serverName`, `message`, `mode` (`form` or `url`), `url`, `elicitationId` and `requestedSchema`. It returns an MCP ElicitResult: `{ action: "accept" | "decline" | "cancel", content? }`. Codehouse answers it in `apps/host/src/elicitation.ts`.
