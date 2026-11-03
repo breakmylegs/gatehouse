@@ -7,6 +7,7 @@ import type { PolicyEngine } from "./engine.js"
 import { checkFloor, type FloorHit } from "./floor.js"
 import { checkRememberFile } from "./schema.js"
 import type { PwshWorker } from "./pwsh.js"
+import { findProjectRoot } from "./paths.js"
 import type { EvalContext, Policy, RememberEntry, ToolCall } from "./types.js"
 
 /**
@@ -39,6 +40,8 @@ export interface RememberCandidate {
   tool: string
   command?: string
   path?: string
+  host?: string
+  project?: string
 }
 
 export type RememberCheck =
@@ -123,11 +126,30 @@ export async function checkRemember(
       preview: `Allow ${call.toolName} on exactly this file: ${target.abs}`,
     }
   }
+  // B31: a documentation site, for this project only.
+  if (call.toolName === "WebFetch") {
+    const url = (call.input as { url?: unknown }).url
+    let u: URL | undefined
+    try {
+      u = typeof url === "string" ? new URL(url) : undefined
+    } catch {
+      u = undefined
+    }
+    if (!u || u.protocol !== "https:" || u.username || u.password)
+      return { ok: false, reason: "Only a site reached over https, with no name or password in the address, can be remembered." }
+    const host = u.hostname.toLowerCase()
+    const project = path.basename(ctx.projectRoot ?? findProjectRoot(ctx.cwd)).toLowerCase()
+    return {
+      ok: true,
+      candidate: { tool: "WebFetch", host, project },
+      preview: `Allow reading pages on ${host} without asking, in the project ${project}`,
+    }
+  }
   return { ok: false, reason: `${call.toolName} calls cannot be remembered.` }
 }
 
-function entryKey(e: Pick<RememberEntry, "tool" | "command" | "path">): string {
-  return `${e.tool}|${e.command ?? ""}|${(e.path ?? "").toLowerCase()}`
+function entryKey(e: Pick<RememberEntry, "tool" | "command" | "path" | "host" | "project">): string {
+  return `${e.tool}|${e.command ?? ""}|${(e.path ?? "").toLowerCase()}|${e.host ?? ""}|${e.project ?? ""}`
 }
 
 /**

@@ -32,7 +32,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 - At high risk (70 or more) Deny is the filled button and Allow becomes an outline.
 - **Deny with message** tells Claude why, so it can try another way.
 - **Edit then allow** lets you change the command first. The edited command is checked again by the floor and the rules, and a deny there blocks it.
-- **Remember** adds one narrow rule to your own rules so the same request is allowed next time. It shows the exact rule first.
+- **Remember** adds one narrow rule to your own rules so the same request is allowed next time. It shows the exact rule first. For a web page it remembers the site, for this project only: its sessions then read pages there without asking, over https only, and your redaction list still applies.
 - **Stop session** denies and ends the session.
 
 **Keyboard**

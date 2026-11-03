@@ -8,10 +8,13 @@ import { AuditWriter } from "@gatehouse/shared/audit"
 import { GatehouseConfig } from "@gatehouse/shared/node"
 import { registerApi, queryAudit, type AdminContext } from "../src/api.js"
 import { HostAudit } from "../src/hostaudit.js"
-import { ArtifactStore } from "../src/artifacts.js"
+import { AI_MARK, ArtifactStore } from "../src/artifacts.js"
 import { MemoryStore } from "../src/memory.js"
 import { ProjectStore } from "../src/projects.js"
 import { UsageStore } from "../src/usage.js"
+
+/** What every page Claude saves starts with (B38). */
+const MARKED = `<meta name="generator" content="${AI_MARK}">\n`
 
 const REPO = path.resolve(import.meta.dirname, "../../..")
 let root: string
@@ -1118,7 +1121,8 @@ describe("artifact endpoints (owner's plan, W1-09, ADR 0003)", () => {
     ).toBe(where)
     const page = await call("GET", where, undefined, { host: "127.0.0.1:5199" })
     expect(page.statusCode).toBe(200)
-    expect(page.body).toBe("<h1>hello</h1><script>1+1</script>")
+    // Marked as made by AI where a program can read it (B38).
+    expect(page.body).toBe(`${MARKED}<h1>hello</h1><script>1+1</script>`)
     const csp = String(page.headers["content-security-policy"])
     expect(csp).toContain("sandbox allow-scripts;")
     expect(csp).toContain("connect-src 'none'")
@@ -1169,7 +1173,7 @@ describe("artifact endpoints (owner's plan, W1-09, ADR 0003)", () => {
     expect(r.json()).toEqual({
       name: "chart-v1.html",
       kind: "html",
-      content: "<h1>hello</h1><script>1+1</script>",
+      content: `${MARKED}<h1>hello</h1><script>1+1</script>`,
     })
     expect(
       (await call("GET", "/api/artifacts/export?session=" + SESSION + "&artifact=chart&version=7"))

@@ -74,8 +74,18 @@ function rememberToRules(file: RememberFile, errors: string[]): Rule[] {
     const id = `remember-${entry.id}`
     if (seen.has(entry.id)) errors.push(`remember/${entry.id}: duplicate id`)
     seen.add(entry.id)
-    if (Boolean(entry.command) === Boolean(entry.path)) {
-      errors.push(`remember/${entry.id}: give exactly one of command or path`)
+    if ([entry.command, entry.path, entry.host].filter(Boolean).length !== 1) {
+      errors.push(`remember/${entry.id}: give exactly one of command, path or host`)
+      continue
+    }
+    // B31: kept to one project when it names one.
+    const scope = entry.project ? { projects: [entry.project.toLowerCase()] } : {}
+    if (entry.host) {
+      if (entry.tool !== "WebFetch") {
+        errors.push(`remember/${entry.id}: a host rule needs tool WebFetch`)
+        continue
+      }
+      rules.push({ id, tools: ["WebFetch"], urlHosts: [entry.host.toLowerCase()], ...scope, remember: true })
       continue
     }
     if (entry.command) {
@@ -83,7 +93,7 @@ function rememberToRules(file: RememberFile, errors: string[]): Rule[] {
         errors.push(`remember/${entry.id}: a command rule needs tool Bash or PowerShell`)
         continue
       }
-      rules.push({ id, tools: [entry.tool], commands: [entry.command], remember: true })
+      rules.push({ id, tools: [entry.tool], commands: [entry.command], ...scope, remember: true })
     } else if (entry.path) {
       if (!FILE_TOOLS.has(entry.tool) || entry.tool === "Grep" || entry.tool === "Glob") {
         errors.push(`remember/${entry.id}: a path rule needs a file tool (Read, Edit, Write, MultiEdit, NotebookEdit)`)
@@ -94,7 +104,7 @@ function rememberToRules(file: RememberFile, errors: string[]): Rule[] {
         continue
       }
       const resolved = resolvePath(entry.path, entry.path)
-      rules.push({ id, tools: [entry.tool], paths: [resolved.key], remember: true })
+      rules.push({ id, tools: [entry.tool], paths: [resolved.key], ...scope, remember: true })
     }
   }
   return rules

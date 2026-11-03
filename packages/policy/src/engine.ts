@@ -177,7 +177,15 @@ export class PolicyEngine {
       return this.#verdict("deny", BUILTIN.webQuery, hash, "rules")
     if (f.malformed) return this.#verdict("escalate", BUILTIN.malformed, hash, "rules")
 
-    const env: MatchEnv = { f, policy, rootKey, mcpSource: ctx.mcpSource }
+    const input = (call.input ?? {}) as Record<string, unknown>
+    const env: MatchEnv = {
+      f,
+      policy,
+      rootKey,
+      mcpSource: ctx.mcpSource,
+      projectName,
+      ...(call.toolName === "WebFetch" && typeof input.url === "string" ? { url: input.url } : {}),
+    }
 
     // Deny rules, per call and per segment. Deny wins.
     const segDeny = new Map<number, Candidate>()
@@ -339,6 +347,26 @@ interface MatchEnv {
   policy: Policy
   rootKey: string
   mcpSource: string | undefined
+  /** The project's folder name, lower case (B31). */
+  projectName?: string
+  /** The address a WebFetch reads (B31). */
+  url?: string
+}
+
+/**
+ * B31: whether an address is on one of the sites: https only, with no name or password in it, and the host exactly
+ * as listed, or under it for *.example.com.
+ */
+export function onSites(url: string, hosts: readonly string[]): boolean {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return false
+  }
+  if (u.protocol !== "https:" || u.username || u.password) return false
+  const host = u.hostname.toLowerCase()
+  return hosts.some((h) => (h.startsWith("*.") ? host.endsWith(h.slice(1)) : host === h))
 }
 
 function segmentMatches(rule: Rule, seg: Segment, withWrappers: boolean): boolean {
@@ -406,6 +434,8 @@ function matchRule(rule: Rule, env: MatchEnv, mode: Mode, withWrappers: boolean)
 function matchRemember(rule: Rule, env: MatchEnv): RuleMatch | null {
   const { f } = env
   if (!rule.tools?.includes(f.tool)) return null
+  if (rule.projects && !(env.projectName !== undefined && rule.projects.includes(env.projectName))) return null
+  if (rule.urlHosts) return env.url !== undefined && onSites(env.url, rule.urlHosts) ? { call: true, segs: new Set() } : null
   const segs = new Set<number>()
   let call = false
   if (rule.commands && f.isShell) {

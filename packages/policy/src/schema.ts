@@ -114,6 +114,8 @@ export const rememberFileSchema = {
           tool: { type: "string", minLength: 1 },
           command: { type: "string", minLength: 1 },
           path: { type: "string", minLength: 1 },
+          host: { type: "string", pattern: "^(\\*\\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$" },
+          project: { type: "string", minLength: 1, maxLength: 120 },
           createdAt: { type: "string" },
         },
       },

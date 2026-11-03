@@ -87,7 +87,8 @@ describe("checkRemember", () => {
     ["a heredoc", bash("cat <<EOF\nx\nEOF"), /built in/],
     ["eval", bash("eval ls"), /built in/],
     ["a parse error", bash("if then fi"), /parsed/],
-    ["a web call", { toolName: "WebFetch", input: { url: "https://example.com" } }, /cannot be remembered/],
+    ["a web page over plain http", { toolName: "WebFetch", input: { url: "http://example.com" } }, /https/],
+    ["an address with a password in it", { toolName: "WebFetch", input: { url: "https://u:p@example.com/" } }, /password/],
     ["an mcp tool", { toolName: "mcp__github__create_issue", input: {} }, /cannot be remembered/],
     ["a UNC path", { toolName: "Read", input: { file_path: "//srv/share/x" } }, /local path|UNC|single/],
     ["malformed input", { toolName: "Bash", input: {} }, /shape/],
@@ -111,6 +112,52 @@ describe("checkRemember", () => {
 
   it("has nothing to offer without a policy", async () => {
     expect((await checkRemember(engine, undefined, bash("npm install x"), ctx())).ok).toBe(false)
+  })
+})
+
+describe("a remembered site (B31)", () => {
+  const fetch = (url: string) => ({ toolName: "WebFetch", input: { url, prompt: "read it" } })
+
+  it("is offered for an https page, for this project only, with a preview that says so", async () => {
+    const r = await checkRemember(engine, policy, fetch("https://Docs.Python.org/3/library/os.html"), ctx())
+    const project = path.basename(fx.ws).toLowerCase()
+    expect(r).toEqual({
+      ok: true,
+      candidate: { tool: "WebFetch", host: "docs.python.org", project },
+      preview: `Allow reading pages on docs.python.org without asking, in the project ${project}`,
+    })
+  })
+
+  it("lets that project read the site without asking, and nowhere else, over https only", async () => {
+    const file = path.join(dir, "sites.yaml")
+    const project = path.basename(fx.ws).toLowerCase()
+    await appendRemember(file, { tool: "WebFetch", host: "docs.python.org", project })
+    await appendRemember(file, { tool: "WebFetch", host: "*.microsoft.com" })
+    const live = loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: [fwd(fx.ws)], localPath: file })
+    const e = new PolicyEngine({ getPolicy: () => live, sensitiveTerms: () => ["acmecorp"] })
+    const here = ctx()
+    const elsewhere = { cwd: fwd(path.join(os.tmpdir(), "another-project")) }
+    expect((await e.evaluate(fetch("https://docs.python.org/3/"), here)).outcome).toBe("allow")
+    expect((await e.evaluate(fetch("https://docs.python.org/3/"), elsewhere)).outcome).toBe("escalate")
+    expect((await e.evaluate(fetch("http://docs.python.org/3/"), here)).outcome).toBe("escalate")
+    expect((await e.evaluate(fetch("https://evil-docs.python.org.example/"), here)).outcome).toBe("escalate")
+    expect((await e.evaluate(fetch("https://python.org/"), here)).outcome).toBe("escalate")
+    // Any part of a site listed as *.microsoft.com, in any project; but not the bare name, nor a look-alike.
+    expect((await e.evaluate(fetch("https://learn.microsoft.com/x"), elsewhere)).outcome).toBe("allow")
+    expect((await e.evaluate(fetch("https://microsoft.com.evil.example/"), here)).outcome).toBe("escalate")
+    // Your redaction list still wins: a listed term never goes out, even to a remembered site.
+    expect((await e.evaluate(fetch("https://docs.python.org/?q=acmecorp"), here)).outcome).toBe("deny")
+  })
+
+  it("is refused in the file for another tool, or with no or two things to match", () => {
+    const bad = path.join(dir, "bad-sites.yaml")
+    fs.writeFileSync(
+      bad,
+      "version: 1\nremember:\n  - { id: a, tool: Bash, host: docs.python.org }\n  - { id: b, tool: WebFetch, host: docs.python.org, path: C:/x }\n",
+    )
+    expect(() => loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: [fwd(fx.ws)], localPath: bad })).toThrow(
+      /needs tool WebFetch|exactly one of command, path or host/,
+    )
   })
 })
 

@@ -36,6 +36,10 @@ export interface Rule {
   bash?: BashFlags
   /** Internal, set only on remember rules: the command or path must match exactly. */
   remember?: boolean
+  /** Internal, remember rules only (B31): sites a WebFetch may read, by host name, or *.example.com. https only. */
+  urlHosts?: string[]
+  /** Internal, remember rules only (B31): the projects it applies in, by folder name, lower case. Absent: every one. */
+  projects?: string[]
   /** Internal, remember rules only: exact absolute path keys. */
   paths?: string[]
 }
@@ -69,6 +73,10 @@ export interface RememberEntry {
   tool: string
   command?: string
   path?: string
+  /** B31: a site WebFetch may read without asking: a host name, or *.example.com for any part of it. */
+  host?: string
+  /** B31: the project it applies in, by its folder name. Absent: every project. */
+  project?: string
   createdAt?: string
 }
 
