@@ -586,25 +586,41 @@ mark.seg {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 2px 10px;
-  margin-bottom: 8px;
-  font-size: 14px;
+  gap: 1px 8px;
+  margin: 0 4px 4px;
+  font-size: 12.5px;
 }
+.activity > [role="status"] {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Claude is working: a small ring that turns (owner, 3 Nov: "the little working icon to actually spin"). */
 .activity-dot {
   align-self: center;
-  width: 9px;
-  height: 9px;
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 2px solid color-mix(in srgb, var(--c-acc) 25%, transparent);
+  border-top-color: var(--c-acc);
   border-radius: 50%;
-  background: var(--c-acc);
-  animation: activity-pulse 1.4s ease-in-out infinite;
+  animation: activity-spin 0.9s linear infinite;
 }
-@keyframes activity-pulse {
-  50% {
-    opacity: 0.25;
+@keyframes activity-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
+/* The working icon in the sidebar and the strip turns too. */
+.state-spin {
+  animation: activity-spin 1.1s linear infinite;
+  transform-origin: 50% 50%;
+}
 @media (prefers-reduced-motion: reduce) {
-  .activity-dot {
+  .activity-dot,
+  .state-spin {
     animation: none;
   }
 }
@@ -1210,6 +1226,8 @@ mark.seg {
   border-color: var(--c-acc);
 }
 .deck-state {
+  display: inline-flex;
+  align-items: center;
   font: 600 11px var(--font-code);
   letter-spacing: 0.02em;
   color: var(--c-shell-mut);
@@ -1479,32 +1497,117 @@ mark.seg {
 }
 
 /* Model, effort and mode under the prompt box. */
+/* One quiet line of small text (owner, 3 Nov: smaller and more discreet), as under Claude Code's own prompt box. */
 .composer-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
-  margin-top: 6px;
+  gap: 2px 6px;
+  margin-top: 3px;
+  padding: 0 4px;
 }
 .composer-pick {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font: 500 12.5px var(--font-sign);
+  font: 500 12px var(--font-sign);
   color: var(--c-mut);
 }
 .composer-select {
-  min-height: 26px;
-  padding: 1px 4px;
+  min-height: 22px;
+  max-width: 15em;
+  padding: 0 2px;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: var(--c-tx);
-  font: 500 13px var(--font-sign);
+  color: var(--c-mut);
+  font: 500 12px var(--font-sign);
+  text-overflow: ellipsis;
   cursor: pointer;
+}
+.composer-select:focus-visible {
+  color: var(--c-tx);
+}
+.composer-bar .btn {
+  min-height: 24px;
+  padding-block: 0;
+  font-size: 12.5px;
 }
 .composer-select:hover {
   border-color: var(--c-line);
+}
+/* A link-like button in the bar, for what is seldom pressed. */
+.composer-link {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--c-mut);
+  font: 500 12.5px var(--font-sign);
+  cursor: pointer;
+}
+.composer-link:hover {
+  color: var(--c-tx);
+  text-decoration: underline;
+}
+
+/*
+ * The prompt box (owner, 3 Nov, after Claude Code's): one rounded box with + at the left and send at the right, both
+ * at the bottom, and the text between, one line high until you write more, then growing to a limit and scrolling.
+ */
+.composer-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-s0, var(--c-bg));
+}
+.composer-box:focus-within {
+  border-color: var(--c-acc);
+  box-shadow: 0 0 0 1px var(--c-acc);
+}
+.composer-input {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  max-height: min(40vh, 320px);
+  padding: 7px 4px;
+  overflow-y: auto;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--c-tx);
+  font: inherit;
+  line-height: 1.45;
+  field-sizing: content;
+}
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.composer-icon {
+  justify-content: center;
+  min-height: 34px;
+  width: 34px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 10px;
+  background: transparent;
+}
+.composer-icon:hover:not(:disabled) {
+  background: var(--c-s2);
+}
+.composer-icon-sm {
+  min-height: 24px;
+  width: 24px;
+  border-radius: 6px;
+}
+.composer-send:not(:disabled) {
+  color: var(--c-acc);
 }
 main[data-rail="hidden"] {
   padding-top: 44px;
@@ -1597,6 +1700,7 @@ main[data-rail="hidden"] {
   color: var(--c-tx);
 }
 .activity[data-stuck] .activity-dot {
+  border-color: var(--c-sev);
   background: var(--c-sev);
   animation: none;
 }
@@ -1904,14 +2008,14 @@ main[data-rail="hidden"] {
 .ctx-meter {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 26px;
-  padding: 1px 6px;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 4px;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
-  color: var(--c-tx);
-  font: 500 13px var(--font-sign);
+  color: var(--c-mut);
+  font: 500 12px var(--font-sign);
   cursor: pointer;
 }
 .ctx-meter:hover,
@@ -1920,8 +2024,8 @@ main[data-rail="hidden"] {
 }
 .ctx-track {
   display: inline-block;
-  width: 44px;
-  height: 6px;
+  width: 32px;
+  height: 5px;
   overflow: hidden;
   border-radius: 3px;
   background: var(--c-s2);
@@ -2266,7 +2370,7 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
 
 /* A file held over the prompt row (owner, 1 Nov): the row says it will take it. */
 .composer-row[data-drop] {
-  border-radius: 8px;
+  border-radius: 14px;
   outline: 2px dashed var(--c-acc);
   outline-offset: 4px;
 }

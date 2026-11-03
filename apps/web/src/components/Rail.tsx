@@ -401,15 +401,19 @@ export function Rail({ onHide }: { onHide: () => void }) {
                           <SessionCode session={s} className="!text-[12.5px]" />
                           <span className="truncate">{titleOf(s)}</span>
                         </span>
+                        {/* The state as a small icon alone, the working one turning (owner, 3 Nov); its word is the
+                            tooltip and what a screen reader says. */}
                         {mark ? (
                           <span
-                            className={clsx(
-                              "inline-flex shrink-0 items-center gap-1 text-[12px]",
-                              mark.className,
-                            )}
+                            className={clsx("inline-flex shrink-0 items-center", mark.className)}
+                            title={mark.text}
                           >
-                            <Icon name={mark.icon} size={13} />
-                            {mark.text}
+                            <Icon
+                              name={mark.icon}
+                              size={14}
+                              className={mark.icon === "working" ? "state-spin" : undefined}
+                            />
+                            <span className="sr-only">{mark.text}</span>
                           </span>
                         ) : null}
                       </button>

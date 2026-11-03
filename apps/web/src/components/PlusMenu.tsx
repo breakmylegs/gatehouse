@@ -100,7 +100,7 @@ export function PlusMenu({
     <div ref={root} className="relative">
       <button
         type="button"
-        className="btn !min-h-9 !w-9 justify-center !px-0 text-[18px]"
+        className="btn composer-icon"
         aria-label="Add files, a folder, a saved prompt, or see commands"
         aria-expanded={open}
         aria-haspopup="menu"

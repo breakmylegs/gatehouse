@@ -747,7 +747,7 @@ function SessionPane({
         </aside>
       </div>
 
-      <footer className="border-t border-line bg-s1 p-3">
+      <footer className="bg-s1 px-3 pb-2 pt-1.5">
         {session.state === "error" ? <StoppedLine session={session} /> : null}
         {session.state === "starting" ? <ComingBack session={session} /> : null}
         {session.paused ? <PausedLine session={session} paused={session.paused} /> : null}
@@ -774,7 +774,7 @@ function SessionPane({
         {/* What the session runs on, under the prompt box where you look when you send. */}
         {barFolded ? (
           <div className="composer-bar" role="group" aria-label="Session bar, folded">
-            <button type="button" className="btn !min-h-7" onClick={() => setBarFolded(false)}>
+            <button type="button" className="composer-link" onClick={() => setBarFolded(false)}>
               Show model and settings
             </button>
             <span className="ml-auto flex items-center gap-2">
@@ -789,8 +789,8 @@ function SessionPane({
               pending={session.compactPending === true}
               chat={session.kind === "chat"}
             />
-            <label className="composer-pick">
-              <span className="text-mut">Model</span>
+            <label className="composer-pick" title="Model">
+              <span className="sr-only">Model</span>
               <select
                 className="composer-select"
                 value={
@@ -812,8 +812,8 @@ function SessionPane({
                 ))}
               </select>
             </label>
-            <label className="composer-pick">
-              <span className="text-mut">Effort</span>
+            <label className="composer-pick" title="Effort: how hard Claude thinks">
+              <span className="sr-only">Effort</span>
               <select
                 className="composer-select"
                 value={session.effort ?? ""}
@@ -832,7 +832,7 @@ function SessionPane({
                 </option>
                 {EFFORTS.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.label}
+                    {x.label} effort
                   </option>
                 ))}
               </select>
@@ -840,8 +840,8 @@ function SessionPane({
             {chat ? (
               <span className="composer-pick">Plan mode, always, in a chat</span>
             ) : (
-              <label className="composer-pick">
-                <span className="text-mut">Mode</span>
+              <label className="composer-pick" title="Mode: what Claude may do without asking you">
+                <span className="sr-only">Mode</span>
                 <select
                   className="composer-select"
                   value={uiModeOf(session)}
@@ -857,8 +857,8 @@ function SessionPane({
               </label>
             )}
             {session.resources ? (
-              <label className="composer-pick">
-                <span className="text-mut">This PC’s processor and memory</span>
+              <label className="composer-pick" title={LEVEL_NOTES[session.resources as Level]}>
+                <span className="sr-only">This PC’s processor and memory</span>
                 <select
                   className="composer-select"
                   value={session.resources}
@@ -873,8 +873,9 @@ function SessionPane({
               </label>
             ) : null}
             {session.resources ? (
-              // What the level means, said where you choose it (owner, 1 Nov).
-              <span id={`lvl-${session.id}`} className="level-note">
+              // What the level means, said where you choose it (owner, 1 Nov): in its tooltip and to a screen reader, so the
+              // line stays short (owner, 3 Nov).
+              <span id={`lvl-${session.id}`} className="sr-only">
                 {LEVEL_NOTES[session.resources as Level]}
               </span>
             ) : null}
@@ -883,8 +884,14 @@ function SessionPane({
                 account={session.account ?? MAIN_ACCOUNT}
                 idle={session.state === "idle"}
               />
-              <button type="button" className="btn !min-h-7" onClick={() => setBarFolded(true)}>
-                Hide settings
+              <button
+                type="button"
+                className="btn composer-icon composer-icon-sm"
+                aria-label="Hide settings"
+                title="Hide settings"
+                onClick={() => setBarFolded(true)}
+              >
+                <Icon name="close" size={12} />
               </button>
               <StopButton sessionId={session.id} busy={busy} />
             </span>
@@ -1628,9 +1635,13 @@ function Composer({
           onClose={() => setViewing(undefined)}
         />
       ) : null}
-      {/* Drop files anywhere on the prompt row (owner, 1 Nov): pictures as thumbnails, other files mentioned. */}
+      {/*
+        One box, as Claude Code's own (owner, 3 Nov): + at the left, send and the microphone at the right, and the text
+        between, which grows with what you write up to a limit and then scrolls. Drop files anywhere on it (owner, 1
+        Nov): pictures as thumbnails, other files mentioned.
+      */}
       <div
-        className="composer-row flex items-end gap-2"
+        className="composer-row composer-box"
         data-drop={dropping ? "" : undefined}
         onDragOver={(e) => {
           if (disabled || !e.dataTransfer.types.includes("Files")) return
@@ -1658,7 +1669,7 @@ function Composer({
         <textarea
           id={composerId}
           ref={area}
-          className="field max-h-[30vh] w-full resize-y"
+          className="composer-input"
           onPaste={(e) => {
             const files = [...e.clipboardData.files]
             if (files.length) {
@@ -1666,14 +1677,11 @@ function Composer({
               void attachPictures(files)
             }
           }}
-          rows={2}
+          rows={1}
           maxLength={100_000}
           disabled={disabled}
-          placeholder={
-            disabled
-              ? "This session has ended"
-              : "Write a prompt. Enter sends, Shift+Enter adds a line. / for commands."
-          }
+          title="Enter sends, Shift+Enter adds a line, / for commands"
+          placeholder={disabled ? "This session has ended" : "Write a prompt, or / for commands"}
           value={text}
           onChange={(e) => {
             setText(e.target.value)
@@ -1694,7 +1702,19 @@ function Composer({
             }
           }}
         />
-        <VoiceButton target={area} disabled={disabled} />
+        <span className="composer-tools">
+          <VoiceButton target={area} disabled={disabled} />
+          <button
+            type="button"
+            className="btn composer-icon composer-send"
+            aria-label="Send"
+            title="Send (Enter)"
+            disabled={disabled || (!text.trim() && pictures.length === 0)}
+            onClick={() => void submit()}
+          >
+            <Icon name="send" />
+          </button>
+        </span>
       </div>
     </div>
   )

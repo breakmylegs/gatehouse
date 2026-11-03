@@ -90,6 +90,23 @@ describe("the sidebar", () => {
     expect(useStore.getState().selectedSession).toBe("s1")
   })
 
+  it("shows each session's state as a small icon, the working one turning, its word said only to a screen reader", () => {
+    render(<App />)
+    for (const area of [
+      screen.getByRole("navigation", { name: "Sidebar" }),
+      screen.getByRole("group", { name: "Live sessions" }),
+    ]) {
+      const row = within(area).getAllByRole("button", { name: /shop/ })[0]!
+      expect(row.querySelector("svg.state-spin[data-icon='working']")).not.toBeNull()
+      const seen = row.cloneNode(true) as HTMLElement
+      seen.querySelectorAll(".sr-only").forEach((e) => e.remove())
+      expect(seen.textContent).not.toMatch(/Working/)
+      // A session that needs you has its own icon, and does not turn.
+      const blog = within(area).getAllByRole("button", { name: /blog/ })[0]!
+      expect(blog.querySelector("svg[data-icon='needs-you']:not(.state-spin)")).not.toBeNull()
+    }
+  })
+
   it("keeps every other page in the profile menu, with the theme and help", async () => {
     render(<App />)
     await userEvent.click(screen.getByRole("button", { name: /Your profile and settings: alex/ }))

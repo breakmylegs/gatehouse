@@ -7,21 +7,21 @@ import { AccountsDialog } from "./AccountsDialog"
 import { Menu } from "./Menu"
 import { openPalette } from "./Rail"
 import { SessionCode } from "./SessionCode"
-import { Icon } from "./Icon"
+import { Icon, type IconName } from "./Icon"
 
-/** A session's state in a word, for the strip. */
+/** A session's state in a word and a small icon, for the strip (owner, 3 Nov: icons for state, not words). */
 function stateWord(s: {
   state: string
   paused?: unknown
   background?: string[]
-}): { text: string; tone: string } | undefined {
-  if (s.paused) return { text: "Paused", tone: "is-warn" }
-  if (s.state === "waiting") return { text: "Needs you", tone: "is-warn" }
+}): { text: string; tone: string; icon: IconName } | undefined {
+  if (s.paused) return { text: "Paused", tone: "is-warn", icon: "paused" }
+  if (s.state === "waiting") return { text: "Needs you", tone: "is-warn", icon: "needs-you" }
   if (s.state === "running" || (s.state === "idle" && s.background?.length))
-    return { text: "Working", tone: "is-run" }
-  if (s.state === "starting") return { text: "Starting", tone: "" }
-  if (s.state === "error") return { text: "Stopped", tone: "is-sev" }
-  if (s.state === "idle") return { text: "Ready", tone: "" }
+    return { text: "Working", tone: "is-run", icon: "working" }
+  if (s.state === "starting") return { text: "Starting", tone: "", icon: "waiting" }
+  if (s.state === "error") return { text: "Stopped", tone: "is-sev", icon: "failed" }
+  if (s.state === "idle") return { text: "Ready", tone: "", icon: "done" }
   return undefined
 }
 
@@ -75,7 +75,15 @@ export function CommandDeck() {
               }}
             >
               <SessionCode session={s} className="!text-[12px]" />
-              {w ? <span className={clsx("deck-state", w.tone)}>{w.text}</span> : null}
+              {w ? (
+                <span className={clsx("deck-state", w.tone)} title={w.text}>
+                  <Icon
+                    name={w.icon}
+                    size={13}
+                    className={w.icon === "working" ? "state-spin" : undefined}
+                  />
+                </span>
+              ) : null}
             </button>
           )
         })}

@@ -46,7 +46,7 @@ export function VoiceButton({
   return (
     <button
       type="button"
-      className="btn !min-h-9 !w-9 justify-center !px-0"
+      className="btn composer-icon"
       aria-label="Speak (Windows voice typing)"
       title="Speak: Windows types what you say here (Win+H)"
       disabled={disabled}
