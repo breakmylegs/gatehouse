@@ -72,7 +72,7 @@ import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } f
 import { Icon, type IconName } from "../components/Icon"
 import { EmptyState } from "../components/EmptyState"
 import { loadBars } from "../lib/load"
-import { attachedName, splitAttachments, type AttachedFile } from "../lib/attachments"
+import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
@@ -658,7 +658,18 @@ function SessionPane({
                   )}
                 >
                   {it.kind === "group" ? (
-                    <ToolGroup tools={it.tools} onOpenArtifact={openArtifacts} />
+                    <ToolGroup
+                      tools={it.tools}
+                      onOpenArtifact={openArtifacts}
+                      onOpenFile={(file) => {
+                        const rel = relInside(session.cwd, file)
+                        if (rel) setOpened({ kind: "file", rel })
+                        else
+                          toast(
+                            "That file is outside this session's folder, so it opens in Explorer only.",
+                          )
+                      }}
+                    />
                   ) : (
                     <ItemView item={it} sessionId={session.id} />
                   )}
@@ -1836,10 +1847,22 @@ function SessionFacts({ sessionId }: { sessionId: string }) {
 const ToolGroup = memo(function ToolGroup({
   tools,
   onOpenArtifact,
+  onOpenFile,
 }: {
   tools: Array<Extract<Item, { kind: "tool" }>>
   onOpenArtifact?: () => void
+  /** Opens a file Claude made beside the chat (owner, 3 Nov). */
+  onOpenFile?: (file: string) => void
 }) {
+  // Files Claude made here, once each, with the newest version: a card to open each (owner, 3 Nov).
+  const made = [
+    ...new Set(
+      tools
+        .filter((t) => t.name === "Write" && t.result && !t.result.isError)
+        .map((t) => t.input.file_path)
+        .filter((p): p is string => typeof p === "string"),
+    ),
+  ]
   // What a chat saved to show you, as cards under the line (Stitch, R8), not folded away in it.
   const artifacts = tools.filter(
     (t) => t.name === "mcp__companion__save_artifact" && t.result && !t.result.isError,
@@ -1905,6 +1928,25 @@ const ToolGroup = memo(function ToolGroup({
           </span>
         ) : null}
       </div>
+      {onOpenFile
+        ? made.map((file) => {
+            const name = file.split(/[\\/]/).at(-1) ?? file
+            return (
+              <div key={file} className="made-file">
+                <FileChip name={name} />
+                <span className="min-w-0 truncate">{name}</span>
+                <button
+                  type="button"
+                  className="btn !min-h-7 !px-2 text-[13px]"
+                  aria-label={`Open ${name}`}
+                  onClick={() => onOpenFile(file)}
+                >
+                  Open
+                </button>
+              </div>
+            )
+          })
+        : null}
       {artifacts.map((t) => (
         <ArtifactCard
           key={t.id}

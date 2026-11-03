@@ -166,6 +166,42 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     return { base: `/preview/${token}/` }
   })
 
+  // Save a copy of a session's file wherever you choose (owner, 3 Nov). You choose the place in the Windows save
+  // window; a file the floor blocks is never copied, and nothing is copied that could not be recorded first.
+  app.post("/api/files/save-copy", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const where = insideRoot(root, typeof b.path === "string" ? b.path : "")
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    if (fs.statSync(where.abs).isDirectory()) return bad(reply, 400, "That is a folder.")
+    const why = await blocked(where.abs, root)
+    if (why) return bad(reply, 403, why)
+    if (!ctx.saveAs) return bad(reply, 501, "Saving a copy in a window is not available here.")
+    const to = await ctx.saveAs(path.basename(where.abs))
+    if (!to) return { saved: null }
+    const recorded = await ctx.audit.record({
+      session: typeof b.session === "string" ? b.session : "desktop",
+      event: "file_copied_out",
+      channel: "desktop",
+      tool: "files",
+      cwd: root,
+      input: { path: path.relative(root, where.abs), to },
+      verdict: {
+        outcome: "allow",
+        ruleId: "file-copied-out",
+        reason: "You saved a copy of a session's file from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so no copy was saved.")
+    fs.copyFileSync(where.abs, to)
+    return { saved: to }
+  })
+
   app.post("/api/files/reveal", async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>
     const root = rootOf(b)

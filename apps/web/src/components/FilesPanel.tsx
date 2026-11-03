@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { CodeView } from "./CodeViews"
+import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
@@ -244,6 +245,16 @@ export function Viewer({
     })
   }, [opened, rel, sessionId, loadBase])
 
+  /** A copy wherever you choose, through the Windows save window (owner, 3 Nov). */
+  async function saveCopy() {
+    const r = await api<{ saved: string | null }>("POST", "/api/files/save-copy", {
+      session: sessionId,
+      path: rel,
+    })
+    if (!r.ok) toast.error(r.error ?? "No copy was saved")
+    else if (r.data?.saved) toast(`Saved a copy to ${r.data.saved}`)
+  }
+
   async function reveal() {
     const r = await api("POST", "/api/files/reveal", { session: sessionId, path: rel })
     if (!r.ok) toast.error(r.error ?? "Explorer could not open")
@@ -270,6 +281,14 @@ export function Viewer({
                 {source ? "Show the page" : "Show the source"}
               </button>
             ) : null}
+            {read?.kind === "text" ? <CopyButton text={read.text} what="the text" /> : null}
+            <button
+              type="button"
+              className="btn !min-h-7 !px-2 text-[13px]"
+              onClick={() => void saveCopy()}
+            >
+              Save a copy…
+            </button>
             <button
               type="button"
               className="btn !min-h-7 !px-2 text-[13px]"

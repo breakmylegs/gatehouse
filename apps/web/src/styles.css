@@ -1612,6 +1612,23 @@ mark.seg {
   white-space: nowrap;
 }
 
+/* A file Claude made, under the line that made it: open it beside the chat (owner, 3 Nov). */
+.made-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 420px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-s1);
+}
+.made-file .file-chip-icon {
+  width: 32px;
+  height: 32px;
+}
+
 /* A link-like button in the bar, for what is seldom pressed. */
 .composer-link {
   padding: 0 2px;

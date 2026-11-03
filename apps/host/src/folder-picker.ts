@@ -22,6 +22,49 @@ const SCRIPT = [
 
 export type FolderPicker = (start?: string) => Promise<string | undefined>
 
+/** Where to save a copy: the normal Windows save window, suggesting a name. Undefined if you cancel. */
+export type SaveAsPicker = (suggestedName: string) => Promise<string | undefined>
+
+const SAVE_SCRIPT = [
+  "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8",
+  "Add-Type -AssemblyName System.Windows.Forms",
+  "$f = New-Object System.Windows.Forms.Form",
+  "$f.TopMost = $true; $f.ShowInTaskbar = $false; $f.StartPosition = 'Manual'",
+  "$f.Location = New-Object System.Drawing.Point(-2000, -2000); $f.Size = New-Object System.Drawing.Size(1, 1)",
+  "$f.Show()",
+  "$d = New-Object System.Windows.Forms.SaveFileDialog; $d.Title = 'Save a copy'; $d.OverwritePrompt = $true",
+  "$d.FileName = $env:CODEHOUSE_SAVE_NAME",
+  "if ($d.ShowDialog($f) -eq [System.Windows.Forms.DialogResult]::OK) { [Console]::Out.Write($d.FileName) }",
+  "$f.Close()",
+].join("; ")
+
+export const saveAsWithWindows: SaveAsPicker = (suggestedName) =>
+  new Promise((resolve, reject) => {
+    if (process.platform !== "win32") {
+      reject(new Error("Saving a copy in a window is only available on Windows."))
+      return
+    }
+    const child = spawn(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-Command", SAVE_SCRIPT],
+      {
+        env: {
+          ...process.env,
+          CODEHOUSE_SAVE_NAME: suggestedName.replace(/[\\/:*?"<>|]/g, "_").slice(0, 200),
+        },
+        stdio: ["ignore", "pipe", "ignore"],
+        windowsHide: true,
+      },
+    )
+    const chunks: Buffer[] = []
+    child.stdout.on("data", (c: Buffer) => chunks.push(c))
+    child.on("error", reject)
+    child.on("exit", () => {
+      const picked = Buffer.concat(chunks).toString("utf8").trim()
+      resolve(picked === "" ? undefined : picked)
+    })
+  })
+
 export const pickFolderWithWindows: FolderPicker = (start) =>
   new Promise((resolve, reject) => {
     if (process.platform !== "win32") {

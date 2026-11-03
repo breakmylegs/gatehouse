@@ -17,7 +17,7 @@ import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
-import type { FolderPicker } from "./folder-picker.js"
+import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -79,6 +79,8 @@ export interface AdminContext {
   phone?: PhoneService
   /** Opens the Windows folder chooser. Absent where there is no desktop (tests). */
   pickFolder?: FolderPicker
+  /** The Windows save window, for Save a copy. Injected so tests never open a window. */
+  saveAs?: SaveAsPicker
   /** The chat projects: instructions and knowledge files. */
   projects?: ProjectStore
   /** What chats remember. */

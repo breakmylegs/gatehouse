@@ -14,7 +14,7 @@ import { ProjectStore } from "./projects.js"
 import { findLimitsExe, limiter } from "./limits.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
-import { pickFolderWithWindows } from "./folder-picker.js"
+import { pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { claudeVersion } from "./doctor.js"
@@ -744,6 +744,7 @@ export function createHost(opts: HostOptions = {}): Host {
       phone,
       usage,
       pickFolder: pickFolderWithWindows,
+      saveAs: saveAsWithWindows,
       localRelay,
       ntfy,
       sessionCwd: (id) => manager.get(id)?.cwd,

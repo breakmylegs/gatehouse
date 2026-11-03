@@ -13,6 +13,10 @@ let ws: string
 let outside: string
 let app: FastifyInstance
 const revealed: string[] = []
+// Save a copy: where the save window answers, what was recorded, and whether recording works.
+let saveTo: string | undefined
+const copied: Array<{ event: string; input: Record<string, unknown> }> = []
+let audited = true
 
 beforeAll(async () => {
   root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "gh-files-")))
@@ -42,6 +46,9 @@ beforeAll(async () => {
     engine: new PolicyEngine({ getPolicy: () => store.current }),
     sessionCwd: (id: string) => (id === "s1" ? ws : undefined),
     reveal: (abs: string) => void revealed.push(abs),
+    saveAs: async () => saveTo,
+    audit: { record: async (e: never) => (copied.push(e), audited) },
+    store,
   } as unknown as AdminContext
   app = Fastify()
   registerFilesRoutes(app, ctx)
@@ -120,5 +127,30 @@ describe("the files panel", () => {
     })
     expect(no.statusCode).toBe(403)
     expect(revealed).toHaveLength(1)
+  })
+
+  it("saves a copy where you choose, only after it is recorded, never a secrets file, and nothing when you cancel", async () => {
+    const save = (p: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/files/save-copy",
+        payload: { session: "s1", path: p },
+      })
+    saveTo = undefined
+    expect((await save("README.md")).json()).toEqual({ saved: null })
+    expect(copied).toHaveLength(0)
+    saveTo = path.join(outside, "README copy.md")
+    audited = false
+    expect((await save("README.md")).statusCode).toBe(503)
+    expect(fs.existsSync(saveTo)).toBe(false)
+    audited = true
+    expect((await save("README.md")).json()).toEqual({ saved: saveTo })
+    expect(fs.readFileSync(saveTo, "utf8")).toBe("# Hello\n")
+    expect(copied.at(-1)).toMatchObject({
+      event: "file_copied_out",
+      input: { path: "README.md", to: saveTo },
+    })
+    expect((await save(".env")).statusCode).toBe(403)
+    expect((await save("../outside/private.txt")).statusCode).toBe(403)
   })
 })

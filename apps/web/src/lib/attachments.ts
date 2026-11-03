@@ -31,6 +31,23 @@ export function splitAttachments(text: string): { words: string; files: Attached
   return { words, files }
 }
 
+/**
+ * A path inside the session's folder, relative to it with forward slashes, or undefined for one outside it. Windows
+ * paths compare without case, as Windows does.
+ */
+export function relInside(cwd: string, file: string): string | undefined {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "")
+  const root = norm(cwd)
+  const abs = norm(file)
+  if (!/^[A-Za-z]:\//.test(abs) && !abs.startsWith("/"))
+    return abs.split("/").includes("..") ? undefined : abs
+  if (abs.toLowerCase().startsWith(root.toLowerCase() + "/")) {
+    const rel = abs.slice(root.length + 1)
+    return rel.split("/").includes("..") ? undefined : rel
+  }
+  return undefined
+}
+
 /** "TXT", "ZIP": the kind of file, for the corner of its icon. Nothing for a name with no extension. */
 export const extensionOf = (name: string): string => {
   const m = /\.([A-Za-z0-9]{1,5})$/.exec(name)
