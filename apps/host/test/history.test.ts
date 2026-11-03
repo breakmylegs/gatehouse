@@ -59,6 +59,20 @@ describe("your titles, pins and archives", () => {
     expect(new SessionMetaStore(f).get("s1")).toEqual({})
   })
 
+  it("keep the project a session is grouped under, refusing a name that is not a project's", async () => {
+    const f = file()
+    const a = new SessionMetaStore(f)
+    await a.set("s1", { group: " Shop redesign " })
+    expect(new SessionMetaStore(f).get("s1")).toEqual({ group: "Shop redesign" })
+    await a.set("s1", { group: "..\\elsewhere" })
+    expect(a.get("s1")).toEqual({})
+    // Not written either, so no other reader of the file meets it.
+    expect(fs.readFileSync(f, "utf8")).not.toContain("elsewhere")
+    await a.set("s2", { group: "Blog", pinned: true })
+    await a.set("s2", { group: null })
+    expect(a.get("s2")).toEqual({ pinned: true })
+  })
+
   it("keep what a newer version wrote, and start empty from a broken file", async () => {
     const f = file()
     fs.writeFileSync(

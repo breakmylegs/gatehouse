@@ -13,7 +13,7 @@ export const titleOf = (s: Pick<SessionInfo, "title" | "project">): string => s.
  */
 export async function setSessionMeta(
   s: { sdkSessionId?: string; cwd?: string },
-  change: { title?: string | null; pinned?: boolean; archived?: boolean },
+  change: { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null },
   said: string,
 ): Promise<boolean> {
   if (!s.sdkSessionId) {

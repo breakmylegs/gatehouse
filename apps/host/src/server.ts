@@ -619,6 +619,7 @@ export class HostServer {
             ...(cmd.title !== undefined ? { title: cmd.title } : {}),
             ...(cmd.pinned !== undefined ? { pinned: cmd.pinned } : {}),
             ...(cmd.archived !== undefined ? { archived: cmd.archived } : {}),
+            ...(cmd.group !== undefined ? { group: cmd.group } : {}),
           },
           live?.cwd ?? cmd.cwd,
           a.log,

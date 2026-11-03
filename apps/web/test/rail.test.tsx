@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { App } from "../src/App"
-import { groupByFolder, notifyLine } from "../src/lib/rail"
+import { groupByFolder, groupChats, notifyLine } from "../src/lib/rail"
+import { api } from "../src/lib/api"
 import { useStore } from "../src/store"
 
 const sent: unknown[] = []
@@ -59,7 +60,10 @@ beforeEach(() => {
     usage: {},
   })
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.mocked(api).mockImplementation(async () => ({ ok: false, status: 404, error: "no route" }))
+})
 
 describe("the sidebar", () => {
   it("groups sessions by the folder they sit in, those needing you first", () => {
@@ -68,6 +72,48 @@ describe("the sidebar", () => {
       ["dev", ["blog", "shop"]],
       ["work", ["api"]],
     ])
+  })
+
+  it("lists a session you moved to a project under the project, after pinned and before the folders", () => {
+    const moved = { ...session("s1", "C:\\dev\\shop", "running"), group: "Redesign" }
+    const chat = { ...session("s4", "C:\\chats\\a"), kind: "chat" as const, group: "Redesign" }
+    const pinned = { ...session("s2", "C:\\dev\\blog"), pinned: true }
+    const groups = groupByFolder([moved, chat, pinned, session("s3", "D:\\work\\api")])
+    expect(groups.map((g) => [g.label, g.sessions.map((s) => s.id)])).toEqual([
+      ["Pinned", ["s2"]],
+      ["Redesign", ["s1", "s4"]],
+      ["work", ["s3"]],
+    ])
+    // On the Chat side a chat goes under the project you moved it to, not the one it started in.
+    const started = { ...chat, chatProject: "Old" }
+    expect(groupChats([started]).map((g) => g.label)).toEqual(["Redesign"])
+  })
+
+  it("moves a session to a project from its menu, kept by its Claude Code id", async () => {
+    useStore.getState().handleEvent({
+      type: "session",
+      info: { ...session("s1", "C:\\dev\\shop", "running"), sdkSessionId: "sdk-1" },
+    })
+    vi.mocked(api).mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { projects: [{ name: "Blog" }, { name: "Redesign" }] },
+    })
+    render(<App />)
+    const rail = screen.getByRole("navigation", { name: "Sidebar" })
+    await userEvent.click(within(rail).getByRole("button", { name: /Actions for shop/ }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Move to a project..." }))
+    const dialog = await screen.findByRole("dialog", { name: "Move to a project" })
+    await userEvent.click(await within(dialog).findByRole("radio", { name: "Redesign" }))
+    await userEvent.click(within(dialog).getByRole("button", { name: "Move" }))
+    await vi.waitFor(() =>
+      expect(sent).toContainEqual({
+        type: "session_meta",
+        sdkSessionId: "sdk-1",
+        group: "Redesign",
+        cwd: "C:\\dev\\shop",
+      }),
+    )
   })
 
   it("puts a session that needs you above newer ones", () => {

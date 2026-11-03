@@ -6,6 +6,8 @@ export interface SessionMeta {
   title?: string
   pinned?: boolean
   archived?: boolean
+  /** The project it is grouped under in the sidebar (owner, 2 Nov): a project's name. */
+  group?: string
 }
 
 /** What a session last ran with, so Resume starts it the same way (owner, 31 Oct). */
@@ -22,6 +24,8 @@ const LEVELS = ["low", "medium", "high"] as const
 const EFFORT = /^[a-z]{2,10}$/
 
 export const MAX_TITLE = 120
+/** A project name, as the projects store allows (projects.ts). */
+export const GROUP_NAME = /^[\p{L}\p{N}][\p{L}\p{N} ._()-]{0,59}$/u
 const MAX_ENTRIES = 2000
 
 /**
@@ -53,6 +57,7 @@ export class SessionMetaStore {
       ...(typeof e.title === "string" && e.title ? { title: e.title } : {}),
       ...(e.pinned === true ? { pinned: true } : {}),
       ...(e.archived === true ? { archived: true } : {}),
+      ...(typeof e.group === "string" && GROUP_NAME.test(e.group) ? { group: e.group } : {}),
     }
   }
 
@@ -91,9 +96,14 @@ export class SessionMetaStore {
   /** Changes some of a session's settings. A null title removes it. Resolves once it is on disk. */
   async set(
     id: string,
-    change: { title?: string | null; pinned?: boolean; archived?: boolean },
+    change: { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null },
   ): Promise<SessionMeta> {
     const e = { ...(this.#all[id] ?? {}) }
+    if (change.group !== undefined) {
+      const g = change.group?.trim()
+      if (g && GROUP_NAME.test(g)) e.group = g
+      else delete e.group
+    }
     if (change.title !== undefined) {
       const t = change.title?.trim().slice(0, MAX_TITLE)
       if (t) e.title = t

@@ -177,6 +177,8 @@ export interface SessionInfo {
   title?: string
   pinned?: boolean
   archived?: boolean
+  /** The project it is grouped under in the sidebar. */
+  group?: string
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
   historyFrom?: string
   /**
@@ -248,6 +250,7 @@ export interface SessionDeps {
     title?: string
     pinned?: boolean
     archived?: boolean
+    group?: string
   }
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
   resumeSettings?: (sdkSessionId: string) => {

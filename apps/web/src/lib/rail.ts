@@ -74,6 +74,7 @@ export function saveHideEnded(on: boolean): void {
 /** Chats sit in a group of their own, after your projects; pinned sessions in one before them all. */
 const CHATS = "chats:"
 const PINNED = "pinned:"
+const PROJECT = "project:"
 
 /**
  * Chats for the Chat side of the sidebar: pinned first, then one group for each project that has chats (by name), then
@@ -89,9 +90,10 @@ export function groupChats(
   for (const s of list) {
     if (s.kind !== "chat" || s.archived) continue
     if (hide?.ended && isHiddenEnded(s, hide.keep)) continue
+    // The project you moved it to, else the one it was started in.
+    const project = s.group ?? s.chatProject
     if (s.pinned) pinned.push(s)
-    else if (s.chatProject)
-      byProject.set(s.chatProject, [...(byProject.get(s.chatProject) ?? []), s])
+    else if (project) byProject.set(project, [...(byProject.get(project) ?? []), s])
     else loose.push(s)
   }
   const newest = (a: SessionInfo, b: SessionInfo) => b.createdAt.localeCompare(a.createdAt)
@@ -100,7 +102,7 @@ export function groupChats(
     ...[...byProject]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, sessions]) => ({
-        folder: `project:${name}`,
+        folder: PROJECT + name,
         label: name,
         sessions: sessions.sort(newest),
       })),
@@ -124,6 +126,14 @@ export function groupByFolder(
       groups.set(PINNED, g)
       continue
     }
+    // A session you moved to a project is listed under the project, before the folders (owner, 2 Nov).
+    if (s.group) {
+      const key = PROJECT + s.group.toLowerCase()
+      const g = groups.get(key) ?? { folder: PROJECT + s.group, label: s.group, sessions: [] }
+      g.sessions.push(s)
+      groups.set(key, g)
+      continue
+    }
     if (s.kind === "chat") {
       const g = groups.get(CHATS) ?? { folder: CHATS, label: "Chats", sessions: [] }
       g.sessions.push(s)
@@ -144,6 +154,7 @@ export function groupByFolder(
   return [...groups.values()].sort(
     (a, b) =>
       Number(b.folder === PINNED) - Number(a.folder === PINNED) ||
+      Number(b.folder.startsWith(PROJECT)) - Number(a.folder.startsWith(PROJECT)) ||
       Number(a.folder === CHATS) - Number(b.folder === CHATS) ||
       a.label.localeCompare(b.label),
   )

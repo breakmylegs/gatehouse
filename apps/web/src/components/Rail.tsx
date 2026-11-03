@@ -19,6 +19,7 @@ import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
 import { SessionCode } from "./SessionCode"
 import { RenameDialog } from "./RenameDialog"
+import { ProjectDialog } from "./ProjectDialog"
 import { HandOffDialog } from "./HandOffDialog"
 import { canFork, forkSession, handOff } from "../lib/fork"
 import {
@@ -106,6 +107,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
   const [renaming, setRenaming] = useState<SessionInfo>()
+  const [moving, setMoving] = useState<SessionInfo>()
   const [handingOff, setHandingOff] = useState<SessionInfo>()
   const mode = useRailMode()
   // The switch follows what you open: a chat shows the Chat side, a coding session the Code side.
@@ -377,6 +379,10 @@ export function Rail({ onHide }: { onHide: () => void }) {
                   })
                 }
               >
+                {/* A project's group has the projects icon, so it is not taken for a folder. */}
+                {g.folder.startsWith("project:") ? (
+                  <Icon name="projects" size={13} className="mr-1 inline align-[-2px]" />
+                ) : null}
                 {g.label} <span aria-hidden="true">{folded[g.folder] ? "▸" : "▾"}</span>
               </button>
               <span className="text-[12px] text-shell-mut">{g.sessions.length}</span>
@@ -450,6 +456,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
                                 ]),
                             { kind: "separator" },
                             { label: "Rename...", onSelect: () => setRenaming(s) },
+                            { label: "Move to a project...", onSelect: () => setMoving(s) },
                             {
                               label: s.pinned ? "Unpin" : "Pin to the top",
                               onSelect: () =>
@@ -522,6 +529,21 @@ export function Rail({ onHide }: { onHide: () => void }) {
             setHandingOff(undefined)
             void handOff(from.id, task, { worktree })
           }}
+        />
+      ) : null}
+      {moving ? (
+        <ProjectDialog
+          current={moving.group ?? (moving.kind === "chat" ? moving.chatProject : undefined)}
+          onClose={() => setMoving(undefined)}
+          onSave={(group) =>
+            void setSessionMeta(
+              moving,
+              { group },
+              group
+                ? `Moved ${titleOf(moving)} to ${group}.`
+                : `${titleOf(moving)} is listed by its folder again.`,
+            )
+          }
         />
       ) : null}
       {renaming ? (

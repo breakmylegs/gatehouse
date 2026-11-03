@@ -154,6 +154,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     title: z.string().max(120).nullable().optional(),
     pinned: z.boolean().optional(),
     archived: z.boolean().optional(),
+    /** The project to group it under in the sidebar; null takes it out of one. */
+    group: z.string().min(1).max(60).nullable().optional(),
     /** Its folder, for a past session, so the title can be written into its transcript. */
     cwd: z.string().min(1).max(4096).optional(),
   }),
@@ -210,6 +212,8 @@ export const SessionInfo = z.object({
   title: z.string().optional(),
   pinned: z.boolean().optional(),
   archived: z.boolean().optional(),
+  /** The project it is grouped under in the sidebar (owner, 2 Nov). Older versions ignore it. */
+  group: z.string().optional(),
   /** The Claude Code conversation this one carries on from (Resume, Fork, or after a restart): the screen shows what was said there. */
   historyFrom: z.string().optional(),
   /**

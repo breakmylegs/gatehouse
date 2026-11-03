@@ -167,7 +167,7 @@ export class SessionHistory {
    */
   async setMeta(
     sessionId: string,
-    change: { title?: string | null; pinned?: boolean; archived?: boolean },
+    change: { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null },
     dir?: string,
     log: (line: string) => void = () => undefined,
   ): Promise<SessionMeta> {
