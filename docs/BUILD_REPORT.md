@@ -137,6 +137,11 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Not used yet:** the wordmarks are in the app's files for a later place that wants one. The offline picture waits for a full-page offline state (being offline is a banner today).
 - Tests: `apps/web/test/brand.test.tsx`, `apps/host/test/brand-files.test.ts` (new; the .ico goes through the C# compiler), `scenes.test.tsx` (the pack's scenes in both themes, earlier ids). Seven break checks fail as they should.
 
+## Phase 99: the agents board (B08)
+
+- **What it does:** the Dashboard's live sessions are now the board the research report asked for. Sessions waiting for you come first; each tile shows its model as people say it ("Opus 5.5", a local model by its own name), and a waiting one says how long it has waited instead of what it was doing, with **Decide**, which opens that request on Approvals. The board's clock ticks every second instead of every five. Spend, state, what it is doing and how long it has been open were already there.
+- Tests: `apps/web/test/dashboard.test.tsx` (waiting first even when older, the model, the time waited, Decide opens the request). Four break checks fail as they should.
+
 ## Phase 98: sessions run only the Claude Code a release was checked with (B04)
 
 - **Why:** Codehouse's safety rests on how Claude Code decides a call: the order of hooks, rules and modes, Plan mode, and what a mod can do, read from 2.1.310's own reference. A different Claude Code could decide differently.

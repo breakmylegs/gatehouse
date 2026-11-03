@@ -30,7 +30,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 
 | Id | Item | Status | Notes and acceptance |
 |---|---|---|---|
-| B08 | Agents board | partial | Dashboard exists; make it the board: every session with state, model, spend, last action, time waiting; a waiting row opens its approval; updates within 1 s |
+| B08 | Agents board | done (Phase 99) | The Dashboard's live sessions are the board: those waiting first, each with state, model, spend, what it is doing, how long it has waited; Decide opens its request; kept up to the second |
 | B09 | More sessions than panes | partial | Sessions run beyond the 4 panes already; add a global cap (CPU, memory, number) on top of per-session limits; kill switch stops all within 2 s |
 | B10 | A git worktree for each session, with a cleanup panel | todo | New session can start in a new worktree from a chosen base, in a sibling folder; cleanup shows disk use, removes after confirmation; merging back is the user's action |
 | B11 | Monaco editor and diff component | todo | Pure JavaScript; files up to 5 MB in 500 ms; side by side and inline diff; keyboard and ARIA. Bundle size noted |

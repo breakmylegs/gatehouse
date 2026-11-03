@@ -254,7 +254,7 @@ Rules are files on this computer. Changes are picked up straight away.`,
 - **Not right**: only when something is wrong, such as the Host or the Approver not running, the kill switch on, a sign-in problem, requests not reaching your phone, a session that stopped with an error, or an update waiting.
 - **What needs your attention now**: the oldest request waiting for you as its full card, with every action and its keys, and the next few on one line each, all decided in place, as on Approvals.
 - **Today**: what was spent and written today, how many sessions are working, and how often Codehouse asked you in the last 24 hours. Usage has the detail.
-- **Live sessions**: a tile for each open session: its code and state, the risk of a request it is waiting on, what it is doing now, how long it has been open and what it has cost. Open shows it in the workspace.
+- **Live sessions**: a tile for each open session, those waiting for you first: its code, state and model, the risk of a request it is waiting on and how long it has waited, what it is doing now, how long it has been open and what it has cost, kept up to the second. **Decide** opens the request it is waiting on; Open shows the session in the workspace.
 - **Lately** (beside the rest on a wide window): what Claude told you, turns that finished or failed, and Extreme approval runs that ended, newest first, since this window opened.`,
   },
   usage: {

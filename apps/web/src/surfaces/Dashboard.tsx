@@ -11,6 +11,7 @@ import { notifyLine } from "../lib/rail"
 import { titleOf } from "../lib/sessionActions"
 import { dayOf } from "../lib/usage"
 import { useNow } from "../lib/useNow"
+import { modelLabel } from "../lib/modelLabel"
 import { send, usePending, useSessionList, useStore } from "../store"
 
 const STATE: Record<string, string> = {
@@ -44,7 +45,8 @@ export function Dashboard() {
   const selectRequest = useStore((s) => s.selectRequest)
   const pending = usePending()
   const list = useSessionList()
-  const now = useNow(5000)
+  // The board keeps up within a second (B08): how long each has waited, what it is doing now.
+  const now = useNow(1000)
   const [digest, setDigest] = useState<{ text: string; askedYou?: number }>()
   useEffect(() => {
     void api<{ text: string; askedYou?: number }>("GET", "/api/digest").then(
@@ -56,7 +58,12 @@ export function Dashboard() {
     () =>
       list
         .filter((s) => s.state !== "ended" && !s.archived)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+        // What waits for you first, then the newest.
+        .sort(
+          (a, b) =>
+            Number(b.state === "waiting") - Number(a.state === "waiting") ||
+            b.createdAt.localeCompare(a.createdAt),
+        ),
     [list],
   )
   const working = open.filter(
@@ -200,17 +207,21 @@ export function Dashboard() {
                       ? `${s.background?.length} working in the background`
                       : STATE[s.state]
                 const asks = pendingFor(s.id)
+                const model = modelLabel(s.model)
                 return (
                   <li key={s.id} className="dash-tile" data-state={s.state}>
                     <span className="dash-tile-head">
                       <SessionCode session={s} className="!text-[13px]" />
                       <span className="dash-state">{STATE[s.state]}</span>
+                      {model ? <span className="dash-model">{model}</span> : null}
                       {asks ? (
                         <RiskBadge risk={asks.request.verdict.risk} className="ml-auto" />
                       ) : null}
                     </span>
                     <span className="truncate text-[15px] font-semibold">{titleOf(s)}</span>
-                    <span className="truncate text-[13px] text-mut">{doing}</span>
+                    <span className="truncate text-[13px] text-mut">
+                      {asks ? `Waiting for you for ${since(asks.request.createdAt, now)}` : doing}
+                    </span>
                     <span className="dash-tile-foot">
                       <span>Open for {since(s.createdAt, now)}</span>
                       {usage?.bySession?.[s.id] ? (
@@ -218,9 +229,22 @@ export function Dashboard() {
                           {money(usage.bySession[s.id]?.costUsd ?? 0)}
                         </span>
                       ) : null}
+                      {asks ? (
+                        <button
+                          type="button"
+                          className="btn btn-primary !min-h-7 ml-auto"
+                          aria-label={`Decide what ${titleOf(s)} asks`}
+                          onClick={() => {
+                            selectRequest(asks.request.id)
+                            setRoute("approvals")
+                          }}
+                        >
+                          Decide
+                        </button>
+                      ) : null}
                       <button
                         type="button"
-                        className="btn !min-h-7 ml-auto"
+                        className={asks ? "btn !min-h-7" : "btn !min-h-7 ml-auto"}
                         onClick={() => openSession(s.id)}
                       >
                         Open

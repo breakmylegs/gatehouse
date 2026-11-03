@@ -2409,3 +2409,9 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
 .doctor-check .icon {
   margin-top: 2px;
 }
+
+/* The agents board (B08): the model a session runs on, quiet beside its state. */
+.dash-model {
+  color: var(--c-mut);
+  font-size: 12px;
+}

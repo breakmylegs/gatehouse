@@ -159,6 +159,60 @@ describe("the Dashboard", () => {
     expect(within(tiles).getByText(/High risk 78/)).toBeTruthy()
   })
 
+  it("is the agents board: what waits first, with its model, how long it has waited, and Decide (B08)", () => {
+    const createdAt = new Date(Date.now() - 3 * 60_000).toISOString()
+    useStore.setState({
+      sessions: {
+        s1: session("s1", "shop", "running", { model: "claude-sonnet-5-5" }),
+        // Older than s1, so only waiting puts it first.
+        s2: {
+          ...session("s2", "blog", "idle"),
+          state: "waiting",
+          model: "claude-opus-5-5",
+          createdAt: "2026-10-31T08:00:00Z",
+        },
+      },
+      pending: {
+        r9: {
+          request: {
+            id: "r9",
+            nonce: "n",
+            kind: "permission",
+            sessionId: "s2",
+            toolUseId: "t9",
+            toolName: "Bash",
+            input: { command: "git push" },
+            cwd: "C:\\dev\\blog",
+            project: "blog",
+            verdict: {
+              outcome: "escalate",
+              ruleId: "git-push",
+              reason: "Pushing shares your work.",
+              risk: 40,
+              decidedBy: "rules",
+              policyHash: "h",
+            },
+            createdAt,
+            expiresAt: new Date(Date.now() + 600_000).toISOString(),
+            payloadHash: "p",
+          },
+          rawInput: { command: "git push" },
+          defaultToNo: false,
+          phone: "none",
+          hardDeadline: new Date(Date.now() + 1_800_000).toISOString(),
+        },
+      } as never,
+    })
+    render(<Dashboard />)
+    const tiles = within(screen.getByRole("region", { name: "Sessions" })).getAllByRole("listitem")
+    expect(tiles[0]!.textContent).toContain("blog")
+    expect(tiles[0]!.textContent).toContain("Opus 5.5")
+    expect(tiles[0]!.textContent).toMatch(/Waiting for you for 3/)
+    expect(tiles[1]!.textContent).toContain("Sonnet 5.5")
+    fireEvent.click(within(tiles[0]!).getByRole("button", { name: /^Decide what blog asks/ }))
+    expect(useStore.getState()).toMatchObject({ route: "approvals", selectedRequest: "r9" })
+  })
+
   it("shows today's numbers, with the way to Usage", async () => {
     render(<Dashboard />)
     const today = screen.getByRole("region", { name: "Today" })
