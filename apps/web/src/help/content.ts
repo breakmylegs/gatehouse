@@ -190,13 +190,15 @@ While a turn runs, a line above the composer says what Claude is doing and for h
 
 Open beside, in a session's name menu or its ... button in the sidebar, shows another session next to it; up to four fit, two by two when there are four. The pane you last clicked or typed in has focus, marked by a line along its top: choosing a session in the sidebar that is not on screen shows it in that pane, and one already on screen just takes focus. Each has its own transcript, files and composer. Close this pane removes one. When a pane is narrow, Plan and Files open over it, and an open file takes the transcript's place until you close it.
 
+**Fork** in the same menu starts a copy of the conversation beside it, in the same folder, and each carries on on its own (once Claude has finished what it is doing). **Hand off a side task...** starts a new session for something that came up: say what it should do, and choose In a new worktree to keep it off this session's files. Both keep the session's mode, approval, model, effort and account.
+
 **Files**
 
 Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, read only, with Ctrl+F to search it, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
 
 **Changes**
 
-What the session changed, file by file, since its first checkpoint (or one you choose). Choose a file to see it as it was and as it is now, **Side by side** or **Inline** (Codehouse remembers which), with unchanged stretches folded away; it is read only, and Ctrl+F searches it. A file that is not text, or over 5 MB, shows its plain diff instead. **Undo** puts one file back as it was then, and **Undo all of these** puts them all back; Codehouse saves a checkpoint first, so you can go back to how things were before the undo.
+What the session changed, file by file, since its first checkpoint (or one you choose). Choose a file to see it as it was and as it is now, **Side by side** or **Inline** (Codehouse remembers which), with unchanged stretches folded away; it is read only, and Ctrl+F searches it. A file that is not text, or over 5 MB, shows its plain diff instead. Under a file with several changes, each is listed in words with **Undo...**: it asks first, puts back only that change, saves a checkpoint before it, and refuses if the file changed since you looked. **Undo** puts one file back as it was then, and **Undo all of these** puts them all back; Codehouse saves a checkpoint first, so you can go back to how things were before the undo.
 
 **Terminal**
 

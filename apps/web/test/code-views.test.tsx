@@ -108,3 +108,43 @@ describe("the changes pane", () => {
     expect(screen.queryByTestId("diff-view")).toBeNull()
   })
 })
+
+describe("undoing one change in a file (B12)", () => {
+  it("lists each change in words and sends the one chosen, against the version shown, after you confirm", async () => {
+    versions = { ok: true, data: { before: "a\nb\nc\nd\n", after: "a\nB\nc\nd\ne\n" } }
+    render(<ChangesPane sessionId="s1" cwd="C:\dev\shop" />)
+    fireEvent.click(await screen.findByRole("button", { name: /a\.txt/ }))
+    const list = await screen.findByRole("region", { name: "Changes in a.txt" })
+    expect(list.textContent).toContain("Changed line 2 (was 1 line)")
+    expect(list.textContent).toContain("Added 1 line at line 5")
+    fireEvent.click(screen.getByRole("button", { name: "Undo: Added 1 line at line 5" }))
+    expect(sent.some((c) => c.type === "undo_change")).toBe(false)
+    fireEvent.click(screen.getByRole("button", { name: "Undo this change" }))
+    await waitFor(() => expect(sent.find((c) => c.type === "undo_change")).toBeTruthy())
+    const hash = [
+      ...new Uint8Array(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode("a\nB\nc\nd\ne\n")),
+      ),
+    ]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+    expect(sent.find((c) => c.type === "undo_change")).toEqual({
+      type: "undo_change",
+      sessionId: "s1",
+      ref: "refs/x",
+      path: "a.txt",
+      hunk: 1,
+      afterHash: hash,
+      confirm: true,
+    })
+  })
+
+  it("counts changes the way the Host does, and says what each is", async () => {
+    const { changesIn, changeWords } = await import("../src/components/ChangesPane")
+    const hunks = changesIn("one\ntwo\nthree\n", "one\nthree\nfour\n")
+    expect(hunks.map(changeWords)).toEqual([
+      "Removed 1 line before line 2",
+      "Added 1 line at line 3",
+    ])
+  })
+})

@@ -1,6 +1,7 @@
 import {
   changesSince,
   fileVersions,
+  revertHunk,
   createCheckpoint,
   listCheckpoints,
   restoreFiles,
@@ -99,6 +100,21 @@ export class CheckpointManager {
       since: from,
       ...(await changesSince(cwd, from.ref, this.#excludes())),
     }
+  }
+
+  /** Puts back one change in a file, after a safety checkpoint. Needs `confirm: true`. */
+  undoChange(
+    cwd: string,
+    o: {
+      ref: string
+      path: string
+      hunk: number
+      afterHash: string
+      sessionId: string
+      confirm: boolean
+    },
+  ) {
+    return revertHunk({ cwd, ...o, excludeGlobs: this.#excludes() })
   }
 
   /** One changed file before and after, for the side-by-side diff. Only a file the Changes pane lists. */

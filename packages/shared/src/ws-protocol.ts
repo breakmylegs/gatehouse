@@ -136,6 +136,16 @@ export const ClientCommand = z.discriminatedUnion("type", [
     paths: z.array(z.string().min(1).max(4096)).min(1).max(500),
     confirm: z.boolean(),
   }),
+  /** Puts back one change in a file (B12), against the version shown, after a safety checkpoint. */
+  z.object({
+    type: z.literal("undo_change"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500),
+    path: z.string().min(1).max(4096),
+    hunk: z.number().int().min(0).max(100_000),
+    afterHash: z.string().regex(/^[0-9a-f]{64}$/),
+    confirm: z.boolean(),
+  }),
   z.object({ type: z.literal("list_history"), dir: z.string().min(1).max(4096).optional() }),
   /** Your title (null removes it), pin or archive for a session, by its Claude Code id. */
   z.object({

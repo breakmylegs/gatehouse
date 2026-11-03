@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process"
+import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { promisify } from "node:util"
+import { structuredPatch } from "diff"
 
 const run = promisify(execFile)
 
@@ -488,4 +490,85 @@ export async function fileVersions(
     ...(before !== undefined ? { before } : {}),
     ...(after !== undefined ? { after } : {}),
   }
+}
+
+/** One change in a file between a checkpoint and now: where it is in each, and the lines on each side. */
+export interface Hunk {
+  /** First line in the file as it was (1-based) and how many lines there; 0 lines for an addition. */
+  beforeStart: number
+  beforeLines: number
+  /** The same for the file as it is now; 0 lines for a removal. */
+  afterStart: number
+  afterLines: number
+}
+
+/** The changes between two texts, each on its own (no context lines), in order. */
+export function hunksOf(before: string, after: string): Hunk[] {
+  const patch = structuredPatch("a", "b", before, after, "", "", { context: 0 })
+  return patch.hunks.map((h) => ({
+    beforeStart: h.oldStart,
+    beforeLines: h.oldLines,
+    afterStart: h.newStart,
+    afterLines: h.newLines,
+  }))
+}
+
+/** sha256 of a text, so a change can be undone only against the version that was shown. */
+export const textHash = (text: string): string =>
+  crypto.createHash("sha256").update(text, "utf8").digest("hex")
+
+/**
+ * Puts back one change in a file as it was at a checkpoint, leaving its other changes (B12). Only a file the Changes
+ * pane lists, only text, only against the very version that was shown (`afterHash`), and after a safety checkpoint,
+ * so the undo can itself be undone. Needs `confirm: true`.
+ */
+export async function revertHunk(opts: {
+  cwd: string
+  ref: string
+  path: string
+  hunk: number
+  afterHash: string
+  sessionId: string
+  confirm: boolean
+  excludeGlobs?: readonly string[]
+}): Promise<{ path: string; safety: Checkpoint; left: number }> {
+  if (opts.confirm !== true) throw new CheckpointError("Undoing needs explicit confirmation")
+  const v = await fileVersions(opts.cwd, opts.ref, opts.path, opts.excludeGlobs)
+  if (v.change !== "modified" || v.before === undefined || v.after === undefined)
+    throw new CheckpointError(
+      "Only a file that was changed, not made or removed, has changes to undo one by one.",
+    )
+  if (textHash(v.after) !== opts.afterHash)
+    throw new CheckpointError(
+      "The file changed since it was shown. Look again, then choose the change.",
+    )
+  const hunks = hunksOf(v.before, v.after)
+  const h = hunks[opts.hunk]
+  if (!Number.isInteger(opts.hunk) || !h)
+    throw new CheckpointError("There is no such change in that file.")
+  const split = (t: string) => t.split(/(?<=\n)/)
+  const beforeLines = split(v.before)
+  const afterLines = split(v.after)
+  // A start is the 1-based line where the change sits on that side, even when it has no lines there (the diff
+  // package numbers an empty side by where its lines would go).
+  const from = Math.max(0, h.afterStart - 1)
+  const at = Math.max(0, h.beforeStart - 1)
+  const restored = beforeLines.slice(at, at + h.beforeLines)
+  const next = [
+    ...afterLines.slice(0, from),
+    ...restored,
+    ...afterLines.slice(from + h.afterLines),
+  ].join("")
+  const top = await repoTop(opts.cwd)
+  const safety = await createCheckpoint({
+    cwd: top,
+    sessionId: opts.sessionId,
+    label: `before undoing a change in ${v.path}`,
+    excludeGlobs: opts.excludeGlobs,
+  })
+  const full = path.join(top, ...v.path.split("/"))
+  const tmp = `${full}.codehouse-undo-${process.pid}`
+  fs.writeFileSync(tmp, next)
+  fs.renameSync(tmp, full)
+  return { path: v.path, safety, left: hunks.length - 1 }
 }

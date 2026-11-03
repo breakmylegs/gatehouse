@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import http from "node:http"
@@ -590,6 +591,47 @@ describe("commands over the WebSocket", () => {
     )
     await c.send({ type: "close_session", sessionId })
     // Many git commands, slow under a full run on this laptop (31 Oct).
+  }, 240_000)
+
+  it("undoes one change in a file, or whole files, only when confirmed, and records each (B12)", async () => {
+    s.sdk.turn = async () => undefined
+    const created = await c.send({ type: "create_session", cwd: s.repo })
+    const sessionId = (created.data as { sessionId: string }).sessionId
+    fs.writeFileSync(`${s.repo}/src/b.ts`, "one\ntwo\nthree\nfour\nfive\n")
+    const cp = await s.checkpoints.beforeEscalation(sessionId, s.repo, "before b")
+    const now = "ONE\ntwo\nthree\nfour\nFIVE\n"
+    fs.writeFileSync(`${s.repo}/src/b.ts`, now)
+    const afterHash = crypto.createHash("sha256").update(now, "utf8").digest("hex")
+    const ask = {
+      type: "undo_change",
+      sessionId,
+      ref: cp?.ref,
+      path: "src/b.ts",
+      hunk: 1,
+      afterHash,
+    }
+    expect(await c.send({ ...ask, confirm: false })).toMatchObject({
+      ok: false,
+      error: { code: "not-confirmed" },
+    })
+    expect((await c.send({ ...ask, confirm: true })).ok).toBe(true)
+    expect(fs.readFileSync(`${s.repo}/src/b.ts`, "utf8").replace(/\r/g, "")).toBe(
+      "ONE\ntwo\nthree\nfour\nfive\n",
+    )
+    await c.waitFor("audit", (e) => (e.record as { event: string }).event === "change_undone")
+    expect(
+      (
+        await c.send({
+          type: "undo_files",
+          sessionId,
+          ref: cp?.ref,
+          paths: ["src/b.ts"],
+          confirm: true,
+        })
+      ).ok,
+    ).toBe(true)
+    await c.waitFor("audit", (e) => (e.record as { event: string }).event === "files_undone")
+    await c.send({ type: "close_session", sessionId })
   }, 240_000)
 
   it("lists past sessions and refreshes the account", async () => {

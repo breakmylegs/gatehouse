@@ -318,6 +318,33 @@ export class HostServer {
     })
   }
 
+  /** An undo from the Changes pane, after it was made (a safety checkpoint was saved first). */
+  async #auditUndo(
+    event: string,
+    session: string,
+    cwd: string,
+    input: Record<string, unknown>,
+    reason: string,
+  ): Promise<void> {
+    await this.#opts.app.audit.record({
+      session,
+      event,
+      channel: "desktop",
+      tool: "checkpoint",
+      cwd,
+      input,
+      verdict: {
+        outcome: "allow",
+        ruleId: event.replace(/_/g, "-"),
+        reason,
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+  }
+
   // ---- commands in ----
 
   #onSocket(socket: WebSocket): void {
@@ -540,7 +567,35 @@ export class HostServer {
       case "undo_files": {
         const s = this.#session(cmd.sessionId)
         if (!cmd.confirm) throw new CommandError("not-confirmed", "Undoing needs your confirmation")
-        return await a.checkpoints.undoFiles(s.cwd, cmd.ref, cmd.paths, s.id, true)
+        const done = await a.checkpoints.undoFiles(s.cwd, cmd.ref, cmd.paths, s.id, true)
+        await this.#auditUndo(
+          "files_undone",
+          s.id,
+          s.cwd,
+          { paths: cmd.paths, ref: cmd.ref },
+          "Files were put back as they were at a checkpoint, from the desktop.",
+        )
+        return done
+      }
+      case "undo_change": {
+        const s = this.#session(cmd.sessionId)
+        if (!cmd.confirm) throw new CommandError("not-confirmed", "Undoing needs your confirmation")
+        const done = await a.checkpoints.undoChange(s.cwd, {
+          ref: cmd.ref,
+          path: cmd.path,
+          hunk: cmd.hunk,
+          afterHash: cmd.afterHash,
+          sessionId: s.id,
+          confirm: true,
+        })
+        await this.#auditUndo(
+          "change_undone",
+          s.id,
+          s.cwd,
+          { path: cmd.path, hunk: cmd.hunk, ref: cmd.ref },
+          "One change in a file was put back as it was at a checkpoint, from the desktop.",
+        )
+        return done
       }
       case "checkpoint_list":
         this.#knownCwd(cmd.cwd)

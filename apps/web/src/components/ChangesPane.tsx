@@ -2,7 +2,16 @@ import clsx from "clsx"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { clock } from "../lib/format"
+import { structuredPatch } from "diff"
 import { DiffView } from "./CodeViews"
+
+/** One change in a file (as packages/shared/src/node/checkpoint.ts counts them). */
+interface Hunk {
+  beforeStart: number
+  beforeLines: number
+  afterStart: number
+  afterLines: number
+}
 import { send, useStore } from "../store"
 
 interface Checkpoint {
@@ -160,7 +169,12 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
                   f.binary ? (
                     <DiffText text={f.diff} />
                   ) : (
-                    <FileDiff sessionId={sessionId} at={since.ref} file={f} />
+                    <FileDiff
+                      sessionId={sessionId}
+                      at={since.ref}
+                      file={f}
+                      onUndone={() => void load()}
+                    />
                   )
                 ) : null}
               </li>
@@ -219,7 +233,17 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
  * A changed file before and after in the diff view (B11), read from the checkpoint and from disk. The plain diff stays
  * when the two sides cannot be read (a very large file).
  */
-function FileDiff({ sessionId, at, file }: { sessionId: string; at: string; file: FileChange }) {
+function FileDiff({
+  sessionId,
+  at,
+  file,
+  onUndone,
+}: {
+  sessionId: string
+  at: string
+  file: FileChange
+  onUndone: () => void
+}) {
   const [sides, setSides] = useState<{ before?: string; after?: string }>()
   const [failed, setFailed] = useState(false)
   useEffect(() => {
@@ -241,7 +265,130 @@ function FileDiff({ sessionId, at, file }: { sessionId: string; at: string; file
   return (
     <div className="border-t border-line p-2">
       <DiffView path={file.path} before={sides.before ?? ""} after={sides.after ?? ""} />
+      {file.change === "modified" && sides.before !== undefined && sides.after !== undefined ? (
+        <ChangeList
+          sessionId={sessionId}
+          at={at}
+          path={file.path}
+          before={sides.before}
+          after={sides.after}
+          onUndone={onUndone}
+        />
+      ) : null}
     </div>
+  )
+}
+
+/** One change, in words: where it is in the file as it is now, and what kind. */
+export function changeWords(h: Hunk): string {
+  const lines = (n: number) => (n === 1 ? "1 line" : `${n} lines`)
+  const at = (start: number, n: number) =>
+    n === 1 ? `line ${start}` : `lines ${start} to ${start + n - 1}`
+  if (h.beforeLines === 0)
+    return `Added ${lines(h.afterLines)} at ${at(h.afterStart, h.afterLines)}`
+  if (h.afterLines === 0) return `Removed ${lines(h.beforeLines)} before line ${h.afterStart}`
+  return `Changed ${at(h.afterStart, h.afterLines)} (was ${lines(h.beforeLines)})`
+}
+
+/** The changes in a file, the same way the Host counts them (diff, no context lines). */
+export function changesIn(before: string, after: string): Hunk[] {
+  return structuredPatch("a", "b", before, after, "", "", { context: 0 }).hunks.map((h) => ({
+    beforeStart: h.oldStart,
+    beforeLines: h.oldLines,
+    afterStart: h.newStart,
+    afterLines: h.newLines,
+  }))
+}
+
+async function sha256(text: string): Promise<string> {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("")
+}
+
+/**
+ * Each change in a changed file, with Undo this change (B12). It asks first; the Host puts back only that change,
+ * and only if the file is still as shown, after a safety checkpoint, and records it.
+ */
+function ChangeList({
+  sessionId,
+  at,
+  path,
+  before,
+  after,
+  onUndone,
+}: {
+  sessionId: string
+  at: string
+  path: string
+  before: string
+  after: string
+  onUndone: () => void
+}) {
+  const hunks = changesIn(before, after)
+  const [asking, setAsking] = useState<number>()
+  const [busy, setBusy] = useState(false)
+  if (hunks.length < 2) return null
+  const undo = async (i: number) => {
+    setBusy(true)
+    const r = await send({
+      type: "undo_change",
+      sessionId,
+      ref: at,
+      path,
+      hunk: i,
+      afterHash: await sha256(after),
+      confirm: true,
+    })
+    setBusy(false)
+    setAsking(undefined)
+    if (!r.ok) {
+      toast.error(r.error?.message ?? "Nothing was undone", { id: "changes" })
+      return
+    }
+    toast(`Put back one change in ${path}.`, { id: "changes" })
+    onUndone()
+  }
+  return (
+    <section aria-label={`Changes in ${path}`} className="mt-2 grid gap-1">
+      <ol className="m-0 grid list-none gap-1 p-0">
+        {hunks.map((h, i) => (
+          <li key={i} className="flex flex-wrap items-center gap-2 text-[13px]">
+            <span>{changeWords(h)}</span>
+            {asking === i ? (
+              <span
+                role="group"
+                aria-label="Confirm undoing this change"
+                className="flex items-center gap-2"
+              >
+                <span className="text-mut">
+                  Put it back as it was? A checkpoint is saved first.
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-primary !min-h-7"
+                  disabled={busy}
+                  onClick={() => void undo(i)}
+                >
+                  Undo this change
+                </button>
+                <button type="button" className="btn !min-h-7" onClick={() => setAsking(undefined)}>
+                  Cancel
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn !min-h-7 !px-2 !text-[12.5px]"
+                aria-label={`Undo: ${changeWords(h)}`}
+                onClick={() => setAsking(i)}
+              >
+                Undo…
+              </button>
+            )}
+          </li>
+        ))}
+      </ol>
+    </section>
   )
 }
 
