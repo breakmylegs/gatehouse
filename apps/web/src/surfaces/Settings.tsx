@@ -21,19 +21,22 @@ interface Config {
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
   rulesPath?: string
   extremeCarryOn?: { turns: number; usd: number; noTurnLimit?: boolean; noSpendLimit?: boolean }
+  planLimitPause?: { percent: number; off?: boolean }
   globalInstructions?: string
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
 const CARRY_TURNS = ["25", "50", "100", "200", "500", "none"] as const
+/** Where sessions pause for the plan's 5-hour limit (owner): a percentage, or never. */
+const PAUSE_AT = ["80", "85", "90", "95", "99", "off"] as const
 const CARRY_USD = ["25", "50", "100", "250", "500", "1000", "none"] as const
 /** The choices, with a value saved by hand or by another version among them, in order. */
 const withCurrent = (list: readonly string[], v: string) =>
   list.includes(v)
     ? [...list]
-    : [...list.filter((n) => n !== "none"), v]
+    : [...list.filter((n) => /^\d+$/.test(n)), v]
         .sort((a, b) => Number(a) - Number(b))
-        .concat(list.includes("none") ? ["none"] : [])
+        .concat(list.filter((n) => !/^\d+$/.test(n)))
 interface SettingsData {
   path: string
   saved: Partial<Config>
@@ -67,6 +70,7 @@ interface Values {
   cpBurst: boolean
   /** A number, or "none" for no limit. */
   ecTurns: string
+  plPause: string
   ecUsd: string
   /** What every session is told at its start. */
   instr: string
@@ -92,6 +96,7 @@ function valuesOf(d: SettingsData): Values {
     cpEsc: c.checkpoints.beforeEscalation,
     cpBurst: c.checkpoints.editBursts,
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
+    plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     instr: c.globalInstructions ?? "",
   }
@@ -127,6 +132,14 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     ...(v.ecTurns === "none" ? { noTurnLimit: true } : {}),
     ...(v.ecUsd === "none" ? { noSpendLimit: true } : {}),
   }
+  // Absent is 95%, so the default is not written; a percentage is kept beside off for an older reader.
+  const { off: _o, ...pauseKeep } = d.saved.planLimitPause ?? { percent: 95 }
+  if (v.plPause === "95" && !d.saved.planLimitPause) delete body.planLimitPause
+  else
+    body.planLimitPause =
+      v.plPause === "off"
+        ? { ...pauseKeep, off: true }
+        : { ...pauseKeep, percent: Number(v.plPause) }
   return body
 }
 
@@ -150,6 +163,7 @@ export const DEFAULT_VALUES: Values = {
   cpEsc: true,
   cpBurst: true,
   ecTurns: "200",
+  plPause: "95",
   ecUsd: "500",
   instr: "",
 }
@@ -369,6 +383,7 @@ export function Settings() {
   const digestChanged =
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
+  const pauseChanged = differs(v, ["plPause"])
   const instrChanged = differs(v, ["instr"])
   const privacyChanged = differs(v, ["terms"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
@@ -631,6 +646,35 @@ export function Settings() {
                   </select>
                 </Field>
               </div>
+            </Group>
+
+            <Group section="sessions" title="Plan limit" gap="gap-2" changed={pauseChanged}>
+              <Field
+                label="Pause every session when the 5-hour limit reaches"
+                help="Sessions paused for the limit start again by themselves when it resets. Pausing a little short of the limit means the turn in hand is not cut off part way."
+              >
+                <select
+                  className="field"
+                  value={v.plPause}
+                  onChange={(e) => change({ plPause: e.target.value }, "Plan limit")}
+                >
+                  {withCurrent(PAUSE_AT, v.plPause).map((n) => (
+                    <option key={n} value={n}>
+                      {n === "off"
+                        ? "Never: run to the limit"
+                        : `${n}%${n === "95" ? " (recommended)" : ""}`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {v.plPause === "off" || Number(v.plPause) >= 99 ? (
+                <p role="note" className="m-0 text-[13px] text-warn">
+                  Cost: at the limit Claude Code stops the work itself, part way through a turn. If
+                  your plan has extra usage switched on, work past the limit is charged as extra
+                  usage instead, which can cost a lot with several sessions running. Plan usage, the
+                  ring under each prompt box, shows where you are.
+                </p>
+              ) : null}
             </Group>
 
             <Group section="phone" title="Daily digest" gap="gap-2" changed={digestChanged}>

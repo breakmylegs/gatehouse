@@ -159,6 +159,14 @@ function build(loose: boolean) {
      * this many automatic turns and dollars after one message of yours. Owner, 31 Oct: higher by default, and either
      * may be No limit (the flags; an older version reads the number, kept at its highest).
      */
+    /**
+     * When sessions pause for the plan's 5-hour limit (owner): the percentage, or off. Absent: 95%. Older versions keep
+     * it without using it, and pause at 95%.
+     */
+    planLimitPause: obj({
+      percent: z.number().int().min(50).max(99),
+      off: z.boolean().optional(),
+    }).optional(),
     extremeCarryOn: z
       .object({
         turns: z.number().int().min(1).max(500).default(200),

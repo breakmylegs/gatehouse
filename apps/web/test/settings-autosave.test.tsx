@@ -90,6 +90,19 @@ describe("settings save as you change them", () => {
     await waitFor(() => expect(toasts).toEqual(["Extreme approval saved"]))
   })
 
+  it("sets where sessions pause for the plan limit, and says what Never can cost", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const at = await screen.findByRole("combobox", { name: /5-hour limit reaches/ })
+    expect((at as HTMLSelectElement).value).toBe("95")
+    expect(screen.queryByRole("note")).toBeNull()
+    fireEvent.change(at, { target: { value: "off" } })
+    await waitFor(() => expect(puts).toHaveLength(1))
+    // A percentage stays beside off, for a version that reads only that.
+    expect(puts[0]?.planLimitPause).toEqual({ percent: 95, off: true })
+    expect(screen.getByRole("note").textContent).toMatch(/charged as extra usage/)
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     await openSection("Account and plan")

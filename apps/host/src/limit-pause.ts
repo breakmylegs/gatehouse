@@ -29,7 +29,17 @@ export interface LimitPauserDeps {
   /** The account's plan limits, read fresh when asked. Nothing when they cannot be read. */
   planUsage: (account: string, fresh: boolean) => Promise<PlanUsage | undefined>
   now?: () => number
+  /** Where to pause, read at each look (Settings): a percentage, or undefined for never. Absent: PAUSE_AT_PERCENT. */
+  pauseAt?: () => number | undefined
   log: (line: string) => void
+}
+
+/** The pause point from the settings: off, a percentage, or the default. */
+export function pausePoint(s: { percent: number; off?: boolean } | undefined): number | undefined {
+  if (s?.off) return undefined
+  return s && Number.isInteger(s.percent) && s.percent >= 50 && s.percent <= 99
+    ? s.percent
+    : PAUSE_AT_PERCENT
 }
 
 /** The 5-hour window as the plan meter shows it: the fullest of the session limits. */
@@ -78,6 +88,8 @@ export class LimitPauser {
 
   async #check(): Promise<void> {
     const now = (this.#d.now ?? Date.now)()
+    // Off pauses nothing new; a session paused already still starts again at the reset.
+    const at = this.#d.pauseAt ? this.#d.pauseAt() : PAUSE_AT_PERCENT
     const byAccount = new Map<string, PauseTarget[]>()
     for (const s of this.#d.sessions())
       byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
@@ -88,7 +100,7 @@ export class LimitPauser {
       for (const s of paused) {
         const until = s.paused?.until ? Date.parse(s.paused.until) : NaN
         const reset = Number.isFinite(until) && now >= until
-        const below = limit !== undefined && limit.percent < PAUSE_AT_PERCENT
+        const below = limit !== undefined && (at === undefined || limit.percent < at)
         if (!reset && !below) continue
         try {
           if (await s.resume("limit-reset")) this.#quiet.set(account, now + QUIET_AFTER_RESUME_MS)
@@ -97,7 +109,7 @@ export class LimitPauser {
           this.#d.log(`session ${s.id} could not start again: ${(e as Error).message}`)
         }
       }
-      if (!limit || limit.percent < PAUSE_AT_PERCENT) continue
+      if (at === undefined || !limit || limit.percent < at) continue
       if (now < (this.#quiet.get(account) ?? 0)) continue
       for (const s of list)
         if (!s.paused) await s.pause(limit.percent, limit.resetsAt).catch(() => undefined)

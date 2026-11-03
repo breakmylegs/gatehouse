@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { LimitPauser, PAUSE_AT_PERCENT, type PauseTarget } from "../src/limit-pause.js"
+import { LimitPauser, PAUSE_AT_PERCENT, pausePoint, type PauseTarget } from "../src/limit-pause.js"
 import type { PlanUsage } from "../src/plan-usage.js"
 
 // Owner, 31 Oct: every session pauses at 95% of the plan's 5-hour limit and starts again when it resets.
@@ -36,6 +36,7 @@ function setup(
   targets: PauseTarget[],
   answers: Record<string, PlanUsage | undefined>,
   at = Date.parse("2026-10-31T10:00:00Z"),
+  pauseAt?: () => number | undefined,
 ) {
   const clock = { now: at }
   const logs: string[] = []
@@ -47,6 +48,7 @@ function setup(
       return answers[account]
     },
     now: () => clock.now,
+    ...(pauseAt ? { pauseAt } : {}),
     log: (l) => logs.push(l),
   })
   return { pauser, clock, logs, asked, answers }
@@ -63,6 +65,28 @@ describe("pausing at the plan limit", () => {
     expect(a.calls).toEqual([`pause 95 ${RESET}`])
     expect(b.calls).toEqual([`pause 95 ${RESET}`])
     expect(other.calls).toEqual([])
+  })
+
+  it("pauses where Settings says, or never when it is off, and still starts a paused one at the reset", async () => {
+    const a = target("a")
+    let at: number | undefined = 80
+    const s = setup([a], { main: usage(81) }, Date.parse("2026-10-31T10:00:00Z"), () => at)
+    await s.pauser.check()
+    expect(a.calls).toEqual([`pause 81 ${RESET}`])
+    // Off: nothing new is paused, and the one paused already starts again at the reset.
+    at = undefined
+    const b = target("b")
+    const t = setup([a, b], { main: usage(99) }, Date.parse(RESET) + 1000, () => at)
+    await t.pauser.check()
+    expect(a.calls.at(-1)).toBe("resume")
+    expect(b.calls).toEqual([])
+    // What Settings holds: off, a percentage, or the default for nothing or a value out of range.
+    expect([
+      pausePoint({ percent: 90, off: true }),
+      pausePoint({ percent: 85 }),
+      pausePoint(undefined),
+      pausePoint({ percent: 20 }),
+    ]).toEqual([undefined, 85, 95, 95])
   })
 
   it("leaves sessions alone just below the pause point", async () => {

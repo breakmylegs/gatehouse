@@ -2,7 +2,7 @@ import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
-import { LimitPauser } from "./limit-pause.js"
+import { LimitPauser, pausePoint } from "./limit-pause.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -427,6 +427,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const limitPauser = new LimitPauser({
     sessions: () => manager.liveSessions(),
     planUsage: (account, fresh) => manager.planUsage(account, fresh),
+    pauseAt: () => pausePoint(config.planLimitPause),
     log,
   })
   // The sessions open now, so a restart or an update brings them back (owner, 30 Oct: nothing lost).
