@@ -5,7 +5,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { limiter } from "../src/limits.js"
+import { limiter, REPORT_SECONDS, type JobUsage } from "../src/limits.js"
 
 const REPO = path.resolve(import.meta.dirname, "../../..")
 const csc = [
@@ -83,6 +83,32 @@ describe.skipIf(!csc)("Codehouse-Limits.exe", () => {
     expect([code, out]).toEqual([7, "got hello\n"])
     expect(errors.join("")).toContain("a warning")
   })
+
+  it("says what the job uses every few seconds, apart from the command's own errors", async () => {
+    const errors: string[] = []
+    const usage: JobUsage[] = []
+    const child = limiter(exe).spawn(
+      job(),
+      () => "high",
+      (t) => errors.push(t),
+      (u) => usage.push(u),
+    )({
+      command: process.execPath,
+      // Busy, with 60 MB held, for a little over two reports.
+      args: [
+        "-e",
+        `const keep = Buffer.alloc(60 * 1024 * 1024, 1); const t = Date.now(); while (Date.now() - t < ${REPORT_SECONDS * 2500}) {} console.error('done ' + keep.length)`,
+      ],
+      env: process.env,
+    } as never) as unknown as ReturnType<typeof spawn>
+    await new Promise((r) => child.on("exit", r))
+    expect(usage.length).toBeGreaterThanOrEqual(1)
+    expect(usage[0]!.cpu).toBeGreaterThan(0)
+    expect(usage[0]!.memoryMb).toBeGreaterThanOrEqual(60)
+    expect(usage[0]!.processes).toBeGreaterThanOrEqual(1)
+    expect(errors.join("")).toContain("done")
+    expect(errors.join("")).not.toContain("codeh-usage")
+  }, 60_000)
 
   it("ends the command and everything it started when it is killed", async () => {
     const name = job()

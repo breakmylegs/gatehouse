@@ -71,6 +71,7 @@ import {
 import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } from "../lib/modes"
 import { Icon, type IconName } from "../components/Icon"
 import { EmptyState } from "../components/EmptyState"
+import { loadBars } from "../lib/load"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -879,6 +880,7 @@ function SessionPane({
                 {LEVEL_NOTES[session.resources as Level]}
               </span>
             ) : null}
+            {ended ? null : <LoadBars sessionId={session.id} />}
             <span className="ml-auto flex items-center gap-2">
               <PlanMeter
                 account={session.account ?? MAIN_ACCOUNT}
@@ -1254,6 +1256,26 @@ export const FORCE_AFTER_MS = 5000
  * Stops the session there and then: the turn and everything in the background. If it is still working a few
  * seconds later, Force stop ends its Claude process and starts it again on the same conversation.
  */
+/**
+ * Two small bars for what this session's processes use now (owner, 1 Nov): its share of the processor, and its memory
+ * against its level's cap or this computer's. Nothing until the first reading, or where Codehouse cannot measure it.
+ */
+function LoadBars({ sessionId }: { sessionId: string }) {
+  const load = useStore((s) => s.load[sessionId])
+  if (!load) return null
+  const b = loadBars(load)
+  return (
+    <span className="load-bars" role="img" aria-label={b.words} title={b.words}>
+      <span className="load-bar" data-high={b.cpu >= 80 ? "" : undefined}>
+        <span style={{ width: `${b.cpu}%` }} />
+      </span>
+      <span className="load-bar is-mem" data-high={b.memory >= 85 ? "" : undefined}>
+        <span style={{ width: `${b.memory}%` }} />
+      </span>
+    </span>
+  )
+}
+
 function StopButton({ sessionId, busy }: { sessionId: string; busy: boolean }) {
   const [askedAt, setAskedAt] = useState<number>()
   const now = useNow(1000)

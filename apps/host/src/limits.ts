@@ -31,12 +31,80 @@ const levelArgs = (l: ResourceLevel) => [
   LEVELS[l].priority,
 ]
 
+/** What a session's job uses now: its share of the whole processor, the memory of its processes, how many there are. */
+export interface JobUsage {
+  cpu: number
+  memoryMb: number
+  processes: number
+}
+
+/** How often the helper says what the job uses, in seconds. */
+export const REPORT_SECONDS = 5
+const USAGE = "[codeh-usage] "
+
+/** A usage line from the helper, or undefined for anything else (or a line it cannot read). */
+export function usageOf(line: string): JobUsage | undefined {
+  if (!line.startsWith(USAGE)) return undefined
+  try {
+    const o = JSON.parse(line.slice(USAGE.length)) as Record<string, unknown>
+    const n = (v: unknown, max: number) =>
+      typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.min(v, max) : undefined
+    const cpu = n(o.cpu, 100)
+    const memoryMb = n(o.memoryMb, 1 << 30)
+    const processes = n(o.processes, 1 << 20)
+    return cpu === undefined || memoryMb === undefined || processes === undefined
+      ? undefined
+      : { cpu, memoryMb, processes }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Splits the helper's error stream into lines: usage lines go to onUsage, the rest on to onStderr as they came. A line
+ * cut between two chunks is kept until the rest arrives.
+ */
+export function splitStderr(
+  onStderr: (text: string) => void,
+  onUsage?: (u: JobUsage) => void,
+): (chunk: string) => void {
+  let rest = ""
+  return (chunk) => {
+    const lines = (rest + chunk).split(/\r?\n/)
+    rest = lines.pop() ?? ""
+    // A piece with no line end yet is held only while it could still be a usage line; anything else goes on now.
+    if (rest && !USAGE.startsWith(rest) && !rest.startsWith(USAGE)) {
+      onStderr(
+        lines
+          .filter((l) => !usageOf(l))
+          .map((l) => l + "\n")
+          .join("") + rest,
+      )
+      for (const l of lines) {
+        const u = usageOf(l)
+        if (u) onUsage?.(u)
+      }
+      rest = ""
+      return
+    }
+    let other = ""
+    for (const line of lines) {
+      const u = usageOf(line)
+      if (u) onUsage?.(u)
+      else other += line + "\n"
+    }
+    if (other) onStderr(other)
+  }
+}
+
 export interface Limiter {
   /** For the SDK's spawnClaudeCodeProcess: Claude Code inside its own job, at the session's level when it starts. */
   spawn(
     job: string,
     level: () => ResourceLevel,
     onStderr: (text: string) => void,
+    /** What the job uses, every few seconds. */
+    onUsage?: (u: JobUsage) => void,
   ): (o: SpawnOptions) => SpawnedProcess
   /** Changes the level of a running session's job. */
   set(job: string, level: ResourceLevel): Promise<void>
@@ -45,15 +113,17 @@ export interface Limiter {
 /** The helper at `exe`. The SDK reads only stdin and stdout from a custom spawn, so stderr is passed on here. */
 export function limiter(exe: string): Limiter {
   return {
-    spawn: (job, level, onStderr) => (o) => {
-      const child = spawn(exe, ["--name", job, ...levelArgs(level()), "--", o.command, ...o.args], {
+    spawn: (job, level, onStderr, onUsage) => (o) => {
+      const args = ["--name", job, ...levelArgs(level()), "--report", String(REPORT_SECONDS)]
+      const child = spawn(exe, [...args, "--", o.command, ...o.args], {
         cwd: o.cwd,
         env: o.env,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true,
         signal: o.signal,
       })
-      child.stderr.on("data", (d: Buffer) => onStderr(d.toString("utf8")))
+      const pass = splitStderr(onStderr, onUsage)
+      child.stderr.on("data", (d: Buffer) => pass(d.toString("utf8")))
       return child as unknown as SpawnedProcess
     },
     set: (job, level) =>

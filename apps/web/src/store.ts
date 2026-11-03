@@ -24,6 +24,7 @@ import {
   type Transcript,
 } from "./lib/transcript"
 import { nextActivity, nextPulse, type Activity, type Pulse } from "./lib/activity"
+import { loadOf, type Load } from "./lib/load"
 import { fromRecord, laterDecision, type Decision } from "./lib/decision"
 
 /** The main Claude account: Claude Code's usual sign-in on this computer. */
@@ -103,6 +104,8 @@ export interface State {
   activity: Record<string, Activity>
   /** When anything last arrived in each running turn, and its tokens. */
   pulse: Record<string, Pulse>
+  /** What each session's processes use now, from its limits helper every few seconds (owner, 1 Nov). */
+  load: Record<string, Load>
   /** Each session's terminal pane: what it printed, and whether a command is running. */
   term: Record<string, TermState>
   audit: unknown[]
@@ -295,6 +298,7 @@ export const useStore = create<State>((set, get) => ({
   transcripts: {},
   activity: {},
   pulse: {},
+  load: {},
   term: {},
   audit: [],
   notices: [],
@@ -508,6 +512,11 @@ export const useStore = create<State>((set, get) => ({
         return
       }
       case "session_event": {
+        if (e.event === "load") {
+          const l = loadOf(e.data)
+          if (l) set((s) => ({ load: { ...s.load, [e.sessionId]: l } }))
+          return
+        }
         if (e.event === "decision") {
           const d = decisionOf(e.data)
           if (d) get().addDecisions([d])

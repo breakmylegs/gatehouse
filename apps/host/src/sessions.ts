@@ -230,6 +230,7 @@ export interface SessionEvents {
         | "resumed"
         | "carry_on"
         | "carry_on_end"
+        | "load"
       data: Record<string, unknown>
     },
   ]
@@ -717,7 +718,23 @@ export class Session extends EventEmitter<SessionEvents> {
       stderr: onStderr,
       // Inside a job object with the session's limits, when Codehouse can make one. Its stderr comes back to onStderr.
       ...(d.limiter
-        ? { spawnClaudeCodeProcess: d.limiter.spawn(this.#job, () => this.#resources, onStderr) }
+        ? {
+            spawnClaudeCodeProcess: d.limiter.spawn(
+              this.#job,
+              () => this.#resources,
+              onStderr,
+              // What it uses now, for the bars in its pane (owner, 1 Nov), against its level's memory cap.
+              (u) =>
+                this.emit("event", {
+                  type: "load",
+                  data: {
+                    ...u,
+                    capMb: LEVELS[this.#resources].memoryMb,
+                    totalMb: Math.round(os.totalmem() / 1024 / 1024),
+                  },
+                }),
+            ),
+          }
         : {}),
       ...(this.#opts.resume !== undefined
         ? {

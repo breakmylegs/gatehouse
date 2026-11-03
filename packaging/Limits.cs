@@ -11,6 +11,8 @@ using System.Text;
 //       Starts the command suspended inside a new job with those limits, hands it this program's own input, output
 //       and error streams, lets it run and exits with its exit code. Closing this program (or killing it) closes the
 //       job, which ends the command and everything it started. 0 for --cpu or --memory-mb means no limit.
+//       With --report <seconds>, it also writes what the job uses every so many seconds to its error stream, as one
+//       line: [codeh-usage] {"cpu":<percent of the whole processor>,"memoryMb":<working sets>,"processes":<n>}.
 //   Codehouse-Limits.exe --set <job> --cpu <percent> --memory-mb <MB> --priority <below|normal>
 //       Changes the limits of a running job.
 //   Codehouse-Limits.exe --query <job>
@@ -24,7 +26,8 @@ static class Limits
     const uint CREATE_SUSPENDED = 0x4, CREATE_NO_WINDOW = 0x08000000, CREATE_UNICODE_ENVIRONMENT = 0x400;
     const int STARTF_USESTDHANDLES = 0x100;
     const uint JOB_ALL_ACCESS = 0x1F001F;
-    const int ExtendedLimits = 9, CpuRate = 15, BasicAccounting = 1;
+    const int ExtendedLimits = 9, CpuRate = 15, BasicAccounting = 1, ProcessIdList = 3;
+    const uint QUERY_LIMITED = 0x1000;
 
     [StructLayout(LayoutKind.Sequential)]
     struct BasicLimit
@@ -62,6 +65,14 @@ static class Limits
     {
         public long TotalUserTime, TotalKernelTime, ThisPeriodTotalUserTime, ThisPeriodTotalKernelTime;
         public uint TotalPageFaultCount, TotalProcesses, ActiveProcesses, TotalTerminatedProcesses;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct MemoryCounters
+    {
+        public uint cb, PageFaultCount;
+        public UIntPtr PeakWorkingSetSize, WorkingSetSize, QuotaPeakPagedPoolUsage, QuotaPagedPoolUsage,
+            QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage, PagefileUsage, PeakPagefileUsage;
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -106,6 +117,10 @@ static class Limits
     static extern bool TerminateProcess(IntPtr process, uint code);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
     static extern IntPtr GetCommandLineW();
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool K32GetProcessMemoryInfo(IntPtr process, out MemoryCounters counters, uint size);
     [DllImport("kernel32.dll", SetLastError = true)]
     static extern IntPtr GetStdHandle(int which);
 
@@ -175,6 +190,59 @@ static class Limits
         if (!Set(job, CpuRate, rate)) Say("the processor cap could not be set: " + new Win32Exception(Marshal.GetLastWin32Error()).Message);
     }
 
+    /** The working sets of every process in the job, in MB, and how many there are. */
+    static ulong JobMemoryMb(IntPtr job, out uint processes)
+    {
+        processes = 0;
+        const int max = 512;
+        int size = 8 + IntPtr.Size * max;
+        IntPtr p = Marshal.AllocHGlobal(size);
+        ulong bytes = 0;
+        try
+        {
+            if (!QueryInformationJobObject(job, ProcessIdList, p, (uint)size, IntPtr.Zero)) return 0;
+            uint n = (uint)Marshal.ReadInt32(p, 4);
+            processes = n;
+            for (int i = 0; i < n && i < max; i++)
+            {
+                int pid = (int)Marshal.ReadIntPtr(p, 8 + i * IntPtr.Size).ToInt64();
+                IntPtr h = OpenProcess(QUERY_LIMITED, false, pid);
+                if (h == IntPtr.Zero) continue;
+                MemoryCounters c;
+                if (K32GetProcessMemoryInfo(h, out c, (uint)Marshal.SizeOf(typeof(MemoryCounters))))
+                    bytes += c.WorkingSetSize.ToUInt64();
+                CloseHandle(h);
+            }
+        }
+        finally { Marshal.FreeHGlobal(p); }
+        return bytes / (1024 * 1024);
+    }
+
+    /** Waits for the command, saying what the job uses every so many seconds when asked to (0: never). */
+    static void Wait(IntPtr job, IntPtr process, uint seconds)
+    {
+        if (seconds == 0) { WaitForSingleObject(process, 0xFFFFFFFF); return; }
+        long lastBusy = 0, lastAt = DateTime.UtcNow.Ticks;
+        while (WaitForSingleObject(process, seconds * 1000) != 0)
+        {
+            try
+            {
+                Accounting acc = Get<Accounting>(job, BasicAccounting);
+                long busy = acc.TotalUserTime + acc.TotalKernelTime, at = DateTime.UtcNow.Ticks;
+                double cpu = at > lastAt ? 100.0 * (busy - lastBusy) / ((at - lastAt) * (double)Environment.ProcessorCount) : 0;
+                bool first = lastBusy == 0;
+                lastBusy = busy;
+                lastAt = at;
+                uint processes;
+                ulong mb = JobMemoryMb(job, out processes);
+                if (first) continue;
+                Console.Error.WriteLine("[codeh-usage] {\"cpu\":" + Math.Max(0, Math.Min(100, Math.Round(cpu, 1))).ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    + ",\"memoryMb\":" + mb + ",\"processes\":" + processes + "}");
+            }
+            catch (Exception) { }
+        }
+    }
+
     static int Run(string[] args)
     {
         string name = Arg(args, "--name");
@@ -209,7 +277,7 @@ static class Limits
         }
         ResumeThread(pi.hThread);
         CloseHandle(pi.hThread);
-        WaitForSingleObject(pi.hProcess, 0xFFFFFFFF);
+        Wait(job, pi.hProcess, Number(Arg(args, "--report"), 3600));
         uint code;
         GetExitCodeProcess(pi.hProcess, out code);
         CloseHandle(pi.hProcess);
