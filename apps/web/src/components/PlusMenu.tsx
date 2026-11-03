@@ -16,6 +16,7 @@ export function PlusMenu({
   meta,
   onInsert,
   onPictures,
+  onFiles,
   disabled,
 }: {
   sessionId: string
@@ -23,6 +24,8 @@ export function PlusMenu({
   onInsert: (text: string) => void
   /** Pictures among the files you add, shown as thumbnails rather than paths. */
   onPictures?: (rels: string[]) => void
+  /** Other files it attached, shown as icons by the prompt box rather than mentioned in its text. */
+  onFiles?: (rels: string[]) => void
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -82,7 +85,8 @@ export function PlusMenu({
     const pictures = ok.map((f) => f.rel as string).filter((rel) => onPictures && isPicture(rel))
     const others = ok.map((f) => f.rel as string).filter((rel) => !pictures.includes(rel))
     if (pictures.length) onPictures?.(pictures)
-    if (others.length) onInsert(others.map((rel) => `@${rel}`).join(" ") + " ")
+    if (others.length && onFiles) onFiles(others)
+    else if (others.length) onInsert(others.map((rel) => `@${rel}`).join(" ") + " ")
     for (const f of r.data.files.filter((x) => x.error))
       toast.error(`${f.path.split(/[\\/]/).pop()}: ${f.error}`)
   }

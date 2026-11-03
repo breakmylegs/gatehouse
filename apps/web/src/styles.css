@@ -1570,6 +1570,38 @@ mark.seg {
   }
 }
 
+/* An attached file as an icon, its kind in the corner (owner, 3 Nov), like a picture's thumbnail beside it. */
+.file-chip {
+  position: relative;
+  display: inline-flex;
+}
+.file-chip-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-s2);
+  color: var(--c-mut);
+}
+.file-chip-ext {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--c-s1);
+  color: var(--c-tx);
+  font: 700 8.5px/1.3 var(--font-code);
+}
+.file-chip > .pic-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+
 /* A link-like button in the bar, for what is seldom pressed. */
 .composer-link {
   padding: 0 2px;

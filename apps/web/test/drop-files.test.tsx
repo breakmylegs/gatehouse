@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 // Drag and drop any file into the prompt box (owner, 1 Nov: "it only allows me to add files via the + button").
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { forwardRef } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { useStore } from "../src/store"
-import { Workspace } from "../src/surfaces/Workspace"
+import { send, useStore } from "../src/store"
+import { ItemView, Workspace } from "../src/surfaces/Workspace"
 
 const posted: Array<Record<string, unknown>> = []
 const toasts: string[] = []
@@ -77,13 +77,39 @@ const drop = (target: Element, files: File[]) =>
   fireEvent.drop(target, { dataTransfer: { files, types: ["Files"] } })
 
 describe("dropping files on the prompt box", () => {
-  it("attaches any file by its name and mentions it in the prompt, as Add files does", async () => {
+  it("attaches any file by its name as an icon, not as its path in the text, and names it to Claude when sent", async () => {
     render(<Workspace />)
     const box = screen.getByRole("textbox", { name: /prompt|message/i }) as HTMLTextAreaElement
     drop(box, [new File(["hello"], "notes.txt", { type: "text/plain" })])
-    await waitFor(() => expect(box.value).toContain("@.codehouse/attachments/abc123-notes.txt"))
+    expect(await screen.findByRole("img", { name: "File notes.txt" })).toBeTruthy()
+    expect(box.value).toBe("")
     expect(posted[0]).toMatchObject({ session: "s1", kind: "file", name: "notes.txt" })
     expect(posted[0]?.data).toBe(btoa("hello"))
+    fireEvent.change(box, { target: { value: "Read this" } })
+    fireEvent.click(screen.getByRole("button", { name: "Send" }))
+    await waitFor(() =>
+      expect(send).toHaveBeenCalledWith({
+        type: "prompt",
+        sessionId: "s1",
+        text: "Read this\n\n@.codehouse/attachments/abc123-notes.txt",
+      }),
+    )
+  })
+
+  it("shows the files in what you sent as icons, and your words without their paths, live or read back", () => {
+    render(
+      <ItemView
+        item={{
+          id: "u1",
+          kind: "user",
+          text: "Read this\n\n@.codehouse/attachments/abc123-notes.txt",
+        }}
+      />,
+    )
+    const sent = screen.getByRole("group", { name: "Files you sent" })
+    expect(within(sent).getByRole("img", { name: "File notes.txt" })).toBeTruthy()
+    expect(screen.getByText("Read this")).toBeTruthy()
+    expect(screen.queryByText(/@\.codehouse/)).toBeNull()
   })
 
   it("says why a file was refused, and attaches nothing for it", async () => {

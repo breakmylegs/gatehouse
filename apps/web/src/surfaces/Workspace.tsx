@@ -72,6 +72,8 @@ import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } f
 import { Icon, type IconName } from "../components/Icon"
 import { EmptyState } from "../components/EmptyState"
 import { loadBars } from "../lib/load"
+import { attachedName, splitAttachments, type AttachedFile } from "../lib/attachments"
+import { FileChip } from "../components/FileChip"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -1429,6 +1431,17 @@ function Composer({
   // Pictures you paste, drop or add: shown as thumbnails, saved into the session's folder, and sent as references
   // with your message, so the prompt box keeps only what you typed (owner, 30 Oct).
   const [pictures, setPictures] = useState<Picture[]>([])
+  // Other files you attached: an icon each, named to Claude with @ when you send (owner, 3 Nov).
+  const [files, setFiles] = useState<AttachedFile[]>([])
+  const addFiles = (rels: string[]) => {
+    setFiles((f) => [
+      ...f,
+      ...rels
+        .filter((rel) => !f.some((x) => x.rel === rel))
+        .map((rel) => ({ rel, name: attachedName(rel) })),
+    ])
+    area.current?.focus()
+  }
   const [viewing, setViewing] = useState<{ url: string; name: string }>()
   const [dropping, setDropping] = useState(false)
   /**
@@ -1458,10 +1471,10 @@ function Composer({
         type: f.type || "application/octet-stream",
         data,
       })
-      if (r.ok && r.data) mentions.push(`@${r.data.rel}`)
+      if (r.ok && r.data) mentions.push(r.data.rel)
       else toast.error(`${f.name}: ${r.error ?? "it was not attached"}`)
     }
-    if (mentions.length) insert(mentions.join(" ") + " ")
+    if (mentions.length) addFiles(mentions)
   }
   async function attachPictures(files: File[]): Promise<boolean> {
     const chosen = files.filter((f) => /^image\/(png|jpeg|gif|webp)$/.test(f.type))
@@ -1521,7 +1534,7 @@ function Composer({
 
   async function submit() {
     const t = text.trim()
-    if (!t && pictures.length === 0) return
+    if (!t && pictures.length === 0 && files.length === 0) return
     if (starting) {
       toast(
         "This session is still starting. What you wrote stays here: send it once it is ready.",
@@ -1593,17 +1606,19 @@ function Composer({
       return
     }
     // What Claude gets: your words, then a reference to each picture, which it opens.
-    const full = [t, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
+    const named = files.map((f) => `@${f.rel}`).join(" ")
+    const full = [t, named, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
     // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.
     const st = useStore.getState().sessions[sessionId]?.state
     addUserText(
       sessionId,
-      t,
+      [t, named].filter(Boolean).join("\n\n"),
       pictures.map((p) => ({ url: p.url, name: p.name })),
       st === "running" || st === "waiting",
     )
     setText("")
     setPictures([])
+    setFiles([])
     const r = await send({ type: "prompt", sessionId, text: full })
     if (!r.ok) toast.error(r.error?.message ?? "The prompt was not sent")
   }
@@ -1639,6 +1654,21 @@ function Composer({
       <label htmlFor={composerId} className="sr-only">
         Prompt
       </label>
+      {files.length ? (
+        <ul className="m-0 flex list-none flex-wrap gap-2 p-0 pl-12" aria-label="Files to send">
+          {files.map((f) => (
+            <li key={f.rel}>
+              <FileChip
+                name={f.name}
+                onRemove={() => {
+                  setFiles((all) => all.filter((x) => x.rel !== f.rel))
+                  area.current?.focus()
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {pictures.length ? (
         <ul className="m-0 flex list-none flex-wrap gap-2 p-0 pl-12" aria-label="Pictures to send">
           {pictures.map((p) => (
@@ -1703,6 +1733,7 @@ function Composer({
           meta={meta}
           onInsert={insert}
           onPictures={(rels) => void addSavedPictures(rels)}
+          onFiles={addFiles}
           disabled={disabled}
         />
         <textarea
@@ -1748,7 +1779,7 @@ function Composer({
             className="btn composer-icon composer-send"
             aria-label="Send"
             title="Send (Enter)"
-            disabled={disabled || (!text.trim() && pictures.length === 0)}
+            disabled={disabled || (!text.trim() && pictures.length === 0 && files.length === 0)}
             onClick={() => void submit()}
           >
             <Icon name="send" />
@@ -1917,8 +1948,20 @@ function UserMessage({
   const [editing, setEditing] = useState<string>()
   const canFork = Boolean(sessionId && point && (point.before || point.first))
   const { shown, retry } = usePictures(sessionId, images)
+  const { words, files } = splitAttachments(text)
   return (
     <div className="ml-auto grid max-w-[80%] justify-items-end gap-1.5">
+      {files.length ? (
+        <div
+          className="flex flex-wrap justify-end gap-1.5"
+          aria-label="Files you sent"
+          role="group"
+        >
+          {files.map((f) => (
+            <FileChip key={f.rel} name={f.name} />
+          ))}
+        </div>
+      ) : null}
       {shown.length ? (
         <div className="flex flex-wrap justify-end gap-1.5">
           {shown.map((im, i) =>
@@ -1974,10 +2017,10 @@ function UserMessage({
             </button>
           </span>
         </form>
-      ) : text ? (
+      ) : words ? (
         <div className="whitespace-pre-wrap rounded-md border border-line bg-s2 px-3 py-2 [overflow-wrap:anywhere]">
           <span className="sr-only">You: </span>
-          {text}
+          {words}
         </div>
       ) : null}
       {text ? (
