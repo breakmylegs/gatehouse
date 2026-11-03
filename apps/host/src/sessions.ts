@@ -29,6 +29,7 @@ import {
 import type { HostAudit } from "./hostaudit.js"
 import type { HostKillSwitch } from "./kill.js"
 import { pluginsWithMods } from "./marketplace.js"
+import { inClaudeRange, rangeText } from "./claude-range.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -833,6 +834,19 @@ export class Session extends EventEmitter<SessionEvents> {
       if ((m.subtype as string) === "init" && typeof m.model === "string") this.#model = m.model
       // B03: a plugin installed outside Codehouse can hold a mod, whose tool.check hook has the last word after the
       // floor hook and so could allow a call the Approver never saw. Such a session stops before any tool runs.
+      // B04: Codehouse's checks were made against the Claude Code versions its release names. A session on another
+      // version, or one that does not say, stops before any tool runs. A model on this computer runs no Claude Code.
+      if (
+        (m.subtype as string) === "init" &&
+        this.#opts.localModel === undefined &&
+        !inClaudeRange(m.claude_code_version)
+      )
+        this.#fatal(
+          new SafetyError(
+            1,
+            `this session reported ${typeof m.claude_code_version === "string" ? `Claude Code ${m.claude_code_version.slice(0, 40)}` : "no Claude Code version"}, and this Codehouse was checked with ${rangeText()}, so it was stopped before it ran anything. Update Codehouse (Settings, Updates), or reinstall it with Codehouse-Setup.exe.`,
+          ),
+        )
       if ((m.subtype as string) === "init") {
         const modded = pluginsWithMods(m.plugins)
         if (modded.length)

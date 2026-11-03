@@ -95,6 +95,13 @@ describe("the Doctor's checks", () => {
       expect(c[id]!.state, id).toBe("warn")
   })
 
+  it("calls a Claude Code this release was not checked with a problem (B04)", () => {
+    expect(by(facts({ claude: { found: true, version: "9.9.9" } }))["claude-code"]).toMatchObject({
+      state: "fail",
+      detail: expect.stringMatching(/9\.9\.9[\s\S]*checked with/),
+    })
+  })
+
   it("waits for the first sign-in check instead of calling it a problem", () => {
     const c = by(facts({ health: health({ signin: { ...health().signin, checked: false } }) }))
     expect(c["sign-in"]!.state).toBe("warn")
@@ -134,7 +141,7 @@ describe("GET /api/doctor", () => {
       expect(body.version).toBe("2.1.20")
       expect(body.checks.find((c) => c.id === "listener")).toMatchObject({ state: "ok" })
       expect(body.report).toMatch(/^Codehouse 2\.1\.20, checked /)
-      expect(body.report).toContain("OK   Claude Code: Claude Code 2.1.310.")
+      expect(body.report).toContain("OK   Claude Code: Claude Code 2.1.310, the version")
       expect(body.report).not.toContain("someone@example.com")
     } finally {
       await app.close()

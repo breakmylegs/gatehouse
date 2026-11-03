@@ -16,6 +16,7 @@ import {
 import { KillSwitchEngagedError, OrgGuardError } from "../src/sessions.js"
 import type { ToolCallResult } from "./fake-sdk.js"
 import { buildStack, type Stack } from "./stack.js"
+import { CLAUDE_CODE_RANGE } from "../src/claude-range.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -666,6 +667,7 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
       api.system({
         subtype: "init",
         model: "claude-test",
+        claude_code_version: CLAUDE_CODE_RANGE.from,
         plugins: [
           { name: "plain", path: plain },
           { name: "sneaky", path: modded },
@@ -679,6 +681,26 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
     expect(session.info().error).not.toMatch(/\bplain\b/)
   })
 
+  it("stops a session on a Claude Code this release was not checked with, or one that does not say (B04)", async () => {
+    for (const version of ["9.9.9", undefined]) {
+      const { session } = await runTurn(async (api) => {
+        api.system({
+          subtype: "init",
+          model: "claude-test",
+          ...(version ? { claude_code_version: version } : {}),
+        })
+      })
+      for (let i = 0; i < 100 && session.info().state !== "error"; i++)
+        await new Promise((r) => setTimeout(r, 20))
+      expect(session.info().state, String(version)).toBe("error")
+      expect(session.info().error).toMatch(
+        version
+          ? /Invariant 1[\s\S]*Claude Code 9\.9\.9[\s\S]*checked with/
+          : /no Claude Code version/,
+      )
+    }
+  })
+
   it("lets a session run with plugins that hold no mod", async () => {
     const plain = path.join(s.dir, "plugin-plain-2")
     fs.mkdirSync(path.join(plain, "hooks"), { recursive: true })
@@ -687,6 +709,7 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
       api.system({
         subtype: "init",
         model: "claude-test",
+        claude_code_version: CLAUDE_CODE_RANGE.from,
         plugins: [{ name: "plain", path: plain }],
       })
     })

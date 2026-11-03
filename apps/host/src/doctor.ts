@@ -11,6 +11,7 @@ import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { gatehouseDataDir, type GatehouseConfig } from "@gatehouse/shared/node"
 import { redactString } from "@gatehouse/policy"
 import { checkRuntime, type LocalRuntimeConfig } from "./providers/local-runtime.js"
+import { inClaudeRange, rangeText } from "./claude-range.js"
 
 export type DoctorState = "ok" | "warn" | "fail"
 
@@ -54,20 +55,28 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
           detail: "Claude Code was not found, so no session can start.",
           fix: "Install Codehouse again with Codehouse-Setup.exe from the newest release: it brings Claude Code with it.",
         }
-      : f.claude.version
+      : f.claude.version && !inClaudeRange(f.claude.version)
         ? {
             id: "claude-code",
             label: "Claude Code",
-            state: "ok",
-            detail: `Claude Code ${f.claude.version}.`,
+            state: "fail",
+            detail: `Claude Code ${f.claude.version} is here, and this Codehouse was checked with ${rangeText()}, so sessions do not start.`,
+            fix: "Settings, Updates: update Codehouse, or install it again with Codehouse-Setup.exe from the newest release.",
           }
-        : {
-            id: "claude-code",
-            label: "Claude Code",
-            state: "warn",
-            detail: "Claude Code is here but did not say which version it is.",
-            fix: "Restart Codehouse. If this stays, install it again with Codehouse-Setup.exe.",
-          },
+        : f.claude.version
+          ? {
+              id: "claude-code",
+              label: "Claude Code",
+              state: "ok",
+              detail: `Claude Code ${f.claude.version}, the version this Codehouse was checked with.`,
+            }
+          : {
+              id: "claude-code",
+              label: "Claude Code",
+              state: "warn",
+              detail: "Claude Code is here but did not say which version it is.",
+              fix: "Restart Codehouse. If this stays, install it again with Codehouse-Setup.exe.",
+            },
   )
 
   const s = h.signin

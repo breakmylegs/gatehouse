@@ -8,6 +8,7 @@ import type {
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk"
 import type { QueryFn } from "../src/account.js"
+import { CLAUDE_CODE_RANGE } from "../src/claude-range.js"
 
 export interface ToolCallResult {
   executed: boolean
@@ -135,6 +136,8 @@ export class FakeSdk {
       type: "system",
       subtype: "init",
       model: "fake-model",
+      // The bundled Claude Code, as a real session reports it (B04).
+      claude_code_version: CLAUDE_CODE_RANGE.from,
       cwd: opts.cwd,
       tools: [],
       mcp_servers: [],
