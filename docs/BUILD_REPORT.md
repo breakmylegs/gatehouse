@@ -137,6 +137,12 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Not used yet:** the wordmarks are in the app's files for a later place that wants one. The offline picture waits for a full-page offline state (being offline is a banner today).
 - Tests: `apps/web/test/brand.test.tsx`, `apps/host/test/brand-files.test.ts` (new; the .ico goes through the C# compiler), `scenes.test.tsx` (the pack's scenes in both themes, earlier ids). Seven break checks fail as they should.
 
+## Phase 104: what happened while you were away (B14)
+
+- **What it does:** the window notes when you leave it (hidden, or another window in front). Back after ten minutes or more, each open session shows **While you were away** over the top of its transcript, in up to five lines: Claude's turns finished (or that it is still working), the files it changed (an edit that failed is not counted; the first two or three named, then how many more), the requests decided for it and how many were allowed, the requests waiting for you, and whether it stopped with an error. **Got it** puts the cards away until you are away again. A session where nothing happened shows none. Release 2.0.17 went out before this, with everything since 2.0.10.
+- **Redaction:** the recap is worked out in the window from the transcript and decisions it already shows, so nothing new is kept or sent anywhere (invariant 12 is about what is persisted or transmitted).
+- Tests: `apps/web/test/recap.test.tsx` (every kind of line, what came before you left is left out, a few files named then counted; only after ten minutes; Got it). Five break checks fail as they should.
+
 ## Phase 103: fork an open session, or hand off a side task (B13)
 
 - **What it does:** each session's menu in the sidebar has **Fork** (once Claude Code has a conversation for it and it is still) and, for a coding session, **Hand off a side task...**. Fork starts a copy of the conversation beside the original, in the same folder (`resume` with `fork`, as Retry and Edit use), and each carries on on its own. Hand off asks what to do and whether to do it in a new worktree (B10), then starts a new session told the task and which session it came from. Both keep the original's mode, Extreme approval, model, effort and account, so a fork or a side task is never looser than where it came from; the Host applies the same policy to every session whatever started it.

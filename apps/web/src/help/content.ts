@@ -192,6 +192,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **Fork** in the same menu starts a copy of the conversation beside it, in the same folder, and each carries on on its own (once Claude has finished what it is doing). **Hand off a side task...** starts a new session for something that came up: say what it should do, and choose In a new worktree to keep it off this session's files. Both keep the session's mode, approval, model, effort and account.
 
+**While you were away**: come back to Codehouse after ten minutes or more and each open session says, in a few lines over its transcript, what happened meanwhile: turns finished, files changed, requests decided and waiting, and whether it stopped. **Got it** puts the cards away.
+
 **Files**
 
 Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, read only, with Ctrl+F to search it, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.

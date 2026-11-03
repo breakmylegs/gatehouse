@@ -2438,3 +2438,18 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
 .diff-view .cm-deletedChunk {
   background-color: color-mix(in srgb, var(--c-sev) 12%, transparent);
 }
+
+/* While you were away (B14): over the top of the transcript, like the find bar, until Got it. */
+.recap-card {
+  position: absolute;
+  top: 8px;
+  left: 16px;
+  right: 16px;
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 10px 14px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
+}

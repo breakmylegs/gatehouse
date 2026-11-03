@@ -32,6 +32,7 @@ import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
 import { findIn } from "../lib/find"
 import { FindBar } from "../components/FindBar"
+import { RecapCard } from "../components/RecapCard"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -614,6 +615,7 @@ function SessionPane({
               }
             }}
           >
+            <RecapCard sessionId={session.id} />
             {finding ? (
               <FindBar
                 query={findQuery}
