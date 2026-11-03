@@ -180,6 +180,8 @@ export interface SessionInfo {
   archived?: boolean
   /** The project it is grouped under in the sidebar. */
   group?: string
+  /** The most effort Settings allows (B18). Absent: no cap. */
+  effortCap?: Effort
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
   historyFrom?: string
   /**

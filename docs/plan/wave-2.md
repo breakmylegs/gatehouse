@@ -51,7 +51,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B21 | Model registry with fallback chain | todo | Fallback only to an allowed provider with the same or a stricter data boundary, every switch recorded |
 | B22 | Side-by-side answers from several providers (chat) | todo | Two to four allowed models, columns with cost and latency, the chosen one recorded |
 | B23 | AGENTS.md read across providers | todo | Read through the floor and given to every provider |
-| B24 | Memory freshness | todo | Each memory shows its age; over 90 days flagged |
+| B24 | Memory freshness | done (3 Nov) | Each memory shows its age; over 90 days flagged |
 
 ## Wave 3: deeper agent capability
 

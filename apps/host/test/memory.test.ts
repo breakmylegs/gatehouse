@@ -123,6 +123,8 @@ describe("changing and forgetting", () => {
       "raised, south side",
     )
     expect(m.list(P("Home"))[0]).toMatchObject({ topic: "Beds", text: "raised, south side" })
+    // A change, or Still true, counts as checking it: its age starts again (B24).
+    expect(Date.now() - Date.parse(m.list(P("Home"))[0]!.at)).toBeLessThan(60_000)
     expect(await code(() => m.update(a.id, { text: "" }))).toBe("invalid")
     expect((await m.remove(a.id)).topic).toBe("Units")
     expect(m.list(G)).toEqual([])

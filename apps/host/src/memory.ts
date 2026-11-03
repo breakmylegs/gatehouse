@@ -167,6 +167,8 @@ export class MemoryStore {
         throw new MemoryError("invalid", `A memory is 1 to ${MAX_TEXT} characters.`)
       next.text = b
     }
+    // Changed or confirmed by you just now, so its age counts from here (B24: a memory shows how old it is).
+    next.at = new Date().toISOString()
     entries[at] = next
     await this.#write(file, entries)
     return this.#entry(next)!

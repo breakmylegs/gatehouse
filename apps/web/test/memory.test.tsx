@@ -78,8 +78,9 @@ describe("the Memory page", () => {
     expect(screen.getByRole("region", { name: "For every chat" })).toBeTruthy()
     expect(screen.getByRole("region", { name: "Project: Home" })).toBeTruthy()
     expect(screen.getByText("Raised.")).toBeTruthy()
-    expect(screen.getAllByText("Kept by Claude").length).toBe(2)
-    expect(screen.getAllByText("Added by you")).toHaveLength(1)
+    // Who kept it, and how long ago (B24).
+    expect(screen.getAllByText(/^Kept by Claude, /).length).toBe(2)
+    expect(screen.getAllByText(/^Added by you, /)).toHaveLength(1)
   })
 
   it("edits an entry, saving only when you choose Save", async () => {

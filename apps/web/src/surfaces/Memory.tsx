@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { download } from "../lib/exportMarkdown"
 import { EmptyState } from "../components/EmptyState"
+import { memoryAge, STALE_DAYS } from "../lib/memoryAge"
 
 interface Entry {
   id: string
@@ -47,6 +48,13 @@ export function MemoryPage() {
     const r = await api("PUT", `/api/memory/${id}`, draft)
     if (!r.ok) return toast.error(r.error ?? "That was not saved", { id: "memory" })
     setEditing(undefined)
+    void load()
+  }
+  /** You checked an old memory and it still holds: its age starts again from today. */
+  async function confirm(e: Entry) {
+    const r = await api("PUT", `/api/memory/${e.id}`, { topic: e.topic, text: e.text })
+    if (!r.ok) return toast.error(r.error ?? "That was not saved", { id: "memory" })
+    toast("Marked as still true", { id: "memory" })
     void load()
   }
   async function forget(id: string) {
@@ -188,11 +196,28 @@ export function MemoryPage() {
                     <span className="flex flex-wrap items-baseline justify-between gap-2">
                       <strong>{e.topic}</strong>
                       <span className="text-xs text-mut">
-                        {e.by === "you" ? "Added by you" : "Kept by Claude"}
+                        {e.by === "you" ? "Added by you" : "Kept by Claude"},{" "}
+                        {memoryAge(e.at).words}
                       </span>
                     </span>
                     <span>{e.text}</span>
+                    {memoryAge(e.at).stale ? (
+                      <span role="note" className="text-[13px] text-warn">
+                        Over {STALE_DAYS} days old: is it still true? Chats are still told it until
+                        you change or forget it.
+                      </span>
+                    ) : null}
                     <span className="flex gap-2">
+                      {memoryAge(e.at).stale ? (
+                        <button
+                          type="button"
+                          className="btn !min-h-7 !text-[13px]"
+                          aria-label={`${e.topic} is still true`}
+                          onClick={() => void confirm(e)}
+                        >
+                          Still true
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         className="btn !min-h-7 !text-[13px]"

@@ -139,6 +139,7 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 
 - A chat starts knowing everything kept for every chat, and everything kept for its project if it is in one. Claude can keep a short fact or preference (the **remember** tool), look it up, and forget it, and it is told to do that only when you ask or it will clearly help, and never for a secret.
 - Everything is here to read. **Edit** changes one, **Forget** removes one, and **Keep something** adds your own. Entries are kept by topic.
+- Each says how long ago it was kept or last changed. One over 90 days old is flagged so you can check it: **Still true** keeps it and starts its age again, and **Edit** does the same. Chats are told it until you change or forget it.
 - **Export as Markdown** saves it all as a file you can read and keep. **Import from Markdown** adds what is not already here.
 - Memory is redacted with your redaction list before it is written, and each change, by you or by Claude, is recorded in the audit log by its id and topic, never by what it says.
 - Claude Code's own automatic memory is switched off in chats, so this is the only memory to look after. Coding sessions do not use it.`,
