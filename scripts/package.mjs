@@ -245,6 +245,7 @@ execFileSync(
     `/out:${path.join(dest, "Codehouse.exe")}`,
     pk("CodehouseApp.cs"),
     pk("Overlay.cs"),
+    pk("Popout.cs"),
     pk("Hotkey.cs"),
     pk("Common.cs"),
   ],

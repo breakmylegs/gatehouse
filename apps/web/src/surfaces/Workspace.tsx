@@ -78,6 +78,10 @@ import { Icon, type IconName } from "../components/Icon"
 import { EmptyState } from "../components/EmptyState"
 import { loadBars } from "../lib/load"
 import { useScreenReaderMode } from "../lib/screenReader"
+import { inShell, tellShell } from "../lib/shell"
+
+/** This page is a session's own window (B16): ?view=pane&session=<id>. */
+const poppedOut = new URLSearchParams(location.search).get("view") === "pane"
 import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
 import { CompareBar } from "../components/CompareBar"
@@ -419,6 +423,18 @@ function SessionPane({
       : []),
     { kind: "separator" },
     ...(panes.length > 1 ? [{ label: "Close this pane", onSelect: () => closePane(index) }] : []),
+    // B16: a window of its own, in the Codehouse window only; closing that window brings it back here.
+    ...(inShell() && !poppedOut
+      ? [
+          {
+            label: "Pop out into its own window",
+            onSelect: () => {
+              tellShell(`popout:${session.id}`)
+              if (panes.length > 1) closePane(index)
+            },
+          },
+        ]
+      : []),
     {
       label: "Stop",
       disabled: !busy,

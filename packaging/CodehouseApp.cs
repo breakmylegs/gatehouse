@@ -72,6 +72,9 @@ internal sealed class MainForm : Form
     // The quick prompt (W1-15): its window, made hidden once the interface has loaded, and its shortcut.
     private CoreWebView2Environment env;
     private QuickOverlay quick;
+    /// <summary>Sessions in windows of their own (B16), by session id.</summary>
+    private readonly System.Collections.Generic.Dictionary<string, PopoutWindow> popouts =
+        new System.Collections.Generic.Dictionary<string, PopoutWindow>();
     private ToolStripMenuItem quickItem;
     private uint hotkeyMods, hotkeyVk;
     private bool hotkeyOn;
@@ -368,6 +371,7 @@ internal sealed class MainForm : Form
             if (m == "attention") Attention();
             else if (m == "voice") VoiceTyping();
             else if (m != null && m.StartsWith("hotkey:")) SetHotkey(m.Substring("hotkey:".Length));
+            else if (m != null && m.StartsWith("popout:")) PopOut(m.Substring("popout:".Length));
         };
         core.NavigationCompleted += delegate(object s, CoreWebView2NavigationCompletedEventArgs e)
         {
@@ -557,6 +561,35 @@ internal sealed class MainForm : Form
         });
         try { await quick.Prepare(env, quickUrl); }
         catch (Exception ex) { Remember("[quick] the quick prompt could not load: " + ex.Message); }
+    }
+
+    // ---- a session in its own window (B16) ----
+
+    /// <summary>
+    /// Opens a session in a window of its own, or brings its window forward if it has one. Only a session id becomes part
+    /// of the address. When the window closes, the main window is told, and shows the session again.
+    /// </summary>
+    private async void PopOut(string session)
+    {
+        if (env == null || url == null || !PopoutWindow.SessionId.IsMatch(session)) return;
+        PopoutWindow open;
+        if (popouts.TryGetValue(session, out open)) { open.Raise(); return; }
+        int hash = url.IndexOf('#');
+        string query = "?view=pane&session=" + session;
+        string paneUrl = hash < 0 ? url + query : url.Substring(0, hash) + query + url.Substring(hash);
+        PopoutWindow w = new PopoutWindow(session, IsOurs, OpenExternal);
+        popouts[session] = w;
+        w.FormClosed += delegate
+        {
+            popouts.Remove(session);
+            Tell("popin:" + session);
+        };
+        try { await w.Open(env, paneUrl); }
+        catch (Exception ex)
+        {
+            Remember("[popout] the window could not load: " + ex.Message);
+            try { w.Close(); } catch (Exception) { }
+        }
     }
 
     /// <summary>The shortcut or the tray: the quick prompt over what you are doing, or the window if it is not ready yet.</summary>

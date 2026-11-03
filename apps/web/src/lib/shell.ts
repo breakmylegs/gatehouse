@@ -16,7 +16,14 @@ const host = () => (globalThis as { chrome?: { webview?: WebViewHost } }).chrome
 export const inShell = () => host() !== undefined
 
 export type ShellMessage =
-  "attention" | "voice" | "quick-close" | `quick-open:${string}` | `hotkey:${string}`
+  | "attention"
+  | "voice"
+  | "quick-close"
+  | `quick-open:${string}`
+  | `hotkey:${string}`
+  // B16: a session in a window of its own, and that window closing itself.
+  | `popout:${string}`
+  | "pane-close"
 
 export function tellShell(message: ShellMessage): void {
   try {

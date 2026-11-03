@@ -5,15 +5,21 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./styles.css"
 import { startConnection, useStore } from "./store"
 import { Quick } from "./surfaces/Quick"
+import { PanePage } from "./surfaces/PanePage"
 
 // The quick prompt's small window (W1-15) loads the same page with ?view=quick: only that page, no start-up picture.
-const quick = new URLSearchParams(location.search).get("view") === "quick"
-if (quick) document.getElementById("boot")?.remove()
+const params = new URLSearchParams(location.search)
+const quick = params.get("view") === "quick"
+// A session in a window of its own (B16): ?view=pane&session=<id>, that session only.
+const pane = params.get("view") === "pane" ? params.get("session") : null
+if (quick || pane) document.getElementById("boot")?.remove()
 const root = createRoot(document.getElementById("root") as HTMLElement)
 if (startConnection()) {
   root.render(
     <StrictMode>
-      <ErrorBoundary>{quick ? <Quick /> : <App />}</ErrorBoundary>
+      <ErrorBoundary>
+        {quick ? <Quick /> : pane ? <PanePage sessionId={pane} /> : <App />}
+      </ErrorBoundary>
     </StrictMode>,
   )
 } else {

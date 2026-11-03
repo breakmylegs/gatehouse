@@ -67,6 +67,14 @@ export function startShell(): () => void {
       subs.forEach((f) => f())
       return
     }
+    // B16: a session's own window closed, so the session goes back into the main window, beside what is there.
+    if (m.startsWith("popin:")) {
+      const id = m.slice(6)
+      const st = useStore.getState()
+      if (!st.sessions[id]) return
+      if (!st.panes.includes(id)) st.openBeside(id)
+      return
+    }
     if (m.startsWith("open-session:")) {
       try {
         const sent = JSON.parse(m.slice(13)) as { session?: unknown; text?: unknown }

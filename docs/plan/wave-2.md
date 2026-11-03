@@ -38,7 +38,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B13 | Fork a session or hand off a side task | done (Phase 103) | Fork from an open session's menu (beside it, same folder); Hand off a side task starts a new session, in a new worktree if you like, told the task and where it came from; both keep mode, approval, model, effort and account. A fork into a worktree waits: resuming a conversation from another folder is not recorded SDK behaviour |
 | B14 | Session recap on return | done (Phase 104) | After 10 minutes or more away (the window hidden or not in front), each open session says in up to 5 lines: turns finished or still working, files changed, requests decided, requests waiting, whether it stopped; until Got it. Worked out in the window from what it already holds, so nothing new is kept or sent |
 | B15 | Usage drivers breakdown | done (Phase 105) | Tokens and cost by model per session and day were there; added What drove it on Usage: tool calls by tool, subagents and skills for the same dates, project and session, counted from the audit log (Claude Code reports cost per model only, so these are counts) |
-| B16 | Pop-out panes | todo | A pane in its own WebView2 window with the same token, Host and Origin checks; docks back with its state |
+| B16 | Pop-out panes | done (3 Nov) | A pane in its own WebView2 window with the same token, Host and Origin checks; docks back with its state |
 
 ## Wave 2: multi-AI foundations
 
