@@ -200,6 +200,23 @@ describe("earlier sessions", () => {
     expect(useStore.getState().route).toBe("workspace")
   })
 
+  it("narrows the list by name or folder as you type, before any search", async () => {
+    render(<EarlierSessions />)
+    const list = await screen.findByRole("list", { name: "Earlier sessions" })
+    const box = screen.getByRole("textbox", { name: "Search inside past conversations" })
+    const rows = () =>
+      within(list)
+        .queryAllByRole("listitem")
+        .map((li) => li.textContent)
+    fireEvent.change(box, { target: { value: "LOGIN" } })
+    expect(rows()).toEqual([expect.stringContaining("Login fix")])
+    fireEvent.change(box, { target: { value: "dev/star" } })
+    expect(rows()).toEqual([expect.stringContaining("Starred")])
+    expect(sent.some((c) => c.type === "search_history")).toBe(false)
+    fireEvent.change(box, { target: { value: "nothing like it" } })
+    expect(screen.getByText(/No earlier session has "nothing like it" in its name/)).toBeTruthy()
+  })
+
   it("searches inside what was said", async () => {
     render(<EarlierSessions />)
     fireEvent.change(

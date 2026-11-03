@@ -64,8 +64,18 @@ export function EarlierSessions() {
       ),
     [open],
   )
-  const shown = (list ?? [])
-    .filter((p) => !openIds.has(p.sessionId) && (showArchived || !p.meta.archived))
+  // What you type narrows the list at once by name and folder (owner); Search what was said looks inside them.
+  const needle = query.trim().toLowerCase()
+  const matches = (p: PastSession) =>
+    !needle ||
+    p.title.toLowerCase().includes(needle) ||
+    (p.meta.title ?? "").toLowerCase().includes(needle) ||
+    (p.cwd ?? "").toLowerCase().includes(needle)
+  const listed = (list ?? []).filter(
+    (p) => !openIds.has(p.sessionId) && (showArchived || !p.meta.archived),
+  )
+  const shown = listed
+    .filter(matches)
     .sort(
       (a, b) =>
         Number(b.meta.pinned === true) - Number(a.meta.pinned === true) ||
@@ -135,6 +145,7 @@ export function EarlierSessions() {
         <input
           className="field min-w-[260px] flex-1"
           aria-label="Search inside past conversations"
+          placeholder="Find by name or folder as you type"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value)
@@ -197,7 +208,11 @@ export function EarlierSessions() {
       ) : !list ? (
         <p className="m-0 text-mut">Reading earlier sessions…</p>
       ) : shown.length === 0 ? (
-        <p className="m-0 text-mut">No earlier sessions.</p>
+        <p className="m-0 text-mut">
+          {listed.length && needle
+            ? `No earlier session has "${query.trim()}" in its name or folder. Search what was said looks inside them.`
+            : "No earlier sessions."}
+        </p>
       ) : (
         <ul
           className="panel m-0 list-none divide-y divide-line overflow-hidden p-0"
