@@ -77,7 +77,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B37 | Signed managed policy bundle from IT | todo | A policy file signed by an IT key, read-only location; tampering stops sessions starting |
 | B38 | EU AI Act Article 50 labelling | done (3 Nov) | "AI-assisted" label and model metadata on every export and artifact |
 | B39 | Plugin eval harness | todo | Pass rate with and without a plugin, under the Approver in Plan mode |
-| B40 | Screen reader mode and keyboard-only audit | partial | Announcer and ARIA exist; add a linear screen-reader mode and an automated scan; a manual NVDA run stays with the owner |
+| B40 | Screen reader mode and keyboard-only audit | done (3 Nov), manual NVDA run with the owner | Announcer and ARIA exist; add a linear screen-reader mode and an automated scan; a manual NVDA run stays with the owner |
 
 ## Wave 5: hosted and third-party agents
 

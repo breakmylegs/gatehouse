@@ -4,6 +4,29 @@ import { UpdatesPanel } from "../components/UpdatesPanel"
 import { TempFilesPanel } from "../components/TempFilesPanel"
 import { QuickKeyPanel } from "../components/QuickKeyPanel"
 import { VoiceSetting } from "../components/VoiceButton"
+import { setScreenReaderMode, useScreenReaderMode } from "../lib/screenReader"
+
+/** Settings: screen reader mode (B40). */
+function ScreenReaderSetting() {
+  const on = useScreenReaderMode()
+  return (
+    <>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => setScreenReaderMode(e.target.checked)}
+        />
+        <span>Show each conversation as one plain list, for a screen reader</span>
+      </label>
+      <p className="m-0 text-xs text-mut">
+        Normally only the messages on screen are drawn, which keeps long conversations quick but
+        hides the rest from a screen reader. With this on, every message is there, in order, so you
+        can move through all of it and find text. Very long conversations may scroll more slowly.
+      </p>
+    </>
+  )
+}
 import { ProvidersPanel } from "../components/ProvidersPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
@@ -799,6 +822,10 @@ export function Settings() {
 
             <Group section="general" title="Quick prompt" gap="gap-2">
               <QuickKeyPanel />
+            </Group>
+
+            <Group section="general" title="Screen reader" gap="gap-2">
+              <ScreenReaderSetting />
             </Group>
 
             <Group section="general" title="Voice typing" gap="gap-2">

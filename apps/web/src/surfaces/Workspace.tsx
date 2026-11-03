@@ -77,6 +77,7 @@ import { EFFORTS, MODE_OPTIONS, uiModeOf, wireOf, type EffortId, type UiMode } f
 import { Icon, type IconName } from "../components/Icon"
 import { EmptyState } from "../components/EmptyState"
 import { loadBars } from "../lib/load"
+import { useScreenReaderMode } from "../lib/screenReader"
 import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
 
@@ -332,6 +333,7 @@ function SessionPane({
   )
   // Owner, 31 Oct: a quick way back to the latest, and a resumed or restarted session opens at its latest.
   const scroller = useRef<VirtuosoHandle>(null)
+  const screenReader = useScreenReaderMode()
   const [atEnd, setAtEnd] = useState(true)
   // Read by the list's own callbacks, which keep the first render's values.
   const following = useRef(true)
@@ -637,24 +639,9 @@ function SessionPane({
                 onClose={closeFind}
               />
             ) : null}
-            <Virtuoso
-              ref={scroller}
-              style={{ height: "100%" }}
-              data={shownItems}
-              followOutput="smooth"
-              atBottomThreshold={80}
-              atBottomStateChange={(b) => {
-                following.current = b
-                setAtEnd(b)
-              }}
-              // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
-              // unless you have scrolled up to read.
-              totalListHeightChanged={() => {
-                if (following.current) toLatest()
-              }}
-              initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
-              computeItemKey={(_, it) => `${view.detail}:${it.id}`}
-              itemContent={(index, it) => (
+            {(() => {
+              // One message as drawn in either list.
+              const itemAt = (index: number, it: (typeof shownItems)[number]) => (
                 <div
                   className={clsx(
                     "pane-item mx-auto max-w-[860px]",
@@ -679,15 +666,51 @@ function SessionPane({
                     <ItemView item={it} sessionId={session.id} />
                   )}
                 </div>
-              )}
-              components={{
-                EmptyPlaceholder: () => (
-                  <p className="mx-auto max-w-[860px] p-6 text-mut">
-                    Nothing yet. Write a prompt below to start the work.
-                  </p>
-                ),
-              }}
-            />
+              )
+              return screenReader ? (
+                // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
+                <ol
+                  className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
+                  aria-label="Conversation"
+                >
+                  {shownItems.length === 0 ? (
+                    <li className="mx-auto max-w-[860px] p-6 text-mut">
+                      Nothing yet. Write a prompt below to start the work.
+                    </li>
+                  ) : null}
+                  {shownItems.map((it, index) => (
+                    <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
+                  ))}
+                </ol>
+              ) : (
+                <Virtuoso
+                  ref={scroller}
+                  style={{ height: "100%" }}
+                  data={shownItems}
+                  followOutput="smooth"
+                  atBottomThreshold={80}
+                  atBottomStateChange={(b) => {
+                    following.current = b
+                    setAtEnd(b)
+                  }}
+                  // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
+                  // unless you have scrolled up to read.
+                  totalListHeightChanged={() => {
+                    if (following.current) toLatest()
+                  }}
+                  initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
+                  computeItemKey={(_, it) => `${view.detail}:${it.id}`}
+                  itemContent={itemAt}
+                  components={{
+                    EmptyPlaceholder: () => (
+                      <p className="mx-auto max-w-[860px] p-6 text-mut">
+                        Nothing yet. Write a prompt below to start the work.
+                      </p>
+                    ),
+                  }}
+                />
+              )
+            })()}
             {atEnd || shownItems.length === 0 ? null : (
               <button
                 type="button"
