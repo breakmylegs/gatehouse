@@ -274,6 +274,7 @@ Rules are files on this computer. Changes are picked up straight away.`,
 - **Cost by day** has a column for each day; point at one, or move to it with Tab, for its cost and tokens.
 - **By project**, **By model** and **By session** list the largest first.
 - **Show as a table** under each one gives the same figures as rows.
+- **What drove it** counts, for the same dates, project and session, how many times each tool was called, which subagents ran and which skills were used, the most first. Claude Code says what each model cost but not each tool, so these are counts, not money.
 
 **Last 24 hours** says what went through automatically and what asked you.
 

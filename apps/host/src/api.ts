@@ -8,6 +8,7 @@ import { registerExportRoutes } from "./export-api.js"
 import { registerPromptRoutes, type PromptStore } from "./prompts.js"
 import { registerMarketplaceRoutes, type Marketplace } from "./marketplace.js"
 import { registerDoctorRoutes } from "./doctor.js"
+import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
@@ -297,6 +298,16 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (!day.test(q.from ?? "") || !day.test(q.to ?? "") || (q.from as string) > (q.to as string))
       return bad(reply, 400, "Give from and to as YYYY-MM-DD, from first.")
     return ctx.usage.report(q.from as string, q.to as string)
+  })
+
+  // What drove the usage (B15): tool calls, subagents and skills, counted from the audit log.
+  app.get("/api/usage/drivers", async (req, reply) => {
+    const q = req.query as Record<string, string | undefined>
+    const day = /^d{4}-d{2}-d{2}$/
+    if (!day.test(q.from ?? "") || !day.test(q.to ?? "") || (q.from as string) > (q.to as string))
+      return bad(reply, 400, "Give from and to as YYYY-MM-DD, from first.")
+    const session = q.session && /^[w-]{1,80}$/.test(q.session) ? q.session : undefined
+    return usageDrivers(ctx.auditDir, q.from as string, q.to as string, session)
   })
 
   // The account's plan limits, for the meter beside the prompt box. Null where none can be read.

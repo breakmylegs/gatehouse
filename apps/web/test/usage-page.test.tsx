@@ -49,6 +49,31 @@ vi.mock("../src/lib/api", () => ({
           daysWithoutCells: {},
         },
       }
+    if (url.startsWith("/api/usage/drivers?"))
+      return {
+        ok: true,
+        status: 200,
+        data: {
+          // Not in order, so the page has to sort them.
+          tools: { Skill: 1, Edit: 3, Bash: 5 },
+          subagents: { "code-reviewer": 2 },
+          skills: { pdf: 1 },
+          bySession: {
+            "019a3b2c-1d00-7abc-8000-000000000001": {
+              project: "shop",
+              tools: { Bash: 4, Edit: 3 },
+              subagents: { "code-reviewer": 2 },
+              skills: {},
+            },
+            "019a3b2c-1d00-7abc-8000-000000000002": {
+              project: "blog",
+              tools: { Bash: 1, Skill: 1 },
+              subagents: {},
+              skills: { pdf: 1 },
+            },
+          },
+        },
+      }
     return { ok: false, status: 404, error: "no route" }
   }),
 }))
@@ -113,5 +138,35 @@ describe("the Usage page", () => {
     // And back to the chart.
     fireEvent.click(within(byProject).getByRole("button", { name: "Show the chart" }))
     expect(within(byProject).queryByRole("table")).toBeNull()
+  })
+})
+
+describe("what drove the usage (B15)", () => {
+  it("shows tool calls, subagents and skills for the range, the most first, and follows the filters", async () => {
+    render(<Usage />)
+    const drove = await screen.findByRole("region", { name: "What drove it" })
+    const tools = within(drove).getByRole("table", { name: "Tool calls" })
+    expect(
+      within(tools)
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => r.textContent),
+    ).toEqual(["Bash5", "Edit3", "Skill1"])
+    expect(within(drove).getByRole("table", { name: "Subagents" }).textContent).toContain(
+      "code-reviewer2",
+    )
+    expect(
+      asked.some((u) => u.startsWith("/api/usage/drivers?") && u.includes(`to=${today}`)),
+    ).toBe(true)
+    fireEvent.change(screen.getByRole("combobox", { name: "Project" }), {
+      target: { value: "blog" },
+    })
+    expect(
+      within(within(drove).getByRole("table", { name: "Tool calls" }))
+        .getAllByRole("row")
+        .slice(1)
+        .map((r) => r.textContent),
+    ).toEqual(["Bash1", "Skill1"])
+    expect(within(drove).getByRole("table", { name: "Subagents" }).textContent).toContain("None")
   })
 })

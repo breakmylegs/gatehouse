@@ -195,11 +195,103 @@ export function Usage() {
           <Card title="By session" rows={s.bySession} kind="name" nameOf={sessionName}>
             <Bars rows={s.bySession.slice(0, 12)} name={(r) => sessionName(r.key)} />
           </Card>
+          <Drivers days={days} filter={filter} />
         </>
       ) : error ? null : (
         <p className="m-0 text-mut">Reading usage.</p>
       )}
     </div>
+  )
+}
+
+interface DriverCounts {
+  tools: Record<string, number>
+  subagents: Record<string, number>
+  skills: Record<string, number>
+}
+interface DriversReport extends DriverCounts {
+  bySession: Record<string, DriverCounts & { project?: string }>
+}
+
+/** What drove it, as rows, the most first. */
+export const ranked = (m: Record<string, number>, top = 10): Array<[string, number]> =>
+  Object.entries(m)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, top)
+
+/** The counts for a filter: one session, the sessions of one project, or all of them. */
+export function driversFor(r: DriversReport, filter: Filter): DriverCounts {
+  if (filter.session) return r.bySession[filter.session] ?? { tools: {}, subagents: {}, skills: {} }
+  if (!filter.project) return r
+  const out: DriverCounts = { tools: {}, subagents: {}, skills: {} }
+  for (const s of Object.values(r.bySession))
+    if (s.project === filter.project)
+      for (const k of ["tools", "subagents", "skills"] as const)
+        for (const [n, c] of Object.entries(s[k])) out[k][n] = (out[k][n] ?? 0) + c
+  return out
+}
+
+/**
+ * What drove the usage (B15): tool calls by tool, the subagents that ran and the skills used, for the same days,
+ * project and session, counted from the audit log. Claude Code does not say what each tool cost, so these are counts.
+ */
+function Drivers({ days, filter }: { days: number; filter: Filter }) {
+  const [report, setReport] = useState<DriversReport>()
+  useEffect(() => {
+    let gone = false
+    const { from, to } = rangeFor(days)
+    void api<DriversReport>("GET", `/api/usage/drivers?from=${from}&to=${to}`).then((r) => {
+      if (!gone && r.ok && r.data) setReport(r.data)
+    })
+    return () => {
+      gone = true
+    }
+  }, [days])
+  if (!report) return null
+  const d = driversFor(report, filter)
+  const parts: Array<[string, string, Record<string, number>]> = [
+    ["Tool calls", "Tool", d.tools],
+    ["Subagents", "Subagent", d.subagents],
+    ["Skills", "Skill", d.skills],
+  ]
+  return (
+    <section aria-label="What drove it" className="panel grid gap-3 p-4">
+      <h2 className="m-0 text-[16px]">What drove it</h2>
+      <p className="m-0 text-[13px] text-mut">
+        How many times each tool was called, and which subagents and skills ran, from the audit log.
+        Claude Code says what each model cost, not each tool, so these are counts. Filtered by
+        model, they still count every model.
+      </p>
+      <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-1">
+        {parts.map(([title, col, m]) => (
+          <table key={title} className="w-full text-[13.5px]">
+            <caption className="text-left font-semibold">{title}</caption>
+            <thead>
+              <tr className="text-[12.5px] text-mut">
+                <th className="text-left font-medium">{col}</th>
+                <th className="text-right font-medium">Times</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked(m).length ? (
+                ranked(m).map(([n, c]) => (
+                  <tr key={n}>
+                    <td className="mono truncate">{n}</td>
+                    <td className="text-right tabular-nums">{c}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={2} className="text-mut">
+                    None
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        ))}
+      </div>
+    </section>
   )
 }
 

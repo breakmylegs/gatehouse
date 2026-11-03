@@ -137,6 +137,12 @@ Running record of what each phase built, how it was checked, where it differs fr
 - **Not used yet:** the wordmarks are in the app's files for a later place that wants one. The offline picture waits for a full-page offline state (being offline is a banner today).
 - Tests: `apps/web/test/brand.test.tsx`, `apps/host/test/brand-files.test.ts` (new; the .ico goes through the C# compiler), `scenes.test.tsx` (the pack's scenes in both themes, earlier ids). Seven break checks fail as they should.
 
+## Phase 105: what drove the usage (B15)
+
+- **What it does:** the Usage page has **What drove it**, for the same dates, project and session as the rest of the page: how many times each tool was called, which subagents ran (by type) and which skills were used, the most first, each as a table. Cost and tokens by model, session and day were already there. Claude Code reports cost per model only, not per tool, so these are counts and say so.
+- **How:** `apps/host/src/usage-drivers.ts`, behind `GET /api/usage/drivers?from&to[&session]`, counts from the audit log, where every tool call is recorded with its session, project and redacted input: the events a call leaves (`decision`, `human_decision`, `floor_deny`, `self_approved`, `self_approved_failed`), each call once by its id (the floor's record and the decision's are one call). Only the month files that can hold the range are read, with a day either side. Nothing new is kept.
+- Tests: `apps/host/test/usage-drivers.test.ts` (each call once, subagents and skills named, only tool-call events, the days and the session asked for), `apps/web/test/usage-page.test.tsx` (sorted, follows the project filter). Six break checks fail as they should (the day check needed a second day in the same month before it could be told apart).
+
 ## Phase 104: what happened while you were away (B14)
 
 - **What it does:** the window notes when you leave it (hidden, or another window in front). Back after ten minutes or more, each open session shows **While you were away** over the top of its transcript, in up to five lines: Claude's turns finished (or that it is still working), the files it changed (an edit that failed is not counted; the first two or three named, then how many more), the requests decided for it and how many were allowed, the requests waiting for you, and whether it stopped with an error. **Got it** puts the cards away until you are away again. A session where nothing happened shows none. Release 2.0.17 went out before this, with everything since 2.0.10.
