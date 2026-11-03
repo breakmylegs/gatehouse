@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { download } from "../lib/exportMarkdown"
+import { offlineExport } from "../lib/artifactExport"
 
 interface Version {
   version: number
@@ -135,14 +136,15 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
               onClick={async () => {
                 const got = await text(artifact.id, chosen.version)
                 if (!got) return toast.error("It could not be exported", { id: "artifact" })
+                // B45: one file that works offline, under the same rules as here (no network).
                 download(
                   got.name,
-                  got.content,
+                  offlineExport(artifact.kind, got.content),
                   artifact.kind === "svg" ? "image/svg+xml" : "text/html",
                 )
               }}
             >
-              Export
+              Export for offline use
             </button>
           </div>
           {compare ? (

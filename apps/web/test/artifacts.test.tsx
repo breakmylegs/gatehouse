@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ArtifactsPane } from "../src/components/ArtifactsPane"
+import { OFFLINE_POLICY, offlineExport } from "../src/lib/artifactExport"
 import { useStore } from "../src/store"
 import { Workspace } from "../src/surfaces/Workspace"
 import { emptyTranscript, reduceHistory } from "../src/lib/transcript"
@@ -128,10 +129,22 @@ describe("the Artifacts panel", () => {
   it("exports the stored version as a file of its own kind", async () => {
     render(<ArtifactsPane sessionId={SESSION} refresh={0} />)
     await screen.findByTitle("Artifact: Logo, version 1")
-    await userEvent.click(screen.getByRole("button", { name: "Export" }))
+    await userEvent.click(screen.getByRole("button", { name: "Export for offline use" }))
     await waitFor(() =>
       expect(saved[0]).toEqual({ name: "logo-v1.html", text: "<svg/>", type: "image/svg+xml" }),
     )
+  })
+
+  it("exports a page that fetches nothing when opened from the file, as in the app (B45)", () => {
+    const page = offlineExport("html", "<html><head><title>t</title></head><body>x</body></html>")
+    expect(page).toBe(
+      `<html><head><meta http-equiv="Content-Security-Policy" content="${OFFLINE_POLICY}"><title>t</title></head><body>x</body></html>`,
+    )
+    expect(OFFLINE_POLICY).toContain("connect-src 'none'")
+    expect(OFFLINE_POLICY).toContain("default-src 'none'")
+    // A page with no head gets one, before anything in it.
+    expect(offlineExport("html", "<p>hi</p>")).toMatch(/^<!doctype html>\n<head><meta http-equiv/)
+    expect(offlineExport("svg", "<svg/>")).toBe("<svg/>")
   })
 
   it("says what to do when there is nothing yet, and looks again when a chat saves one", async () => {

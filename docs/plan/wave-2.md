@@ -87,7 +87,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B42 | GitHub Copilot SDK as a provider | later | Needs IT approval and a spike proving every tool call reaches the Approver (conformance suite) |
 | B43 | Codex as a provider | later | Its hooks are documented as not a complete boundary (ADR 0008); not wrapped |
 | B44 | ACP host adapter | later | Only an agent that passes the conformance suite, including hidden-tool tests |
-| B45 | Artifact sharing without the cloud | partial | Export with a redaction preview exists; add a self-contained offline HTML artifact export |
+| B45 | Artifact sharing without the cloud | done (3 Nov) | Export with a redaction preview exists; add a self-contained offline HTML artifact export |
 
 ## Order
 
