@@ -48,6 +48,7 @@ export type Route =
   | "memory"
   | "prompts"
   | "marketplace"
+  | "doctor"
 
 export interface ResolvedView {
   id: string
@@ -199,6 +200,7 @@ const KEPT_ROUTES: Route[] = [
   "memory",
   "prompts",
   "marketplace",
+  "doctor",
 ]
 /** Sessions side by side at most (owner, 1 Nov: "Up to 4 shown at once"); four sit two by two. */
 export const MAX_PANES = 4

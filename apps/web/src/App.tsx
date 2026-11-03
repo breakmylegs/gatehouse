@@ -32,6 +32,7 @@ const MemoryPage = lazy(() => import("./surfaces/Memory").then((m) => ({ default
 const Marketplace = lazy(() =>
   import("./surfaces/Marketplace").then((m) => ({ default: m.Marketplace })),
 )
+const Doctor = lazy(() => import("./surfaces/Doctor").then((m) => ({ default: m.Doctor })))
 const Prompts = lazy(() => import("./surfaces/Prompts").then((m) => ({ default: m.Prompts })))
 const Projects = lazy(() => import("./surfaces/Projects").then((m) => ({ default: m.Projects })))
 const Dashboard = lazy(() => import("./surfaces/Dashboard").then((m) => ({ default: m.Dashboard })))
@@ -218,6 +219,7 @@ export function App() {
                   {route === "memory" && <MemoryPage />}
                   {route === "prompts" && <Prompts />}
                   {route === "marketplace" && <Marketplace />}
+                  {route === "doctor" && <Doctor />}
                 </Suspense>
               </main>
               <HelpPane />

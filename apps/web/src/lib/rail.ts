@@ -172,6 +172,7 @@ export const RAIL_PAGES: Array<{ route: Route; label: string }> = [
   { route: "memory", label: "Memory" },
   { route: "prompts", label: "Prompts" },
   { route: "marketplace", label: "Marketplace" },
+  { route: "doctor", label: "Doctor" },
   { route: "policy", label: "What Claude may do" },
   { route: "audit", label: "Audit log" },
   { route: "approver", label: "Approver" },

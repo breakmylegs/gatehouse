@@ -31,7 +31,9 @@ export interface CommandContext {
   followSystem: () => void
   toggleHelp: () => void
   /** Opens a part of the window that keeps its own state: the sidebar, accounts, shortcuts, the palette. */
-  fire: (event: "codeh:toggle-rail" | "codeh:accounts" | "codeh:shortcuts" | "codeh:hide-ended") => void
+  fire: (
+    event: "codeh:toggle-rail" | "codeh:accounts" | "codeh:shortcuts" | "codeh:hide-ended",
+  ) => void
 }
 
 /** The pages, with the words the sidebar and menus already use for them. */
@@ -51,6 +53,7 @@ export const PAGES: Array<{ route: Route; label: string; keywords?: string }> = 
   { route: "memory", label: "Memory", keywords: "remember forget chats preferences" },
   { route: "prompts", label: "Prompts", keywords: "saved library templates skills" },
   { route: "marketplace", label: "Marketplace", keywords: "plugins skills install extensions" },
+  { route: "doctor", label: "Doctor", keywords: "check health problems diagnose fix troubleshoot" },
   { route: "settings", label: "Settings", keywords: "options preferences" },
   { route: "guide", label: "User guide", keywords: "help manual" },
 ]

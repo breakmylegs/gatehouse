@@ -50,6 +50,7 @@ const PAGE_ICON: Partial<Record<Route, IconName>> = {
   memory: "memory",
   prompts: "prompts",
   marketplace: "marketplace",
+  doctor: "done",
   policy: "policy",
   audit: "audit-log",
   approver: "approver",

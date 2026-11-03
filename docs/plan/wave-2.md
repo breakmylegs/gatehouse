@@ -24,7 +24,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B04 | Claude Code version range gate | todo | Sessions refuse a binary outside the range a signed Codehouse release names; a Doctor link |
 | B05 | Fail-closed fuzz suite for the decision path, phone included | partial | Many fail-closed tests exist; add 10,000 fuzzed payloads (truncated, wrong signature, replayed, late) with zero allows |
 | B06 | MCP 2026-07-28 readiness in in-process servers | todo | URL-mode elicitation becomes an Approver decision showing the full URL, never opens a browser by itself |
-| B07 | Doctor page | todo | Binary version, organisation guard, listener tokens, relay, Ollama, disk; each with a fix; output redacted |
+| B07 | Doctor page | done (Phase 97) | Claude Code and its version, sign-in, organisation guard, Approver and rule files, kill switch, listener on 127.0.0.1, PowerShell checker, phone and push channels, models on this computer, disk space, updates; each with what to do; a report to copy with secrets and email addresses taken out |
 
 ## Wave 1: the agent work surface
 

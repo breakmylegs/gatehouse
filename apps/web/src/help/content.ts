@@ -102,6 +102,15 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - A chat is named from your first message (with your redaction list applied before the name is kept). Rename it as you like.
 - To build something, start a coding session instead: New session in the sidebar.`,
   },
+  doctor: {
+    id: "doctor",
+    title: "Doctor",
+    body: `The Doctor checks what Codehouse needs to work safely on this computer, and says what to do about anything that is not right. Open it from More in the sidebar, or search for Doctor with Ctrl+K.
+
+- **What it checks:** Claude Code is here (and its version), you are signed in, the account belongs to the organisation Codehouse expects, the Approver runs with every rule file loaded, the kill switch, that Codehouse listens on this computer only, the PowerShell checker, your phone and notifications, models on this computer if you switched them on, free disk space, and updates.
+- **Fine, something to look at, or a problem:** a problem stops sessions or makes Codehouse less safe; something to look at means Codehouse asks you more, or reaches you less. Each says what to do.
+- **Copy the report** to send it to whoever helps you. It names no email address, token or file path of yours.`,
+  },
   marketplace: {
     id: "marketplace",
     title: "Marketplace",

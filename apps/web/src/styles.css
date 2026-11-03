@@ -2397,3 +2397,15 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   outline-offset: 4px;
   border-radius: 6px;
 }
+
+/* The Doctor: each check with its mark (from the pack's icons) beside what it found and what to do. */
+.doctor-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+}
+.doctor-check .icon {
+  margin-top: 2px;
+}

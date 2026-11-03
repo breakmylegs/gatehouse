@@ -17,6 +17,7 @@ import { LocalRelay } from "./relay/local.js"
 import { pickFolderWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
+import { claudeVersion } from "./doctor.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
 import { createRequire } from "node:module"
@@ -743,6 +744,8 @@ export function createHost(opts: HostOptions = {}): Host {
       planUsage: (account, fresh) => manager.planUsage(account, fresh),
       pickFiles: pickFilesWithWindows,
       updates,
+      health,
+      claude: () => claudeVersion(findClaudeBinary),
       updateToken,
       slack: {
         status: () => slack.status(),
