@@ -1602,6 +1602,16 @@ mark.seg {
   right: -6px;
 }
 
+/* Folded, the bar still says what is set, in small text. */
+.composer-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-mut);
+  font: 500 12px var(--font-sign);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* A link-like button in the bar, for what is seldom pressed. */
 .composer-link {
   padding: 0 2px;

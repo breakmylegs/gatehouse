@@ -73,6 +73,19 @@ describe("folding the session bar", () => {
       expect(within(p).getByRole("group", { name: "Model, effort and mode" })).toBeTruthy()
   })
 
+  it("still says what is set, in a short line, when folded", async () => {
+    useStore.setState({
+      sessions: {
+        ...useStore.getState().sessions,
+        s1: { ...useStore.getState().sessions.s1!, effort: "high", resources: "medium" },
+      },
+    })
+    render(<Workspace />)
+    await userEvent.click(within(panes()[0]!).getByRole("button", { name: "Hide settings" }))
+    const folded = within(panes()[0]!).getByRole("group", { name: "Session bar, folded" })
+    expect(folded.textContent).toMatch(/High effort, Manual, Medium/)
+  })
+
   it("is kept for next time", async () => {
     render(<Workspace />)
     await userEvent.click(within(panes()[0]!).getByRole("button", { name: "Hide settings" }))

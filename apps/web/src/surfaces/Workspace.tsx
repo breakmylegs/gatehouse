@@ -777,10 +777,16 @@ function SessionPane({
         {/* What the session runs on, under the prompt box where you look when you send. */}
         {barFolded ? (
           <div className="composer-bar" role="group" aria-label="Session bar, folded">
+            {/* Folded, it still says what is set, in a line of small text, and keeps the plan ring (owner, 3 Nov). */}
+            <span className="composer-summary">{settingsSummary(session, chat)}</span>
             <button type="button" className="composer-link" onClick={() => setBarFolded(false)}>
               Show model and settings
             </button>
             <span className="ml-auto flex items-center gap-2">
+              <PlanMeter
+                account={session.account ?? MAIN_ACCOUNT}
+                idle={session.state === "idle"}
+              />
               <StopButton sessionId={session.id} busy={busy} />
             </span>
           </div>
@@ -975,6 +981,17 @@ export const LEVEL_NOTES: Record<Level, string> = {
   low: "A fifth of the processor and 2 GB, shared by everything it runs at once; gives way to you.",
   lowest:
     "A tenth of the processor and 1 GB, shared by everything it runs at once; gives way to you.",
+}
+
+/** What a session is set to, in a few words, for the folded line: "Opus 5.5, High effort, Auto, Medium". */
+export function settingsSummary(s: SessionInfo, chat: boolean): string {
+  const model = MODELS.find((m) => m.id === (s.model ?? ""))?.label ?? s.model ?? "Default model"
+  const effort = EFFORTS.find((e) => e.id === s.effort)?.label
+  const mode = chat ? "Plan mode" : MODE_OPTIONS.find((m) => m.id === uiModeOf(s))?.label
+  const level = s.resources
+    ? LEVEL_OPTIONS.find((o) => o.id === s.resources)?.label.split(":")[0]
+    : undefined
+  return [model, effort ? `${effort} effort` : undefined, mode, level].filter(Boolean).join(", ")
 }
 
 /** A level for one session, applied at once to it and to everything it started (owner, 30 Oct). */
