@@ -357,7 +357,8 @@ const size = (() => {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
       const p = path.join(d, e.name)
       if (e.isDirectory()) walk(p)
-      else n += fs.statSync(p).size
+      // A link is not followed: its target is counted where it is, and following one can be refused.
+      else if (!e.isSymbolicLink()) n += fs.statSync(p).size
     }
   }
   walk(dest)
