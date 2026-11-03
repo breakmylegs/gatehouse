@@ -49,7 +49,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B19 | Local model profiles for corporate laptops | todo | Detect RAM and GPU, suggest a profile, show the licence before use, refuse models not on the IT allow list |
 | B20 | Unified cost and limits meter | partial | Claude plan meter exists; add caps per provider and in total that pause and ask |
 | B21 | Model registry with fallback chain | todo | Fallback only to an allowed provider with the same or a stricter data boundary, every switch recorded |
-| B22 | Side-by-side answers from several providers (chat) | todo | Two to four allowed models, columns with cost and latency, the chosen one recorded |
+| B22 | Side-by-side answers from several providers (chat) | done (3 Nov) | Two to four allowed models, columns with cost and latency, the chosen one recorded |
 | B23 | AGENTS.md read across providers | todo | Read through the floor and given to every provider |
 | B24 | Memory freshness | done (3 Nov) | Each memory shows its age; over 90 days flagged |
 

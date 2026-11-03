@@ -67,6 +67,14 @@ export function NewChat() {
   }, [model, offerClaude, offerLocal, shownLocal])
   const nothingAllowed = !offerClaude && shownLocal.length === 0
   const localModel = model.startsWith("local:") ? model.slice(6) : undefined
+  // B22: the same first message to two to four models, side by side, to keep the best answer.
+  const [comparing, setComparing] = useState(false)
+  const [compareWith, setCompareWith] = useState<string[]>([])
+  const compareChoices = [
+    ...(offerClaude ? MODELS.filter((m) => m.id).map((m) => ({ id: m.id, label: m.label })) : []),
+    ...shownLocal.map((m) => ({ id: `local:${m}`, label: `${m} (${localLabel})` })),
+  ]
+  const compareReady = !comparing || (compareWith.length >= 2 && compareWith.length <= 4)
   // A chat ready for the first message while this page is open (the warm chat); the Host puts it away after a while.
   useEffect(() => keepChatWarm(), [])
 
@@ -77,6 +85,7 @@ export function NewChat() {
     setBusy(true)
     setStartedAt(Date.now())
     setError(undefined)
+    if (comparing) return void startCompare(said)
     const r = await send(
       {
         type: "create_session",
@@ -109,6 +118,44 @@ export function NewChat() {
     s.addUserText(id, said)
     void send({ type: "prompt", sessionId: id, text: said })
     s.selectSession(id)
+    s.setRoute("workspace")
+  }
+
+  /** One chat for each model chosen, the same message to each, opened side by side (B22). */
+  async function startCompare(said: string) {
+    const at = Date.now()
+    const ids: string[] = []
+    for (const m of compareWith) {
+      const local = m.startsWith("local:") ? m.slice(6) : undefined
+      const r = await send(
+        {
+          type: "create_session",
+          cwd: "chat",
+          kind: "chat",
+          title: chatName(said),
+          mode: "plan",
+          ...accountForNew(),
+          ...(local ? { localModel: local } : { model: m }),
+          ...(project ? { chatProject: project } : {}),
+          ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
+        },
+        START_WAIT_MS,
+      )
+      if (!r.ok) {
+        setBusy(false)
+        for (const id of ids) void send({ type: "close_session", sessionId: id })
+        setError(r.error?.message ?? "One of the chats did not start, so none was kept")
+        return
+      }
+      ids.push((r.data as { sessionId: string }).sessionId)
+    }
+    setBusy(false)
+    const s = useStore.getState()
+    for (const id of ids) {
+      s.addUserText(id, said)
+      void send({ type: "prompt", sessionId: id, text: said })
+    }
+    useStore.setState({ panes: ids, selectedSession: ids[0], compare: { ids, at } })
     s.setRoute("workspace")
   }
 
@@ -201,11 +248,47 @@ export function NewChat() {
               ) : null}
             </select>
           </label>
-          <button className="btn btn-primary" disabled={busy || !text.trim() || nothingAllowed}>
+          <label className="flex items-center gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              checked={comparing}
+              onChange={(e) => setComparing(e.target.checked)}
+            />
+            Compare answers from several models
+          </label>
+          <button
+            className="btn btn-primary"
+            disabled={busy || !text.trim() || nothingAllowed || !compareReady}
+          >
             {busy ? "Starting…" : "Start the chat"}
           </button>
           <span className="text-[13px] text-mut">Ctrl+Enter starts it too.</span>
         </div>
+        {comparing ? (
+          <fieldset className="m-0 grid gap-1 rounded-md border border-line p-3">
+            <legend className="px-1 text-[13px] font-semibold">Compare two to four models</legend>
+            {compareChoices.map((c) => (
+              <label key={c.id} className="flex items-center gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={compareWith.includes(c.id)}
+                  disabled={!compareWith.includes(c.id) && compareWith.length >= 4}
+                  onChange={(e) =>
+                    setCompareWith((w) =>
+                      e.target.checked ? [...w, c.id] : w.filter((x) => x !== c.id),
+                    )
+                  }
+                />
+                {c.label}
+              </label>
+            ))}
+            <span className="text-xs text-mut">
+              Each gets your message as its own chat, side by side, with what it cost and how long
+              it took. Keep the best one and the others close; your choice is recorded. Each one
+              uses your plan.
+            </span>
+          </fieldset>
+        ) : null}
         {nothingAllowed ? (
           <p role="alert" className="m-0 text-warn">
             The project {project} allows only models on this computer, and none is ready. Check

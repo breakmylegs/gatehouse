@@ -177,6 +177,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
     /** Its folder, for a past session, so the title can be written into its transcript. */
     cwd: z.string().min(1).max(4096).optional(),
   }),
+  /** B22: of chats started side by side with the same message, the one you kept; recorded, the rest are closed. */
+  z.object({
+    type: z.literal("compare_chosen"),
+    kept: Id,
+    others: z.array(Id).min(1).max(3),
+  }),
   /** What was said in a past session, for export. */
   z.object({
     type: z.literal("history_messages"),

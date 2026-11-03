@@ -1629,6 +1629,18 @@ mark.seg {
   height: 32px;
 }
 
+/* B22: over each answer compared side by side, its model, time and cost, and Keep this one. */
+.compare-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--c-line);
+  background: var(--c-s2);
+  font-size: 13px;
+}
+
 /* A link-like button in the bar, for what is seldom pressed. */
 .composer-link {
   padding: 0 2px;

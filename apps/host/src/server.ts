@@ -627,6 +627,33 @@ export class HostServer {
         a.manager.announce(cmd.sdkSessionId)
         return meta
       }
+      case "compare_chosen": {
+        // B22: which answer you kept, by session and model, never what was said. The screen closes the rest.
+        const all = [cmd.kept, ...cmd.others].map((id) => a.manager.get(id)?.info())
+        if (all.some((s) => !s || s.kind !== "chat"))
+          throw new Error("Only chats started side by side can be compared.")
+        const model = (s: (typeof all)[number]) => s?.model ?? "default"
+        await this.#opts.app.audit.record({
+          session: cmd.kept,
+          event: "compare_chosen",
+          channel: "desktop",
+          tool: "compare",
+          input: {
+            kept: { session: cmd.kept, model: model(all[0]) },
+            others: all.slice(1).map((s) => ({ session: s?.id, model: model(s) })),
+          },
+          verdict: {
+            outcome: "allow",
+            ruleId: "compare-chosen",
+            reason: "You kept one of several answers compared side by side.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        return undefined
+      }
       case "history_messages":
         return cmd.all
           ? await this.#history().allMessages(cmd.sdkSessionId, cmd.cwd)

@@ -178,6 +178,8 @@ let hostApp: HostApp
 
 beforeAll(async () => {
   s = await buildStack({ hardTimeoutMs: 20_000, phoneExpiryMs: 10_000 })
+  // Chats get folders of their own here (B22 compares chats).
+  s.deps.chatsDir = path.join(s.dir, "chats")
   const app: HostApp = (hostApp = {
     manager: s.manager,
     broker: s.broker,
@@ -668,6 +670,40 @@ describe("commands over the WebSocket", () => {
       error: { code: "invalid-command" },
     })
     await c.send({ type: "close_session", sessionId })
+  })
+
+  it("records which of the chats compared side by side you kept, by session and model, and only for chats (B22)", async () => {
+    const chat = async (model: string) =>
+      (
+        (await c.send({ type: "create_session", cwd: "chat", kind: "chat", title: "t", model }))
+          .data as { sessionId: string }
+      ).sessionId
+    const a = await chat("claude-opus-5-5")
+    const b = await chat("claude-sonnet-5-5")
+    expect(await c.send({ type: "compare_chosen", kept: a, others: [b] })).toMatchObject({
+      ok: true,
+    })
+    const rec = s
+      .records()
+      .filter((r) => r.event === "compare_chosen")
+      .at(-1)
+    expect(rec).toMatchObject({
+      session: a,
+      verdict: { ruleId: "compare-chosen", decidedBy: "human-desktop" },
+    })
+    // The model each one runs, as it reports it (the stand-in SDK names its own).
+    const model = (id: string) => s.manager.get(id)?.info().model
+    expect(JSON.parse((rec as unknown as { inputJson: string }).inputJson)).toEqual({
+      kept: { session: a, model: model(a) },
+      others: [{ session: b, model: model(b) }],
+    })
+    const coding = (
+      (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    ).sessionId
+    expect(await c.send({ type: "compare_chosen", kept: a, others: [coding] })).toMatchObject({
+      ok: false,
+    })
+    for (const id of [a, b, coding]) await c.send({ type: "close_session", sessionId: id })
   })
 
   it("restarts only where the window app can, and says so where it cannot", async () => {

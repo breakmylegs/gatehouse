@@ -122,6 +122,8 @@ export interface State {
   selectedRequest?: string
   /** A project chosen on the Projects page, for the new chat page to start in. Used once. */
   newChatProject?: string
+  /** B22: chats started side by side with the same message, and when, until you keep one. */
+  compare?: { ids: string[]; at: number }
   theme: "light" | "dark"
   /** No choice of yours is kept, so the window follows the Windows theme as it changes. */
   themeFollows: boolean

@@ -80,6 +80,7 @@ import { loadBars } from "../lib/load"
 import { useScreenReaderMode } from "../lib/screenReader"
 import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
+import { CompareBar } from "../components/CompareBar"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -789,6 +790,7 @@ function SessionPane({
         </aside>
       </div>
 
+      <CompareBar sessionId={session.id} />
       <footer className="bg-s1 px-3 pb-2 pt-1.5">
         {session.state === "error" ? <StoppedLine session={session} /> : null}
         {session.state === "starting" ? <ComingBack session={session} /> : null}
