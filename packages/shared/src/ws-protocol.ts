@@ -11,6 +11,17 @@ const Id = z.string().min(1).max(200)
 const Mode = z.enum(["default", "acceptEdits", "plan", "auto"])
 export const Effort = z.enum(["low", "medium", "high", "xhigh", "max"])
 export type Effort = z.infer<typeof Effort>
+/** The one effort scale, least first (B18). Every provider's own setting is mapped onto it, or it has none. */
+export const EFFORT_ORDER = Effort.options
+/** The effort to use: the one asked for, no higher than the cap (when there is one). */
+export function capEffort(e: Effort | undefined, cap: Effort | undefined): Effort | undefined {
+  if (!cap) return e
+  if (!e) return undefined
+  return EFFORT_ORDER.indexOf(e) > EFFORT_ORDER.indexOf(cap) ? cap : e
+}
+/** Whether an effort is above the cap. */
+export const aboveCap = (e: Effort, cap: Effort | undefined): boolean =>
+  cap !== undefined && EFFORT_ORDER.indexOf(e) > EFFORT_ORDER.indexOf(cap)
 /**
  * How much of this computer a session may use, least first (owner: five levels). Low, Medium and High keep the
  * meaning they had when there were three, so a level saved by an older version means the same.
@@ -250,6 +261,8 @@ export const SessionInfo = z.object({
   research: z.boolean().optional(),
   /** Runs on a model on this computer, not Claude (ADR 0011). `model` names it. */
   local: z.boolean().optional(),
+  /** The most effort Settings allows (B18). Absent: no cap. */
+  effortCap: Effort.optional(),
   /** Where a local chat's words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel: z.string().max(120).optional(),
   /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */

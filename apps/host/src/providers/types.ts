@@ -16,7 +16,8 @@ export type ProviderId = string
 export type Pattern = "wrap" | "loop"
 /** Codehouse's modes, by their SDK names (Manual is "default"). No bypass value exists. */
 export type ProviderMode = "default" | "plan" | "acceptEdits" | "auto"
-export type ProviderEffort = "minimal" | "low" | "medium" | "high" | "max"
+/** Codehouse's one effort scale (B18), the same as the session's. An adapter lists the levels it can carry out. */
+export type ProviderEffort = "low" | "medium" | "high" | "xhigh" | "max"
 /** Where a session's words go: this computer, a provider that keeps nothing, or one that keeps them a while. */
 export type DataBoundary = "local" | "hosted-zdr" | "hosted-retained"
 

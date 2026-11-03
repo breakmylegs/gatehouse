@@ -186,6 +186,11 @@ function build(loose: boolean) {
      * When sessions pause for the plan's 5-hour limit (owner): the percentage, or off. Absent: 95%. Older versions keep
      * it without using it, and pause at 95%.
      */
+    /**
+     * The most effort a session may use (B18): low, medium, high, xhigh or max. Absent: no cap. Older versions keep it
+     * without using it.
+     */
+    effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
     planLimitPause: obj({
       percent: z.number().int().min(50).max(99),
       off: z.boolean().optional(),

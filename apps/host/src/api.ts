@@ -1312,6 +1312,7 @@ const LIVE_SETTINGS = [
   "digestTime",
   "extremeCarryOn",
   "planLimitPause",
+  "effortCap",
   "globalInstructions",
   "providers",
 ] as const

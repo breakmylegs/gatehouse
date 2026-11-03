@@ -7,6 +7,7 @@ import { VoiceSetting } from "../components/VoiceButton"
 import { ProvidersPanel } from "../components/ProvidersPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { EFFORTS } from "../lib/modes"
 import { send, useStore } from "../store"
 
 interface Config {
@@ -22,6 +23,7 @@ interface Config {
   rulesPath?: string
   extremeCarryOn?: { turns: number; usd: number; noTurnLimit?: boolean; noSpendLimit?: boolean }
   planLimitPause?: { percent: number; off?: boolean }
+  effortCap?: string
   globalInstructions?: string
 }
 
@@ -71,6 +73,7 @@ interface Values {
   /** A number, or "none" for no limit. */
   ecTurns: string
   plPause: string
+  effortCap: string
   ecUsd: string
   /** What every session is told at its start. */
   instr: string
@@ -97,6 +100,7 @@ function valuesOf(d: SettingsData): Values {
     cpBurst: c.checkpoints.editBursts,
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
+    effortCap: c.effortCap ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     instr: c.globalInstructions ?? "",
   }
@@ -132,6 +136,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     ...(v.ecTurns === "none" ? { noTurnLimit: true } : {}),
     ...(v.ecUsd === "none" ? { noSpendLimit: true } : {}),
   }
+  if (v.effortCap) body.effortCap = v.effortCap
+  else delete body.effortCap
   // Absent is 95%, so the default is not written; a percentage is kept beside off for an older reader.
   const { off: _o, ...pauseKeep } = d.saved.planLimitPause ?? { percent: 95 }
   if (v.plPause === "95" && !d.saved.planLimitPause) delete body.planLimitPause
@@ -164,6 +170,7 @@ export const DEFAULT_VALUES: Values = {
   cpBurst: true,
   ecTurns: "200",
   plPause: "95",
+  effortCap: "",
   ecUsd: "500",
   instr: "",
 }
@@ -384,6 +391,7 @@ export function Settings() {
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause"])
+  const effortChanged = differs(v, ["effortCap"])
   const instrChanged = differs(v, ["instr"])
   const privacyChanged = differs(v, ["terms"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
@@ -646,6 +654,26 @@ export function Settings() {
                   </select>
                 </Field>
               </div>
+            </Group>
+
+            <Group section="sessions" title="Effort" gap="gap-2" changed={effortChanged}>
+              <Field
+                label="Most effort a session may use"
+                help="Higher effort thinks longer and uses more of your plan. Sessions started above this run at it, and the picker under each prompt box offers nothing higher. Models on this computer have no effort setting."
+              >
+                <select
+                  className="field"
+                  value={v.effortCap}
+                  onChange={(e) => change({ effortCap: e.target.value }, "Effort")}
+                >
+                  <option value="">No limit</option>
+                  {EFFORTS.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </Group>
 
             <Group section="sessions" title="Plan limit" gap="gap-2" changed={pauseChanged}>

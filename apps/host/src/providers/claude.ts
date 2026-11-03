@@ -25,7 +25,7 @@ export function claudeAdapter(deps: { account: () => AccountInfo | undefined }):
       webSearch: "app-tool",
       imageInput: true,
       fileInput: true,
-      effortLevels: ["low", "medium", "high", "max"],
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
       reportsUsage: true,
       reportsRateLimits: true,
       dataBoundary: "hosted-retained",

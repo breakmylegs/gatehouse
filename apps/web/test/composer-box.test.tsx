@@ -82,6 +82,24 @@ describe("the prompt box", () => {
     expect(box.value).toBe("")
   })
 
+  it("greys out efforts above the limit in Settings, and offers no effort for a model on this computer", () => {
+    useStore.setState({
+      sessions: { s1: { ...useStore.getState().sessions.s1!, effort: "high", effortCap: "high" } },
+    })
+    const { unmount } = render(<Workspace />)
+    const options = [
+      ...(screen.getByRole("combobox", { name: "Effort" }) as HTMLSelectElement).options,
+    ]
+    const off = options.filter((o) => o.disabled && o.value).map((o) => o.value)
+    expect(off).toEqual(["xhigh", "max"])
+    unmount()
+    useStore.setState({
+      sessions: { s1: { ...useStore.getState().sessions.s1!, local: true, model: "tiny" } },
+    })
+    render(<Workspace />)
+    expect(screen.queryByRole("combobox", { name: "Effort" })).toBeNull()
+  })
+
   it("keeps the settings under it short: each picker named for a screen reader, not in words on the line", () => {
     render(<Workspace />)
     const bar = screen.getByRole("group", { name: "Model, effort and mode" })

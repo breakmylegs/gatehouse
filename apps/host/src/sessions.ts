@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events"
 import crypto from "node:crypto"
 import os from "node:os"
-import { Effort, type Verdict } from "@gatehouse/shared"
+import { aboveCap, capEffort, Effort, type Verdict } from "@gatehouse/shared"
 import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -493,7 +493,9 @@ export class Session extends EventEmitter<SessionEvents> {
     this.project = path.basename(findProjectRoot(opts.cwd))
     this.#mode = opts.mode ?? "default"
     this.#model = opts.localModel ?? opts.model
-    this.#effort = opts.effort
+    // No higher than the cap in Settings (B18); a model on this computer has no effort to set.
+    this.#effort =
+      opts.localModel !== undefined ? undefined : capEffort(opts.effort, deps.config().effortCap)
     this.#extreme = opts.extreme === true
     this.#resources = opts.resources ?? "high"
     this.#account = opts.account ?? MAIN_ACCOUNT
@@ -533,6 +535,7 @@ export class Session extends EventEmitter<SessionEvents> {
         : {}),
       ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
+      ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
@@ -1274,6 +1277,11 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Reasoning effort. Applied to the running session as a flag setting that carries only this one key. */
   async setEffort(effort: Effort): Promise<void> {
+    if (this.#opts.localModel !== undefined)
+      throw new Error("A model on this computer has no effort to set.")
+    const cap = this.#deps.config().effortCap
+    if (aboveCap(effort, cap))
+      throw new Error(`Settings limits effort to ${cap}, so this session cannot use ${effort}.`)
     await this.#q?.applyFlagSettings({ effortLevel: effort })
     this.#effort = effort
     this.emit("state", this.info())

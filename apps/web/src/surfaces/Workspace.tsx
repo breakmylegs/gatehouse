@@ -1,4 +1,9 @@
-import type { PendingView, ResourceLevel, SessionInfo } from "@gatehouse/shared/ws-protocol"
+import {
+  aboveCap,
+  type PendingView,
+  type ResourceLevel,
+  type SessionInfo,
+} from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { diffLines } from "diff"
 import {
@@ -832,31 +837,44 @@ function SessionPane({
                 ))}
               </select>
             </label>
-            <label className="composer-pick" title="Effort: how hard Claude thinks">
-              <span className="sr-only">Effort</span>
-              <select
-                className="composer-select"
-                value={session.effort ?? ""}
-                disabled={ended}
-                onChange={(e) =>
-                  e.target.value &&
-                  void send({
-                    type: "set_effort",
-                    sessionId: session.id,
-                    effort: e.target.value as EffortId,
-                  })
-                }
-              >
-                <option value="" disabled>
-                  Model default
-                </option>
-                {EFFORTS.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.label} effort
+            {/* A model on this computer has no effort to set (B18), so the picker is not offered for it. */}
+            {session.local ? null : (
+              <label className="composer-pick" title="Effort: how hard Claude thinks">
+                <span className="sr-only">Effort</span>
+                <select
+                  className="composer-select"
+                  value={session.effort ?? ""}
+                  disabled={ended}
+                  onChange={(e) =>
+                    e.target.value &&
+                    void send({
+                      type: "set_effort",
+                      sessionId: session.id,
+                      effort: e.target.value as EffortId,
+                    })
+                  }
+                >
+                  <option value="" disabled>
+                    Model default
                   </option>
-                ))}
-              </select>
-            </label>
+                  {EFFORTS.map((x) => (
+                    <option
+                      key={x.id}
+                      value={x.id}
+                      // Above the cap in Settings: shown, so you know it exists, but not chosen (B18).
+                      disabled={
+                        session.effortCap !== undefined && aboveCap(x.id, session.effortCap)
+                      }
+                    >
+                      {x.label} effort
+                      {session.effortCap !== undefined && aboveCap(x.id, session.effortCap)
+                        ? " (above the limit in Settings)"
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {chat ? (
               <span className="composer-pick">Plan mode, always, in a chat</span>
             ) : (
