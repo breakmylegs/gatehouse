@@ -517,6 +517,10 @@ export const useStore = create<State>((set, get) => ({
           if (l) set((s) => ({ load: { ...s.load, [e.sessionId]: l } }))
           return
         }
+        if (e.event === "queue_empty") {
+          queueEmpty(e.sessionId, get())
+          return
+        }
         if (e.event === "decision") {
           const d = decisionOf(e.data)
           if (d) get().addDecisions([d])
@@ -539,7 +543,11 @@ export const useStore = create<State>((set, get) => ({
         }
         const line = describeEvent(e.event, e.data)
         if (!line) return
-        if (e.event === "notify_user" || e.event === "carry_on_end" || e.event === "paused")
+        if (
+          e.event === "notify_user" ||
+          e.event === "paused" ||
+          (e.event === "carry_on_end" && e.data.why !== "done")
+        )
           notice(e.sessionId, line)
         set((s) => ({
           transcripts: {
@@ -796,6 +804,34 @@ function firstPending(p: Record<string, PendingView>): string | undefined {
 const shown = new Map<string, Notification>()
 
 /** Tells the user without moving focus: a toast always, a browser notification only if they turned it on. */
+/**
+ * A session says its build queue is empty (owner, 3 Nov): a toast, a line in Notices and, when notifications are on,
+ * one from Windows, which opens the session. Only the session's name goes in it, as for a request.
+ */
+function queueEmpty(sessionId: string, s: State): void {
+  const info = s.sessions[sessionId]
+  const name = info ? (info.title ?? info.project) : "A session"
+  const open = () => {
+    const st = useStore.getState()
+    st.selectSession(sessionId)
+    st.setRoute("workspace")
+  }
+  notice(sessionId, "the build queue is empty.")
+  toast(`${name}: the build queue is empty`, { action: { label: "Open", onClick: open } })
+  tellShell("attention")
+  if (s.notify && typeof Notification !== "undefined" && Notification.permission === "granted") {
+    const n = new Notification("Codehouse", {
+      body: `${name}: the build queue is empty`,
+      tag: `queue-${sessionId}`,
+    })
+    n.onclick = () => {
+      window.focus()
+      open()
+      n.close()
+    }
+  }
+}
+
 function announce(v: PendingView, s: State): void {
   tellShell("attention")
   const project = v.request.project

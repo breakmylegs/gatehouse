@@ -82,6 +82,20 @@ describe("Extreme approval", () => {
     ).toHaveLength(2)
   })
 
+  it("says when a reply ends the build queue, in Manual too, and not for any other reply", async () => {
+    s.sdk.turn = async (api, text) =>
+      api.say(text === "last one" ? "Finished.\nQUEUE EMPTY" : "Done that.")
+    const session = await s.manager.start({ cwd: s.repo })
+    const told: string[] = []
+    session.on("event", (e) => told.push(e.type))
+    const count = results(session)
+    session.prompt("first job")
+    await vi.waitFor(() => expect(count()).toBe(1))
+    expect(told).not.toContain("queue_empty")
+    session.prompt("last one")
+    await vi.waitFor(() => expect(told).toContain("queue_empty"))
+  })
+
   it("starts a new run with your next message after the queue was empty", async () => {
     s.sdk.turn = async (api, text) =>
       api.say(text === CARRY_ON_PROMPT ? "QUEUE EMPTY" : "Done that.")

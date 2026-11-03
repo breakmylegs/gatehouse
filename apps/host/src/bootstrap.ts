@@ -607,6 +607,14 @@ export function createHost(opts: HostOptions = {}): Host {
       void phone
         .notify("notify", { title: "Claude", body: String(data.text), project })
         .catch(() => undefined)
+    else if (type === "queue_empty")
+      void phone
+        .notify("notify", {
+          title: "Build queue empty",
+          body: "Claude has finished its queue.",
+          project,
+        })
+        .catch(() => undefined)
     else if (type === "stop")
       void phone
         .notify("stop", { title: "Session finished", body: "", project })

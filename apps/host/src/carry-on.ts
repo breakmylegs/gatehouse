@@ -16,6 +16,9 @@ export const LIMIT_RESUME_PROMPT =
 
 const QUEUE_EMPTY = /\bQUEUE EMPTY\b/
 
+/** Claude ended a reply saying its build queue is empty, in any mode (owner, 3 Nov: tell me when it is). */
+export const saysQueueEmpty = (text: string): boolean => QUEUE_EMPTY.test(text)
+
 /** Why carrying on stopped. Stalled: two turns in a row did no work, so nothing seems left to do. */
 export type CarryOnEnd = "done" | "turns" | "spend" | "stopped" | "error" | "stalled"
 

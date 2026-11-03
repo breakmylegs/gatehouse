@@ -48,6 +48,7 @@ import {
   carryOnLimits,
   LIMIT_RESUME_PROMPT,
   RESUME_PROMPT,
+  saysQueueEmpty,
   type CarryOnStatus,
 } from "./carry-on.js"
 import { planLimits, type PlanUsage } from "./plan-usage.js"
@@ -231,6 +232,7 @@ export interface SessionEvents {
         | "carry_on"
         | "carry_on_end"
         | "load"
+        | "queue_empty"
       data: Record<string, unknown>
     },
   ]
@@ -894,6 +896,9 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#running = false
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
+      if (typeof m.result === "string" && m.is_error !== true && saysQueueEmpty(m.result))
+        this.emit("event", { type: "queue_empty", data: {} })
       if (this.#compactAfterTurn) {
         // Asked for while the turn ran: it compacts now, and Extreme approval carries on after that.
         this.#compactAfterTurn = false
