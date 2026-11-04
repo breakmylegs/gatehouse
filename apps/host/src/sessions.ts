@@ -34,7 +34,9 @@ import type { Worktrees } from "./worktrees.js"
 import {
   assertSafeOptions,
   isAllowedMode,
+  isShadowSystemMessage,
   isShadowWarning,
+  watchShadowWarning,
   outOfProcessServers,
   SafetyError,
   type SessionMode,
@@ -815,7 +817,17 @@ export class Session extends EventEmitter<SessionEvents> {
     const queryFn =
       this.#opts.localModel !== undefined ? d.local?.queryFn(this.#opts.localModel) : d.queryFn
     if (!queryFn) throw new Error("Models on this computer are not switched on.")
-    const query = queryFn({ prompt: this.#input, options })
+    // Invariant 4: the SDK's own warning, raised in this process while query() reads the options.
+    const unwatch = watchShadowWarning(() =>
+      this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed")),
+    )
+    let query: ReturnType<typeof queryFn>
+    try {
+      query = queryFn({ prompt: this.#input, options })
+    } finally {
+      // Node hands a warning to its listeners on the next tick; setImmediate runs after that.
+      setImmediate(unwatch)
+    }
     this.#q = query
     const checkStart = async (): Promise<void> => {
       const init = await query.initializationResult()
@@ -923,7 +935,7 @@ export class Session extends EventEmitter<SessionEvents> {
       this.emit("state", this.info())
     }
     if (msg.type === "system") {
-      if (isShadowWarning(JSON.stringify(m)))
+      if (isShadowSystemMessage(m))
         this.#fatal(new SafetyError(4, "the SDK reported that canUseTool is shadowed"))
       if ((m.subtype as string) === "init" && typeof m.model === "string") this.#model = m.model
       // B03: a plugin installed outside Codehouse can hold a mod, whose tool.check hook has the last word after the

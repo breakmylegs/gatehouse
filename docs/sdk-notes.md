@@ -157,6 +157,8 @@ type AccountInfo = { email?, organization?, subscriptionType?, tokenSource?, api
 
 The string `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` does not appear in the installed package. UNVERIFIED. Gatehouse enforces invariant 4 itself: startup refuses any `allowedTools` entry that is a bare tool name, and any `permissionMode` outside `default` and `plan`. Revisit if the SDK emits a warning at runtime during the spike.
 
+Verified 4 Nov 2026 (Agent SDK 0.3.310, `sdk.mjs`): the SDK now has it. While `query()` reads its options it calls `process.emitWarning(text, { code: "CLAUDE_SDK_CAN_USE_TOOL_SHADOWED" })` in the Host's own process, when `canUseTool` is set and `allowedTools` holds bare tool names. The text begins "canUseTool will not be invoked for:" and adds that allow rules from settings files can also shadow the callback but are not visible to it. The warning is not a system message and not Claude Code's stderr. Codehouse watches `process` "warning" events from just before `query()` until the tick after (`watchShadowWarning`, safety.ts). It still reads Claude Code's stderr and system messages for the code or that sentence only, and never the system messages that carry what Claude, a subagent, a hook or a command wrote (`CONTENT_SUBTYPES`). A looser pattern there stopped a build session whenever a subagent's report quoted the warning (owner, 4 Nov). Allow rules in settings files are answered by the floor hook asking in every mode (O14).
+
 ## Spike results (2026-10-26, `npm run host:cli -- C:\dev\gatehouse-spike`)
 
 One streaming-input session, `permissionMode: "default"`, Claude Code preset prompt, all three setting sources, sanitised env. Cost about 0.06 USD.

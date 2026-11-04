@@ -153,13 +153,54 @@ export function outOfProcessServers(statuses: unknown): string[] {
   return out
 }
 
-const SHADOWED =
-  /CLAUDE_SDK_CAN_USE_TOOL_SHADOWED|canUseTool[^\n]{0,80}\b(shadow|never (be )?called|bypass)/i
+/** The code the SDK gives its warning (Agent SDK 0.3.310, sdk.mjs: process.emitWarning(text, { code })). */
+export const SHADOW_CODE = "CLAUDE_SDK_CAN_USE_TOOL_SHADOWED"
+// The code, or the SDK's own sentence ("canUseTool will not be invoked for: Bash. Bare allowedTools entries...").
+const SHADOWED = /CLAUDE_SDK_CAN_USE_TOOL_SHADOWED|canUseTool will not be invoked for:/
 
 /**
- * Invariant 4: a warning that canUseTool is being shadowed (some rule approves calls before it is asked)
- * is fatal. The installed SDK does not contain the string, so this also matches the likely wording.
+ * Invariant 4: a warning that canUseTool is being shadowed (some rule approves calls before it is asked) is fatal.
+ * Only the SDK's own code or sentence counts. An earlier, looser pattern ("canUseTool ... shadow") stopped a session
+ * whenever a subagent's report merely quoted the warning (owner, 4 Nov).
  */
 export function isShadowWarning(text: string): boolean {
   return SHADOWED.test(text)
+}
+
+/**
+ * System messages that carry what Claude, a subagent, a hook or a command wrote: a quote of the warning there is
+ * text, not the SDK warning, so these are not read for it.
+ */
+export const CONTENT_SUBTYPES = new Set([
+  "task_notification",
+  "task_progress",
+  "task_started",
+  "task_updated",
+  "local_command_output",
+  "hook_response",
+  "hook_progress",
+  "hook_started",
+  "compact_boundary",
+  "memory_recall",
+  "files_persisted",
+  "notification",
+])
+
+/** Whether a system message is the SDK's shadow warning, never a message that only carries text quoting it. */
+export function isShadowSystemMessage(m: Record<string, unknown>): boolean {
+  if (typeof m.subtype === "string" && CONTENT_SUBTYPES.has(m.subtype)) return false
+  return isShadowWarning(JSON.stringify(m))
+}
+
+/**
+ * The SDK raises its warning in this process (process.emitWarning) while query() reads the options, and Node hands
+ * it to "warning" listeners on the next tick. Watch from just before query() until after that tick; returns how to
+ * stop watching.
+ */
+export function watchShadowWarning(onShadow: () => void): () => void {
+  const on = (w: Error & { code?: string }) => {
+    if (w.code === SHADOW_CODE || isShadowWarning(String(w.message))) onShadow()
+  }
+  process.on("warning", on)
+  return () => process.off("warning", on)
 }

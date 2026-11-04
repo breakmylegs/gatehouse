@@ -9,8 +9,11 @@ import {
   assertSafeOptions,
   isAllowedMode,
   isBareToolName,
+  isShadowSystemMessage,
   isShadowWarning,
   outOfProcessServers,
+  SHADOW_CODE,
+  watchShadowWarning,
   SafetyError,
 } from "../src/safety.js"
 import { KillSwitchEngagedError, OrgGuardError } from "../src/sessions.js"
@@ -92,11 +95,15 @@ describe("invariant 4: no bare tool names in allowedTools", () => {
 
   it("recognises a shadow warning, which is fatal", () => {
     expect(isShadowWarning("warning CLAUDE_SDK_CAN_USE_TOOL_SHADOWED: Bash")).toBe(true)
+    // The SDK's own sentence (Agent SDK 0.3.310).
     expect(
-      isShadowWarning("canUseTool will never be called for Read because of an allow rule"),
+      isShadowWarning(
+        "canUseTool will not be invoked for: Bash. Bare allowedTools entries auto-approve",
+      ),
     ).toBe(true)
-    expect(isShadowWarning("canUseTool is shadowed by allowedTools")).toBe(true)
     expect(isShadowWarning("session started")).toBe(false)
+    // Words about the warning are not the warning (owner, 4 Nov: a subagent's report stopped the session).
+    expect(isShadowWarning("Invariant 4: the SDK reported that canUseTool is shadowed")).toBe(false)
   })
 })
 
@@ -640,6 +647,47 @@ describe("invariant 1: when something fails, the answer is not an allow", () => 
     expect(calls).toBeGreaterThan(0)
     expect(results[0]).toMatchObject({ executed: false })
     expect(results[0]?.message).toContain("could not be recorded")
+  })
+
+  it("does not stop a session when a subagent's report or a command only quotes the warning", async () => {
+    const quote = `The guard matches ${SHADOW_CODE} and "canUseTool will not be invoked for:".`
+    expect(
+      isShadowSystemMessage({ type: "system", subtype: "task_notification", summary: quote }),
+    ).toBe(false)
+    expect(
+      isShadowSystemMessage({ type: "system", subtype: "local_command_output", content: quote }),
+    ).toBe(false)
+    const { session, done } = await runTurn(async (api) => {
+      api.system({ subtype: "task_notification", status: "completed", summary: quote })
+    })
+    await done
+    expect(session.info().state).not.toBe("error")
+  })
+
+  it("stops a starting session when the SDK raises its warning in this process", async () => {
+    let seen = 0
+    const stop = watchShadowWarning(() => seen++)
+    process.emitWarning("canUseTool will not be invoked for: Bash.", { code: SHADOW_CODE })
+    process.emitWarning("something else", { code: "OTHER" })
+    await new Promise((r) => setImmediate(r))
+    stop()
+    process.emitWarning("canUseTool will not be invoked for: Bash.", { code: SHADOW_CODE })
+    await new Promise((r) => setImmediate(r))
+    expect(seen).toBe(1)
+    const original = s.deps.queryFn
+    s.deps.queryFn = ((p: Parameters<typeof original>[0]) => {
+      process.emitWarning("canUseTool will not be invoked for: Bash.", { code: SHADOW_CODE })
+      return original(p)
+    }) as typeof original
+    try {
+      const session = await s.manager.start({ cwd: s.repo })
+      for (let i = 0; i < 100 && session.info().state !== "error"; i++)
+        await new Promise((r) => setTimeout(r, 20))
+      expect(session.info().state).toBe("error")
+      expect(session.info().error).toContain("Invariant 4")
+    } finally {
+      s.deps.queryFn = original
+    }
   })
 
   it("stops a session when the SDK warns that canUseTool is shadowed", async () => {
