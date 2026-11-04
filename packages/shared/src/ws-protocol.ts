@@ -177,6 +177,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
     /** Its folder, for a past session, so the title can be written into its transcript. */
     cwd: z.string().min(1).max(4096).optional(),
   }),
+  /** B21: a chat carried on with another model you allow; recorded before the new chat starts. */
+  z.object({
+    type: z.literal("fallback_used"),
+    from: Id,
+    model: z.string().min(1).max(100),
+  }),
   /** B25: the check to carry on until it passes, or null for none. */
   z.object({
     type: z.literal("set_goal"),

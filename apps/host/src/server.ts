@@ -632,6 +632,40 @@ export class HostServer {
         a.manager.announce(cmd.sdkSessionId)
         return meta
       }
+      case "fallback_used": {
+        // B21: only a chat, only to a model you allow on this computer or its gateway; recorded by session and model.
+        const from = a.manager.get(cmd.from)?.info()
+        if (!from || from.kind !== "chat")
+          throw new Error("Only a chat can be carried on with another model.")
+        const local = a.admin?.config().providers?.local
+        if (!local?.models.some((m) => m.name === cmd.model))
+          throw new Error("That model is not one you allow in Settings, Other AI providers.")
+        // The same data boundary as Claude or stricter: this computer, or a gateway whose provider keeps nothing or 30
+        // days at most. One whose provider's keeping is not known is not offered.
+        if (local.kind === "gateway" && local.keeps !== "nothing" && local.keeps !== "30-days")
+          throw new Error(
+            "That gateway's provider may keep more than Claude does, so a chat is not carried on there.",
+          )
+        const recorded = await this.#opts.app.audit.record({
+          session: cmd.from,
+          event: "fallback_used",
+          channel: "desktop",
+          tool: "fallback",
+          input: { from: from.model ?? "default", to: cmd.model, kind: local.kind },
+          verdict: {
+            outcome: "allow",
+            ruleId: "fallback-used",
+            reason:
+              "You carried a chat on with another model you allow, whose data boundary is the same or stricter.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!recorded) throw new Error("It could not be recorded, so the chat was not carried on.")
+        return undefined
+      }
       case "compare_chosen": {
         // B22: which answer you kept, by session and model, never what was said. The screen closes the rest.
         const all = [cmd.kept, ...cmd.others].map((id) => a.manager.get(id)?.info())

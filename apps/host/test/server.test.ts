@@ -706,6 +706,27 @@ describe("commands over the WebSocket", () => {
     for (const id of [a, b, coding]) await c.send({ type: "close_session", sessionId: id })
   })
 
+  it("carries a chat on only to a model you allow, and never a coding session (B21)", async () => {
+    const chat = (
+      (await c.send({ type: "create_session", cwd: "chat", kind: "chat", title: "t" })).data as {
+        sessionId: string
+      }
+    ).sessionId
+    // No model on this computer is allowed here, so the switch is refused and nothing is recorded.
+    const before = s.records().filter((r) => r.event === "fallback_used").length
+    expect(await c.send({ type: "fallback_used", from: chat, model: "qwen3:8b" })).toMatchObject({
+      ok: false,
+    })
+    const coding = (
+      (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    ).sessionId
+    expect(await c.send({ type: "fallback_used", from: coding, model: "qwen3:8b" })).toMatchObject({
+      ok: false,
+    })
+    expect(s.records().filter((r) => r.event === "fallback_used")).toHaveLength(before)
+    for (const id of [chat, coding]) await c.send({ type: "close_session", sessionId: id })
+  })
+
   it("restarts only where the window app can, and says so where it cannot", async () => {
     delete hostApp.restart
     expect(await c.send({ type: "restart" })).toMatchObject({

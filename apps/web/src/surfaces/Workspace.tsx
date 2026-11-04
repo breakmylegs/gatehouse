@@ -85,6 +85,7 @@ const poppedOut = new URLSearchParams(location.search).get("view") === "pane"
 import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
 import { CompareBar } from "../components/CompareBar"
+import { FallbackButton } from "../components/FallbackButton"
 import { GoalDialog } from "../components/GoalDialog"
 import { startReview } from "../lib/review"
 import { runTestsUntilPass } from "../lib/testLoop"
@@ -1315,6 +1316,7 @@ function StoppedLine({ session }: { session: SessionInfo }) {
           {busy ? "Starting again" : "Start again"}
         </button>
       ) : null}
+      <FallbackButton session={session} />
     </div>
   )
 }
@@ -1363,6 +1365,8 @@ function PausedLine({
       >
         {busy ? "Starting" : "Start now"}
       </button>
+      {/* B21: or carry a chat on now with a model you allow, no looser with your words than Claude. */}
+      <FallbackButton session={session} />
     </div>
   )
 }
