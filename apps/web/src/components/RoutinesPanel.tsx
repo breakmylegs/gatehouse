@@ -12,6 +12,17 @@ interface Routine {
   extreme?: boolean
   enabled: boolean
   lastRun?: string
+  /** Absent: on a schedule. */
+  trigger?: { kind: "commit" | "files" }
+}
+
+type Starts = "schedule" | "commit" | "files"
+
+/** When a routine starts, in words. */
+export function startsText(x: Pick<Routine, "time" | "days" | "trigger">): string {
+  if (x.trigger?.kind === "commit") return "on a new commit"
+  if (x.trigger?.kind === "files") return "when files change"
+  return `${x.time}, ${x.days.join(" ")}`
 }
 
 const DAYS = [
@@ -38,6 +49,7 @@ export function RoutinesPanel() {
     time: "08:00",
     days: WEEKDAYS,
     extreme: false,
+    starts: "schedule" as Starts,
   })
   const load = async () => {
     const r = await api<{ routines: Routine[] }>("GET", "/api/routines")
@@ -47,7 +59,12 @@ export function RoutinesPanel() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault()
-    const r = await api("PUT", "/api/routines", { ...draft, enabled: true })
+    const { starts, ...rest } = draft
+    const r = await api("PUT", "/api/routines", {
+      ...rest,
+      enabled: true,
+      ...(starts === "schedule" ? {} : { trigger: { kind: starts } }),
+    })
     if (!r.ok) return toast.error(r.error ?? "The routine was not saved", { id: "routines" })
     setDraft({ ...draft, name: "", prompt: "" })
     toast("Routine saved", { id: "routines" })
@@ -71,7 +88,9 @@ export function RoutinesPanel() {
         is open (within an hour of it, if the computer was asleep), and sends it your prompt. It
         goes through every check a session you start does: the kill switch, your sign-in and
         organisation, the limit on sessions, and every rule. With Extreme approval it carries on by
-        itself within your turn and spending limits; otherwise it asks you as usual.
+        itself within your turn and spending limits; otherwise it asks you as usual. One can start
+        instead on a new commit in its folder, or when files in it change: never because of its own
+        session&apos;s work, at most once in 15 minutes and 12 times a day.
       </p>
       {list?.length ? (
         <ul className="m-0 grid list-none gap-2 p-0" aria-label="Your routines">
@@ -80,7 +99,7 @@ export function RoutinesPanel() {
               <span className="grid min-w-0 flex-1">
                 <strong className="truncate">{x.name}</strong>
                 <span className="mono truncate text-xs text-mut">
-                  {x.time}, {x.days.join(" ")}, {x.folder}
+                  {startsText(x)}, {x.folder}
                   {x.extreme ? ", Extreme approval" : ""}
                   {x.lastRun ? `, last ran ${x.lastRun}` : ""}
                 </span>
@@ -136,34 +155,50 @@ export function RoutinesPanel() {
         </label>
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid gap-1 text-sm">
-            <span>Time</span>
-            <input
+            <span>Starts</span>
+            <select
               className="field"
-              type="time"
-              value={draft.time}
-              onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-            />
+              value={draft.starts}
+              onChange={(e) => setDraft({ ...draft, starts: e.target.value as Starts })}
+            >
+              <option value="schedule">On a schedule</option>
+              <option value="commit">On a new commit</option>
+              <option value="files">When files change</option>
+            </select>
           </label>
-          <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
-            <legend className="mb-1 p-0 text-sm">Days</legend>
-            {DAYS.map(([id, label]) => (
-              <label key={id} className="flex items-center gap-1 text-sm">
+          {draft.starts === "schedule" ? (
+            <>
+              <label className="grid gap-1 text-sm">
+                <span>Time</span>
                 <input
-                  type="checkbox"
-                  checked={draft.days.includes(id)}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      days: e.target.checked
-                        ? [...draft.days, id]
-                        : draft.days.filter((d) => d !== id),
-                    })
-                  }
+                  className="field"
+                  type="time"
+                  value={draft.time}
+                  onChange={(e) => setDraft({ ...draft, time: e.target.value })}
                 />
-                {label}
               </label>
-            ))}
-          </fieldset>
+              <fieldset className="m-0 flex flex-wrap gap-2 border-0 p-0">
+                <legend className="mb-1 p-0 text-sm">Days</legend>
+                {DAYS.map(([id, label]) => (
+                  <label key={id} className="flex items-center gap-1 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={draft.days.includes(id)}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          days: e.target.checked
+                            ? [...draft.days, id]
+                            : draft.days.filter((d) => d !== id),
+                        })
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            </>
+          ) : null}
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

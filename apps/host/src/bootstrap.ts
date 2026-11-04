@@ -4,7 +4,8 @@ import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
 import { LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
-import { RoutineScheduler, RoutineStore } from "./routines.js"
+import { RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
+import { TriggerWatcher } from "./routine-triggers.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -219,6 +220,7 @@ export function createHost(opts: HostOptions = {}): Host {
   let manager!: SessionManager
   // eslint-disable-next-line prefer-const
   let terminal!: TerminalManager
+  let routineTriggers: TriggerWatcher<Routine> | undefined
   const kill = new HostKillSwitch({
     broker,
     audit,
@@ -960,36 +962,51 @@ export function createHost(opts: HostOptions = {}): Host {
           .catch(() => undefined)
       limitPauser.start()
       // B34: each routine through the same path as any session: kill switch, sign-in, organisation, limits.
-      new RoutineScheduler({
-        store: routines,
-        log,
-        start: async (r) => {
-          const recorded = await audit.record({
-            session: "desktop",
-            event: "routine_run",
-            channel: "host",
-            tool: "routines",
-            cwd: r.folder,
-            input: { id: r.id, name: r.name },
-            verdict: {
-              outcome: "allow",
-              ruleId: "routine-run",
-              reason: `The routine ${r.name} started at its time.`,
-              risk: 0,
-              decidedBy: "rules",
-              policyHash: store.current?.hash ?? "",
-            },
-            latencyMs: 0,
-          })
-          if (!recorded) throw new Error("it could not be recorded, so it did not start")
-          const session = await manager.start({
-            cwd: r.folder,
-            mode: "default",
-            ...(r.extreme ? { extreme: true } : {}),
-          })
-          session.prompt(r.prompt)
+      const runRoutine = async (r: Routine): Promise<string> => {
+        const why =
+          r.trigger?.kind === "commit"
+            ? "a new commit in its folder"
+            : r.trigger?.kind === "files"
+              ? "files in its folder changing"
+              : "its time"
+        const recorded = await audit.record({
+          session: "desktop",
+          event: "routine_run",
+          channel: "host",
+          tool: "routines",
+          cwd: r.folder,
+          input: { id: r.id, name: r.name, ...(r.trigger ? { trigger: r.trigger.kind } : {}) },
+          verdict: {
+            outcome: "allow",
+            ruleId: "routine-run",
+            reason: `The routine ${r.name} started at ${why}.`,
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: store.current?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+        if (!recorded) throw new Error("it could not be recorded, so it did not start")
+        const session = await manager.start({
+          cwd: r.folder,
+          mode: "default",
+          ...(r.extreme ? { extreme: true } : {}),
+        })
+        session.prompt(r.prompt)
+        return session.id
+      }
+      new RoutineScheduler({ store: routines, log, start: runRoutine }).start()
+      // And those started by a new commit or by files changing, never by their own session's work.
+      routineTriggers = new TriggerWatcher({
+        list: () => routines.list(),
+        start: runRoutine,
+        working: (id) => {
+          const st = manager.get(id)?.info().state
+          return st === "running" || st === "waiting"
         },
-      }).start()
+        log,
+      })
+      routineTriggers.start()
       // In the background: the window opens at once and each session appears as it comes back.
       if (openSessions)
         void restoreOpenSessions(openSessions, {
@@ -1027,6 +1044,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
+      routineTriggers?.stop()
       ntfy.stop()
       updates.stop()
       slack.stop()

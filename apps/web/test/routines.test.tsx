@@ -81,3 +81,41 @@ describe("routines in Settings", () => {
     )
   })
 })
+
+describe("routines started by a trigger", () => {
+  it("adds one that starts on a new commit, with no time or days, and lists it so", async () => {
+    routines = [
+      {
+        id: "r2",
+        name: "Review",
+        folder: "C:/dev/shop",
+        prompt: "Review it.",
+        time: "00:00",
+        days: [],
+        enabled: true,
+        trigger: { kind: "files" },
+      },
+    ]
+    render(<RoutinesPanel />)
+    const list = await screen.findByRole("list", { name: "Your routines" })
+    expect(list.textContent).toMatch(/Review.*when files change, C:\/dev\/shop/)
+    const form = screen.getByRole("form", { name: "Add a routine" })
+    fireEvent.change(within(form).getByRole("combobox", { name: "Starts" }), {
+      target: { value: "commit" },
+    })
+    expect(within(form).queryByText("Days")).toBeNull()
+    fireEvent.change(within(form).getByRole("textbox", { name: "Name" }), {
+      target: { value: "On commit" },
+    })
+    fireEvent.change(within(form).getByRole("textbox", { name: "Prompt" }), {
+      target: { value: "Review the last commit." },
+    })
+    fireEvent.click(within(form).getByRole("button", { name: "Add the routine" }))
+    await waitFor(() =>
+      expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+        name: "On commit",
+        trigger: { kind: "commit" },
+      }),
+    )
+  })
+})

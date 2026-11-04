@@ -2,12 +2,17 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "@gatehouse/shared/node"
+import type { Trigger } from "./routine-triggers.js"
 
 /**
  * B34: local routines. A routine is a prompt for a folder, started as a normal session on the days and at the time you
  * choose, while Codehouse is open. It starts through the same path as any session, so the kill switch, the sign-in
  * and organisation check, the session limit and every rule apply; with Extreme approval its turn and spending limits
  * do too. Kept in %LOCALAPPDATA%\Gatehouse\routines.json, read tolerantly.
+ *
+ * A routine may instead start on a new commit in its folder, or when files in it change (routine-triggers.ts). Those
+ * are kept apart, under `triggered`, so a version from before them keeps them as they are and never runs them on a
+ * schedule.
  */
 export const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const
 export type Day = (typeof DAYS)[number]
@@ -22,6 +27,8 @@ export interface Routine {
   days: Day[]
   extreme?: boolean
   enabled: boolean
+  /** Started by a new commit or by files changing, not by the clock; time and days are then not used. */
+  trigger?: Trigger
   /** The local day ("YYYY-MM-DD") it last ran, so it runs once a day at most. */
   lastRun?: string
 }
@@ -42,6 +49,20 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
     throw new RoutineError("A routine needs a full folder path, such as C:\\dev\\shop.")
   if (!prompt || prompt.length > 8000)
     throw new RoutineError("A routine needs a prompt of up to 8,000 characters.")
+  const kind = (r.trigger as { kind?: unknown } | undefined)?.kind
+  if (r.trigger !== undefined && kind !== "commit" && kind !== "files")
+    throw new RoutineError("A routine starts on a schedule, a new commit, or files changing.")
+  if (kind === "commit" || kind === "files")
+    return {
+      name,
+      folder,
+      prompt,
+      time: TIME.test(String(r.time ?? "")) ? String(r.time) : "00:00",
+      days: [],
+      ...(r.extreme ? { extreme: true } : {}),
+      enabled: r.enabled !== false,
+      trigger: { kind },
+    }
   if (!TIME.test(String(r.time ?? "")))
     throw new RoutineError("A routine needs a time, such as 07:30.")
   const days = [
@@ -64,7 +85,7 @@ const localDay = (d: Date) =>
 
 /** Whether a routine is due now: on one of its days, at or after its time today, and not run today. */
 export function isDue(r: Routine, now: Date): boolean {
-  if (!r.enabled) return false
+  if (!r.enabled || r.trigger) return false
   if (!r.days.includes(DAYS[now.getDay()]!)) return false
   if (r.lastRun === localDay(now)) return false
   // Within the hour after its time: a laptop asleep at 07:30 and woken at 07:40 still runs it, one woken at noon does not.
@@ -82,10 +103,10 @@ export class RoutineStore {
     this.#file = file
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
-      const { routines, ...rest } = raw
+      const { routines, triggered, ...rest } = raw
       this.#extra = rest
-      if (Array.isArray(routines))
-        for (const x of routines as Array<Partial<Routine>>) {
+      for (const list of [routines, triggered])
+        for (const x of (Array.isArray(list) ? list : []) as Array<Partial<Routine>>) {
           try {
             const ok = checkRoutine(x)
             if (typeof x.id === "string")
@@ -111,7 +132,16 @@ export class RoutineStore {
     fs.mkdirSync(path.dirname(this.#file), { recursive: true })
     await writeFileAtomic(
       this.#file,
-      JSON.stringify({ ...this.#extra, version: 1, routines: this.#all }, null, 2) + "\n",
+      JSON.stringify(
+        {
+          ...this.#extra,
+          version: 1,
+          routines: this.#all.filter((r) => !r.trigger),
+          triggered: this.#all.filter((r) => r.trigger),
+        },
+        null,
+        2,
+      ) + "\n",
     )
   }
 
@@ -151,7 +181,7 @@ export class RoutineStore {
 export interface RoutineSchedulerDeps {
   store: RoutineStore
   /** Starts the routine's session and sends its prompt; throws when it cannot start. */
-  start: (r: Routine) => Promise<void>
+  start: (r: Routine) => Promise<unknown>
   log: (line: string) => void
   now?: () => Date
 }
