@@ -8,7 +8,6 @@ import { Approvals } from "./surfaces/Approvals"
 import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
 import { Setup } from "./surfaces/Setup"
-import { SceneBackdrop } from "./components/SceneBackdrop"
 import { HelpPane } from "./components/HelpPane"
 import { Rail } from "./components/Rail"
 import { RailResizer, savedRailWidth } from "./components/RailResizer"
@@ -109,11 +108,6 @@ export function App() {
 
   // In the Codehouse window: the quick prompt's shortcut, and what the quick prompt sent (W1-15).
   useEffect(() => startShell(), [])
-
-  // the Codehouse look is the only look (owner, 28 Oct): it comes in a light and a dark version and cannot be turned off.
-  useEffect(() => {
-    document.documentElement.dataset.scene = "on"
-  }, [])
 
   // First launch: the setup wizard, once. It can be run again from Settings.
   useEffect(() => {
@@ -234,7 +228,6 @@ export function App() {
       <Announcer />
       <ExportDialog />
       <ShortcutSheet />
-      <SceneBackdrop />
       <Toaster position="bottom-right" theme={theme} closeButton />
     </>
   )

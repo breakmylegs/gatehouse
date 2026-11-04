@@ -35,7 +35,6 @@ vi.mock("../src/lib/api", () => ({
   }),
 }))
 vi.mock("../src/components/UpdatesPanel", () => ({ UpdatesPanel: () => <p>Updates panel</p> }))
-vi.mock("../src/components/ScenePicker", () => ({ ScenePicker: () => null }))
 
 beforeEach(() => {
   localStorage.clear()
@@ -102,7 +101,6 @@ describe("Settings in sections", () => {
       "Checkpoints",
       "Updates",
       "Setup",
-      "Background picture",
       "Notifications",
     ])
       expect(

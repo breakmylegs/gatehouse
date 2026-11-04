@@ -54,7 +54,6 @@ vi.mock("../src/lib/update", async (orig) => ({
   updateCall: vi.fn(async () => undefined),
 }))
 vi.mock("../src/components/UpdatesPanel", () => ({ UpdatesPanel: () => null }))
-vi.mock("../src/components/ScenePicker", () => ({ ScenePicker: () => null }))
 
 beforeEach(() => {
   puts.length = 0

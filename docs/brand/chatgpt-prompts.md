@@ -23,25 +23,9 @@ For every picture I ask for:
 Reply "Ready" and wait for my first request.
 ```
 
-## 1. Backgrounds (behind every page, faint)
+## 1. Backgrounds (no longer used)
 
-Wide pictures, 1536 x 1024 (landscape). The app shows them faintly behind its pages, so the middle and left should be calm and fairly dark, with the detail toward the edges.
-
-| File | Prompt |
-|---|---|
-| `scene-neon-sign.png` | The roadhouse's big neon sign seen from below at an angle, glowing cyan and magenta against the night sky, no readable letters (the tubes out of focus). Calm dark sky over the left two thirds. |
-| `scene-front.png` | The front porch of the roadhouse straight on, the saloon doors closed, lamps lit either side, empty wooden boardwalk. Keep the centre soft and dim. |
-| `scene-porch.png` | Close on the porch boards and a rocking chair under a hanging amber lamp, a barrel and a fern in the corner, rain-wet boards catching neon. Detail on the right, dark on the left. |
-| `scene-bar.png` | Inside the roadhouse: a long wooden bar counter with stools, shelves of unlabelled bottles behind, pendant lamps, a neon glow on the back wall, nobody there. Detail on the right, dim on the left. |
-| `scene-jukebox.png` | An old jukebox glowing magenta and cyan in a dark corner of the roadhouse, its light spilling across a wooden floor. Jukebox to the right, dark space to the left. |
-| `scene-car-park.png` | The gravel car park outside at night, one parked classic pickup truck, puddles with neon reflections, the roadhouse's lit windows in the distance on the right. |
-| `scene-lot.png` | A wider view of the empty lot and the roadhouse far off, a single tall light pole, wet ground, mist low over the ground. Lots of dark sky. |
-| `scene-highway.png` | A two-lane desert highway at night leading to the roadhouse glowing on the horizon, the centre line wet and shining, stars and moonlit cloud above. |
-| `scene-dawn.png` | The same roadhouse at first light: neon still on but fading, a pale blue and pink sky, mist over the car park, lamps still warm. |
-
-### Light versions (for the light theme, optional)
-
-Same names with `-light` before `.png`, 1536 x 1024. Prompt for each: "The same view as `<file>` at late afternoon in soft daylight: warm sun, pale sky, the neon switched off, the colours muted and airy, so dark text reads on top of it." Make: `scene-neon-sign-light`, `scene-front-light`, `scene-porch-light`, `scene-bar-light`, `scene-car-park-light`, `scene-lot-light`, `scene-highway-light`.
+The faint pictures behind every page were taken out on 4 Nov 2026 at the owner's request, so the app looks cleaner. No background pictures are needed.
 
 ## 2. Empty pages (small pictures above a line of text)
 

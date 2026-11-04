@@ -49,7 +49,6 @@ vi.mock("../src/lib/api", () => ({
   }),
 }))
 vi.mock("../src/components/UpdatesPanel", () => ({ UpdatesPanel: () => null }))
-vi.mock("../src/components/ScenePicker", () => ({ ScenePicker: () => null }))
 
 beforeEach(() => {
   sent.length = 0

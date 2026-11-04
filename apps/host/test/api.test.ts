@@ -451,29 +451,6 @@ describe("insights endpoints", () => {
     expect(none.statusCode).toBe(501)
   })
 
-  it("lists and serves your own roadhouse pictures, and nothing else", async () => {
-    const dataDir = path.join(root, "data-pics")
-    const dir = path.join(dataDir, "pictures")
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, "mine.png"), Buffer.from([137, 80, 78, 71]))
-    fs.writeFileSync(path.join(dir, "notes.txt"), "not a picture")
-    const before = ctx.env
-    ctx.env = { ...before, GATEHOUSE_DATA_DIR: dataDir }
-    try {
-      const list = (await app.inject({ method: "GET", url: "/api/scenes/pictures" })).json()
-      expect(list.names).toEqual(["mine.png"])
-      const got = await app.inject({ method: "GET", url: "/api/scenes/pictures/mine.png" })
-      expect(got.headers["content-type"]).toContain("image/png")
-      expect(got.rawPayload.length).toBe(4)
-      for (const bad of ["notes.txt", "..%2F..%2Fconfig.json", "nope.png"])
-        expect(
-          (await app.inject({ method: "GET", url: "/api/scenes/pictures/" + bad })).statusCode,
-        ).toBe(404)
-    } finally {
-      ctx.env = before
-    }
-  })
-
   it("reports the Approver's status, tools and recent decisions for the workbench", async () => {
     const info = (await app.inject({ method: "GET", url: "/api/approver" })).json()
     expect(info.supervised).toBe(false)

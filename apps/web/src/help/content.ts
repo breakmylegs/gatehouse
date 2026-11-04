@@ -390,7 +390,6 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
 - **Redaction list**: words replaced before anything is saved or sent, for example client names.
 - **Checkpoints**: snapshots taken before risky steps so you can restore.
 - **Updates**: the version you have, how often Codehouse looks for a new one, skipped versions, and going back to the version before.
-- **Background picture**: which faint roadhouse picture sits behind the screens, or your own.
 
 Some changes apply at once; others say a restart is needed.`,
   },

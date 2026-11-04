@@ -10,7 +10,7 @@ The owner supplied the Codehouse visual identity pack on 2 Nov 2026 (`codehouse-
 | `tray-icons/` | `packaging/brand/tray-*.png`, copied next to the exe | The tray icon; the attention version while a decision waits, back to normal when the window is opened |
 | `phone-icons/` | `apps/phone/public/` | The phone app's home-screen, maskable and Apple touch icons |
 | (owner, 2 Nov, made with ChatGPT) | `apps/web/public/codehouse/splash.png`, `start-screen.png` | The start screen: the native start-up window (splash.png), the page before it loads, and Home (start-screen.png). It replaces the pack's flat `splash/` pictures. |
-| `backgrounds/` | `apps/web/public/codehouse/scenes/` | The faint scene behind every screen, its light version in the light theme (`lib/scenes.ts`) |
+| `backgrounds/` | Not used | The faint scenes behind every screen were taken out on 4 Nov 2026 (owner: the app looks cleaner without them) |
 | `empty-states/` (600 x 450) | `apps/web/public/codehouse/empty/` | The picture above an empty page or list (`components/EmptyState.tsx`) |
 | `interface-icons/interface-icons-sprite.svg` | `apps/web/public/codehouse/icons.svg` | Every interface icon (`components/Icon.tsx`) |
 | `wordmarks/` | `apps/web/public/codehouse/brand/` | Kept with the app for the places a wordmark is wanted |

@@ -123,21 +123,6 @@ a {
 [hidden] {
   display: none !important;
 }
-/* the Codehouse look: one faint picture behind everything. It is below all content, never over text. */
-html[data-scene="on"] body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  /* The pack's scenes are whole pictures composed for faint use behind the interface. */
-  background: var(--scene-img, none) no-repeat center / cover;
-  opacity: 0.08;
-  mask-image: linear-gradient(to left, #000 40%, transparent 100%);
-}
-html[data-scene="on"][data-theme="dark"] body::before {
-  opacity: 0.11;
-}
 button,
 input,
 select,
@@ -2602,11 +2587,20 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   animation: progress-breathe 1.6s ease-in-out infinite;
 }
 @keyframes progress-breathe {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.55; transform: scale(0.8); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.8);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .progress-dot { animation: none; }
+  .progress-dot {
+    animation: none;
+  }
 }
 
 /* The interface icons from the Codehouse visual identity pack (components/Icon.tsx). */
@@ -2716,4 +2710,3 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   padding: 10px 14px;
   box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
 }
-

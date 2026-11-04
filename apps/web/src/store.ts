@@ -138,7 +138,6 @@ export interface State {
   setHelpOpen: (open: boolean) => void
   markSeen: (id: string) => void
   /** "auto", a built-in picture id, or "user:<file name>". */
-  jcPic: string
   setupDone: boolean
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
@@ -159,7 +158,6 @@ export interface State {
   followSystem: () => void
   setNotify: (on: boolean) => void
   setSetupDone: (done: boolean) => void
-  setJcPic: (pic: string) => void
   addUserText: (
     sessionId: string,
     text: string,
@@ -342,7 +340,6 @@ export const useStore = create<State>((set, get) => ({
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   markSeen: (id) => set((s) => (s.seen[id] ? s : { seen: { ...s.seen, [id]: true } })),
   setupDone: localStorage.getItem("gatehouse.setup") === "done",
-  jcPic: localStorage.getItem("gatehouse.jcpic") || "auto",
 
   setRoute: (route) => set({ route }),
   selectSession: (selectedSession) =>
@@ -407,10 +404,6 @@ export const useStore = create<State>((set, get) => ({
     set({ notify })
   },
   setUpdate: (update) => set({ update }),
-  setJcPic: (jcPic) => {
-    localStorage.setItem("gatehouse.jcpic", jcPic)
-    set({ jcPic })
-  },
   setSetupDone: (setupDone) => {
     localStorage.setItem("gatehouse.setup", setupDone ? "done" : "")
     set({ setupDone })

@@ -42,7 +42,6 @@ import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audi
 import {
   configPath,
   GatehouseConfig,
-  gatehouseDataDir,
   managedPolicyDir,
   unknownConfigKeys,
   writeFileAtomic,
@@ -496,39 +495,6 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     config: ctx.config,
     configFile: configPath(ctx.env),
     itModels: () => readItModels(managedPolicyDir(ctx.env)),
-  })
-
-  // Your own pictures for the Codehouse look: files in a folder in the data folder. Only picture files, only by a
-  // name that is in the listing, so a request can never name a path.
-  const picturesDir = () => path.join(gatehouseDataDir(ctx.env), "pictures")
-  const pictureTypes: Record<string, string> = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-  }
-  const listPictures = (): string[] => {
-    try {
-      return fs
-        .readdirSync(picturesDir(), { withFileTypes: true })
-        .filter((e) => e.isFile() && path.extname(e.name).toLowerCase() in pictureTypes)
-        .filter((e) => fs.statSync(path.join(picturesDir(), e.name)).size <= 8 * 1024 * 1024)
-        .map((e) => e.name)
-        .sort()
-        .slice(0, 60)
-    } catch {
-      return []
-    }
-  }
-  app.get("/api/scenes/pictures", async () => ({ names: listPictures(), folder: picturesDir() }))
-  app.get("/api/scenes/pictures/:name", async (req, reply) => {
-    const name = (req.params as { name: string }).name
-    if (!listPictures().includes(name)) return bad(reply, 404, "No such picture.")
-    return reply
-      .header("cache-control", "no-store")
-      .type(pictureTypes[path.extname(name).toLowerCase()] ?? "application/octet-stream")
-      .send(fs.readFileSync(path.join(picturesDir(), name)))
   })
 
   app.get("/api/approver", async () => {

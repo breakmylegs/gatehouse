@@ -189,8 +189,6 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     })
   if (p === "/api/settings") return json(SETTINGS)
   if (p.startsWith("/api/files/list")) return json({ entries: FILES, more: 0 })
-  if (p === "/api/scenes/pictures")
-    return json({ names: [], folder: "%LOCALAPPDATA%\\Gatehouse\\codehouse" })
   if (p === "/api/push") return json({ ntfy: { enabled: false, listening: false, sent: 0 } })
   if (p === "/api/files/attach-data") return json({ rel: ".codehouse/attachments/demo-shot.png" })
   if (p === "/api/library" && init?.method === "PUT") {

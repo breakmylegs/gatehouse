@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react"
-import { ScenePicker } from "../components/ScenePicker"
 import { UpdatesPanel } from "../components/UpdatesPanel"
 import { TempFilesPanel } from "../components/TempFilesPanel"
 import { QuickKeyPanel } from "../components/QuickKeyPanel"
@@ -951,14 +950,6 @@ export function Settings() {
 
             <Group section="general" title="Temporary files" gap="gap-2">
               <TempFilesPanel />
-            </Group>
-
-            <Group section="general" title="Background picture" gap="gap-2">
-              <p className="m-0 text-xs text-mut">
-                Codehouse always shows a faint roadhouse picture behind the screens, in the light
-                and the dark theme. Choose which one, or add your own.
-              </p>
-              <ScenePicker />
             </Group>
 
             <Group section="phone" title="Notifications" gap="gap-2">
