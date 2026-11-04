@@ -8,6 +8,7 @@ import { registerExportRoutes } from "./export-api.js"
 import { registerPromptRoutes, type PromptStore } from "./prompts.js"
 import { registerMarketplaceRoutes, type Marketplace } from "./marketplace.js"
 import { registerEvalRoutes, type PluginEvaluator } from "./plugin-eval.js"
+import type { NtfySecretStore } from "./push/ntfy.js"
 import { registerDoctorRoutes } from "./doctor.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
@@ -95,6 +96,8 @@ export interface AdminContext {
   /** Your saved prompts (W1-14). */
   prompts?: PromptStore
   marketplace?: Marketplace
+  /** The token or password for an ntfy server that needs a sign-in, sealed. */
+  ntfySecrets?: NtfySecretStore
   /** B39: plugin evaluations, with and without a plugin, in Plan mode. */
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
@@ -626,8 +629,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
+  const ntfyStatus = () => {
+    const st = ctx.ntfy?.status() ?? { enabled: false, listening: false, sent: 0 }
+    return st.auth && !ctx.ntfySecrets?.has() ? { ...st, missingSecret: true } : st
+  }
   app.get("/api/push", async () => ({
-    ntfy: ctx.ntfy?.status() ?? { enabled: false, listening: false, sent: 0 },
+    ntfy: ntfyStatus(),
     slack: ctx.slack?.status() ?? { enabled: false, connected: false, hasTokens: false, sent: 0 },
   }))
   app.post("/api/push/slack/enable", async (req, reply) => {
@@ -685,6 +692,11 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       maxRisk?: unknown
       newTopics?: unknown
       topic?: unknown
+      /** none, token or basic; absent keeps what is set. */
+      auth?: unknown
+      user?: unknown
+      /** The token or password, given only when it changes. Sealed, never saved in the settings or recorded. */
+      secret?: unknown
     }
     // The topic the phone already has, typed back in. Only one Codehouse made, so it cannot be guessed.
     const typed = typeof b.topic === "string" ? ownTopic(b.topic) : undefined
@@ -711,13 +723,41 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       typeof b.maxRisk === "number" ? Math.max(0, Math.min(84, Math.round(b.maxRisk))) : 69
     const old = ctx.config().push?.ntfy
     const fresh = !old || (b.newTopics === true && !typed)
+    // A server that needs a sign-in (owner, 4 Nov): an access token, or a user name and password.
+    const auth =
+      b.auth === undefined
+        ? old?.auth
+        : b.auth === "token" || b.auth === "basic"
+          ? b.auth
+          : undefined
+    if (b.auth !== undefined && b.auth !== "none" && !auth)
+      return bad(reply, 400, "Choose no sign-in, an access token, or a user name and password.")
+    const user =
+      auth === "basic" ? (typeof b.user === "string" ? b.user.trim() : (old?.user ?? "")) : ""
+    if (auth === "basic" && (!user || user.includes(":") || user.length > 120))
+      return bad(reply, 400, "Give the ntfy user name (without a colon).")
+    const secret = typeof b.secret === "string" ? b.secret.trim() : ""
+    if (secret.length > 500 || /[\r\n]/.test(secret))
+      return bad(reply, 400, "That token or password is not one ntfy would take.")
+    const changedKind = auth !== old?.auth
+    if (auth && !secret && (changedKind || !ctx.ntfySecrets?.has()))
+      return bad(
+        reply,
+        400,
+        auth === "token" ? "Give the access token." : "Give the password for that user.",
+      )
+    if (auth && !ctx.ntfySecrets) return bad(reply, 501, "A sign-in cannot be kept safely here.")
     const ntfy: NtfySettings = {
       enabled: true,
       server: u.origin,
       topic: typed ?? (fresh ? randomTopic() : old.topic),
       replyTopic: fresh ? randomTopic() : old.replyTopic,
       maxRisk,
+      ...(auth ? { auth } : {}),
+      ...(auth === "basic" ? { user } : {}),
     }
+    if (auth && secret) await ctx.ntfySecrets?.save(secret)
+    if (!auth) ctx.ntfySecrets?.forget()
     await savePush(ntfy)
     ctx.ntfy.stop()
     ctx.ntfy.start()
@@ -726,8 +766,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       maxRisk,
       newTopics: fresh,
       ...(typed ? { typedTopic: true } : {}),
+      // Which sign-in and as whom, never the token or password.
+      signIn: auth ?? "none",
+      ...(auth === "basic" ? { user } : {}),
+      ...(secret ? { newSecret: true } : {}),
     })
-    return ctx.ntfy.status()
+    return ntfyStatus()
   })
   app.post("/api/push/ntfy/disable", async (_req, reply) => {
     if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")

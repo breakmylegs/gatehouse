@@ -103,6 +103,9 @@ function build(loose: boolean) {
         topic: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
         replyTopic: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
         maxRisk: z.number().int().min(0).max(84),
+        /** A server that needs a sign-in: which kind, and the user name. The token or password is sealed apart. */
+        auth: z.enum(["token", "basic"]).optional(),
+        user: z.string().max(120).optional(),
       }).optional(),
       /** Slack, through Socket Mode. The tokens are kept encrypted elsewhere, never here. */
       slack: obj({

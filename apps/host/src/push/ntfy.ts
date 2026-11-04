@@ -1,6 +1,9 @@
 import { randomInt } from "node:crypto"
+import fs from "node:fs"
+import path from "node:path"
 import type { PendingView } from "@gatehouse/shared"
 import type { Broker } from "../broker.js"
+import type { Protector } from "../relay/protector.js"
 import { PushCodes, riskBand, SEVERE, summarise } from "./codes.js"
 
 export { summarise } from "./codes.js"
@@ -24,6 +27,12 @@ export interface NtfySettings {
   replyTopic: string
   /** Highest risk that can be approved from a notification. Capped at 84. */
   maxRisk: number
+  /**
+   * A server that needs a sign-in (owner, 4 Nov: a user's own ntfy server asks for one): an access token, or a user
+   * name and password. Only which kind and the user name are kept here; the token or password is sealed apart.
+   */
+  auth?: "token" | "basic"
+  user?: string
 }
 
 export interface NtfyStatus {
@@ -32,6 +41,11 @@ export interface NtfyStatus {
   server?: string
   topic?: string
   maxRisk?: number
+  /** How Codehouse signs in to the server, and as whom; never the token or password. */
+  auth?: "token" | "basic"
+  user?: string
+  /** The sign-in is set but its token or password is not there (or cannot be opened). */
+  missingSecret?: boolean
   lastError?: string
   sent: number
   /**
@@ -55,6 +69,70 @@ export interface NtfyDeps {
   now?: () => number
   /** Called when it is switched on or off, or starts or stops listening: for the line in the sidebar. */
   onChange?: () => void
+  /** The token or password for a server that needs a sign-in, from its sealed store. */
+  secret?: () => Promise<string | undefined>
+}
+
+/**
+ * The token or password for an ntfy server that needs a sign-in, kept as Slack's tokens are: sealed for this Windows
+ * user (DPAPI), in its own file, never in the settings, the log or the audit.
+ */
+export class NtfySecretStore {
+  readonly #file: string
+  readonly #protector: Protector
+
+  constructor(file: string, protector: Protector) {
+    this.#file = file
+    this.#protector = protector
+  }
+
+  has(): boolean {
+    return fs.existsSync(this.#file)
+  }
+
+  async load(): Promise<string | undefined> {
+    if (!fs.existsSync(this.#file)) return undefined
+    try {
+      const plain = await this.#protector.unprotect(new Uint8Array(fs.readFileSync(this.#file)))
+      const v = JSON.parse(Buffer.from(plain).toString("utf8")) as { secret?: unknown }
+      return typeof v.secret === "string" && v.secret ? v.secret : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  async save(secret: string): Promise<void> {
+    const sealed = await this.#protector.protect(Buffer.from(JSON.stringify({ secret }), "utf8"))
+    fs.mkdirSync(path.dirname(this.#file), { recursive: true })
+    const tmp = this.#file + ".tmp"
+    fs.writeFileSync(tmp, sealed)
+    fs.renameSync(tmp, this.#file)
+  }
+
+  forget(): void {
+    fs.rmSync(this.#file, { force: true })
+  }
+}
+
+/**
+ * The Authorization header for a server that needs a sign-in: Bearer for an access token, Basic for a user name and
+ * password. Nothing for a server that needs none. Throws when a sign-in is set but its secret is missing, so nothing
+ * is sent without it.
+ */
+export async function ntfyAuthHeader(
+  s: Pick<NtfySettings, "auth" | "user">,
+  secret: (() => Promise<string | undefined>) | undefined,
+): Promise<Record<string, string>> {
+  if (!s.auth) return {}
+  const value = await secret?.()
+  if (!value)
+    throw new Error(
+      "the sign-in for this ntfy server is missing: give it again in Phone and notifications",
+    )
+  if (s.auth === "token") return { Authorization: `Bearer ${value}` }
+  return {
+    Authorization: `Basic ${Buffer.from(`${s.user ?? ""}:${value}`, "utf8").toString("base64")}`,
+  }
 }
 
 const REPLY = /^(allow|deny) ([0-9a-f-]{36}) ([A-Za-z0-9_-]{22,64})$/
@@ -115,6 +193,7 @@ export class NtfyChannel {
       enabled: s?.enabled === true,
       ...(s ? { server: s.server, topic: s.topic, maxRisk: Math.min(s.maxRisk, SEVERE - 1) } : {}),
       ...(s && !isOwnTopic(s.topic) ? { oldStyle: true } : {}),
+      ...(s?.auth ? { auth: s.auth, ...(s.user ? { user: s.user } : {}) } : {}),
     }
   }
 
@@ -155,8 +234,18 @@ export class NtfyChannel {
     const s = this.#d.settings()
     if (!s?.enabled) return
     const r = view.request
+    let auth: Record<string, string>
+    try {
+      auth = await ntfyAuthHeader(s, this.#d.secret)
+    } catch (e) {
+      this.#status = { ...this.#status, lastError: `Sending failed: ${(e as Error).message}` }
+      this.#d.log(`ntfy: ${this.#status.lastError}`)
+      return
+    }
     const { allow, deny } = this.#codes.issue(view, s.maxRisk)
     const reply = `${s.server.replace(/\/$/, "")}/${s.replyTopic}`
+    // The phone's ntfy app sends a button's answer itself, so on a server that needs a sign-in the button carries it.
+    const buttonAuth = Object.keys(auth).length ? { headers: auth } : {}
     const actions =
       r.kind === "question"
         ? []
@@ -169,6 +258,7 @@ export class NtfyChannel {
                     url: reply,
                     method: "POST",
                     body: `allow ${r.id} ${allow}`,
+                    ...buttonAuth,
                     clear: true,
                   },
                 ]
@@ -179,6 +269,7 @@ export class NtfyChannel {
               url: reply,
               method: "POST",
               body: `deny ${r.id} ${deny}`,
+              ...buttonAuth,
               clear: true,
             },
           ]
@@ -198,7 +289,7 @@ export class NtfyChannel {
     try {
       const res = await (this.#d.fetchImpl ?? fetch)(s.server.replace(/\/$/, ""), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...auth },
         body: JSON.stringify({
           topic: s.topic,
           title: this.#d.redact(`Codehouse: ${r.project} needs you`),
@@ -221,9 +312,10 @@ export class NtfyChannel {
     const s = this.#d.settings()
     if (!s?.enabled) return { ok: false, error: "ntfy is not switched on" }
     try {
+      const auth = await ntfyAuthHeader(s, this.#d.secret)
       const res = await (this.#d.fetchImpl ?? fetch)(s.server.replace(/\/$/, ""), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...auth },
         body: JSON.stringify({
           topic: s.topic,
           title: "Codehouse test",
@@ -231,7 +323,14 @@ export class NtfyChannel {
             "Notifications from Codehouse reach this phone. Approve and Deny buttons appear when a request needs you.",
         }),
       })
-      if (!res.ok) return { ok: false, error: `ntfy answered ${res.status}` }
+      if (!res.ok)
+        return {
+          ok: false,
+          error:
+            res.status === 401 || res.status === 403
+              ? `ntfy refused the sign-in (${res.status}): check the token, or the user name and password, and that this user may write to the topic`
+              : `ntfy answered ${res.status}`,
+        }
       // ntfy answers with the message it stored, so Codehouse can say it arrived there.
       const got = (await res.json().catch(() => ({}))) as { id?: unknown; time?: unknown }
       return {
@@ -264,9 +363,10 @@ export class NtfyChannel {
       if (!s?.enabled) break
       this.#abort = new AbortController()
       try {
+        const auth = await ntfyAuthHeader(s, this.#d.secret)
         const res = await (this.#d.fetchImpl ?? fetch)(
           `${s.server.replace(/\/$/, "")}/${s.replyTopic}/json?since=${since}`,
-          { signal: this.#abort.signal },
+          { signal: this.#abort.signal, headers: auth },
         )
         if (!res.ok || !res.body) throw new Error(`ntfy answered ${res.status}`)
         this.#listening(true)

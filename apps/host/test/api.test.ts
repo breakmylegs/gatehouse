@@ -782,6 +782,59 @@ describe("insights endpoints", () => {
     }
   })
 
+  it("signs in to an ntfy server that needs it, with the secret sealed away, never in the settings file or the audit (owner, 4 Nov)", async () => {
+    let sealed: string | undefined
+    ctx.ntfy = {
+      status: () => ({
+        enabled: true,
+        listening: true,
+        sent: 0,
+        ...(runningConfig.push?.ntfy?.auth ? { auth: runningConfig.push.ntfy.auth } : {}),
+      }),
+      start: () => undefined,
+      stop: () => undefined,
+      test: async () => ({ ok: true }),
+    }
+    ctx.ntfySecrets = {
+      has: () => sealed !== undefined,
+      save: async (s: string) => void (sealed = s),
+      forget: () => void (sealed = undefined),
+    } as never
+    const enable = (payload: object) =>
+      app.inject({ method: "POST", url: "/api/push/ntfy/enable", payload })
+    try {
+      expect((await enable({ auth: "token" })).json().error).toMatch(/Give the access token/)
+      expect((await enable({ auth: "basic", secret: "pw" })).json().error).toMatch(/user name/)
+      expect((await enable({ auth: "key", secret: "x" })).statusCode).toBe(400)
+      const on = await enable({
+        server: "https://ntfy.internal.example",
+        auth: "token",
+        secret: "tk_live_123",
+      })
+      expect(on.statusCode).toBe(200)
+      expect(sealed).toBe("tk_live_123")
+      expect(runningConfig.push?.ntfy).toMatchObject({ auth: "token" })
+      // Saving again without the token keeps the one sealed.
+      expect((await enable({ maxRisk: 39 })).statusCode).toBe(200)
+      expect(sealed).toBe("tk_live_123")
+      await enable({ auth: "basic", user: "codehouse", secret: "s3cret-pw" })
+      expect(runningConfig.push?.ntfy).toMatchObject({ auth: "basic", user: "codehouse" })
+      expect(sealed).toBe("s3cret-pw")
+      const file = fs.readFileSync(path.join(root, "config.json"), "utf8")
+      expect(file).not.toMatch(/tk_live_123|s3cret-pw/)
+      const log = (await app.inject({ method: "GET", url: "/api/audit/export" })).body
+      expect(log).toContain("newSecret")
+      expect(log).not.toMatch(/tk_live_123|s3cret-pw/)
+      // No sign-in forgets the secret.
+      await enable({ auth: "none" })
+      expect(sealed).toBeUndefined()
+      expect(runningConfig.push?.ntfy?.auth).toBeUndefined()
+    } finally {
+      delete ctx.ntfy
+      delete ctx.ntfySecrets
+    }
+  })
+
   it("switches Slack on with both tokens sealed away, never in the settings file, and audits it", async () => {
     let sealed: unknown
     let hasTokens = false

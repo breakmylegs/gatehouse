@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
-import { NtfyChannel } from "./push/ntfy.js"
+import { NtfyChannel, NtfySecretStore } from "./push/ntfy.js"
 import { LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
 import { RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
@@ -484,9 +484,16 @@ export function createHost(opts: HostOptions = {}): Host {
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
   // Push through ntfy: outbound only. Refused answers are recorded; good ones are recorded by the decision itself.
+  // A server that needs a sign-in has its token or password sealed as Slack's tokens are (owner, 4 Nov).
+  const ntfySecrets = new NtfySecretStore(
+    path.join(gatehouseDataDir(env), "ntfy.sealed"),
+    opts.phoneProtector ??
+      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+  )
   const ntfy = new NtfyChannel({
     broker,
     settings: () => config.push?.ntfy,
+    secret: () => ntfySecrets.load(),
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
     log,
@@ -826,6 +833,7 @@ export function createHost(opts: HostOptions = {}): Host {
       saveAs: saveAsWithWindows,
       localRelay,
       ntfy,
+      ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
       sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
       projects,
