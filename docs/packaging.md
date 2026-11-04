@@ -115,6 +115,8 @@ The version is `major.minor` from package.json and the number of commits (`npm r
 - It needs the same things as the source: you signed in to Claude Code on this computer, and PowerShell 7 (`pwsh`) installed for the PowerShell parser.
 - Notifications from the page itself (Settings, browser notification) are allowed in the window, but the taskbar flash and balloon are the dependable signal.
 
+Every release also attaches `changes.json`, each change with the files it touched and its platform, for forks on other systems (see docs/forks.md). It plays no part in updating.
+
 ## Updates never break, across renames (owner, 2 Nov 2026)
 
 "We cant have a breaking change ever that means people cant follow the in app upgrade." Every installed copy, however old, must be able to update in the app to the newest version, in several steps if it has to.
