@@ -3,6 +3,7 @@ import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
 import { LimitPauser, pausePoint } from "./limit-pause.js"
+import { Telemetry } from "./telemetry.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -599,6 +600,38 @@ export function createHost(opts: HostOptions = {}): Host {
       await phone.notify("info", { title: "Codehouse digest", body: d.text, project: "Codehouse" })
       return true
     },
+  })
+  // B36: each decision as an OpenTelemetry span, to a file or a collector on this computer, when Settings say so.
+  const telemetry = new Telemetry({
+    dir: path.join(gatehouseDataDir(env), "telemetry"),
+    settings: () => config.telemetry,
+    log,
+  })
+  manager.on("event", ({ sessionId, type, data }) => {
+    if (type !== "decision") return
+    telemetry.span({
+      name: "codehouse.decision",
+      session: sessionId,
+      outcome: String(data.outcome ?? ""),
+      rule: String(data.ruleId ?? ""),
+      risk: Number(data.risk ?? 0),
+      decidedBy: String(data.decidedBy ?? ""),
+    })
+  })
+  // Your answers and the floor's blocks, which the Host itself records.
+  audit.listeners.add((r) => {
+    if (!r.verdict.decidedBy.startsWith("human") && r.verdict.decidedBy !== "floor") return
+    telemetry.span({
+      name: "codehouse.decision",
+      session: r.session,
+      outcome: r.verdict.outcome,
+      rule: r.verdict.ruleId,
+      risk: r.verdict.risk,
+      decidedBy: r.verdict.decidedBy,
+      tool: r.tool,
+      channel: r.channel,
+      latencyMs: r.latencyMs,
+    })
   })
   // A finished session or a note from Claude reaches the phone as a sealed message, never as plain text (invariant 9).
   manager.on("event", ({ sessionId, type, data }) => {

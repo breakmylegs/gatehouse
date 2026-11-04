@@ -1314,6 +1314,7 @@ const LIVE_SETTINGS = [
   "planLimitPause",
   "effortCap",
   "maxSessions",
+  "telemetry",
   "globalInstructions",
   "providers",
 ] as const

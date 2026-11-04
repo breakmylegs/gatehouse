@@ -9,6 +9,8 @@ export class HostAudit {
   readonly #log: (line: string) => void
   /** Called after every record that was written, so the UI can stream the audit log. */
   onRecord: ((record: AuditRecord) => void) | undefined
+  /** Others told of each record too, such as the local telemetry export (B36). A listener that throws is ignored. */
+  readonly listeners = new Set<(record: AuditRecord) => void>()
 
   constructor(writer: AuditWriter, log: (line: string) => void = () => undefined) {
     this.#writer = writer
@@ -23,6 +25,12 @@ export class HostAudit {
     try {
       const record = await this.#writer.append(entry)
       this.onRecord?.(record)
+      for (const f of this.listeners)
+        try {
+          f(record)
+        } catch {
+          // a listener's failure never stops the record
+        }
       return true
     } catch (e) {
       this.#log(`audit append failed (${(e as NodeJS.ErrnoException).code ?? (e as Error).name})`)

@@ -190,6 +190,21 @@ function build(loose: boolean) {
      * The most effort a session may use (B18): low, medium, high, xhigh or max. Absent: no cap. Older versions keep it
      * without using it.
      */
+    /**
+     * B36: a local OpenTelemetry export of decisions: to a file in the data folder, to a collector on this computer
+     * (127.0.0.1 or localhost only), or both. Absent: off. Spans never hold prompts, commands, paths or names.
+     */
+    telemetry: obj({
+      file: z.boolean().optional(),
+      endpoint: z
+        .string()
+        .max(200)
+        .regex(
+          /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{2,5}(\/[A-Za-z0-9._~\/-]*)?$/,
+          "must be a collector on this computer",
+        )
+        .optional(),
+    }).optional(),
     /** B09: the most sessions and chats open at once, 1 to 32. Absent: no limit. Older versions keep it unused. */
     maxSessions: z.number().int().min(1).max(32).optional(),
     effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),

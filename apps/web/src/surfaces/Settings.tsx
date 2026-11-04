@@ -48,6 +48,7 @@ interface Config {
   planLimitPause?: { percent: number; off?: boolean; noAutoResume?: boolean }
   effortCap?: string
   maxSessions?: number
+  telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
 }
 
@@ -100,6 +101,8 @@ interface Values {
   plResume: boolean
   effortCap: string
   maxSessions: string
+  telFile: boolean
+  telEndpoint: string
   ecUsd: string
   /** What every session is told at its start. */
   instr: string
@@ -129,6 +132,8 @@ function valuesOf(d: SettingsData): Values {
     plResume: c.planLimitPause?.noAutoResume !== true,
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
+    telFile: c.telemetry?.file === true,
+    telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     instr: c.globalInstructions ?? "",
   }
@@ -168,6 +173,15 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.effortCap
   if (v.maxSessions) body.maxSessions = Number(v.maxSessions)
   else delete body.maxSessions
+  if (v.telFile || v.telEndpoint.trim())
+    body.telemetry = {
+      ...(d.saved.telemetry ?? {}),
+      file: v.telFile,
+      ...(v.telEndpoint.trim() ? { endpoint: v.telEndpoint.trim() } : {}),
+    }
+  else delete body.telemetry
+  if (body.telemetry && !v.telEndpoint.trim())
+    delete (body.telemetry as { endpoint?: string }).endpoint
   // Absent is 95%, so the default is not written; a percentage is kept beside off for an older reader.
   const { off: _o, ...pauseKeep } = d.saved.planLimitPause ?? { percent: 95 }
   const { noAutoResume: _r, ...pauseRest } = pauseKeep as {
@@ -208,6 +222,8 @@ export const DEFAULT_VALUES: Values = {
   plResume: true,
   effortCap: "",
   maxSessions: "",
+  telFile: false,
+  telEndpoint: "",
   ecUsd: "500",
   instr: "",
 }
@@ -430,6 +446,7 @@ export function Settings() {
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const effortChanged = differs(v, ["effortCap"])
   const limitChanged = differs(v, ["maxSessions"])
+  const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
   const privacyChanged = differs(v, ["terms"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
@@ -869,6 +886,29 @@ export function Settings() {
 
             <Group section="general" title="Quick prompt" gap="gap-2">
               <QuickKeyPanel />
+            </Group>
+
+            <Group section="general" title="Telemetry" gap="gap-2" changed={telemetryChanged}>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.telFile}
+                  onChange={(e) => change({ telFile: e.target.checked }, "Telemetry")}
+                />
+                Write each decision to a trace file in the data folder (OpenTelemetry)
+              </label>
+              <Field
+                label="Or send them to a collector on this computer"
+                help="An address on this computer only, such as http://127.0.0.1:4318/v1/traces. Each decision says the tool, what was decided, the rule, the risk, who decided and how long it took; never a prompt, a command, a path, a file name or a project name. Saved when you leave the box."
+              >
+                <input
+                  className="field mono"
+                  placeholder="http://127.0.0.1:4318/v1/traces"
+                  value={v.telEndpoint}
+                  onChange={(e) => edit({ telEndpoint: e.target.value })}
+                  onBlur={() => commit("Telemetry")}
+                />
+              </Field>
             </Group>
 
             <Group section="general" title="Screen reader" gap="gap-2">
