@@ -1388,6 +1388,7 @@ const LIVE_SETTINGS = [
   "spendCapUsd",
   "globalInstructions",
   "profile",
+  "keepAwake",
   "providers",
 ] as const
 

@@ -376,6 +376,8 @@ The sections come in three groups. **Preferences**: General, Account and plan, P
 
 **Your usage limits** (Usage) shows how much of your plan's 5-hour and weekly limits is used and when each resets, as the ring beside the prompt box does, with Refresh and a way to the Usage page.
 
+**Keep the computer awake** (System) stops Windows going to sleep while a session works or waits on you, so a long build is not cut off. The display can still turn off, and closing the lid still sleeps. It is on until you turn it off, and works in the Codehouse window.
+
 **Profile** (Account and plan) is what Claude should call you and what best describes your work. Every new session is told it first.
 
 **Instructions for every session** (Sessions) are your own words that every new session is told at its start, ahead of its project's and its own. They apply to sessions started after you save.

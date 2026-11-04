@@ -53,6 +53,7 @@ interface Config {
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
+  keepAwake?: boolean
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
@@ -113,6 +114,8 @@ interface Values {
   /** What Claude should call you, and your work (Profile). */
   callMe: string
   work: string
+  /** Keep the computer awake while a session works. */
+  awake: boolean
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -146,6 +149,7 @@ function valuesOf(d: SettingsData): Values {
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
+    awake: c.keepAwake !== false,
   }
 }
 
@@ -176,6 +180,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   }
   if (Object.keys(profile).length) body.profile = profile
   else delete body.profile
+  if (v.awake) delete body.keepAwake
+  else body.keepAwake = false
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -250,6 +256,7 @@ export const DEFAULT_VALUES: Values = {
   instr: "",
   callMe: "",
   work: "",
+  awake: true,
 }
 const differs = (v: Values, keys: Array<keyof Values>) =>
   keys.some((k) => v[k] !== DEFAULT_VALUES[k])
@@ -1001,6 +1008,27 @@ export function Settings() {
                 A chat can show a page, a picture or a small tool beside the conversation. It runs
                 in a sandbox with no network and no access to this computer, and is labelled
                 AI-generated.
+              </p>
+            </Group>
+
+            <Group
+              section="system"
+              title="Keep the computer awake"
+              gap="gap-2"
+              changed={differs(v, ["awake"])}
+            >
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.awake}
+                  onChange={(e) => change({ awake: e.target.checked }, "Keep the computer awake")}
+                />
+                Keep the computer awake while a session works
+              </label>
+              <p className="m-0 text-xs text-mut">
+                So a long build is not cut off when Windows would sleep. The display can still turn
+                off, and closing the lid still puts the computer to sleep. In the Codehouse window
+                only.
               </p>
             </Group>
 

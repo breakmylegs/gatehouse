@@ -38,6 +38,18 @@ internal sealed class MainForm : Form
     [DllImport("user32.dll")]
     private static extern bool FlashWindowEx(ref FlashInfo info);
 
+    // Keep the computer awake while a session works (owner, 4 Nov). ES_CONTINUOUS | ES_SYSTEM_REQUIRED keeps it from
+    // sleeping; ES_CONTINUOUS alone lets it sleep again. The display may still turn off, and the lid still sleeps.
+    [DllImport("kernel32.dll")]
+    private static extern uint SetThreadExecutionState(uint flags);
+    private const uint EsContinuous = 0x80000000;
+    private const uint EsSystemRequired = 0x00000001;
+
+    private void KeepAwake(bool on)
+    {
+        SetThreadExecutionState(on ? EsContinuous | EsSystemRequired : EsContinuous);
+    }
+
     private readonly bool check;
     private readonly bool withRelay;
     private readonly bool startInTray;
@@ -246,6 +258,7 @@ internal sealed class MainForm : Form
                 else if (Hosting.ApplyLine.IsMatch(ev.Data)) { string line = ev.Data; OnUi(delegate { ApplyUpdate(line); }); }
                 else if (Hosting.RestartLine.IsMatch(ev.Data)) OnUi(delegate { Restart(); });
                 else if (Hosting.ProgressLine.IsMatch(ev.Data)) { string text = Hosting.JsonField(ev.Data, "text"); OnUi(delegate { Step(text); }); }
+                else if (Hosting.AwakeLine.IsMatch(ev.Data)) { bool on = Hosting.AwakeLine.Match(ev.Data).Groups[1].Value == "true"; OnUi(delegate { KeepAwake(on); }); }
                 else Remember(ev.Data);
             };
             host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
@@ -455,6 +468,8 @@ internal sealed class MainForm : Form
 
     private void OnHostExited()
     {
+        // Whatever the Host last said, nothing is working now.
+        KeepAwake(false);
         if (quitting) return;
         if (check) { Say("Check failed: the Host stopped.\r\n" + Tail()); Finish(1); return; }
         // How it ended, kept in host.log: a process ended by Windows (out of memory, a native crash) leaves no line of

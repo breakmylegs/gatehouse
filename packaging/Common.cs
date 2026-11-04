@@ -58,6 +58,8 @@ internal static class Hosting
 
     /// <summary>A start-up step the Host reports: {"event":"progress","text":"Loading your rules"}</summary>
     internal static readonly Regex ProgressLine = new Regex(@"""event""\s*:\s*""progress""");
+    /// <summary>Keep the computer awake while a session works (owner, 4 Nov): {"event":"awake","on":true}.</summary>
+    internal static readonly Regex AwakeLine = new Regex(@"""event""\s*:\s*""awake"".*?""on""\s*:\s*(true|false)");
 
     /// <summary>A string field from a one-line JSON object, with JSON's escapes undone.</summary>
     internal static string JsonField(string line, string name)

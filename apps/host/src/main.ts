@@ -3,6 +3,7 @@
  * Prints one JSON line with the address to open. The address carries the per-launch token in its fragment,
  * which a browser never sends to any server, and the UI keeps it only for this launch.
  */
+import { AwakeWatch } from "./awake.js"
 import path from "node:path"
 import { generateToken } from "./approver-process.js"
 import { gatehouseDataDir } from "@gatehouse/shared/node"
@@ -35,6 +36,14 @@ const token = generateToken()
 host.app.broker.on("created", () => {
   process.stdout.write(JSON.stringify({ event: "attention" }) + "\n")
 })
+// Keep the computer awake while a session works (owner, 4 Nov): the window app asks Windows not to sleep while this
+// says on. Checked again each minute, so turning the setting off lets go without waiting for a session to change.
+const awake = new AwakeWatch(
+  () => host.config.keepAwake !== false,
+  (on) => process.stdout.write(JSON.stringify({ event: "awake", on }) + "\n"),
+)
+host.app.manager.on("session", (info) => awake.note(info))
+setInterval(() => awake.check(), 60_000).unref()
 // Restart now, after a setting that needs it. Only the window app can do it; the console launcher cannot.
 if (env.GATEHOUSE_CAN_RESTART === "1")
   host.app.restart = () => process.stdout.write(JSON.stringify({ event: "restart" }) + "\n")
