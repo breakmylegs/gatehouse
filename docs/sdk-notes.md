@@ -272,3 +272,7 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 ## onElicitation (used from 3 Nov, B06)
 
 `Options.onElicitation(request, { signal })` is called when an MCP server asks for user input and no hook answered it; without it the SDK declines. `request` has `serverName`, `message`, `mode` (`form` or `url`), `url`, `elicitationId` and `requestedSchema`. It returns an MCP ElicitResult: `{ action: "accept" | "decline" | "cancel", content? }`. Codehouse answers it in `apps/host/src/elicitation.ts`.
+
+## No live tool output (checked 4 Nov, B33)
+
+While a tool runs the SDK sends `tool_progress` (`tool_use_id`, `tool_name`, `elapsed_time_seconds`) and nothing of its output; the output comes in the tool result when it finishes. A background task's `task_started` and `task_progress` carry no output path; `task_notification` names `output_file` when the task ends. So a live read-only view of a running command waits for an SDK that streams it.
