@@ -86,6 +86,7 @@ import { attachedName, relInside, splitAttachments, type AttachedFile } from "..
 import { FileChip } from "../components/FileChip"
 import { CompareBar } from "../components/CompareBar"
 import { GoalDialog } from "../components/GoalDialog"
+import { startReview } from "../lib/review"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -423,6 +424,17 @@ function SessionPane({
           onSelect: () => openBeside(s.id),
         }))
       : []),
+    // B27, B28: a second session in Plan mode reviews this one's uncommitted changes, changing nothing.
+    ...(chat || session.local
+      ? []
+      : [
+          { kind: "separator" as const },
+          { label: "Review the changes", onSelect: () => void startReview(session, "review") },
+          {
+            label: "Security review of the changes",
+            onSelect: () => void startReview(session, "security"),
+          },
+        ]),
     { kind: "separator" },
     ...(panes.length > 1 ? [{ label: "Close this pane", onSelect: () => closePane(index) }] : []),
     // B16: a window of its own, in the Codehouse window only; closing that window brings it back here.

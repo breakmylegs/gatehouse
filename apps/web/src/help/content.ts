@@ -170,6 +170,7 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 
 **At the top of a session**
 
+- **Review the changes** and **Security review of the changes**, in the same menu, start a second session beside this one, in Plan mode, that reads the changes not yet committed and lists what it finds by file and line, most serious first. It changes nothing.
 - **Set a goal...**, in the same menu, names a check such as npm test. In Extreme approval the session then carries on by itself until it has run that check and it passed, within your turn and spending limits. The check is a command like any other, decided by your rules.
 - **Pop out into its own window**, in the same menu, moves a session into a window of its own, which you can put on another screen; closing that window puts it back beside the others.
 - Its name opens a menu: show another session here, open one beside it, rename it, pin it to the top of the sidebar, export it as Markdown, close the pane, stop, close the session, or archive it (it stops and leaves the sidebar; Earlier sessions keeps it).
