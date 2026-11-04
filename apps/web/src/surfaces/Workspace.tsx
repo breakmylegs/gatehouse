@@ -84,6 +84,8 @@ import { inShell, tellShell } from "../lib/shell"
 const poppedOut = new URLSearchParams(location.search).get("view") === "pane"
 import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
+import { PastedCard } from "../components/PastedCard"
+import { isLargePaste, textToBase64 } from "../lib/paste"
 import { CompareBar } from "../components/CompareBar"
 import { FallbackButton } from "../components/FallbackButton"
 import { GoalDialog } from "../components/GoalDialog"
@@ -1584,6 +1586,8 @@ function Composer({
   const [pictures, setPictures] = useState<Picture[]>([])
   // Other files you attached: an icon each, named to Claude with @ when you send (owner, 3 Nov).
   const [files, setFiles] = useState<AttachedFile[]>([])
+  // A large paste: a card above the box, sent as a text file with the message (owner, 4 Nov).
+  const [pasted, setPasted] = useState<Array<{ id: string; text: string }>>([])
   const addFiles = (rels: string[]) => {
     setFiles((f) => [
       ...f,
@@ -1685,7 +1689,7 @@ function Composer({
 
   async function submit() {
     const t = text.trim()
-    if (!t && pictures.length === 0 && files.length === 0) return
+    if (!t && pictures.length === 0 && files.length === 0 && pasted.length === 0) return
     if (starting) {
       toast(
         "This session is still starting. What you wrote stays here: send it once it is ready.",
@@ -1756,8 +1760,24 @@ function Composer({
       toast("A picture is still being attached. Send again in a moment.")
       return
     }
-    // What Claude gets: your words, then a reference to each picture, which it opens.
-    const named = files.map((f) => `@${f.rel}`).join(" ")
+    // Each large paste goes into the session's attachments as a text file, checked and recorded as a dropped file is.
+    const pastedRels: string[] = []
+    for (const [i, p] of pasted.entries()) {
+      const r = await api<{ rel: string }>("POST", "/api/files/attach-data", {
+        session: sessionId,
+        kind: "file",
+        name: pasted.length > 1 ? `pasted-text-${i + 1}.txt` : "pasted-text.txt",
+        type: "text/plain",
+        data: textToBase64(p.text),
+      })
+      if (!r.ok || !r.data) {
+        toast.error(r.error ?? "The pasted text was not attached, so nothing was sent")
+        return
+      }
+      pastedRels.push(r.data.rel)
+    }
+    // What Claude gets: your words, then a reference to each file and picture, which it opens.
+    const named = [...files.map((f) => f.rel), ...pastedRels].map((rel) => `@${rel}`).join(" ")
     const full = [t, named, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
     // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.
     const st = useStore.getState().sessions[sessionId]?.state
@@ -1770,6 +1790,7 @@ function Composer({
     setText("")
     setPictures([])
     setFiles([])
+    setPasted([])
     const r = await send({ type: "prompt", sessionId, text: full })
     if (!r.ok) toast.error(r.error?.message ?? "The prompt was not sent")
   }
@@ -1805,6 +1826,27 @@ function Composer({
       <label htmlFor={composerId} className="sr-only">
         Prompt
       </label>
+      {pasted.length ? (
+        <ul
+          className="m-0 flex list-none flex-wrap gap-2 p-0 pl-12"
+          aria-label="Pasted text to send"
+        >
+          {pasted.map((p) => (
+            <li key={p.id}>
+              <PastedCard
+                text={p.text}
+                onChange={(text) =>
+                  setPasted((all) => all.map((x) => (x.id === p.id ? { ...x, text } : x)))
+                }
+                onRemove={() => {
+                  setPasted((all) => all.filter((x) => x.id !== p.id))
+                  area.current?.focus()
+                }}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {files.length ? (
         <ul className="m-0 flex list-none flex-wrap gap-2 p-0 pl-12" aria-label="Files to send">
           {files.map((f) => (
@@ -1896,6 +1938,12 @@ function Composer({
             if (files.length) {
               e.preventDefault()
               void attachPictures(files)
+              return
+            }
+            const pastedText = e.clipboardData.getData("text/plain")
+            if (isLargePaste(pastedText)) {
+              e.preventDefault()
+              setPasted((p) => [...p, { id: `t${++pictureSeq}`, text: pastedText }])
             }
           }}
           rows={1}
@@ -1930,7 +1978,10 @@ function Composer({
             className="btn composer-icon composer-send"
             aria-label="Send"
             title="Send (Enter)"
-            disabled={disabled || (!text.trim() && pictures.length === 0 && files.length === 0)}
+            disabled={
+              disabled ||
+              (!text.trim() && pictures.length === 0 && files.length === 0 && pasted.length === 0)
+            }
             onClick={() => void submit()}
           >
             <Icon name="send" />

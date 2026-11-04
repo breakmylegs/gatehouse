@@ -1843,6 +1843,56 @@ main[data-rail="hidden"] {
   color: var(--c-mut);
 }
 
+/* A large paste waiting to be sent, as a card above the prompt box (owner, 4 Nov). */
+.paste-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 6px;
+  width: 168px;
+  height: 132px;
+  padding: 8px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-s1);
+}
+.paste-card-text {
+  overflow: hidden;
+  color: var(--c-mut);
+  font: 400 11px/1.45 var(--font-code);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.paste-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.paste-card-tag {
+  padding: 1px 6px;
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+  color: var(--c-mut);
+  font: 600 10.5px/1.4 var(--font-sign);
+  letter-spacing: 0.04em;
+}
+.paste-card-edit {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--c-s2);
+  color: var(--c-tx);
+  cursor: pointer;
+}
+.paste-card > .pic-remove {
+  top: -7px;
+  right: -7px;
+}
+
 /* Pictures waiting to be sent, above the prompt box. */
 .pic-chip {
   position: relative;
