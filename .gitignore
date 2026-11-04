@@ -22,3 +22,6 @@ dist-release/
 
 # Update routes for installs made before a rename (scripts/release.ts). Kept out of the repository.
 release-channels.local.json
+
+# The inventory names earlier product names, which invariant 16 keeps out of the repository
+docs/inventory/
