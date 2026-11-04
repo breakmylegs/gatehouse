@@ -106,6 +106,12 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 7. Region and window screenshots need new C# code in the quick prompt. Fine to add?
 8. Chat is on today, so `chat.enabled` would be on by default; `chat.import.enabled` stays off until CH-04 passes. Agree?
 
+## Progress
+
+- CH-01 guardrails: done 4 Nov (commit ab7b882, released in 2.0.79).
+- CH-02 data model: done 4 Nov (ADR 0013, ADR 0015).
+- Next: CH-03, native chat on the store.
+
 ## 8. Owner decision (4 Nov 2026)
 
 "On the chat features and anything else that requires my input I want you to choose the best/recommended option for everything and continue build." So the plan is approved with these answers, and the build goes ahead in slice order:
