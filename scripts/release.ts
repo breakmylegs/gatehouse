@@ -242,6 +242,8 @@ if (cmd === "version") {
       [path.join(root, "scripts", "gate.mjs"), ...(last ? ["--base", last] : ["--full"])],
     )
   }
+  // Even with --skip-tests: a release never ships what the terms or the rules forbid (CH-01).
+  step("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")])
   step("package and check it", node, [path.join(root, "scripts", "package.mjs"), "--check"])
   step("installer", node, [path.join(root, "scripts", "installer.mjs")])
   const out = path.join(root, "dist-release")

@@ -363,15 +363,7 @@ internal sealed class MainForm : Form
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = true;
         core.Settings.IsBuiltInErrorPageEnabled = false;
-        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
-        {
-            if (!IsOurs(e.Uri)) { e.Cancel = true; OpenExternal(e.Uri); }
-        };
-        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
-        {
-            e.Handled = true;
-            if (!IsOurs(e.Uri)) OpenExternal(e.Uri);
-        };
+        Guard(core);
         core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
         {
             // Only our own page is ever loaded, so notifications are the one thing it may ask for.
@@ -401,11 +393,35 @@ internal sealed class MainForm : Form
         TryNavigate();
     }
 
-    private bool IsOurs(string uri)
+    /// <summary>CH-01: a Codehouse window (this one, a pop-out or the quick prompt) shows only our own page
+    /// (packaging/NavGuard.cs). Anything else is cancelled, a web link opens in your browser, and the Host audits it.</summary>
+    internal void Guard(CoreWebView2 core)
     {
-        if (uri == null) return false;
-        if (uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return true;
-        return hostOrigin != null && uri.StartsWith(hostOrigin, StringComparison.OrdinalIgnoreCase);
+        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (Refused(e.Uri, "window")) e.Cancel = true;
+        };
+        core.FrameNavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (Refused(e.Uri, "frame")) e.Cancel = true;
+        };
+        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            e.Handled = true;
+            Refused(e.Uri, "new-window");
+        };
+    }
+
+    private bool Refused(string uri, string where)
+    {
+        NavAction a = NavGuard.Decide(uri, hostOrigin, where);
+        if (a == NavAction.Allow) return false;
+        if (a == NavAction.External) OpenExternal(uri);
+        string at = url;
+        string body = NavGuard.Report(where, uri, a);
+        if (at != null)
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { Hosting.Post(at, "/api/shell/navigation", body); });
+        return true;
     }
 
     internal static void OpenExternal(string uri)
@@ -568,7 +584,7 @@ internal sealed class MainForm : Form
         if (quick != null || env == null || url == null) return;
         int hash = url.IndexOf('#');
         string quickUrl = hash < 0 ? url + "?view=quick" : url.Substring(0, hash) + "?view=quick" + url.Substring(hash);
-        quick = new QuickOverlay(IsOurs, OpenExternal, delegate(string sent)
+        quick = new QuickOverlay(Guard, delegate(string sent)
         {
             // What the quick prompt sent: show the main window on that session, with your words in it.
             ShowWindow();
@@ -592,7 +608,7 @@ internal sealed class MainForm : Form
         int hash = url.IndexOf('#');
         string query = "?view=pane&session=" + session;
         string paneUrl = hash < 0 ? url + query : url.Substring(0, hash) + query + url.Substring(hash);
-        PopoutWindow w = new PopoutWindow(session, IsOurs, OpenExternal);
+        PopoutWindow w = new PopoutWindow(session, Guard);
         popouts[session] = w;
         w.FormClosed += delegate
         {

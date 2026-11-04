@@ -250,6 +250,22 @@ internal static class Hosting
         return AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
     }
 
+    /// <summary>Sends a little JSON to the Host with the token from the ready URL. Best effort: a Host that has gone
+    /// away is not an error worth showing.</summary>
+    internal static void Post(string url, string route, string json)
+    {
+        try
+        {
+            string baseUrl = url.Substring(0, url.IndexOf('/', 8));
+            string token = url.Substring(url.IndexOf("#token=") + 7);
+            System.Net.WebClient c = new System.Net.WebClient();
+            c.Headers.Add("Authorization", "Bearer " + token);
+            c.Headers.Add("Content-Type", "application/json");
+            c.UploadString(baseUrl + route, json);
+        }
+        catch (Exception) { }
+    }
+
     /// <summary>The address a check can call, and its token, from the ready URL.</summary>
     internal static bool CheckHost(string url, out string message)
     {

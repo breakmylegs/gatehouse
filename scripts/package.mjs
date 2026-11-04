@@ -247,6 +247,7 @@ execFileSync(
     pk("Overlay.cs"),
     pk("Popout.cs"),
     pk("Hotkey.cs"),
+    pk("NavGuard.cs"),
     pk("Common.cs"),
   ],
   { stdio: "inherit" },

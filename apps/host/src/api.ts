@@ -10,6 +10,7 @@ import { registerMarketplaceRoutes, type Marketplace } from "./marketplace.js"
 import { registerEvalRoutes, type PluginEvaluator } from "./plugin-eval.js"
 import type { NtfySecretStore } from "./push/ntfy.js"
 import { registerDoctorRoutes } from "./doctor.js"
+import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -495,6 +496,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerEvalRoutes(app, ctx)
   registerDoctorRoutes(app, ctx)
   registerWorktreeRoutes(app, ctx)
+  registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   registerProviderRoutes(app, {
     audit: ctx.audit,
     config: ctx.config,

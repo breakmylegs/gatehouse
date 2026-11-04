@@ -6,6 +6,8 @@
 //   npm run gate -- --dry         say what would run, run nothing
 //
 // What it runs, and why:
+//   0. Always: the prohibited-pattern check (scripts/forbidden.mjs: claude.ai's private API, debugging ports, browser
+//      automation, cookie stores, the Claude app's own data).
 //   1. Typecheck: the workspaces the change touches, and the workspaces that depend on them.
 //   2. Lint: the changed files only.
 //   3. Tests whose code imports a changed file, directly or through other files (vitest related, which follows
@@ -171,6 +173,9 @@ while (grew) {
 }
 
 const failures = []
+// 0. Always: nothing Anthropic's terms or Codehouse's rules forbid is in the tree (CH-01). It takes a second.
+if (run("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")]) !== 0)
+  failures.push("prohibited patterns")
 if (fullReason) {
   say(`running everything (${fullReason})`)
   for (const w of workspaces)
@@ -308,7 +313,7 @@ if (fullReason) {
       failures.push("named tests")
   }
   const window = present.filter((f) =>
-    /^packaging\/(CodehouseApp|Overlay|Hotkey|Common|Launcher)\.cs$|^scripts\/package\.mjs$|^packaging\/installer\.iss$/.test(
+    /^packaging\/(CodehouseApp|Overlay|Popout|Hotkey|NavGuard|Common|Launcher)\.cs$|^scripts\/package\.mjs$|^packaging\/installer\.iss$/.test(
       f,
     ),
   )
