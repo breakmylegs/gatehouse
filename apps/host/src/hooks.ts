@@ -97,6 +97,8 @@ export interface SessionHookDeps {
   onDecision?: (toolUseId: string, verdict: Verdict) => void
   /** B32: what the session read from outside, to catch a command copied from it. */
   provenance?: Provenance
+  /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
+  onWritten?: (filePath: string) => void
   log: (line: string) => void
 }
 
@@ -202,6 +204,9 @@ const SELF_APPROVED: Omit<Verdict, "policyHash"> = {
 }
 
 /** Audits calls that ran without ever reaching canUseTool (invariant 13), from PostToolUse. */
+/** The tools that write a file Claude made or changed. */
+const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
+
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
   return async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
@@ -210,6 +215,11 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(input.tool_response)
+      if (input.hook_event_name === "PostToolUse" && WRITE_TOOLS.has(input.tool_name)) {
+        const p = asRecord(input.tool_input)
+        const file = p.file_path ?? p.notebook_path
+        if (typeof file === "string" && file) deps.onWritten?.(file)
+      }
       deps.verdicts?.delete(input.tool_use_id)
       if (deps.decided.has(input.tool_use_id)) return NO_DECISION
       await deps.audit.record({

@@ -459,6 +459,10 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
   }
 }
 
+/** How a written file is remembered: its full path, resolved against the session folder, in lower case. */
+export const writtenKey = (file: string, cwd: string): string =>
+  path.resolve(cwd, file).toLowerCase()
+
 export class Session extends EventEmitter<SessionEvents> {
   readonly id: string
   readonly cwd: string
@@ -467,6 +471,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #deps: SessionDeps
   readonly #input = new InputQueue()
   readonly #decided = new Set<string>()
+  /** The files this session wrote or edited, by full path in lower case, while Codehouse runs. */
+  readonly #written = new Set<string>()
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
@@ -546,6 +552,11 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#onBrokerChange = () => this.#refreshWaiting()
     deps.broker.on("created", this.#onBrokerChange)
     deps.broker.on("resolved", this.#onBrokerChange)
+  }
+
+  /** Whether this session wrote or edited the file at this full path. */
+  wrote(absPath: string): boolean {
+    return this.#written.has(writtenKey(absPath, this.cwd))
   }
 
   info(): SessionInfo {
@@ -696,6 +707,7 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       approver: d.approver,
       verdicts: this.#verdicts,
+      onWritten: (file) => this.#written.add(writtenKey(file, this.cwd)),
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
     const onStderr = (data: string) => {

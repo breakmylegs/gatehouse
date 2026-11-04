@@ -717,12 +717,9 @@ function SessionPane({
                       tools={it.tools}
                       onOpenArtifact={openArtifacts}
                       onOpenFile={(file) => {
-                        const rel = relInside(session.cwd, file)
-                        if (rel) setOpened({ kind: "file", rel })
-                        else
-                          toast(
-                            "That file is outside this session's folder, so it opens in Explorer only.",
-                          )
+                        // A file outside the folder opens by its full path; the Host lets the pane read it only if
+                        // this session wrote or edited it (owner, 4 Nov).
+                        setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
                       }}
                     />
                   ) : (

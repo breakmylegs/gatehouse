@@ -827,6 +827,7 @@ export function createHost(opts: HostOptions = {}): Host {
       localRelay,
       ntfy,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
       projects,
       memory,
       routines,

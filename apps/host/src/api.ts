@@ -99,6 +99,8 @@ export interface AdminContext {
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** Whether a running session wrote or edited the file at this full path. */
+  sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** An account's plan limits, read on one of its open sessions. */
   planUsage?: (account: string, fresh: boolean) => Promise<PlanUsage | undefined>
   /** The Windows file window for the composer's Add files. Injected so tests never open a window. */
