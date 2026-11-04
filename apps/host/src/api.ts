@@ -1343,6 +1343,7 @@ const LIVE_SETTINGS = [
   "telemetry",
   "spendCapUsd",
   "globalInstructions",
+  "profile",
   "providers",
 ] as const
 

@@ -147,6 +147,19 @@ describe("what Claude is told", () => {
     expect(clipInstructions("  hi \n")).toBe("hi")
   })
 
+  it("tells every session first what to call you and your work, from Settings, Profile (owner, 4 Nov)", () => {
+    const text = composeInstructions({
+      profile: { callMe: " Pete ", work: "chief architect" },
+      global: "Be kind.",
+    })
+    expect(text).toContain("About the person you are working with:")
+    expect(text).toContain("- Call them Pete.")
+    expect(text).toContain("- Their work: chief architect.")
+    expect(text.indexOf("Call them")).toBeLessThan(text.indexOf("Be kind."))
+    expect(composeInstructions({ profile: { callMe: "  ", work: "" } })).toBe("")
+    expect(composeInstructions({ profile: { work: "consultant" } })).not.toContain("Call them")
+  })
+
   it("says nothing when there is nothing to say, and names the knowledge files when there are some", () => {
     expect(composeInstructions({})).toBe("")
     expect(composeInstructions({ global: "   ", session: "" })).toBe("")

@@ -52,6 +52,7 @@ interface Config {
   spendCapUsd?: number
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
+  profile?: { callMe?: string; work?: string }
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
@@ -109,6 +110,9 @@ interface Values {
   ecUsd: string
   /** What every session is told at its start. */
   instr: string
+  /** What Claude should call you, and your work (Profile). */
+  callMe: string
+  work: string
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -140,6 +144,8 @@ function valuesOf(d: SettingsData): Values {
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     instr: c.globalInstructions ?? "",
+    callMe: c.profile?.callMe ?? "",
+    work: c.profile?.work ?? "",
   }
 }
 
@@ -161,6 +167,15 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.projectsFolder
   if (v.instr.trim()) body.globalInstructions = v.instr.trim()
   else delete body.globalInstructions
+  // Anything a newer version keeps beside the profile stays.
+  const { callMe: _c, work: _w, ...profileKeep } = d.saved.profile ?? {}
+  const profile = {
+    ...profileKeep,
+    ...(v.callMe.trim() ? { callMe: v.callMe.trim() } : {}),
+    ...(v.work.trim() ? { work: v.work.trim() } : {}),
+  }
+  if (Object.keys(profile).length) body.profile = profile
+  else delete body.profile
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -233,6 +248,8 @@ export const DEFAULT_VALUES: Values = {
   telEndpoint: "",
   ecUsd: "500",
   instr: "",
+  callMe: "",
+  work: "",
 }
 const differs = (v: Values, keys: Array<keyof Values>) =>
   keys.some((k) => v[k] !== DEFAULT_VALUES[k])
@@ -484,10 +501,11 @@ export function Settings() {
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
+  const profileChanged = differs(v, ["callMe", "work"])
   const privacyChanged = differs(v, ["terms"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
   const sectionChanged: Partial<Record<SectionId, boolean>> = {
-    account: orgChanged,
+    account: orgChanged || profileChanged,
     sessions: extremeChanged || checkpointsChanged || instrChanged,
     phone: phoneChanged || digestChanged,
     privacy: privacyChanged,
@@ -933,6 +951,33 @@ export function Settings() {
 
             <Group section="updates" title="Updates" gap="gap-2">
               <UpdatesPanel />
+            </Group>
+
+            <Group section="account" title="Profile" gap="gap-3" changed={profileChanged}>
+              <Field
+                label="What should Claude call you?"
+                help="Told to every session at its start. Saved when you leave the box."
+              >
+                <input
+                  className="field max-w-sm"
+                  maxLength={60}
+                  value={v.callMe}
+                  onChange={(e) => edit({ callMe: e.target.value })}
+                  {...typed("Profile")}
+                />
+              </Field>
+              <Field
+                label="What best describes your work?"
+                help="For example: chief architect, consultant, data engineer. Saved when you leave the box."
+              >
+                <input
+                  className="field max-w-sm"
+                  maxLength={120}
+                  value={v.work}
+                  onChange={(e) => edit({ work: e.target.value })}
+                  {...typed("Profile")}
+                />
+              </Field>
             </Group>
 
             <Group section="general" title="Appearance" gap="gap-2">

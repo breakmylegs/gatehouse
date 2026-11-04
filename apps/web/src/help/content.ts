@@ -376,6 +376,8 @@ The sections come in three groups. **Preferences**: General, Account and plan, P
 
 **Your usage limits** (Usage) shows how much of your plan's 5-hour and weekly limits is used and when each resets, as the ring beside the prompt box does, with Refresh and a way to the Usage page.
 
+**Profile** (Account and plan) is what Claude should call you and what best describes your work. Every new session is told it first.
+
 **Instructions for every session** (Sessions) are your own words that every new session is told at its start, ahead of its project's and its own. They apply to sessions started after you save.
 
 **Quick prompt** (General) is a small window over whatever you are doing, opened by a shortcut (Ctrl+Alt+Space until you change it) or from the tray menu. Type and press Enter to start a chat, or choose the coding session you started last to message it; the main window then opens there. Esc puts it away and gives the focus back to the program you were in. If another program already uses the shortcut you type, the one before stays and three free ones are offered. It is part of the Codehouse window, so a browser has no shortcut.

@@ -666,6 +666,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const agentsMd =
       this.#opts.kind !== "chat" ? await readAgentsMd(this.cwd, this.#deps.policy()) : undefined
     return composeInstructions({
+      profile: this.#deps.config().profile,
       global: this.#deps.config().globalInstructions,
       ...(agentsMd ? { agentsMd } : {}),
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
@@ -1770,6 +1771,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           global: c.globalInstructions ?? "",
+          profile: c.profile ?? null,
           memory: memory.map((m) => [m.id, m.at]),
           policy: this.#deps.policy()?.hash ?? "",
         }),

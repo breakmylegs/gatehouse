@@ -86,6 +86,13 @@ function build(loose: boolean) {
      * Read by older versions too, which keep it without using it.
      */
     globalInstructions: z.string().max(8000).optional(),
+    /**
+     * Who you are to Claude, from Settings, Account and plan, Profile (owner, 4 Nov, after Claude's desktop app): what
+     * it should call you and what best describes your work. Told to every session first. Absent: nothing.
+     */
+    profile: z
+      .object({ callMe: z.string().max(60).optional(), work: z.string().max(120).optional() })
+      .optional(),
     /** When the daily digest is sent to the phone, local time. Null turns it off. Absent means 08:00. */
     digestTime: z.string().regex(TIME).nullable().optional(),
     /** Outbound-only push channels. Answers come back over a connection this computer opens. */
