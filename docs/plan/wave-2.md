@@ -46,7 +46,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 |---|---|---|---|
 | B17 | Data-boundary card per provider, providers allowed per project | done (Phase 97b, 3 Nov) | A gateway records what its provider keeps (Phase 86); add the card (retention, training use, region, ZDR, date checked) and a per-project allow list |
 | B18 | Normalise and cap effort across providers | done (3 Nov) | Low to Max mapped to each provider's parameter; policy can cap it |
-| B19 | Local model profiles for corporate laptops | done (4 Nov) for the profile and licence; an IT-signed model list is left for later | Detect RAM and GPU, suggest a profile, show the licence before use, refuse models not on the IT allow list |
+| B19 | Local model profiles for corporate laptops | done (4 Nov): the profile, the licence, and IT's signed list of allowed models (models.json beside the managed policy) | Detect RAM and GPU, suggest a profile, show the licence before use, refuse models not on the IT allow list |
 | B20 | Unified cost and limits meter | done (4 Nov): a daily spending cap over every session beside the plan meter; models on this computer cost nothing | Claude plan meter exists; add caps per provider and in total that pause and ask |
 | B21 | Model registry with fallback chain | done (4 Nov): carry a chat on with an allowed model no looser than Claude, by your choice, recorded | Fallback only to an allowed provider with the same or a stricter data boundary, every switch recorded |
 | B22 | Side-by-side answers from several providers (chat) | done (3 Nov) | Two to four allowed models, columns with cost and latency, the chosen one recorded |

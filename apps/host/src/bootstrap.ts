@@ -20,6 +20,7 @@ import { pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
+import { readItModels } from "./providers/it-models.js"
 import { claudeVersion } from "./doctor.js"
 import { Worktrees } from "./worktrees.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
@@ -331,7 +332,11 @@ export function createHost(opts: HostOptions = {}): Host {
         const p = config.providers
         if (p?.multi?.enabled !== true || !p.local)
           throw new Error("Models on this computer are not switched on.")
-        const r = await checkRuntime(p.local as LocalRuntimeConfig)
+        const r = await checkRuntime(
+          p.local as LocalRuntimeConfig,
+          fetch,
+          readItModels(managedPolicyDir(env)),
+        )
         if (!r.ok) throw new Error(r.reason)
         if (!r.models.includes(model))
           throw new Error("That model is not one you allowed, or the runtime does not have it.")

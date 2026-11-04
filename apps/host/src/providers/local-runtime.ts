@@ -11,6 +11,7 @@
  * credentials itself. Codehouse sends it no key, token or password, ever: invariant 6 stays as written. What Codehouse sends
  * has the redaction list applied first, as for any runtime, and the window says where the words go.
  */
+import { itAllows, type ItModels } from "./it-models.js"
 
 export interface LocalModel {
   name: string
@@ -114,7 +115,34 @@ export async function modelLicence(
 export async function checkRuntime(
   cfg: LocalRuntimeConfig,
   fetchFn: typeof fetch = fetch,
+  it: ItModels = { ok: true },
 ): Promise<RuntimeCheck> {
+  // B19: IT's signed list, when there is one, has the last word; one that does not check out allows nothing.
+  if (!it.ok)
+    return {
+      ok: false,
+      code: "runtime.it-list",
+      reason: `IT's list of the models this computer may run does not check out (${it.reason}), so no model on this computer can be used.`,
+    }
+  const r = await checkListed(cfg, fetchFn)
+  if (!r.ok || !it.models) return r
+  const models = r.models.filter((m) => itAllows(it, m))
+  const left = [
+    ...r.left,
+    ...r.models
+      .filter((m) => !itAllows(it, m))
+      .map((name) => ({ name, why: "IT has not allowed it on this computer" })),
+  ]
+  return models.length
+    ? { ...r, models, left }
+    : {
+        ok: false,
+        code: "runtime.no-models",
+        reason: "None of the listed models can be used: IT has not allowed them on this computer.",
+      }
+}
+
+async function checkListed(cfg: LocalRuntimeConfig, fetchFn: typeof fetch): Promise<RuntimeCheck> {
   const bad = addressProblem(cfg.url)
   if (bad) return { ok: false, code: "runtime.non-loopback", reason: bad }
   if (!cfg.models.length)

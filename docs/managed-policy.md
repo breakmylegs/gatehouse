@@ -41,3 +41,13 @@ deny:
 escalate:
   - { id: it-ask-npm-publish, commands: ["npm publish*"], risk: 80 }
 ```
+
+## The models this computer may run (B19)
+
+IT can also say which models on this computer (or through your organisation's gateway) Codehouse may use. Put `models.json` in the same folder, signed with the same key, as `models.json.sig`:
+
+```json
+{ "version": 1, "models": ["qwen3:8b", "llama3.2:*"] }
+```
+
+A name ending in `*` allows every tag of that model. With the file there, only the models it names can be used, whatever is listed in Settings; the others are shown as left out, "IT has not allowed it on this computer". A `models.json` that does not check out (changed after signing, unsigned, no key, or not in this form) allows no model at all, and says why. No `models.json`: nothing changes. Sign it as for `policy.yaml`, with `-in models.json`.

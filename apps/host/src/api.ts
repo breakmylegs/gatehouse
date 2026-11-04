@@ -13,6 +13,7 @@ import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
+import { readItModels } from "./providers/it-models.js"
 import { registerHousekeepingRoutes } from "./housekeeping.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
@@ -42,6 +43,7 @@ import {
   configPath,
   GatehouseConfig,
   gatehouseDataDir,
+  managedPolicyDir,
   unknownConfigKeys,
   writeFileAtomic,
 } from "@gatehouse/shared/node"
@@ -493,6 +495,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     audit: ctx.audit,
     config: ctx.config,
     configFile: configPath(ctx.env),
+    itModels: () => readItModels(managedPolicyDir(ctx.env)),
   })
 
   // Your own pictures for the Codehouse look: files in a folder in the data folder. Only picture files, only by a

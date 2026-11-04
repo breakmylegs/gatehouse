@@ -4,6 +4,7 @@ import type { FastifyInstance } from "fastify"
 import { GatehouseConfig, writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "../hostaudit.js"
 import { machineProfile } from "./profile.js"
+import type { ItModels } from "./it-models.js"
 import {
   addressProblem,
   checkRuntime,
@@ -27,6 +28,8 @@ export function registerProviderRoutes(
     config: () => GatehouseConfig
     configFile?: string
     fetchFn?: typeof fetch
+    /** B19: IT's signed list of the models this computer may run. */
+    itModels?: () => ItModels
   },
 ): void {
   const view = async () => {
@@ -37,7 +40,9 @@ export function registerProviderRoutes(
       enabled,
       ...(p?.boundaries ? { boundaries: p.boundaries } : {}),
       ...(local ? { local, label: runtimeLabel(local) } : {}),
-      ...(enabled && local ? { check: await checkRuntime(local, ctx.fetchFn) } : {}),
+      ...(enabled && local
+        ? { check: await checkRuntime(local, ctx.fetchFn, ctx.itModels?.()) }
+        : {}),
     }
   }
 

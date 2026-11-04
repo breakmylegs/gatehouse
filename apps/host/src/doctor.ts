@@ -8,7 +8,8 @@ import { execFile } from "node:child_process"
 import fs from "node:fs"
 import type { FastifyInstance } from "fastify"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
-import { gatehouseDataDir, type GatehouseConfig } from "@gatehouse/shared/node"
+import { gatehouseDataDir, managedPolicyDir, type GatehouseConfig } from "@gatehouse/shared/node"
+import { readItModels } from "./providers/it-models.js"
 import { redactString } from "@gatehouse/policy"
 import { checkRuntime, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
@@ -371,7 +372,11 @@ export function registerDoctorRoutes(
         : {}),
       ...(local?.multi?.enabled && local.local
         ? {
-            localRuntime: await checkRuntime(local.local as LocalRuntimeConfig).then(
+            localRuntime: await checkRuntime(
+              local.local as LocalRuntimeConfig,
+              fetch,
+              readItModels(managedPolicyDir(ctx.env)),
+            ).then(
               (c) => (c.ok ? { ok: true } : { ok: false, reason: c.reason }),
               () => ({ ok: false, reason: "The runtime could not be checked." }),
             ),
