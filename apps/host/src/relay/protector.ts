@@ -2,6 +2,7 @@ import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { inlineScriptArgs, powerShellExe } from "@gatehouse/policy"
 
 /** Keeps secrets off the disk in the clear. On Windows this is DPAPI for the current user. */
 export interface Protector {
@@ -24,17 +25,25 @@ function findScript(): string {
 }
 const DEFAULT_SCRIPT = findScript()
 
+/** PowerShell 7 if it is installed, otherwise the Windows PowerShell every Windows has (owner, 4 Nov). */
 export class DpapiProtector implements Protector {
   constructor(
     private readonly script = DEFAULT_SCRIPT,
-    private readonly pwsh = "pwsh",
+    private readonly pwsh = powerShellExe(),
   ) {}
 
   #run(mode: "protect" | "unprotect", bytes: Uint8Array): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
+      let args: string[]
+      try {
+        args = inlineScriptArgs(this.script, [mode])
+      } catch (e) {
+        reject(new Error(`DPAPI ${mode} failed: ${(e as Error).message}`))
+        return
+      }
       const child = execFile(
         this.pwsh,
-        ["-NoProfile", "-NonInteractive", "-File", this.script, mode],
+        args,
         { timeout: 30_000, maxBuffer: 1 << 20, windowsHide: true },
         (err, stdout) => {
           if (err) return reject(new Error(`DPAPI ${mode} failed: ${err.message.split("\n")[0]}`))

@@ -112,7 +112,7 @@ The version is `major.minor` from package.json and the number of commits (`npm r
 
 - It is not code signed, so Windows SmartScreen may warn the first time. Signing needs a certificate.
 - The folder bundles one Node version (recorded in `runtime\NODE-VERSION.txt`). Update it by building a new package.
-- It needs the same things as the source: you signed in to Claude Code on this computer, and PowerShell 7 (`pwsh`) installed for the PowerShell parser.
+- It needs the same things as the source: you signed in to Claude Code on this computer. The PowerShell parser and DPAPI sealing use PowerShell 7 (`pwsh`) when it is installed and Windows PowerShell 5.1 otherwise; both run Codehouse's scripts as `-Command` text, so the execution policy (Restricted by default in Windows PowerShell) does not stop them.
 - Notifications from the page itself (Settings, browser notification) are allowed in the window, but the taskbar flash and balloon are the dependable signal.
 
 Every release also attaches `changes.json`, each change with the files it touched and its platform, for forks on other systems (see docs/forks.md). It plays no part in updating.

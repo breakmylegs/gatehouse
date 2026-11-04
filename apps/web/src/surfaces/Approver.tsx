@@ -129,7 +129,9 @@ export function Approver() {
           )}
           {!info.pwsh.running ? (
             <p className="m-0 text-mut">
-              Without the PowerShell parser, every PowerShell command waits for you.
+              Without the PowerShell parser, every PowerShell command waits for you. It uses
+              PowerShell 7 when installed and the Windows PowerShell that comes with Windows
+              otherwise, so if it stays off, PowerShell may be limited on this computer.
             </p>
           ) : null}
           {info.supervised ? (
