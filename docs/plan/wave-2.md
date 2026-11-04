@@ -61,7 +61,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B26 | Auto-continue after the usage limit resets | done (3 Nov): a setting, on by default; Extreme limits still apply | Pause at the plan limit and start again on reset exist (owner, 31 Oct); confirm opt-in and the spend cap |
 | B27 | Review agent on a worktree diff | done (4 Nov) | Plan mode, read-only; findings linked to diff lines |
 | B28 | Security scan agent | done (4 Nov) | Read-only; patches only through B12 |
-| B29 | Test and build loop panel | todo | Test commands allow-listed per project in policy |
+| B29 | Test and build loop panel | done (4 Nov), through goal mode | Test commands allow-listed per project in policy |
 | B30 | Local codebase index | todo | ripgrep (needs IT) plus tree-sitter WASM; floor-excluded files never indexed; one-click delete |
 | B31 | Allow-listed docs fetch | done (3 Nov): remembered sites, per project | WebFetch goes to the Approver and is marked untrusted; add a per-project domain allow list |
 | B32 | Provenance labels against prompt injection | done (4 Nov) | Web content is marked untrusted (ADR 0007); add taint: calls whose arguments come from untrusted content get a higher risk |

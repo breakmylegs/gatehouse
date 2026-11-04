@@ -87,6 +87,7 @@ import { FileChip } from "../components/FileChip"
 import { CompareBar } from "../components/CompareBar"
 import { GoalDialog } from "../components/GoalDialog"
 import { startReview } from "../lib/review"
+import { runTestsUntilPass } from "../lib/testLoop"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -429,6 +430,11 @@ function SessionPane({
       ? []
       : [
           { kind: "separator" as const },
+          // B29: the project's own test command as the goal, run and fixed until it passes.
+          {
+            label: "Run the tests until they pass",
+            onSelect: () => void runTestsUntilPass(session),
+          },
           { label: "Review the changes", onSelect: () => void startReview(session, "review") },
           {
             label: "Security review of the changes",
