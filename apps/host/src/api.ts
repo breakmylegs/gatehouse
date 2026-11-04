@@ -58,7 +58,7 @@ import {
 import type { HostAudit } from "./hostaudit.js"
 import { localDay, type UsageStore } from "./usage.js"
 import type { PlanUsage } from "./plan-usage.js"
-import { ArtifactError, artifactHeaders, type ArtifactStore } from "./artifacts.js"
+import { ArtifactError, artifactHeaders, EXT, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
@@ -972,7 +972,7 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
       const a = store.read(String(q.session ?? ""), String(q.artifact ?? ""), Number(q.version))
       if (!a) return bad(reply, 404, "There is no such artifact.")
       return {
-        name: `${q.artifact}-v${Number(q.version)}.${a.kind}`,
+        name: `${q.artifact}-v${Number(q.version)}.${EXT[a.kind]}`,
         content: a.content,
         kind: a.kind,
       }

@@ -4,6 +4,9 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { download } from "../lib/exportMarkdown"
 import { offlineExport } from "../lib/artifactExport"
+import Markdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+import { CodeView } from "./CodeViews"
 
 interface Version {
   version: number
@@ -13,7 +16,7 @@ interface Version {
 interface Artifact {
   id: string
   title: string
-  kind: "html" | "svg"
+  kind: "html" | "svg" | "markdown" | "code"
   versions: Version[]
 }
 
@@ -21,10 +24,14 @@ interface Artifact {
  * What a chat made to show you (owner's plan, W1-09, ADR 0003): each artifact with its versions, shown in a sandbox
  * that runs its own scripts and nothing else. Compare a version with the one before, or export it as a file.
  */
+/** A document or code: shown as text with the app's own views, so nothing in it runs (CH-03). */
+const asText = (kind: Artifact["kind"] | undefined) => kind === "markdown" || kind === "code"
+
 export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refresh: number }) {
   const [list, setList] = useState<Artifact[]>()
   const [chosen, setChosen] = useState<{ id: string; version: number }>()
   const [path, setPath] = useState<string>()
+  const [body, setBody] = useState<string>()
   const [compare, setCompare] =
     useState<Array<{ value: string; added?: boolean; removed?: boolean }>>()
 
@@ -44,10 +51,24 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
   }, [sessionId])
   useEffect(() => void load(), [load, refresh])
 
+  const chosenKind = list?.find((a) => a.id === chosen?.id)?.kind
   useEffect(() => {
     setCompare(undefined)
+    setBody(undefined)
     if (!chosen) return setPath(undefined)
     let gone = false
+    if (asText(chosenKind)) {
+      setPath(undefined)
+      void api<{ content: string }>(
+        "GET",
+        `/api/artifacts/export?session=${encodeURIComponent(sessionId)}&artifact=${encodeURIComponent(chosen.id)}&version=${chosen.version}`,
+      ).then((r) => {
+        if (!gone && r.ok && r.data) setBody(r.data.content)
+      })
+      return () => {
+        gone = true
+      }
+    }
     void api<{ path: string }>("POST", "/api/artifacts/open", {
       session: sessionId,
       artifact: chosen.id,
@@ -58,7 +79,7 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
     return () => {
       gone = true
     }
-  }, [sessionId, chosen])
+  }, [sessionId, chosen, chosenKind])
 
   const text = async (id: string, version: number) => {
     const r = await api<{ name: string; content: string }>(
@@ -137,15 +158,35 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
                 const got = await text(artifact.id, chosen.version)
                 if (!got) return toast.error("It could not be exported", { id: "artifact" })
                 // B45: one file that works offline, under the same rules as here (no network).
+                if (asText(artifact.kind))
+                  return download(
+                    got.name,
+                    got.content,
+                    artifact.kind === "markdown" ? "text/markdown" : "text/plain",
+                  )
                 download(
                   got.name,
-                  offlineExport(artifact.kind, got.content),
+                  offlineExport(artifact.kind as "html" | "svg", got.content),
                   artifact.kind === "svg" ? "image/svg+xml" : "text/html",
                 )
               }}
             >
-              Export for offline use
+              {asText(artifact.kind) ? "Download" : "Export for offline use"}
             </button>
+            {asText(artifact.kind) && body !== undefined ? (
+              <button
+                type="button"
+                className="btn !min-h-7 !text-[13px]"
+                onClick={() =>
+                  void navigator.clipboard
+                    .writeText(body)
+                    .then(() => toast.success("Copied", { id: "artifact" }))
+                    .catch(() => toast.error("It could not be copied", { id: "artifact" }))
+                }
+              >
+                Copy
+              </button>
+            ) : null}
           </div>
           {compare ? (
             <pre
@@ -167,6 +208,19 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
                 </span>
               ))}
             </pre>
+          ) : asText(artifact.kind) ? (
+            body === undefined ? (
+              <p className="m-0 text-mut">Loading…</p>
+            ) : artifact.kind === "markdown" ? (
+              <div
+                className="help-body max-h-[60vh] overflow-auto rounded-md border border-line px-4 py-3"
+                aria-label={`Artifact: ${artifact.title}, version ${chosen.version}`}
+              >
+                <Markdown remarkPlugins={[remarkGfm]}>{body}</Markdown>
+              </div>
+            ) : (
+              <CodeView text={body} label={`${artifact.title}, version ${chosen.version}`} />
+            )
           ) : path ? (
             // A sandbox: its own scripts and nothing else. The address carries the same rule in its headers.
             <iframe
@@ -178,7 +232,9 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
             />
           ) : null}
           <p className="m-0 text-xs text-mut">
-            It runs on its own: it cannot reach the internet, your files or Codehouse.
+            {asText(artifact.kind)
+              ? "Shown as text: nothing in it runs."
+              : "It runs on its own: it cannot reach the internet, your files or Codehouse."}
           </p>
         </>
       ) : null}

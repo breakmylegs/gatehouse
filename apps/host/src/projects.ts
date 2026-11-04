@@ -322,7 +322,7 @@ export function composeInstructions(parts: {
     : []
   const artifacts = parts.artifacts
     ? [
-        "You can show the person a small web page or picture beside the chat with the save_artifact tool: one self-contained page (html, with its own style and script inline) or an svg. It runs in a sandbox with no internet and no access to their files, so put everything it needs inside it. Saving again with the same title makes a new version.",
+        "You can show the person something beside the chat with the save_artifact tool: a small web page (html, one self-contained page with its own style and script inline) or a picture (svg), which run in a sandbox with no internet and no access to their files, so put everything they need inside them; or a document they may want to keep or send, such as a letter, a plan or notes (markdown), or code to read or copy (code), shown as text. Saving again with the same title makes a new version.",
       ]
     : []
   // Owner, 1 Nov: the disk filled with temporary files no one removed. Every coding session is asked to tidy up.
