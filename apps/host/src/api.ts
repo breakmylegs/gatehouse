@@ -7,6 +7,7 @@ import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
 import { registerPromptRoutes, type PromptStore } from "./prompts.js"
 import { registerMarketplaceRoutes, type Marketplace } from "./marketplace.js"
+import { registerEvalRoutes, type PluginEvaluator } from "./plugin-eval.js"
 import { registerDoctorRoutes } from "./doctor.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
@@ -93,6 +94,8 @@ export interface AdminContext {
   /** Your saved prompts (W1-14). */
   prompts?: PromptStore
   marketplace?: Marketplace
+  /** B39: plugin evaluations, with and without a plugin, in Plan mode. */
+  evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
   /** An account's plan limits, read on one of its open sessions. */
@@ -483,6 +486,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerExportRoutes(app, ctx)
   registerPromptRoutes(app, ctx)
   registerMarketplaceRoutes(app, ctx)
+  registerEvalRoutes(app, ctx)
   registerDoctorRoutes(app, ctx)
   registerWorktreeRoutes(app, ctx)
   registerProviderRoutes(app, {

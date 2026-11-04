@@ -19,6 +19,7 @@ import { LocalRelay } from "./relay/local.js"
 import { pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
+import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
 import { claudeVersion } from "./doctor.js"
 import { Worktrees } from "./worktrees.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
@@ -454,7 +455,8 @@ export function createHost(opts: HostOptions = {}): Host {
     ? new OpenSessionsStore(path.join(gatehouseDataDir(env), "open-sessions.json"))
     : undefined
   // A chat on a model on this computer has no saved conversation to carry on from yet, so it is not brought back.
-  if (openSessions) manager.on("session", (info) => !info.local && openSessions.note(info))
+  if (openSessions)
+    manager.on("session", (info) => !info.local && !info.evaluation && openSessions.note(info))
   // What each conversation runs with, kept by its Claude Code id, so Resume starts it the same way (owner, 31 Oct).
   manager.on("session", (info) => {
     if (!info.sdkSessionId || info.kind === "chat") return
@@ -765,6 +767,25 @@ export function createHost(opts: HostOptions = {}): Host {
     env,
   })
 
+  // The marketplace (W1-19): the main account's Claude Code, with no credential in its environment.
+  const marketplace = new Marketplace(binaryRunner(findClaudeBinary, () => accounts.env()))
+  // B39: a plugin's evaluation runs as normal sessions in Plan mode, with the plugin and without it.
+  const evals = new PluginEvaluator({
+    store: new EvalStore(path.join(gatehouseDataDir(env), "plugin-evals.json")),
+    start: (o) => manager.start(o),
+    enabled: async (id) => {
+      try {
+        const e = await marketplace.entry(id)
+        return e.installed?.enabled === true
+      } catch {
+        return undefined
+      }
+    },
+    audit,
+    policyHash: () => store.current?.hash ?? "",
+    log,
+  })
+
   const app: HostApp = {
     updates,
     manager,
@@ -804,8 +825,8 @@ export function createHost(opts: HostOptions = {}): Host {
       routines,
       artifacts,
       prompts,
-      // The marketplace (W1-19): the main account's Claude Code, with no credential in its environment.
-      marketplace: new Marketplace(binaryRunner(findClaudeBinary, () => accounts.env())),
+      marketplace,
+      evals,
       planUsage: (account, fresh) => manager.planUsage(account, fresh),
       pickFiles: pickFilesWithWindows,
       updates,

@@ -50,6 +50,27 @@ export function isOnlyAutoMemoryOff(settings: unknown): boolean {
   )
 }
 
+/**
+ * The inline settings Codehouse may set, which can only turn things off: auto memory off (above), and installed plugins
+ * off for one session (B39, a plugin's evaluation without it). A plugin can never be turned on here, and nothing else
+ * may be set, since anything more could carry permission rules.
+ */
+export function isOnlyTurningOff(settings: unknown): boolean {
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) return false
+  const s = settings as Record<string, unknown>
+  const keys = Object.keys(s)
+  if (!keys.length || keys.some((k) => k !== "autoMemoryEnabled" && k !== "enabledPlugins"))
+    return false
+  if ("autoMemoryEnabled" in s && s.autoMemoryEnabled !== false) return false
+  if (!("enabledPlugins" in s)) return true
+  const p = s.enabledPlugins
+  if (!p || typeof p !== "object" || Array.isArray(p)) return false
+  const entries = Object.entries(p as Record<string, unknown>)
+  return (
+    entries.length > 0 && entries.every(([id, v]) => /^[\w.-]+@[\w.-]+$/.test(id) && v === false)
+  )
+}
+
 export function assertSafeOptions(options: Options): void {
   if (options.permissionMode === undefined) {
     throw new SafetyError(3, "the permission mode must be set explicitly on every session")
@@ -70,7 +91,7 @@ export function assertSafeOptions(options: Options): void {
       `allowedTools has bare tool names (${bare.join(", ")}), which skip canUseTool`,
     )
   }
-  if (options.settings !== undefined && !isOnlyAutoMemoryOff(options.settings)) {
+  if (options.settings !== undefined && !isOnlyTurningOff(options.settings)) {
     throw new SafetyError(5, "inline settings are not allowed, they could carry permission rules")
   }
   if (options.permissionPromptToolName !== undefined) {

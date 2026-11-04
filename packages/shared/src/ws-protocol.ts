@@ -277,6 +277,8 @@ export const SessionInfo = z.object({
   instructions: z.string().optional(),
   /** A research chat (W1-10). */
   research: z.boolean().optional(),
+  /** B39: one run of a plugin's evaluation, with the plugin on or off. Not brought back after a restart. */
+  evaluation: z.object({ plugin: z.string(), with: z.boolean() }).optional(),
   /** Runs on a model on this computer, not Claude (ADR 0011). `model` names it. */
   local: z.boolean().optional(),
   /** The most effort Settings allows (B18). Absent: no cap. */

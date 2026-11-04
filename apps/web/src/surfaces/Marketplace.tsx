@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { EmptyState } from "../components/EmptyState"
+import { PluginEval } from "../components/PluginEval"
 
 interface Contents {
   commands: number
@@ -52,6 +53,7 @@ export function Marketplace() {
   const [query, setQuery] = useState("")
   const [asking, setAsking] = useState<string>()
   const [busy, setBusy] = useState<string>()
+  const [evaluating, setEvaluating] = useState<string>()
   const load = useCallback(async () => {
     const r = await api<{ marketplaces: string[]; plugins: Plugin[] }>("GET", "/api/marketplace")
     if (!r.ok || !r.data) return setError(r.error ?? "The marketplaces could not be read")
@@ -149,16 +151,27 @@ export function Marketplace() {
                 ))}
               </ul>
               {p.installed ? (
-                <span>
-                  <button
-                    type="button"
-                    className="btn !min-h-7"
-                    disabled={busy !== undefined}
-                    onClick={() => void act(p, "uninstall")}
-                  >
-                    {busy === p.id ? "Removing…" : "Remove"}
-                  </button>
-                </span>
+                <>
+                  <span className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn !min-h-7"
+                      disabled={busy !== undefined}
+                      onClick={() => void act(p, "uninstall")}
+                    >
+                      {busy === p.id ? "Removing…" : "Remove"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn !min-h-7"
+                      aria-expanded={evaluating === p.id}
+                      onClick={() => setEvaluating(evaluating === p.id ? undefined : p.id)}
+                    >
+                      Evaluate…
+                    </button>
+                  </span>
+                  {evaluating === p.id ? <PluginEval plugin={p.id} name={p.name} /> : null}
+                </>
               ) : p.refusal ? (
                 <p className="m-0 text-[12.5px] text-mut">
                   Codehouse does not install it. {p.refusal}

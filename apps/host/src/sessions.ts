@@ -230,6 +230,8 @@ export interface SessionInfo {
   instructions?: string
   /** A research chat (W1-10). */
   research?: boolean
+  /** B39: one run of a plugin's evaluation. */
+  evaluation?: { plugin: string; with: boolean }
   /** Runs on a model on this computer, not Claude (ADR 0011). */
   local?: boolean
   /** Where its words go: "On this computer", or a provider through your gateway (ADR 0010). */
@@ -393,6 +395,11 @@ export interface StartSessionOptions {
   worktree?: { base?: string }
   /** The worktree it works in, once made (set by the manager, not the screen). */
   inWorktree?: { branch: string; repo: string }
+  /**
+   * B39: a run of a plugin's evaluation. Without it, the plugin is turned off for this session alone (inline settings
+   * may only turn things off); with it, the plugin runs as installed.
+   */
+  evaluation?: { plugin: string; with: boolean }
 }
 
 /**
@@ -576,6 +583,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
       ...(this.#opts.kind === "chat" && this.#opts.research ? { research: true } : {}),
+      ...(this.#opts.evaluation ? { evaluation: this.#opts.evaluation } : {}),
       ...(this.#opts.localModel !== undefined
         ? { local: true, ...(this.#localLabel ? { localLabel: this.#localLabel } : {}) }
         : {}),
@@ -794,6 +802,12 @@ export class Session extends EventEmitter<SessionEvents> {
           }
         : {}),
     }
+    const ev = this.#opts.evaluation
+    if (ev && !ev.with)
+      options.settings = {
+        ...(typeof options.settings === "object" ? options.settings : {}),
+        enabledPlugins: { [ev.plugin]: false },
+      }
     assertSafeOptions(options)
 
     // A chat on a model on this computer runs Codehouse's own loop with these same options: the floor hook, canUseTool and
