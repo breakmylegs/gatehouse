@@ -278,6 +278,8 @@ export function composeInstructions(parts: {
   tidy?: boolean | undefined
   /** A research chat (W1-10, ADR 0007). */
   research?: boolean | undefined
+  /** B23: the project's AGENTS.md, for a coding session, as read through the floor. */
+  agentsMd?: string | undefined
 }): string {
   const blocks = [
     ...layer("For every conversation:", parts.global),
@@ -315,13 +317,20 @@ export function composeInstructions(parts: {
       ]
     : []
   const research = parts.research ? [RESEARCH_INSTRUCTION] : []
+  // B23: written for other coding agents; Claude is told to follow it as it would CLAUDE.md.
+  const agents = parts.agentsMd
+    ? [
+        `This project has an AGENTS.md, the instructions file other coding agents read. Follow it as you would CLAUDE.md, unless the person asks otherwise:\n${parts.agentsMd}`,
+      ]
+    : []
   if (
     !blocks.length &&
     !knowledge.length &&
     !memory.length &&
     !artifacts.length &&
     !tidy.length &&
-    !research.length
+    !research.length &&
+    !agents.length
   )
     return ""
   return [
@@ -336,5 +345,6 @@ export function composeInstructions(parts: {
     ...artifacts,
     ...tidy,
     ...research,
+    ...agents,
   ].join("\n\n")
 }

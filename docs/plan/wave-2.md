@@ -50,7 +50,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B20 | Unified cost and limits meter | partial | Claude plan meter exists; add caps per provider and in total that pause and ask |
 | B21 | Model registry with fallback chain | todo | Fallback only to an allowed provider with the same or a stricter data boundary, every switch recorded |
 | B22 | Side-by-side answers from several providers (chat) | done (3 Nov) | Two to four allowed models, columns with cost and latency, the chosen one recorded |
-| B23 | AGENTS.md read across providers | todo | Read through the floor and given to every provider |
+| B23 | AGENTS.md read across providers | done (4 Nov) for coding sessions; chats on a model on this computer have no project folder | Read through the floor and given to every provider |
 | B24 | Memory freshness | done (3 Nov) | Each memory shows its age; over 90 days flagged |
 
 ## Wave 3: deeper agent capability

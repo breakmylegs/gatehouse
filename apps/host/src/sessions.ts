@@ -42,6 +42,7 @@ import {
 import type { UsageStore } from "./usage.js"
 import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
 import { decideElicitation } from "./elicitation.js"
+import { readAgentsMd } from "./agents-md.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import {
   CARRY_ON_PROMPT,
@@ -626,8 +627,12 @@ export class Session extends EventEmitter<SessionEvents> {
           latencyMs: 0,
         })
         .catch(() => undefined)
+    // B23: a coding session's project may keep its instructions in AGENTS.md, for other coding agents.
+    const agentsMd =
+      this.#opts.kind !== "chat" ? await readAgentsMd(this.cwd, this.#deps.policy()) : undefined
     return composeInstructions({
       global: this.#deps.config().globalInstructions,
+      ...(agentsMd ? { agentsMd } : {}),
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
       session: this.#opts.instructions,
       ...(memory ? { memory } : {}),
