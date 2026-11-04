@@ -931,6 +931,25 @@ describe("the Usage page's report", () => {
       delete ctx.usage
     }
   })
+
+  it("says what drove the usage for a real range of days and a session, and refuses one it cannot read (B15)", async () => {
+    // The route once checked dates with its backslashes lost, so every real date was refused (inventory, 4 Nov).
+    const ok = await app.inject({
+      method: "GET",
+      url: "/api/usage/drivers?from=2026-10-31&to=2026-11-04&session=01a1a559-4b41-72ef",
+    })
+    expect(ok.statusCode).toBe(200)
+    expect(ok.json()).toMatchObject({ from: "2026-10-31", to: "2026-11-04" })
+    for (const q of [
+      "",
+      "?from=2026-10-31",
+      "?from=2026-11-05&to=2026-11-04",
+      "?from=dddd-dd-dd&to=dddd-dd-dd",
+    ]) {
+      const bad = await app.inject({ method: "GET", url: `/api/usage/drivers${q}` })
+      expect(bad.statusCode, q).toBe(400)
+    }
+  })
 })
 
 describe("chat project endpoints (owner's plan, W1-07)", () => {
