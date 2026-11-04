@@ -3,6 +3,8 @@ import type { ChatStore, ContentBlock } from "./db.js"
 /** What the recorder needs to know about a session. */
 export interface RecordedSession {
   kind?: "code" | "chat"
+  /** The folder it runs in. */
+  cwd?: string
   title?: string
   model?: string
   sdkSessionId?: string
@@ -98,6 +100,7 @@ export class ChatRecorder {
         role: "user",
         blocks: [{ type: "text", text }],
         ...(info?.sdkSessionId ? { sdkSessionId: info.sdkSessionId } : {}),
+        ...(info?.cwd ? { cwd: info.cwd } : {}),
       })
       place.leaf = m.id
     } catch (e) {
@@ -154,6 +157,7 @@ export class ChatRecorder {
       ...((place.model ?? info?.model) ? { model: (place.model ?? info?.model)! } : {}),
       ...(place.lastUuid ? { sdkUuid: place.lastUuid } : {}),
       ...(info?.sdkSessionId ? { sdkSessionId: info.sdkSessionId } : {}),
+      ...(info?.cwd ? { cwd: info.cwd } : {}),
     })
     place.leaf = m.id
     place.blocks = []

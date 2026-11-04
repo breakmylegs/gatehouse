@@ -112,7 +112,8 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 - CH-02 data model: done 4 Nov (ADR 0013, ADR 0015).
 - CH-03 native chat: in progress. Done 4 Nov: every chat recorded into the store, and the versions navigator (‹ 2 of 3 ›) for Retry and Edit.
 - CH-03 tool posture: done 4 Nov (ADR 0012, rule `chat-no-shell`). The outputs folder is deferred (ADR 0012) until rules can be scoped to one session's folder.
-- Next in CH-03: the sidebar from the store, artifact views, memory as injected.
+- CH-03 finding chats: done 4 Nov (search in Ctrl+K, recency groups in the sidebar).
+- Next in CH-03: artifact views (Markdown and code), memory shown as injected.
 
 ## 8. Owner decision (4 Nov 2026)
 

@@ -1,6 +1,8 @@
 import { Command } from "cmdk"
 import { useEffect, useRef, useState } from "react"
+import { api } from "../lib/api"
 import { type AppCommand, buildCommands, rankCommands } from "../lib/commands"
+import { openConversation } from "../lib/redo"
 import { readHideEnded } from "../lib/rail"
 import { usePending, useSessionList, useStore } from "../store"
 import { EmptyState } from "./EmptyState"
@@ -27,6 +29,8 @@ export function CommandPalette() {
   const setHelpOpen = useStore((s) => s.setHelpOpen)
   const sessions = useSessionList()
   const pending = usePending()
+  const [query, setQuery] = useState("")
+  const hits = useChatSearch(open ? query : "")
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,11 +56,13 @@ export function CommandPalette() {
 
   const close = () => {
     setOpen(false)
+    setQuery("")
     back.current?.focus?.()
   }
   const run = (fn: () => void) => () => {
     fn()
     setOpen(false)
+    setQuery("")
   }
 
   if (!open) return null
@@ -103,6 +109,8 @@ export function CommandPalette() {
       >
         <Command.Input
           autoFocus
+          value={query}
+          onValueChange={setQuery}
           placeholder="Go to a page, session or waiting request, or run a command"
           className="field w-full !rounded-none !border-0 !border-b !border-line"
         />
@@ -154,6 +162,24 @@ export function CommandPalette() {
               ))}
             </Command.Group>
           ) : null}
+          {hits.length > 0 ? (
+            // CH-03: what was said in your chats, from Chat's own store. The words you typed are in each value so
+            // the list's own filter keeps them.
+            <Command.Group heading="In your chats" className="text-[13px] text-mut">
+              {hits.map((h) => (
+                <Item
+                  key={h.messageId}
+                  value={`chat-hit ${h.messageId} ${query} ${h.title}`}
+                  onSelect={run(() => void openConversation(h.conversationId))}
+                >
+                  <span className="grid">
+                    <span>{h.title || "Untitled chat"}</span>
+                    <span className="text-[12px] font-normal text-mut">{h.snippet}</span>
+                  </span>
+                </Item>
+              ))}
+            </Command.Group>
+          ) : null}
           <Command.Group heading="Commands" className="text-[13px] text-mut">
             {commandItems(rest.filter((c) => c.group === "Actions"))}
           </Command.Group>
@@ -165,6 +191,38 @@ export function CommandPalette() {
       </Command>
     </div>
   )
+}
+
+interface ChatHit {
+  conversationId: string
+  messageId: string
+  title: string
+  snippet: string
+}
+
+/** Searches your chats as you type, from two letters, a moment after you stop. */
+function useChatSearch(query: string): ChatHit[] {
+  const [hits, setHits] = useState<ChatHit[]>([])
+  useEffect(() => {
+    const q = query.trim()
+    if (q.length < 2) {
+      setHits([])
+      return
+    }
+    let live = true
+    const timer = setTimeout(() => {
+      void api<{ hits: ChatHit[] }>("GET", `/api/chat/search?q=${encodeURIComponent(q)}`).then(
+        (r) => {
+          if (live) setHits(r.ok && r.data ? r.data.hits.slice(0, 20) : [])
+        },
+      )
+    }, 250)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [query])
+  return hits
 }
 
 function Item({

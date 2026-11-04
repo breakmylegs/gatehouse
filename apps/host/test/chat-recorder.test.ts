@@ -178,6 +178,32 @@ describe("recording native chats", () => {
     expect(reply.blocks).toEqual([{ type: "text", text: "Hi" }])
   })
 
+  it("opens a conversation found by search where its shown branch ends, in that session's folder", async () => {
+    const { store, sessions, rec, turn } = setup()
+    sessions.set("s1", { kind: "chat", sdkSessionId: "sdk1", cwd: "C:/chats/colours" })
+    turn("s1", "Name a colour", "Blue", "u1")
+    sessions.set("s2", {
+      kind: "chat",
+      sdkSessionId: "sdk2",
+      cwd: "C:/chats/colours",
+      historyFrom: "sdk1",
+      historyUntil: "u1",
+      replaces: "s1",
+    })
+    turn("s2", "A warm one", "Orange", "v1")
+    const app = Fastify()
+    registerChatRoutes(app, { store, recorder: rec })
+    const open = (conversation: string) =>
+      app.inject({ method: "POST", url: "/api/chat/open", payload: { conversation } })
+    const conversation = rec.conversationOf("s2")!
+    expect((await open(conversation)).json()).toEqual({
+      sdkSessionId: "sdk2",
+      cwd: "C:/chats/colours",
+    })
+    expect((await open("nothing")).statusCode).toBe(404)
+    await app.close()
+  })
+
   it("serves the branch to the screen and switches through the admin API", async () => {
     const { store, sessions, rec, turn } = setup()
     sessions.set("s1", { kind: "chat", sdkSessionId: "sdk1" })

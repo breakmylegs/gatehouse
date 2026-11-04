@@ -69,6 +69,46 @@ export async function carryOnFrom(
 }
 
 /**
+ * Opens a chat found by search (CH-03), where the branch it shows ends: the open session when it is already open,
+ * otherwise that conversation carried on in its own folder, in Plan mode like every chat.
+ */
+export async function openConversation(conversation: string): Promise<boolean> {
+  const to = await api<{ sdkSessionId: string; cwd: string }>("POST", "/api/chat/open", {
+    conversation,
+  })
+  if (!to.ok || !to.data) {
+    toast.error(to.error ?? "That chat could not be opened.", { id: "open-chat" })
+    return false
+  }
+  const st = useStore.getState()
+  const open = Object.values(st.sessions).find(
+    (s) => s.sdkSessionId === to.data?.sdkSessionId && s.state !== "ended",
+  )
+  if (open) {
+    st.selectSession(open.id)
+    st.setRoute("workspace")
+    return true
+  }
+  const r = await send(
+    {
+      type: "create_session",
+      cwd: to.data.cwd,
+      kind: "chat",
+      mode: "plan",
+      resume: to.data.sdkSessionId,
+    },
+    START_WAIT_MS,
+  )
+  if (!r.ok) {
+    toast.error(r.error?.message ?? "That chat could not be opened.", { id: "open-chat" })
+    return false
+  }
+  st.selectSession((r.data as { sessionId: string }).sessionId)
+  st.setRoute("workspace")
+  return true
+}
+
+/**
  * Shows another version of a chat message (CH-03, the "2 of 3" arrows): the Host moves the chat to that branch and
  * says which conversation it ends in, and that conversation is opened in this pane in place of the one shown.
  */

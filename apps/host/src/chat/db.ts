@@ -62,6 +62,8 @@ export interface Message {
   sdkUuid: string | null
   /** The SDK session (the branch) it belongs to. */
   sdkSessionId: string | null
+  /** The folder that session ran in. */
+  cwd: string | null
 }
 
 export interface NewMessage {
@@ -72,6 +74,7 @@ export interface NewMessage {
   model?: string
   sdkUuid?: string
   sdkSessionId?: string
+  cwd?: string
   raw?: unknown
   createdAt?: string
 }
@@ -121,6 +124,7 @@ interface MessageRow {
   redactions: number
   sdk_uuid: string | null
   sdk_session_id: string | null
+  cwd: string | null
 }
 
 /** How many strings differ between a value and its redacted copy. */
@@ -184,6 +188,7 @@ const toMessage = (r: MessageRow): Message => ({
   redactions: r.redactions,
   sdkUuid: r.sdk_uuid,
   sdkSessionId: r.sdk_session_id,
+  cwd: r.cwd,
 })
 
 export class ChatStore {
@@ -304,8 +309,8 @@ export class ChatStore {
       ).n
       this.#db
         .prepare(
-          `INSERT INTO message (id, conversation_id, parent_id, seq, role, created_at, provider, model, blocks_json, redactions, raw_json, sdk_uuid, sdk_session_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO message (id, conversation_id, parent_id, seq, role, created_at, provider, model, blocks_json, redactions, raw_json, sdk_uuid, sdk_session_id, cwd)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -321,6 +326,7 @@ export class ChatStore {
           m.raw === undefined ? null : JSON.stringify(this.#redact(m.raw)),
           m.sdkUuid ?? null,
           m.sdkSessionId ?? null,
+          m.cwd ?? null,
         )
       const text = searchText(blocks)
       if (text)

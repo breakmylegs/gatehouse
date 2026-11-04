@@ -52,6 +52,16 @@ export function registerChatRoutes(app: FastifyInstance, chat: ChatDeps): void {
     }
   })
 
+  /** Where a conversation's shown branch ends, so the screen can open it (a search hit, the sidebar). */
+  app.post("/api/chat/open", async (req, reply) => {
+    const b = z.object({ conversation: z.string().max(100) }).safeParse(req.body)
+    if (!b.success) return reply.code(400).send({ error: "not a conversation" })
+    const steps = chat.store.branch(b.data.conversation)
+    const end = [...steps].reverse().find((s) => s.message.sdkSessionId && s.message.cwd)?.message
+    if (!end) return reply.code(404).send({ error: "That chat cannot be opened from here." })
+    return { sdkSessionId: end.sdkSessionId, cwd: end.cwd }
+  })
+
   app.get("/api/chat/conversations", async (req) => {
     const q = z
       .object({ kind: Kind.optional(), limit: z.coerce.number().int().min(1).max(1000).optional() })

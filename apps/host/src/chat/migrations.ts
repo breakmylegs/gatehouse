@@ -108,6 +108,10 @@ export const MIGRATIONS: readonly string[] = [
   CREATE INDEX message_sdk_uuid ON message(sdk_uuid);
   CREATE INDEX message_sdk_session ON message(sdk_session_id, seq);
   `,
+  // 3 (CH-03): the folder each message's session ran in, so a conversation found by search opens where it was.
+  `
+  ALTER TABLE message ADD COLUMN cwd TEXT;
+  `,
 ]
 
 export class ChatSchemaError extends Error {}
