@@ -70,7 +70,7 @@ import { computeDigest } from "./analytics.js"
 import { recordsSince } from "./api.js"
 import { DigestScheduler } from "./digest.js"
 import { HostKillSwitch } from "./kill.js"
-import { DpapiProtector, PlainProtector, type Protector } from "./relay/protector.js"
+import { platformProtector, type Protector } from "./relay/protector.js"
 import { PhoneService } from "./relay/service.js"
 import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
@@ -478,8 +478,7 @@ export function createHost(opts: HostOptions = {}): Host {
 
   const phoneStore = new PhoneStore(
     path.join(gatehouseDataDir(env), "phone.json"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+    opts.phoneProtector ?? platformProtector(),
   )
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
@@ -512,8 +511,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // Slack through Socket Mode: outbound only. Its tokens are kept with the same protection as the phone keys.
   const slackSecrets = new SlackSecretStore(
     path.join(gatehouseDataDir(env), "slack.sealed"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+    opts.phoneProtector ?? platformProtector(),
   )
   const slack = new SlackChannel({
     broker,
@@ -545,8 +543,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const installDir = env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined
   const updateToken = new UpdateTokenStore(
     path.join(gatehouseDataDir(env), "update-token.sealed"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+    opts.phoneProtector ?? platformProtector(),
   )
   // Test hooks only: a local stand-in for GitHub and the key its releases are signed with. Both must be set.
   const testBase = env.GATEHOUSE_UPDATE_BASE

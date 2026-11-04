@@ -10,6 +10,7 @@ import {
   gatehouseDataDir,
   listCheckpoints,
   loadConfig,
+  managedPolicyDir,
   unknownConfigKeys,
   safeSegment,
 } from "../src/node/index.js"
@@ -54,6 +55,20 @@ describe("data directory and config", () => {
     expect(auditDir({ LOCALAPPDATA: "C:/L" })).toBe(path.join("C:/L", "Gatehouse", "audit"))
     expect(auditDir({ GATEHOUSE_AUDIT_DIR: "E:/a" })).toBe("E:/a")
     expect(gatehouseDataDir({}).endsWith("Gatehouse")).toBe(true)
+  })
+
+  it("keeps a Mac's data in Application Support, and its managed policy where only an administrator writes", () => {
+    expect(gatehouseDataDir({ HOME: "/Users/me" }, "darwin")).toBe(
+      path.join("/Users/me", "Library", "Application Support", "Gatehouse"),
+    )
+    expect(gatehouseDataDir({ GATEHOUSE_DATA_DIR: "/tmp/x", HOME: "/Users/me" }, "darwin")).toBe(
+      "/tmp/x",
+    )
+    expect(managedPolicyDir({}, "darwin")).toBe("/Library/Application Support/Codehouse/managed")
+    expect(managedPolicyDir({ GATEHOUSE_MANAGED_DIR: "/tmp/m" }, "darwin")).toBe("/tmp/m")
+    expect(managedPolicyDir({ ProgramData: "C:/PD" }, "win32")).toBe(
+      path.join("C:/PD", "Codehouse", "managed"),
+    )
   })
 
   it("gives defaults when there is no config file and rejects an invalid one", () => {
