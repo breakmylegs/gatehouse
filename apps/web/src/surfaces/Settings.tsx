@@ -1,6 +1,11 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
-import { AppearancePanel, GoTo, UsageLimitsPanel } from "../components/SettingsPanels"
+import {
+  AppearancePanel,
+  GoTo,
+  NotifyKindsSetting,
+  UsageLimitsPanel,
+} from "../components/SettingsPanels"
 import { TempFilesPanel } from "../components/TempFilesPanel"
 import { QuickKeyPanel } from "../components/QuickKeyPanel"
 import { VoiceSetting } from "../components/VoiceButton"
@@ -1151,6 +1156,7 @@ export function Settings() {
                 />
                 Show a browser notification when a decision is waiting
               </label>
+              <NotifyKindsSetting on={notify} />
               <p className="m-0 text-xs text-mut">
                 The notification never shows the command or file names. This choice applies to this
                 browser only.

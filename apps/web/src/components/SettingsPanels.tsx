@@ -8,6 +8,7 @@ import {
   saveAppearance,
   type Appearance,
 } from "../lib/appearance"
+import { readKinds, saveKinds, type NotifyKinds } from "../lib/notifyKinds"
 import { useNow } from "../lib/useNow"
 import { useStore } from "../store"
 import { ago, money, PLAN_HIGH, readPlan, resets, type PlanUsage } from "./PlanMeter"
@@ -172,6 +173,46 @@ export function AppearancePanel() {
           </select>
         )}
       </Row>
+    </div>
+  )
+}
+
+/** Which Windows notifications you get, each on its own; they need notifications on above. */
+export function NotifyKindsSetting({ on }: { on: boolean }) {
+  const [k, setK] = useState<NotifyKinds>(readKinds)
+  const set = (patch: Partial<NotifyKinds>) => {
+    const next = { ...k, ...patch }
+    setK(next)
+    saveKinds(next)
+  }
+  const box = (key: keyof NotifyKinds, label: string, help: string) => (
+    <label className="flex items-start gap-2 pl-6">
+      <input
+        type="checkbox"
+        className="mt-1"
+        disabled={!on}
+        checked={k[key]}
+        onChange={(e) => set({ [key]: e.target.checked })}
+      />
+      <span className="grid">
+        <span>{label}</span>
+        <span className="text-xs text-mut">{help}</span>
+      </span>
+    </label>
+  )
+  return (
+    <div className="grid gap-1.5" role="group" aria-label="Which notifications">
+      {box(
+        "requests",
+        "Requests that need you",
+        "An action, a question or a plan waiting on your decision.",
+      )}
+      {box(
+        "completions",
+        "Response completions",
+        "When a reply that took a while finishes and Codehouse is not in front. Useful for long tasks.",
+      )}
+      {box("queueEmpty", "Build queue empty", "When a session says its build queue is empty.")}
     </div>
   )
 }

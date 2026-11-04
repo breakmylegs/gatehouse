@@ -1,3 +1,4 @@
+import { readKinds, worthTelling } from "./lib/notifyKinds"
 import { readInit, type SessionMeta } from "./lib/sessionMeta"
 import type { UpdateStatus } from "./lib/update"
 import type {
@@ -490,14 +491,21 @@ export const useStore = create<State>((set, get) => ({
         })
         // A partial message changes nothing in the transcript itself.
         if ((e.message as { type?: unknown } | null)?.type === "stream_event") return
-        const done = e.message as { type?: unknown; is_error?: unknown; subtype?: unknown } | null
-        if (done?.type === "result")
+        const done = e.message as {
+          type?: unknown
+          is_error?: unknown
+          subtype?: unknown
+          duration_ms?: unknown
+        } | null
+        if (done?.type === "result") {
           notice(
             e.sessionId,
             done.is_error === true || String(done.subtype ?? "").startsWith("error")
               ? "A turn ended with an error."
               : "A turn finished.",
           )
+          finished(e.sessionId, done.duration_ms, get())
+        }
         set((s) => ({
           transcripts: {
             ...s.transcripts,
@@ -806,6 +814,29 @@ const shown = new Map<string, Notification>()
  * A session says its build queue is empty (owner, 3 Nov): a toast, a line in Notices and, when notifications are on,
  * one from Windows, which opens the session. Only the session's name goes in it, as for a request.
  */
+/**
+ * A reply that took a while finished while you were elsewhere (owner, 4 Nov, after Claude's desktop app): a Windows
+ * notification, when notifications and this kind are on. Only the session's name goes in it.
+ */
+function finished(sessionId: string, durationMs: unknown, s: State): void {
+  if (!s.notify || !readKinds().completions) return
+  if (typeof document === "undefined" || !worthTelling(durationMs, document.hasFocus())) return
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return
+  const info = s.sessions[sessionId]
+  const name = info ? (info.title ?? info.project) : "A session"
+  const n = new Notification("Codehouse", {
+    body: `${name}: Claude has finished`,
+    tag: `done-${sessionId}`,
+  })
+  n.onclick = () => {
+    window.focus()
+    const st = useStore.getState()
+    st.selectSession(sessionId)
+    st.setRoute("workspace")
+    n.close()
+  }
+}
+
 function queueEmpty(sessionId: string, s: State): void {
   const info = s.sessions[sessionId]
   const name = info ? (info.title ?? info.project) : "A session"
@@ -817,7 +848,12 @@ function queueEmpty(sessionId: string, s: State): void {
   notice(sessionId, "the build queue is empty.")
   toast(`${name}: the build queue is empty`, { action: { label: "Open", onClick: open } })
   tellShell("attention")
-  if (s.notify && typeof Notification !== "undefined" && Notification.permission === "granted") {
+  if (
+    s.notify &&
+    readKinds().queueEmpty &&
+    typeof Notification !== "undefined" &&
+    Notification.permission === "granted"
+  ) {
     const n = new Notification("Codehouse", {
       body: `${name}: the build queue is empty`,
       tag: `queue-${sessionId}`,
@@ -842,7 +878,12 @@ function announce(v: PendingView, s: State): void {
   toast(`${what} in ${project} needs you`, {
     action: { label: "Open", onClick: () => useStore.getState().selectRequest(v.request.id) },
   })
-  if (s.notify && typeof Notification !== "undefined" && Notification.permission === "granted") {
+  if (
+    s.notify &&
+    readKinds().requests &&
+    typeof Notification !== "undefined" &&
+    Notification.permission === "granted"
+  ) {
     // Detail stays out of the notification: it can show on a locked screen or be mirrored.
     const n = new Notification("Codehouse", {
       body: `${what} needs your decision`,
