@@ -1,3 +1,4 @@
+import { useAppearance } from "./components/SettingsPanels"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { Toaster } from "sonner"
 import { Announcer } from "./components/Announcer"
@@ -108,6 +109,8 @@ export function App() {
 
   // In the Codehouse window: the quick prompt's shortcut, and what the quick prompt sent (W1-15).
   useEffect(() => startShell(), [])
+  // Settings, General, Appearance: width, code font and size, and movement (owner, 4 Nov).
+  useAppearance()
 
   // First launch: the setup wizard, once. It can be run again from Settings.
   useEffect(() => {

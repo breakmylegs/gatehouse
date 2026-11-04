@@ -62,7 +62,7 @@ export function mergePlan(prev: PlanUsage | null, next: PlanUsage | null): PlanU
 /** For tests: forget what was read. */
 export const forgetPlan = () => cache.clear()
 
-function resets(iso: string | undefined, now: number): string | undefined {
+export function resets(iso: string | undefined, now: number): string | undefined {
   if (!iso) return undefined
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return undefined
@@ -72,7 +72,7 @@ function resets(iso: string | undefined, now: number): string | undefined {
     : `Resets ${d.toLocaleDateString("en-GB", { weekday: "short" })} ${time}`
 }
 
-const money = (n: number, currency: string) =>
+export const money = (n: number, currency: string) =>
   n.toLocaleString("en-GB", {
     style: "currency",
     currency,
@@ -80,7 +80,7 @@ const money = (n: number, currency: string) =>
     minimumFractionDigits: 2,
   })
 
-function ago(iso: string, now: number): string {
+export function ago(iso: string, now: number): string {
   const min = Math.round((now - new Date(iso).getTime()) / 60_000)
   return min < 1 ? "just now" : min === 1 ? "a minute ago" : `${min} minutes ago`
 }

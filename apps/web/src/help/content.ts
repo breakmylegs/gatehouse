@@ -370,6 +370,12 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
     title: "Settings",
     body: `Settings are saved on this computer, as you change them: a switch or a choice at once, a typed box when you leave it or press Enter. A short message confirms each save, or says what was wrong.
 
+The sections come in three groups. **Preferences**: General, Account and plan, Privacy, Usage, Capabilities, Sessions, Phone and notifications. **This computer**: System, Updates, Developer. **Customize**: Skills, Connectors, Plugins, each a way to the page that holds them.
+
+**Appearance** (General) sets the theme (or following Windows), the text size and detail a conversation opens at until you change that pane, how wide a conversation runs, whether movement is reduced, and the font and size for code, files, diffs and command output. These are kept in this window only.
+
+**Your usage limits** (Usage) shows how much of your plan's 5-hour and weekly limits is used and when each resets, as the ring beside the prompt box does, with Refresh and a way to the Usage page.
+
 **Instructions for every session** (Sessions) are your own words that every new session is told at its start, ahead of its project's and its own. They apply to sessions started after you save.
 
 **Quick prompt** (General) is a small window over whatever you are doing, opened by a shortcut (Ctrl+Alt+Space until you change it) or from the tray menu. Type and press Enter to start a chat, or choose the coding session you started last to message it; the main window then opens there. Esc puts it away and gives the focus back to the program you were in. If another program already uses the shortcut you type, the one before stays and three free ones are offered. It is part of the Codehouse window, so a browser has no shortcut.

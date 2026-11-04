@@ -707,7 +707,7 @@ function SessionPane({
               const itemAt = (index: number, it: (typeof shownItems)[number]) => (
                 <div
                   className={clsx(
-                    "pane-item mx-auto max-w-[860px]",
+                    "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
                     hitSet.has(index) && "find-hit",
                     index === current && "find-current",
                   )}
@@ -734,7 +734,7 @@ function SessionPane({
                   aria-label="Conversation"
                 >
                   {shownItems.length === 0 ? (
-                    <li className="mx-auto max-w-[860px] p-6 text-mut">
+                    <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
                       Nothing yet. Write a prompt below to start the work.
                     </li>
                   ) : null}
@@ -763,7 +763,7 @@ function SessionPane({
                   itemContent={itemAt}
                   components={{
                     EmptyPlaceholder: () => (
-                      <p className="mx-auto max-w-[860px] p-6 text-mut">
+                      <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
                         Nothing yet. Write a prompt below to start the work.
                       </p>
                     ),

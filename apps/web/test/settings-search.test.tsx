@@ -55,13 +55,26 @@ describe("Settings in sections", () => {
   it("opens on General, shows one section at a time, and keeps the one you left it on", async () => {
     const { unmount } = render(<Settings />)
     const list = await nav()
+    // Grouped as in Claude's desktop app (owner, 4 Nov): Preferences, This computer, Customize.
+    expect(list.getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual([
+      "Preferences",
+      "This computer",
+      "Customize",
+    ])
     expect(list.getAllByRole("button").map((b) => b.textContent)).toEqual([
       "General",
       "Account and plan",
+      "Privacy",
+      "Usage",
+      "Capabilities",
       "Sessions",
       "Phone and notifications",
-      "Privacy",
+      "System",
       "Updates",
+      "Developer",
+      "Skills",
+      "Connectors",
+      "Plugins",
     ])
     expect(list.getByRole("button", { name: "General" }).getAttribute("aria-current")).toBe("page")
     expect(group("Setup")).toBeTruthy()
@@ -83,10 +96,17 @@ describe("Settings in sections", () => {
     for (const name of [
       "General",
       "Account and plan",
+      "Privacy",
+      "Usage",
+      "Capabilities",
       "Sessions",
       "Phone and notifications",
-      "Privacy",
+      "System",
       "Updates",
+      "Developer",
+      "Skills",
+      "Connectors",
+      "Plugins",
     ]) {
       await open(name)
       for (const g of screen.getAllByRole("group"))
@@ -102,6 +122,15 @@ describe("Settings in sections", () => {
       "Updates",
       "Setup",
       "Notifications",
+      "Appearance",
+      "Your usage limits",
+      "Memory",
+      "Quick prompt",
+      "Temporary files",
+      "Telemetry",
+      "Local MCP servers",
+      "Skills",
+      "Plugins",
     ])
       expect(
         [...seen].some((t) => t.startsWith(title)),

@@ -1,3 +1,5 @@
+import { readAppearance } from "./appearance"
+
 /**
  * How one session's conversation is shown: its text size and how close the messages sit (owner, 31 Oct, O5). Kept per
  * session, by its id, which a restart or an update keeps, so each pane comes back as you left it.
@@ -21,33 +23,38 @@ export const SIZES = [90, 100, 115, 130] as const
 
 export const DEFAULT_VIEW: PaneView = { size: 100, density: "comfortable", detail: "normal" }
 
+/** How a pane opens until you change it: the text size and detail chosen in Settings, General, Appearance. */
+export function defaultView(): PaneView {
+  const a = readAppearance()
+  return { size: a.textSize, density: "comfortable", detail: a.detail }
+}
+
 const key = (sessionId: string) => `gatehouse.pane.${sessionId}`
 
 /** What was kept for this session, or the usual look. Anything unreadable is the usual look. */
 export function readPaneView(sessionId: string): PaneView {
+  const base = defaultView()
   try {
     const v = JSON.parse(localStorage.getItem(key(sessionId)) ?? "null") as Partial<PaneView> | null
     return {
-      size: SIZES.includes(v?.size as (typeof SIZES)[number])
-        ? (v!.size as number)
-        : DEFAULT_VIEW.size,
+      size: SIZES.includes(v?.size as (typeof SIZES)[number]) ? (v!.size as number) : base.size,
       density: v?.density === "compact" ? "compact" : "comfortable",
       // Kept by a newer version; an older one never wrote it and reads the rest as before.
-      detail: v?.detail === "summary" || v?.detail === "verbose" ? v.detail : "normal",
+      detail:
+        v?.detail === "summary" || v?.detail === "verbose" || v?.detail === "normal"
+          ? v.detail
+          : base.detail,
     }
   } catch {
-    return DEFAULT_VIEW
+    return base
   }
 }
 
 export function savePaneView(sessionId: string, view: PaneView): void {
   try {
     // The usual look is not stored, so a session you never changed leaves nothing behind.
-    if (
-      view.size === DEFAULT_VIEW.size &&
-      view.density === DEFAULT_VIEW.density &&
-      view.detail === DEFAULT_VIEW.detail
-    )
+    const base = defaultView()
+    if (view.size === base.size && view.density === base.density && view.detail === base.detail)
       localStorage.removeItem(key(sessionId))
     else localStorage.setItem(key(sessionId), JSON.stringify(view))
   } catch {

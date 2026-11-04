@@ -610,6 +610,23 @@ mark.seg {
   }
 }
 
+/* Settings, Appearance, Motion: Reduce turns movement off whatever Windows says (owner, 4 Nov). */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+/* Settings, Appearance, Code font size: code blocks, open files, diffs and command output. */
+:root[data-code-size] pre,
+:root[data-code-size] code,
+:root[data-code-size] .cm-editor,
+:root[data-code-size] .terminal-output {
+  font-size: var(--code-size) !important;
+}
+
 /* A session's code and its ribbon colour, like a flight number. */
 .code {
   display: inline-flex;
@@ -2374,6 +2391,20 @@ li[data-resuming] {
 }
 
 /* Settings: the list of sections beside the settings (W1-04). */
+.settings-nav-heading {
+  margin: 10px 0 2px;
+  padding: 0 10px;
+  color: var(--c-mut);
+  font: 600 11.5px var(--font-sign);
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--c-line);
+}
 .settings-nav button {
   display: flex;
   align-items: center;
