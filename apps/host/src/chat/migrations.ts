@@ -102,6 +102,12 @@ export const MIGRATIONS: readonly string[] = [
 
   CREATE VIRTUAL TABLE message_fts USING fts5(text, message_id UNINDEXED, conversation_id UNINDEXED);
   `,
+  // 2 (CH-03, ADR 0015): the SDK session each message belongs to, so a branch can be resumed where it ends.
+  `
+  ALTER TABLE message ADD COLUMN sdk_session_id TEXT;
+  CREATE INDEX message_sdk_uuid ON message(sdk_uuid);
+  CREATE INDEX message_sdk_session ON message(sdk_session_id, seq);
+  `,
 ]
 
 export class ChatSchemaError extends Error {}

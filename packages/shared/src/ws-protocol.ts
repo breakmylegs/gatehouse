@@ -63,6 +63,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
       .optional(),
     /** With resume and fork: carry on from this message of the conversation (Retry and Edit). */
     resumeAt: z.string().max(100).optional(),
+    /** The session this one replaces in its pane (Retry and Edit), so Chat keeps both as branches. */
+    replaces: Id.optional(),
     /** Start in a new git worktree of the repository cwd is in (B10), from a branch, tag or commit. */
     worktree: z.object({ base: z.string().max(100).optional() }).optional(),
   }),

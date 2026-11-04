@@ -19,6 +19,8 @@ import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
 import { findCodehouseHelper } from "./win-helper.js"
+import { ChatStore } from "./chat/db.js"
+import { ChatRecorder } from "./chat/recorder.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -447,6 +449,19 @@ export function createHost(opts: HostOptions = {}): Host {
     if (exe) deps.limiter = limiter(exe)
   }
   manager = new SessionManager(deps)
+  // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
+  const chatStore = new ChatStore({
+    file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
+    redact: (v) => redact(v, { terms: config.redactTerms }),
+  })
+  const chatRecorder = new ChatRecorder(chatStore, (id) => manager.get(id)?.info(), log)
+  manager.on("prompted", ({ sessionId, text }) => chatRecorder.prompted(sessionId, text))
+  manager.on("message", ({ sessionId, message }) =>
+    chatRecorder.message(sessionId, message as unknown as Record<string, unknown>),
+  )
+  manager.on("session", (info) => {
+    if (info.state === "ended") chatRecorder.closed(info.id)
+  })
   // Pauses every session at 95% of the plan's 5-hour limit and starts them again when it resets (owner, 31 Oct).
   const limitPauser = new LimitPauser({
     sessions: () => manager.liveSessions(),
@@ -849,6 +864,7 @@ export function createHost(opts: HostOptions = {}): Host {
       ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
       sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
+      chat: { store: chatStore, recorder: chatRecorder },
       projects,
       memory,
       routines,

@@ -240,6 +240,8 @@ export interface SessionInfo {
   localLabel?: string
   /** A fork from a point: its earlier conversation is shown up to this message only. */
   historyUntil?: string
+  /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
+  replaces?: string
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
@@ -269,6 +271,8 @@ export interface SessionEvents {
   ]
   /** Its Claude Code process crashed (not a stop Codehouse made), and whether it was working then. */
   crashed: [{ wasRunning: boolean; message: string }]
+  /** You sent a message. For the Host only (Chat's store, CH-03): it goes to no screen and no phone. */
+  prompted: [string]
 }
 
 /**
@@ -393,6 +397,8 @@ export interface StartSessionOptions {
   localModel?: string
   /** With resume and fork: carry on from this message (its uuid), for Retry and Edit. */
   resumeAt?: string
+  /** The session this one replaces in its pane (Retry and Edit). */
+  replaces?: string
   /** Start in a new git worktree of the repository cwd is in, from this base (its current commit when absent). */
   worktree?: { base?: string }
   /** The worktree it works in, once made (set by the manager, not the screen). */
@@ -576,6 +582,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#error !== undefined ? { error: this.#error } : {}),
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
       ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
+      ...(this.#opts.replaces !== undefined ? { replaces: this.#opts.replaces } : {}),
       ...(this.#opts.inWorktree ? { worktree: this.#opts.inWorktree } : {}),
       ...(this.#opts.restore
         ? {
@@ -1041,6 +1048,7 @@ export class Session extends EventEmitter<SessionEvents> {
   prompt(text: string): void {
     this.#syncKnowledge()
     this.#send(text)
+    this.emit("prompted", text)
     this.#carry.started(this.#lastCost)
     // Your own message is you starting it again; the pause is over.
     if (this.#paused) void this.#endPause("you")
@@ -1467,6 +1475,8 @@ export interface ManagerEvents {
   session: [SessionInfo]
   message: [{ sessionId: string; message: SDKMessage }]
   event: [{ sessionId: string; type: string; data: Record<string, unknown> }]
+  /** You sent a message in a session (Host only). */
+  prompted: [{ sessionId: string; text: string }]
 }
 
 /** A chat's name from what was said first: one line, at most 80 characters. */
@@ -1754,6 +1764,9 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     })
     session.on("event", (e) => {
       if (!hidden()) this.emit("event", { sessionId: session.id, type: e.type, data: e.data })
+    })
+    session.on("prompted", (text) => {
+      if (!hidden()) this.emit("prompted", { sessionId: session.id, text })
     })
     session.on("crashed", (c) => {
       if (hidden()) void this.#dropWarm("its Claude Code stopped")

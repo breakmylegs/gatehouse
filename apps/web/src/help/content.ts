@@ -75,7 +75,7 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.
 
-**Retry and Edit** on any of your messages carry the conversation on from just before it: **Retry** sends the same words again, **Edit** lets you change them in place (Enter sends, Esc cancels). The new version takes the old one's place, and the old one is kept under Earlier sessions. Wait for Claude to finish first, or stop it. In a coding session, files changed after that point stay as they are.
+**Retry and Edit** on any of your messages carry the conversation on from just before it: **Retry** sends the same words again, **Edit** lets you change them in place (Enter sends, Esc cancels). The new version takes the old one's place. In a chat nothing is lost: the message shows arrows, ‹ 2 of 3 ›, to move between its versions, and each version carries on from where it left off. In a coding session the old one is kept under Earlier sessions. Wait for Claude to finish first, or stop it. In a coding session, files changed after that point stay as they are.
 
 **Find in this conversation**: press Ctrl+F in a session to find words in what was said, including commands, file paths and tool output. It says how many lines match and outlines the one shown; Enter goes to the next, Shift+Enter to the one before, and Esc closes it and puts you back in the prompt box.
 

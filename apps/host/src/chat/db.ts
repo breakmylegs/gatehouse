@@ -60,6 +60,8 @@ export interface Message {
   /** How many pieces of text redaction changed before this was stored. */
   redactions: number
   sdkUuid: string | null
+  /** The SDK session (the branch) it belongs to. */
+  sdkSessionId: string | null
 }
 
 export interface NewMessage {
@@ -69,6 +71,7 @@ export interface NewMessage {
   provider?: string
   model?: string
   sdkUuid?: string
+  sdkSessionId?: string
   raw?: unknown
   createdAt?: string
 }
@@ -117,6 +120,7 @@ interface MessageRow {
   blocks_json: string
   redactions: number
   sdk_uuid: string | null
+  sdk_session_id: string | null
 }
 
 /** How many strings differ between a value and its redacted copy. */
@@ -179,6 +183,7 @@ const toMessage = (r: MessageRow): Message => ({
   blocks: JSON.parse(r.blocks_json) as ContentBlock[],
   redactions: r.redactions,
   sdkUuid: r.sdk_uuid,
+  sdkSessionId: r.sdk_session_id,
 })
 
 export class ChatStore {
@@ -299,8 +304,8 @@ export class ChatStore {
       ).n
       this.#db
         .prepare(
-          `INSERT INTO message (id, conversation_id, parent_id, seq, role, created_at, provider, model, blocks_json, redactions, raw_json, sdk_uuid)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO message (id, conversation_id, parent_id, seq, role, created_at, provider, model, blocks_json, redactions, raw_json, sdk_uuid, sdk_session_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           id,
@@ -315,6 +320,7 @@ export class ChatStore {
           changedStrings(m.blocks, blocks),
           m.raw === undefined ? null : JSON.stringify(this.#redact(m.raw)),
           m.sdkUuid ?? null,
+          m.sdkSessionId ?? null,
         )
       const text = searchText(blocks)
       if (text)
@@ -332,6 +338,27 @@ export class ChatStore {
     const r = this.#db.prepare("SELECT * FROM message WHERE id = ?").get(id) as
       MessageRow | undefined
     return r ? toMessage(r) : undefined
+  }
+
+  /** The message an SDK message id belongs to: where a fork made at that point carries on from. */
+  bySdkUuid(uuid: string): Message | undefined {
+    const r = this.#db
+      .prepare("SELECT * FROM message WHERE sdk_uuid = ? ORDER BY seq DESC LIMIT 1")
+      .get(uuid) as MessageRow | undefined
+    return r ? toMessage(r) : undefined
+  }
+
+  /** The newest message of an SDK session: where a session brought back after a restart carries on. */
+  lastInSdkSession(sdkSessionId: string): Message | undefined {
+    const r = this.#db
+      .prepare("SELECT * FROM message WHERE sdk_session_id = ? ORDER BY seq DESC LIMIT 1")
+      .get(sdkSessionId) as MessageRow | undefined
+    return r ? toMessage(r) : undefined
+  }
+
+  /** One message by its id. */
+  message(id: string): Message | undefined {
+    return this.#message(id)
   }
 
   messages(conversationId: string): Message[] {

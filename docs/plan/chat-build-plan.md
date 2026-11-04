@@ -110,7 +110,8 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 
 - CH-01 guardrails: done 4 Nov (commit ab7b882, released in 2.0.79).
 - CH-02 data model: done 4 Nov (ADR 0013, ADR 0015).
-- Next: CH-03, native chat on the store.
+- CH-03 native chat: in progress. Done 4 Nov: every chat recorded into the store, and the versions navigator (‹ 2 of 3 ›) for Retry and Edit.
+- Next in CH-03: the outputs folder with its Approver rules, the sidebar from the store, artifact views, memory as injected.
 
 ## 8. Owner decision (4 Nov 2026)
 

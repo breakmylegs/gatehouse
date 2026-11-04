@@ -2073,6 +2073,25 @@ main[data-rail="hidden"] {
   display: inline;
   margin: 0 0 0 4px;
 }
+/* CH-03: the other versions of a chat message, "‹ 2 of 3 ›", before its other actions. */
+.branch-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: 6px;
+  color: var(--c-mut);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.branch-nav .copy-btn {
+  min-width: 24px;
+  justify-content: center;
+  font-size: 15px;
+}
+.branch-nav .copy-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 .code-block {
   margin: 0.5em 0;
   border: 1px solid var(--c-line);

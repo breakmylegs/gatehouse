@@ -1,3 +1,4 @@
+import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
   type PendingView,
@@ -342,6 +343,14 @@ function SessionPane({
           : transcript.items,
       ),
     [transcript.items, view.detail, keepIds],
+  )
+  // CH-03: the versions of each of your messages in a chat, for the "2 of 3" arrows.
+  const isChat = session?.kind === "chat"
+  const branchSteps = useBranchSteps(
+    session?.id ?? "",
+    isChat,
+    session?.state ?? "",
+    isChat ? transcript.items.filter((i) => i.kind === "user" && !i.queued).map((i) => i.id) : [],
   )
   // Owner, 31 Oct: a quick way back to the latest, and a resumed or restarted session opens at its latest.
   const scroller = useRef<VirtuosoHandle>(null)
@@ -702,75 +711,77 @@ function SessionPane({
                 onClose={closeFind}
               />
             ) : null}
-            {(() => {
-              // One message as drawn in either list.
-              const itemAt = (index: number, it: (typeof shownItems)[number]) => (
-                <div
-                  className={clsx(
-                    "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
-                    hitSet.has(index) && "find-hit",
-                    index === current && "find-current",
-                  )}
-                >
-                  {it.kind === "group" ? (
-                    <ToolGroup
-                      tools={it.tools}
-                      onOpenArtifact={openArtifacts}
-                      onOpenFile={(file) => {
-                        // A file outside the folder opens by its full path; the Host lets the pane read it only if
-                        // this session wrote or edited it (owner, 4 Nov).
-                        setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
-                      }}
-                    />
-                  ) : (
-                    <ItemView item={it} sessionId={session.id} />
-                  )}
-                </div>
-              )
-              return screenReader ? (
-                // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
-                <ol
-                  className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
-                  aria-label="Conversation"
-                >
-                  {shownItems.length === 0 ? (
-                    <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
-                      Nothing yet. Write a prompt below to start the work.
-                    </li>
-                  ) : null}
-                  {shownItems.map((it, index) => (
-                    <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
-                  ))}
-                </ol>
-              ) : (
-                <Virtuoso
-                  ref={scroller}
-                  style={{ height: "100%" }}
-                  data={shownItems}
-                  followOutput="smooth"
-                  atBottomThreshold={80}
-                  atBottomStateChange={(b) => {
-                    following.current = b
-                    setAtEnd(b)
-                  }}
-                  // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
-                  // unless you have scrolled up to read.
-                  totalListHeightChanged={() => {
-                    if (following.current) toLatest()
-                  }}
-                  initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
-                  computeItemKey={(_, it) => `${view.detail}:${it.id}`}
-                  itemContent={itemAt}
-                  components={{
-                    EmptyPlaceholder: () => (
-                      <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+            <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
+              {(() => {
+                // One message as drawn in either list.
+                const itemAt = (index: number, it: (typeof shownItems)[number]) => (
+                  <div
+                    className={clsx(
+                      "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
+                      hitSet.has(index) && "find-hit",
+                      index === current && "find-current",
+                    )}
+                  >
+                    {it.kind === "group" ? (
+                      <ToolGroup
+                        tools={it.tools}
+                        onOpenArtifact={openArtifacts}
+                        onOpenFile={(file) => {
+                          // A file outside the folder opens by its full path; the Host lets the pane read it only if
+                          // this session wrote or edited it (owner, 4 Nov).
+                          setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
+                        }}
+                      />
+                    ) : (
+                      <ItemView item={it} sessionId={session.id} />
+                    )}
+                  </div>
+                )
+                return screenReader ? (
+                  // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
+                  <ol
+                    className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
+                    aria-label="Conversation"
+                  >
+                    {shownItems.length === 0 ? (
+                      <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
                         Nothing yet. Write a prompt below to start the work.
-                      </p>
-                    ),
-                  }}
-                />
-              )
-            })()}
+                      </li>
+                    ) : null}
+                    {shownItems.map((it, index) => (
+                      <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <Virtuoso
+                    ref={scroller}
+                    style={{ height: "100%" }}
+                    data={shownItems}
+                    followOutput="smooth"
+                    atBottomThreshold={80}
+                    atBottomStateChange={(b) => {
+                      following.current = b
+                      setAtEnd(b)
+                    }}
+                    // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
+                    // unless you have scrolled up to read.
+                    totalListHeightChanged={() => {
+                      if (following.current) toLatest()
+                    }}
+                    initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
+                    computeItemKey={(_, it) => `${view.detail}:${it.id}`}
+                    itemContent={itemAt}
+                    components={{
+                      EmptyPlaceholder: () => (
+                        <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+                          Nothing yet. Write a prompt below to start the work.
+                        </p>
+                      ),
+                    }}
+                  />
+                )
+              })()}
+            </BranchSteps.Provider>
             {atEnd || shownItems.length === 0 ? null : (
               <button
                 type="button"
@@ -2167,8 +2178,11 @@ function UserMessage({
   images,
   sessionId,
   point,
+  itemId,
 }: {
   text: string
+  /** The item it is on screen, for its versions (CH-03). */
+  itemId?: string
   images?: Shown[]
   sessionId?: string
   /** Where Retry and Edit carry on from. */
@@ -2255,6 +2269,7 @@ function UserMessage({
       ) : null}
       {text ? (
         <div className="msg-actions">
+          {itemId ? <BranchNav itemId={itemId} /> : null}
           <CopyButton text={text} what="your message" />
           {sessionId && canFork && point ? (
             <button
@@ -2374,6 +2389,7 @@ export const ItemView = memo(function ItemView({
             text={item.text}
             images={item.images}
             sessionId={sessionId}
+            itemId={item.id}
             point={{
               ...(item.before ? { before: item.before } : {}),
               ...(item.first ? { first: true } : {}),

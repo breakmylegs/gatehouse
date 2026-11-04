@@ -11,6 +11,7 @@ import { registerEvalRoutes, type PluginEvaluator } from "./plugin-eval.js"
 import type { NtfySecretStore } from "./push/ntfy.js"
 import { registerDoctorRoutes } from "./doctor.js"
 import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
+import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -99,6 +100,8 @@ export interface AdminContext {
   marketplace?: Marketplace
   /** The token or password for an ntfy server that needs a sign-in, sealed. */
   ntfySecrets?: NtfySecretStore
+  /** Chat's own store and what records into it (CH-03). */
+  chat?: ChatDeps
   /** B39: plugin evaluations, with and without a plugin, in Plan mode. */
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
@@ -497,6 +500,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerDoctorRoutes(app, ctx)
   registerWorktreeRoutes(app, ctx)
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
+  if (ctx.chat) registerChatRoutes(app, ctx.chat)
   registerProviderRoutes(app, {
     audit: ctx.audit,
     config: ctx.config,
