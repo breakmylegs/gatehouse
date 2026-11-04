@@ -702,6 +702,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const hookDeps: SessionHookDeps = {
       sessionId: this.id,
       cwd: this.cwd,
+      sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
       policy: d.policy,
       pwsh: d.pwsh,
       audit: d.audit,
@@ -730,6 +731,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const canUse = createCanUseTool({
       sessionId: this.id,
       cwd: this.cwd,
+      sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
       project: this.project,
       approver: d.approver,
       broker: d.broker,

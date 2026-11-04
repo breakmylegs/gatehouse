@@ -249,6 +249,36 @@ describe("rule semantics", () => {
     expect((await e.evaluate(call, { ...ctx(), mcpSource: "user" })).ruleId).toBe("mcp-external")
   })
 
+  it("applies a rule for chats only in a chat, and counts a call that does not say as a coding session (CH-03)", async () => {
+    const e = engineFor(rulesDoc())
+    const chat = { ...ctx(), sessionKind: "chat" as const }
+    for (const call of [
+      bash("git status"),
+      { toolName: "PowerShell", input: { command: "Get-ChildItem" } },
+      { toolName: "Write", input: { file_path: `${fwd(fx.ws)}/src/a.ts`, content: "x" } },
+      { toolName: "Edit", input: { file_path: `${fwd(fx.ws)}/src/a.ts`, old_string: "a", new_string: "b" } },
+    ])
+      expect(await e.evaluate(call, chat), call.toolName).toMatchObject({
+        outcome: "deny",
+        ruleId: "chat-no-shell",
+      })
+    expect((await e.evaluate(bash("git status"), ctx())).ruleId).toBe("safe-shell")
+    expect((await e.evaluate(bash("git status"), { ...ctx(), sessionKind: "code" })).ruleId).toBe(
+      "safe-shell",
+    )
+    // Reading is still judged as in any session.
+    const read = { toolName: "Read", input: { file_path: `${fwd(fx.ws)}/README.md` } }
+    expect((await e.evaluate(read, chat)).ruleId).toBe((await e.evaluate(read, ctx())).ruleId)
+    // A rule may be scoped to coding sessions too, and the schema refuses a kind it does not know.
+    const doc = rulesDoc()
+    doc.deny.push({ id: "code-only", tools: ["Read"], sessionKinds: ["code"] })
+    expect((await engineFor(doc).evaluate(read, chat)).ruleId).not.toBe("code-only")
+    expect((await engineFor(doc).evaluate(read, ctx())).ruleId).toBe("code-only")
+    const bad = rulesDoc()
+    bad.deny.push({ id: "odd", tools: ["Read"], sessionKinds: ["robot" as "chat"] })
+    expect(() => engineFor(bad)).toThrow(/sessionKinds/)
+  })
+
   it("needs a listed source for an allow rule that names one", async () => {
     const e = engineFor(rulesDoc())
     const call = { toolName: "mcp__companion__notify_user", input: {} }

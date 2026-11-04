@@ -27,6 +27,12 @@ deny:
   - id: destructive-shell
     commands: ["rm -rf /*", "rm -rf ~*", "Remove-Item * -Recurse -Force*", "format *", "diskpart*",
                "git push --force*", "git push -f*", "git reset --hard*", "git clean -fdx*"]
+  # A chat runs no command and changes no file (CH-03, ADR 0012). Its tool list has none of these; this is the second
+  # wall. A call that does not say which kind of session it is from counts as a coding session.
+  - id: chat-no-shell
+    tools: [Bash, PowerShell, BashOutput, KillShell, Write, Edit, MultiEdit, NotebookEdit]
+    sessionKinds: [chat]
+    message: "A chat cannot run commands or change files. Start a coding session for that."
 
 escalate:
   - { id: package-install, commands: ["npm install*", "npm i *", "pip install*", "winget*", "choco*"], risk: 70 }

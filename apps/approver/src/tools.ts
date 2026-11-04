@@ -48,6 +48,8 @@ export const EvaluateContext = z.object({
   toolUseId: z.string().max(200).optional(),
   /** `options.mcpServer.source` from the SDK, for mcp__ tools. */
   mcpSource: z.string().max(100).optional(),
+  /** A chat or a coding session (CH-03, ADR 0012). Absent: a coding session. */
+  sessionKind: z.enum(["code", "chat"]).optional(),
 })
 export type EvaluateContext = z.infer<typeof EvaluateContext>
 
@@ -84,6 +86,7 @@ export async function evaluateAndAudit(
         cwd: ctx.cwd,
         ...(ctx.projectRoot !== undefined ? { projectRoot: ctx.projectRoot } : {}),
         ...(ctx.mcpSource !== undefined ? { mcpSource: ctx.mcpSource } : {}),
+        ...(ctx.sessionKind !== undefined ? { sessionKind: ctx.sessionKind } : {}),
       })
   let judgeRationale: string | undefined
   if (verdict.outcome === "escalate") {

@@ -29,6 +29,11 @@ export interface Rule {
    * call only when its source is known and not in the list, so an unknown source is never favoured.
    */
   mcpSource?: string[]
+  /**
+   * The kinds of session it applies in (CH-03, ADR 0012). A call that does not say counts as a coding session, so a
+   * rule for chats never loosens or tightens anything in a coding session.
+   */
+  sessionKinds?: SessionKind[]
   everySegmentMustMatch?: boolean
   risk?: number
   message?: string
@@ -142,10 +147,15 @@ export interface ToolCall {
   input: Record<string, unknown>
 }
 
+/** A chat, or a coding session (CH-03, ADR 0012). */
+export type SessionKind = "code" | "chat"
+
 export interface EvalContext {
   cwd: string
   /** For `mcp__*` tools: the SDK's report of where the server came from (`options.mcpServer.source`). */
   mcpSource?: string
+  /** A chat or a coding session (CH-03). Absent: a coding session. */
+  sessionKind?: SessionKind
   /** Defaults to the git root of cwd. */
   projectRoot?: string
 }

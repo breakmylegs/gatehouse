@@ -86,6 +86,8 @@ export interface SessionHookDeps {
   /** The Approver, for the modes in which Claude Code would otherwise decide alone. */
   approver?: Pick<ApproverClient, "evaluate">
   projectRoot?: string
+  /** A chat or a coding session, for rules scoped to one (CH-03, ADR 0012). */
+  sessionKind?: "code" | "chat"
   /** The Approver's verdict by toolUseID, so canUseTool uses it instead of asking again (one decision, one record). */
   verdicts?: Map<string, Verdict>
   /** Session events for the UI: notification, stop, subagent start and stop. */
@@ -161,6 +163,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
             sessionId: deps.sessionId,
             toolUseId: input.tool_use_id,
             ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
+            ...(deps.sessionKind ? { sessionKind: deps.sessionKind } : {}),
             ...(input.mcp_server?.source !== undefined
               ? { mcpSource: input.mcp_server.source }
               : {}),
