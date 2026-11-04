@@ -69,6 +69,8 @@ describe("models on this computer", () => {
     fireEvent.change(screen.getByLabelText("What do you want to talk about?"), {
       target: { value: "Explain this repo" },
     })
+    // B19: its licence is shown first, and ticked.
+    fireEvent.click(await screen.findByRole("checkbox", { name: /I have read the licence/ }))
     fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
     await waitFor(() =>
       expect(sent[0]).toMatchObject({
