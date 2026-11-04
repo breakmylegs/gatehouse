@@ -43,6 +43,7 @@ import type { UsageStore } from "./usage.js"
 import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
 import { decideElicitation } from "./elicitation.js"
 import { readAgentsMd } from "./agents-md.js"
+import { Provenance } from "./provenance.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import {
   CARRY_ON_PROMPT,
@@ -462,6 +463,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
   #goal: string | undefined
+  /** B32: what this session read from outside, for the lifetime of its Claude Code. */
+  readonly #provenance = new Provenance()
   /** Its job object's name, unique to this start, for changing the limits while it runs. */
   readonly #job = `Local\\Codehouse-${uuidv7()}`
   /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
@@ -667,6 +670,7 @@ export class Session extends EventEmitter<SessionEvents> {
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,
+      provenance: this.#provenance,
       log: d.log,
       mode: () => this.#mode,
       approver: d.approver,
@@ -701,6 +705,7 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
       onDecision: this.#tellDecision,
+      provenance: this.#provenance,
       log: d.log,
     })
     const options: Options = {

@@ -1,3 +1,4 @@
+import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
@@ -15,6 +16,8 @@ import type { ApproverClient } from "./approver-client.js"
 import type { HostAudit } from "./hostaudit.js"
 
 export interface CanUseDeps {
+  /** B32: what the session read from outside, to catch a command copied from it. */
+  provenance?: Provenance
   /** Verdicts the PreToolUse hook already got from the Approver (Auto and Accept edits), used instead of asking again. */
   verdicts?: Map<string, Verdict>
   sessionId: string
@@ -161,7 +164,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
 
       const early = deps.verdicts?.get(toolUseID)
       deps.verdicts?.delete(toolUseID)
-      const verdict =
+      const judged =
         early ??
         (await deps.approver.evaluate(
           { toolName, input },
@@ -175,6 +178,8 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
               : {}),
           },
         ))
+      // B32: the hook already applied it to an early verdict; applying it again changes nothing.
+      const verdict = withProvenance(judged, toolName, input, deps.provenance)
       if (!early) deps.onDecision?.(toolUseID, verdict)
       if (verdict.outcome === "allow") return allow(input, toolUseID)
       if (verdict.outcome === "deny") {
@@ -213,6 +218,8 @@ export const PLAN_EDIT_TOOLS: ReadonlySet<string> = new Set([
  * an allow, because a failure must always end in a person or a denial (invariant 1).
  */
 export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
+  // B32: a command copied from a web page is always a person's decision.
+  TAINT_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

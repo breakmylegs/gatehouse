@@ -64,7 +64,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B29 | Test and build loop panel | todo | Test commands allow-listed per project in policy |
 | B30 | Local codebase index | todo | ripgrep (needs IT) plus tree-sitter WASM; floor-excluded files never indexed; one-click delete |
 | B31 | Allow-listed docs fetch | done (3 Nov): remembered sites, per project | WebFetch goes to the Approver and is marked untrusted; add a per-project domain allow list |
-| B32 | Provenance labels against prompt injection | partial | Web content is marked untrusted (ADR 0007); add taint: calls whose arguments come from untrusted content get a higher risk |
+| B32 | Provenance labels against prompt injection | done (4 Nov) | Web content is marked untrusted (ADR 0007); add taint: calls whose arguments come from untrusted content get a higher risk |
 | B33 | Read-only view of agent shell output | partial | Tool output shows in the tool tree; a live read-only terminal view is todo |
 
 ## Wave 4: automation, phone, governance

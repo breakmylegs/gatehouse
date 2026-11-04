@@ -31,7 +31,8 @@ export interface TurnApi {
   callTool(
     toolName: string,
     input: Record<string, unknown>,
-    opts?: { selfApproved?: boolean; toolUseId?: string; mcpSource?: string },
+    /** response: what the tool gave back, as PostToolUse hooks see it (B32). */
+    opts?: { selfApproved?: boolean; toolUseId?: string; mcpSource?: string; response?: unknown },
   ): Promise<ToolCallResult>
   say(text: string): void
   /** Emits a raw system message, for example a warning. */
@@ -149,6 +150,7 @@ export class FakeSdk {
       input: Record<string, unknown>,
       id: string,
       signal: AbortSignal,
+      response: unknown = {},
     ) => {
       const callbacks = (
         (opts.hooks as Record<string, { hooks: HookCallback[] }[]> | undefined)?.[event] ?? []
@@ -163,7 +165,7 @@ export class FakeSdk {
             tool_use_id: id,
             cwd: opts.cwd,
             session_id: sessionId,
-            ...(event === "PostToolUse" ? { tool_response: {} } : {}),
+            ...(event === "PostToolUse" ? { tool_response: response } : {}),
           } as never,
           id,
           { signal },
@@ -229,7 +231,7 @@ export class FakeSdk {
           }
           finalInput = permission.updatedInput ?? input
         }
-        await hook("PostToolUse", toolName, finalInput, id, signal)
+        await hook("PostToolUse", toolName, finalInput, id, signal, o.response)
         push({
           type: "user",
           message: {

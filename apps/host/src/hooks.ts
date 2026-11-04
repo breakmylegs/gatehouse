@@ -1,3 +1,4 @@
+import { fromOutside, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import type { HookCallback, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk"
 import { evaluateFloor, type Policy, type PwshWorker } from "@gatehouse/policy"
 import type { Verdict } from "@gatehouse/shared"
@@ -94,6 +95,8 @@ export interface SessionHookDeps {
   ) => void
   /** Each tool call's verdict, for the line under it in the transcript. */
   onDecision?: (toolUseId: string, verdict: Verdict) => void
+  /** B32: what the session read from outside, to catch a command copied from it. */
+  provenance?: Provenance
   log: (line: string) => void
 }
 
@@ -149,7 +152,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       await deps.checkpoints?.noteEdit(deps.sessionId, cwd, input.tool_name)
       const mode = deps.mode?.() ?? "default"
       if (deps.approver && SELF_APPROVING_MODES.has(mode) && !NOT_JUDGED.has(input.tool_name)) {
-        const verdict = await deps.approver.evaluate(
+        const judged = await deps.approver.evaluate(
           { toolName: input.tool_name, input: toolInput },
           {
             cwd,
@@ -161,13 +164,17 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
               : {}),
           },
         )
+        // B32: a command copied from what Claude read goes to a person, even in these modes.
+        const verdict = withProvenance(judged, input.tool_name, toolInput, deps.provenance)
         deps.verdicts?.set(input.tool_use_id, verdict)
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
         if (
           verdict.outcome === "escalate" &&
-          (verdict.risk >= ASK_FROM_RISK || COULD_NOT_DECIDE.has(verdict.ruleId))
+          (verdict.risk >= ASK_FROM_RISK ||
+            COULD_NOT_DECIDE.has(verdict.ruleId) ||
+            verdict.ruleId === TAINT_RULE)
         )
           return askOutput(
             `Codehouse asks about this even in ${mode === "auto" ? "Auto" : "Accept edits"} mode: ${verdict.reason}`,
@@ -200,6 +207,9 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
       return NO_DECISION
     try {
+      // B32: what came from outside is remembered, so a command copied from it can be caught.
+      if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
+        deps.provenance?.add(input.tool_response)
       deps.verdicts?.delete(input.tool_use_id)
       if (deps.decided.has(input.tool_use_id)) return NO_DECISION
       await deps.audit.record({
