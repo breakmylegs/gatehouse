@@ -102,7 +102,14 @@ export class KeychainProtector implements Protector {
   ) {}
 
   async #find(): Promise<Buffer | undefined> {
-    const r = await this.run(["find-generic-password", "-s", this.service, "-a", this.account, "-w"])
+    const r = await this.run([
+      "find-generic-password",
+      "-s",
+      this.service,
+      "-a",
+      this.account,
+      "-w",
+    ])
     if (r.code === NOT_FOUND) return undefined
     if (r.code !== 0) throw new Error(`Keychain read failed (security exited ${r.code})`)
     const hex = r.stdout.trim()

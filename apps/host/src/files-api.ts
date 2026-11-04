@@ -44,6 +44,11 @@ export interface FilesDeps {
 }
 
 export const revealInExplorer = (abs: string): void => {
+  // On a Mac, Finder with the file selected. The path is absolute, so open never reads it as an option.
+  if (process.platform === "darwin" && path.isAbsolute(abs)) {
+    spawn("/usr/bin/open", ["-R", abs], { detached: true, stdio: "ignore" }).unref()
+    return
+  }
   if (process.platform !== "win32") return
   spawn("explorer.exe", [`/select,${abs}`], {
     detached: true,

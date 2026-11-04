@@ -66,14 +66,18 @@ describe("the Mac Keychain protector", () => {
 
   it("refuses, and makes no new key, when the Keychain cannot be read", async () => {
     const kc = fakeKeychain({ readCode: 51 })
-    await expect(new KeychainProtector(kc.run).protect(secret)).rejects.toThrow(/Keychain read failed/)
+    await expect(new KeychainProtector(kc.run).protect(secret)).rejects.toThrow(
+      /Keychain read failed/,
+    )
     expect(kc.calls.some((c) => c.args[0] === "-i")).toBe(false)
   })
 
   it("refuses an item that is not a key rather than replacing it", async () => {
     const kc = fakeKeychain()
     kc.items.set("Codehouse/sealing-key", "not-a-key")
-    await expect(new KeychainProtector(kc.run).protect(secret)).rejects.toThrow(/not a Codehouse key/)
+    await expect(new KeychainProtector(kc.run).protect(secret)).rejects.toThrow(
+      /not a Codehouse key/,
+    )
     expect(kc.items.get("Codehouse/sealing-key")).toBe("not-a-key")
   })
 
