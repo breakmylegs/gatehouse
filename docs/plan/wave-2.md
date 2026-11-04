@@ -74,7 +74,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B34 | Local routines (schedule, file and git triggers) | todo | Only while signed in; each run a normal session with Extreme limits; kill switch covers them |
 | B35 | Phone starts a session from an approved template | no, safe variant later | Free text from the phone conflicts with rule 7 as amended; a signed template with fixed inputs is the safe variant |
 | B36 | Local OpenTelemetry export | done (4 Nov) | To 127.0.0.1 or a file by default, no prompt text, redacted |
-| B37 | Signed managed policy bundle from IT | todo | A policy file signed by an IT key, read-only location; tampering stops sessions starting |
+| B37 | Signed managed policy bundle from IT | done (4 Nov), docs/managed-policy.md | A policy file signed by an IT key, read-only location; tampering stops sessions starting |
 | B38 | EU AI Act Article 50 labelling | done (3 Nov) | "AI-assisted" label and model metadata on every export and artifact |
 | B39 | Plugin eval harness | todo | Pass rate with and without a plugin, under the Approver in Plan mode |
 | B40 | Screen reader mode and keyboard-only audit | done (3 Nov), manual NVDA run with the owner | Announcer and ARIA exist; add a linear screen-reader mode and an automated scan; a manual NVDA run stays with the owner |

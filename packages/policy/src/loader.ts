@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -31,6 +32,40 @@ export interface LoadOptions {
   extraWorkspaceRoots?: string[]
   /** Replaces `<you>` in workspace roots. Defaults to the current user name. */
   user?: string
+  /**
+   * B37: a folder IT keeps (such as %ProgramData%\\Codehouse\\managed, which you cannot change) holding policy.yaml,
+   * policy.yaml.sig and key.pem. When policy.yaml is there, it must be signed with that key, and it applies to every
+   * project as an overlay: it can add deny and escalate rules and remove allow rules, never allow anything.
+   */
+  managedDir?: string
+}
+
+/** The prefix of every error about IT's policy, so the Host can refuse to start sessions on one (B37). */
+export const MANAGED_ERROR = "managed policy"
+
+/** IT's signed policy, checked, or undefined when there is none. Problems go into errors. */
+function readManaged(dir: string | undefined, errors: string[]): Overlay | undefined {
+  if (!dir || !fs.existsSync(path.join(dir, "policy.yaml"))) return undefined
+  const fail = (why: string) => {
+    errors.push(`${MANAGED_ERROR}: ${why}`)
+    return undefined
+  }
+  try {
+    const data = fs.readFileSync(path.join(dir, "policy.yaml"))
+    const sigFile = path.join(dir, "policy.yaml.sig")
+    const keyFile = path.join(dir, "key.pem")
+    if (!fs.existsSync(sigFile)) return fail("policy.yaml has no signature (policy.yaml.sig)")
+    if (!fs.existsSync(keyFile)) return fail("there is no key to check it with (key.pem)")
+    const key = crypto.createPublicKey(fs.readFileSync(keyFile, "utf8"))
+    if (key.asymmetricKeyType !== "ed25519") return fail("key.pem is not an Ed25519 public key")
+    const sig = Buffer.from(fs.readFileSync(sigFile, "utf8").trim(), "base64")
+    if (!crypto.verify(null, data, key, sig)) return fail("the signature does not match policy.yaml, so it may have been changed")
+    const checked = checkOverlay(parseYaml(data.toString("utf8")))
+    if (!checked.ok) return fail(checked.errors.join("; "))
+    return checked.value
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : String(e))
+  }
 }
 
 function readYaml(file: string): unknown {
@@ -134,6 +169,17 @@ export function loadPolicy(opts: LoadOptions): Policy {
   const userRules = readUserRules(opts.userRulesPath, errors)
   const merged = mergeRules({ ...base, workspaceRoots: roots }, packs, userRules, errors)
   const rules: RulesFile = merged.rules
+  // B37: IT's rules last, over everything: tightening only.
+  const managed = readManaged(opts.managedDir, errors)
+  if (managed) {
+    for (const id of managed.removeAllow ?? []) {
+      if (!rules.allow.some((r) => r.id === id)) errors.push(`${MANAGED_ERROR}: removeAllow names unknown allow rule ${id}`)
+    }
+    const removed = new Set(managed.removeAllow ?? [])
+    rules.allow = rules.allow.filter((r) => !removed.has(r.id))
+    rules.deny = [...rules.deny, ...(managed.deny ?? [])]
+    rules.escalate = [...rules.escalate, ...(managed.escalate ?? [])]
+  }
 
   const ids = new Set<string>()
   for (const section of ["floor", "deny", "escalate", "allow"] as const) {
@@ -195,6 +241,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
   return {
     rules,
     sources: merged.sources,
+    ...(managed ? { managed: true } : {}),
     overlays,
     remember,
     hash,
@@ -257,12 +304,13 @@ export class PolicyStore {
     if (this.#opts.libraryDir) dirs.add(this.#opts.libraryDir)
     if (this.#opts.userRulesPath) dirs.add(path.dirname(this.#opts.userRulesPath))
     if (this.#opts.localPath) dirs.add(path.dirname(this.#opts.localPath))
+    if (this.#opts.managedDir) dirs.add(this.#opts.managedDir)
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) continue
       const watcher = fs.watch(dir, { persistent: false }, (_event, filename) => {
-        // Only rules files matter. Unrelated activity in the folder (audit files, temp files) must not
-        // keep pushing the reload back.
-        if (filename && !/\.ya?ml$/i.test(String(filename))) return
+        // Only rules files matter (and IT's signature and key, B37). Unrelated activity in the folder (audit files,
+        // temp files) must not keep pushing the reload back.
+        if (filename && !/\.(ya?ml|sig|pem)$/i.test(String(filename))) return
         clearTimeout(this.#timer)
         this.#timer = setTimeout(() => {
           this.load()

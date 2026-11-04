@@ -73,6 +73,15 @@ export class OrgGuardError extends Error {
 /** The folder for a new session cannot be used or made. */
 export class SessionFolderError extends Error {}
 
+/** B37: IT's signed policy could not be checked, so no session may start. */
+export class ManagedPolicyError extends Error {
+  constructor(why: string) {
+    super(
+      `Your IT team's policy for Codehouse is on this computer but could not be checked (${why.replace(/^managed policy: /, "")}), so no session can start. Ask IT to put it right; nothing else needs doing here.`,
+    )
+  }
+}
+
 /** B09: as many sessions are open as Settings allows; another waits until one is closed. */
 export class SessionLimitError extends Error {
   constructor(readonly limit: number) {
@@ -273,6 +282,8 @@ export interface SessionDeps {
     archived?: boolean
     group?: string
   }
+  /** B37: why IT's signed policy could not be checked, if it could not; then no session starts. */
+  managedPolicyProblem?: () => string | undefined
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
   resumeSettings?: (sdkSessionId: string) => {
     model?: string
@@ -1518,6 +1529,9 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
 
   async #start(opts: StartSessionOptions): Promise<Session> {
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
+    // B37: IT's policy for this computer is there but does not check out, so nothing starts until it does.
+    const managed = this.#deps.managedPolicyProblem?.()
+    if (managed) throw new ManagedPolicyError(managed)
     // Resume starts a conversation with what it last ran with, for anything the screen did not choose (owner, 31 Oct).
     // The mode is checked again with every other option before Claude Code starts (invariant 3).
     if (opts.resume !== undefined && !opts.restore) {

@@ -33,7 +33,14 @@ import {
   resolveSettings,
   type Options,
 } from "@anthropic-ai/claude-agent-sdk"
-import { PolicyEngine, PolicyStore, PwshWorker, redact, redactString } from "@gatehouse/policy"
+import {
+  PolicyEngine,
+  PolicyStore,
+  PwshWorker,
+  redact,
+  redactString,
+  MANAGED_ERROR,
+} from "@gatehouse/policy"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { AuditWriter } from "@gatehouse/shared/audit"
 import {
@@ -44,6 +51,7 @@ import {
   loadConfig,
   writeFileAtomic,
   type GatehouseConfig,
+  managedPolicyDir,
 } from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
 import { Accounts, type AccountEntry } from "./accounts.js"
@@ -145,6 +153,8 @@ export function createHost(opts: HostOptions = {}): Host {
     localPath: localRules,
     libraryDir: env.GATEHOUSE_LIBRARY_DIR ?? path.join(rulesDir, "library"),
     userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
+    // B37: IT's signed policy, when there is one.
+    managedDir: managedPolicyDir(env),
     ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
     ...(config.projectsFolder ? { extraWorkspaceRoots: [config.projectsFolder] } : {}),
   }
@@ -308,6 +318,7 @@ export function createHost(opts: HostOptions = {}): Host {
       if (!sessionMeta.get(id).title) await sessionMeta.set(id, { title })
     },
     resumeSettings: (id) => sessionMeta.settings(id),
+    managedPolicyProblem: () => store.status().errors.find((e) => e.startsWith(MANAGED_ERROR)),
     // Models on this computer (ADR 0011), only while other providers are on, checked before each chat starts.
     local: {
       label: () =>

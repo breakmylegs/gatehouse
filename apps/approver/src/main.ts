@@ -6,7 +6,7 @@
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { PwshWorker } from "@gatehouse/policy"
-import { auditDir, loadConfig } from "@gatehouse/shared/node"
+import { auditDir, loadConfig, managedPolicyDir } from "@gatehouse/shared/node"
 import { assertUsableToken } from "./guard.js"
 import { ApproverServer } from "./server.js"
 import { createSdkJudge } from "./sdk-judge.js"
@@ -32,6 +32,8 @@ try {
       // The same library and rules of yours as the Host, so the two always decide alike.
       libraryDir: env.GATEHOUSE_LIBRARY_DIR ?? path.join(rulesDir, "library"),
       userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
+      // B37: IT's signed policy, the same one the Host checks.
+      managedDir: managedPolicyDir(env),
       ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
       ...(config.projectsFolder ? { extraWorkspaceRoots: [config.projectsFolder] } : {}),
     },

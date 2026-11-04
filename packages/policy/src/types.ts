@@ -123,6 +123,8 @@ export interface UserRules {
 }
 
 export interface Policy {
+  /** B37: IT's signed policy was found, checked and applied. */
+  managed?: boolean
   /** Base rules with workspaceRoots expanded, then switched-on packs and your rules merged in. */
   rules: RulesFile
   /** Where each rule came from: base, a pack, or yours. Not part of the hash. */
