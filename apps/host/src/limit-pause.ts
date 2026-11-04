@@ -19,7 +19,7 @@ export interface PauseTarget {
   id: string
   account: string
   paused?: SessionInfo["paused"]
-  pause(percent: number, until?: string): Promise<void>
+  pause(percent: number, until?: string, reason?: "spend"): Promise<void>
   resume(by: "limit-reset"): Promise<boolean>
 }
 
@@ -31,6 +31,9 @@ export interface LimitPauserDeps {
   now?: () => number
   /** Where to pause, read at each look (Settings): a percentage, or undefined for never. Absent: PAUSE_AT_PERCENT. */
   pauseAt?: () => number | undefined
+  /** B20: today's spending over every session, and the cap on it (undefined for none). */
+  spendToday?: () => number
+  spendCap?: () => number | undefined
   /** B26: whether a paused session starts again by itself when the limit resets. Absent: yes (owner, 31 Oct). */
   autoResume?: () => boolean
   log: (line: string) => void
@@ -90,13 +93,35 @@ export class LimitPauser {
 
   async #check(): Promise<void> {
     const now = (this.#d.now ?? Date.now)()
+    // B20: today's spending over every session, against the cap in Settings.
+    const cap = this.#d.spendCap?.()
+    const spent = this.#d.spendToday?.() ?? 0
+    const overSpend = cap !== undefined && spent >= cap
+    if (overSpend) {
+      const midnight = new Date(now)
+      midnight.setHours(24, 0, 0, 0)
+      for (const s of this.#d.sessions())
+        if (!s.paused)
+          await s
+            .pause(Math.round((100 * spent) / cap), midnight.toISOString(), "spend")
+            .catch(() => undefined)
+    }
     // Off pauses nothing new; a session paused already still starts again at the reset.
     const at = this.#d.pauseAt ? this.#d.pauseAt() : PAUSE_AT_PERCENT
     const byAccount = new Map<string, PauseTarget[]>()
     for (const s of this.#d.sessions())
       byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
     for (const [account, list] of byAccount) {
-      const paused = list.filter((s) => s.paused)
+      // A pause for spending is lifted at midnight or when the cap is raised or removed, not by the plan limit.
+      const spendPaused = list.filter((s) => s.paused?.reason === "spend")
+      for (const s of spendPaused) {
+        const until = s.paused?.until ? Date.parse(s.paused.until) : NaN
+        if (!(Number.isFinite(until) && now >= until) && overSpend) continue
+        await s
+          .resume("limit-reset")
+          .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
+      }
+      const paused = list.filter((s) => s.paused && s.paused.reason !== "spend")
       // Fresh when something is paused, so the reset is seen as soon as it happens.
       const limit = fiveHour(await this.#d.planUsage(account, paused.length > 0))
       // B26: off, a paused session waits for you to start it, even after the reset. Pausing goes on as before.

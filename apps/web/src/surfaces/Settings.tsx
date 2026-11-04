@@ -49,6 +49,7 @@ interface Config {
   planLimitPause?: { percent: number; off?: boolean; noAutoResume?: boolean }
   effortCap?: string
   maxSessions?: number
+  spendCapUsd?: number
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
 }
@@ -102,6 +103,7 @@ interface Values {
   plResume: boolean
   effortCap: string
   maxSessions: string
+  spendCap: string
   telFile: boolean
   telEndpoint: string
   ecUsd: string
@@ -133,6 +135,7 @@ function valuesOf(d: SettingsData): Values {
     plResume: c.planLimitPause?.noAutoResume !== true,
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
+    spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -174,6 +177,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.effortCap
   if (v.maxSessions) body.maxSessions = Number(v.maxSessions)
   else delete body.maxSessions
+  if (v.spendCap) body.spendCapUsd = Number(v.spendCap)
+  else delete body.spendCapUsd
   if (v.telFile || v.telEndpoint.trim())
     body.telemetry = {
       ...(d.saved.telemetry ?? {}),
@@ -223,6 +228,7 @@ export const DEFAULT_VALUES: Values = {
   plResume: true,
   effortCap: "",
   maxSessions: "",
+  spendCap: "",
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
@@ -446,7 +452,7 @@ export function Settings() {
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const effortChanged = differs(v, ["effortCap"])
-  const limitChanged = differs(v, ["maxSessions"])
+  const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
   const privacyChanged = differs(v, ["terms"])
@@ -732,6 +738,25 @@ export function Settings() {
                       {n}
                     </option>
                   ))}
+                </select>
+              </Field>
+              <Field
+                label="Most spending a day, over every session"
+                help="What Claude costs at API prices, as each session reports it. At the limit every session pauses until midnight, or until you raise it; Start now starts one sooner. Models on this computer cost nothing."
+              >
+                <select
+                  className="field"
+                  value={v.spendCap}
+                  onChange={(e) => change({ spendCap: e.target.value }, "How many at once")}
+                >
+                  <option value="">No limit</option>
+                  {withCurrent(["10", "25", "50", "100", "250", "500"], v.spendCap || "10").map(
+                    (n) => (
+                      <option key={n} value={n}>
+                        ${n}
+                      </option>
+                    ),
+                  )}
                 </select>
               </Field>
             </Group>

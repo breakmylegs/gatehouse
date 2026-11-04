@@ -1366,6 +1366,7 @@ const LIVE_SETTINGS = [
   "effortCap",
   "maxSessions",
   "telemetry",
+  "spendCapUsd",
   "globalInstructions",
   "providers",
 ] as const

@@ -239,7 +239,7 @@ export interface SessionInfo {
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
-  paused?: { until?: string; percent: number; wasRunning: boolean }
+  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" }
 }
 
 export interface SessionEvents {
@@ -1176,10 +1176,15 @@ export class Session extends EventEmitter<SessionEvents> {
    * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
    * when you start it.
    */
-  async pause(percent: number, until?: string): Promise<void> {
+  async pause(percent: number, until?: string, reason?: "spend"): Promise<void> {
     if (!this.live || this.#paused) return
     const wasRunning = this.#running || this.#background.size > 0
-    this.#paused = { percent, wasRunning, ...(until ? { until } : {}) }
+    this.#paused = {
+      percent,
+      wasRunning,
+      ...(until ? { until } : {}),
+      ...(reason ? { reason } : {}),
+    }
     await this.#auditLimit(
       "limit_pause",
       "limit-pause",
@@ -1188,10 +1193,15 @@ export class Session extends EventEmitter<SessionEvents> {
         wasRunning,
         ...(until ? { until } : {}),
       },
-      `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
+      reason === "spend"
+        ? "Today's spending reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
+        : `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
       "rules",
     )
-    this.emit("event", { type: "paused", data: { percent, ...(until ? { until } : {}) } })
+    this.emit("event", {
+      type: "paused",
+      data: { percent, ...(until ? { until } : {}), ...(reason ? { reason } : {}) },
+    })
     await this.stop("plan-limit").catch((e: Error) => this.#deps.log(`pause: ${e.message}`))
     this.emit("state", this.info())
   }

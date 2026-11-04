@@ -294,6 +294,8 @@ export const SessionInfo = z.object({
       percent: z.number(),
       /** A turn was running when it paused, so starting it again carries on where it stopped. */
       wasRunning: z.boolean(),
+      /** B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. */
+      reason: z.enum(["spend"]).optional(),
     })
     .optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */

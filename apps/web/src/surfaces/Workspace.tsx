@@ -1333,13 +1333,22 @@ function PausedLine({
   const [busy, setBusy] = useState(false)
   return (
     <div role="status" className="pane-stopped">
-      <span>
-        <strong>Paused.</strong> The plan's 5-hour limit reached {Math.round(paused.percent)}%, so
-        Codehouse stopped this session{paused.wasRunning ? " part way through a turn" : ""}.{" "}
-        {paused.until && clock(paused.until)
-          ? `It starts again by itself when the limit resets at ${clock(paused.until)}.`
-          : "It starts again by itself when the limit resets."}
-      </span>
+      {paused.reason === "spend" ? (
+        // B20: today's spending over every session reached the cap in Settings.
+        <span>
+          <strong>Paused.</strong> Today's spending reached the most Settings allows a day, so
+          Codehouse stopped this session{paused.wasRunning ? " part way through a turn" : ""}. It
+          starts again by itself tomorrow, or sooner if you raise the limit in Settings, Sessions.
+        </span>
+      ) : (
+        <span>
+          <strong>Paused.</strong> The plan's 5-hour limit reached {Math.round(paused.percent)}%, so
+          Codehouse stopped this session{paused.wasRunning ? " part way through a turn" : ""}.{" "}
+          {paused.until && clock(paused.until)
+            ? `It starts again by itself when the limit resets at ${clock(paused.until)}.`
+            : "It starts again by itself when the limit resets."}
+        </span>
+      )}
       <button
         type="button"
         className="btn !min-h-7"

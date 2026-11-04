@@ -18,9 +18,14 @@ function target(id: string, account = "main") {
     id,
     account,
     calls,
-    async pause(percent, until) {
+    async pause(percent, until, reason) {
       calls.push(`pause ${percent} ${until ?? "-"}`)
-      t.paused = { percent, wasRunning: false, ...(until ? { until } : {}) }
+      t.paused = {
+        percent,
+        wasRunning: false,
+        ...(until ? { until } : {}),
+        ...(reason ? { reason } : {}),
+      }
     },
     async resume() {
       if (t.failResume) throw new Error("the kill switch is engaged")
@@ -103,6 +108,42 @@ describe("pausing at the plan limit", () => {
     await pauser.check()
     expect(a.calls).toEqual([])
     expect(b.calls).toEqual([`pause 97 ${RESET}`])
+  })
+
+  it("pauses every session when today's spending reaches the cap, and starts them at midnight or when it is lifted (B20)", async () => {
+    const a = target("a")
+    const b = target("b", "work")
+    let spent = 30
+    let cap: number | undefined = 25
+    let clock = Date.parse("2026-11-04T15:00:00")
+    const pauser = new LimitPauser({
+      sessions: () => [a, b],
+      planUsage: async () => usage(10),
+      now: () => clock,
+      spendToday: () => spent,
+      spendCap: () => cap,
+      log: () => undefined,
+    })
+    await pauser.check()
+    // Every account's sessions, for the reason spend, until midnight; the low plan limit does not start them again.
+    expect(a.paused).toMatchObject({ reason: "spend" })
+    expect(b.paused).toMatchObject({ reason: "spend" })
+    expect(a.calls[0]).toMatch(/^pause 120 /)
+    await pauser.check()
+    expect(a.calls).toHaveLength(1)
+    // The cap is lifted: they start again.
+    cap = undefined
+    await pauser.check()
+    expect(a.calls.at(-1)).toBe("resume")
+    // Over it again, then past midnight: they start again by themselves.
+    cap = 25
+    a.calls.length = 0
+    await pauser.check()
+    expect(a.paused?.reason).toBe("spend")
+    clock = Date.parse(a.paused!.until!) + 1000
+    spent = 0
+    await pauser.check()
+    expect(a.calls.at(-1)).toBe("resume")
   })
 
   it("leaves sessions alone just below the pause point", async () => {

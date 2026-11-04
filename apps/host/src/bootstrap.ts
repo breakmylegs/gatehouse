@@ -443,6 +443,9 @@ export function createHost(opts: HostOptions = {}): Host {
     sessions: () => manager.liveSessions(),
     planUsage: (account, fresh) => manager.planUsage(account, fresh),
     pauseAt: () => pausePoint(config.planLimitPause),
+    // B20: today's spending over every session, and the cap on it.
+    spendToday: () => usage.snapshot().byDay[localDay(new Date())]?.costUsd ?? 0,
+    spendCap: () => config.spendCapUsd,
     autoResume: () => config.planLimitPause?.noAutoResume !== true,
     log,
   })
