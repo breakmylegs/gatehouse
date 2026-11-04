@@ -15,12 +15,26 @@ export const LIMIT_RESUME_PROMPT =
   "Codehouse paused you because the plan's 5-hour limit was nearly used up, which stopped your last turn part way. You may carry on now. Continue from where you were, without starting again."
 
 const QUEUE_EMPTY = /\bQUEUE EMPTY\b/
+const GOAL_MET = /\bGOAL MET\b/
+
+/** B25: a goal is one line, the check to run, such as "npm test". */
+export const MAX_GOAL = 300
+export const goalOk = (check: string): boolean =>
+  check.trim().length > 0 && check.length <= MAX_GOAL && !/[\r\n]/.test(check)
+
+/**
+ * B25 (goal mode): what Extreme approval sends after each turn when the session has a goal. The check runs as
+ * Claude's own tool call, so the floor and the Approver decide it like any other.
+ */
+export const goalPrompt = (check: string): string =>
+  `Carry on towards the goal, without asking me anything: where you would ask, choose the recommended option yourself. When you think it is met, run exactly this check: ${check.trim()} . If it passes, end your reply with the line GOAL MET. If it fails, fix what it shows and keep going; never end with GOAL MET unless that check passed just now.`
 
 /** Claude ended a reply saying its build queue is empty, in any mode (owner, 3 Nov: tell me when it is). */
 export const saysQueueEmpty = (text: string): boolean => QUEUE_EMPTY.test(text)
 
 /** Why carrying on stopped. Stalled: two turns in a row did no work, so nothing seems left to do. */
-export type CarryOnEnd = "done" | "turns" | "spend" | "stopped" | "error" | "stalled"
+/** Goal: the goal's check passed (B25). */
+export type CarryOnEnd = "done" | "goal" | "turns" | "spend" | "stopped" | "error" | "stalled"
 
 export interface CarryOnLimits {
   /** Automatic turns after one message of yours. None: no limit. */
@@ -104,6 +118,7 @@ export class CarryOn {
       return { go: false, why, turns: this.#turns, spentUsd: this.#spent }
     }
     if (r.isError) return end("error")
+    if (GOAL_MET.test(r.text)) return end("goal")
     if (QUEUE_EMPTY.test(r.text)) return end("done")
     this.#idle = r.steps !== undefined && r.steps <= 1 ? this.#idle + 1 : 0
     if (this.#idle >= 2) return end("stalled")

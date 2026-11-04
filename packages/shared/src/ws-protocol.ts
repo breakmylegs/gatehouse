@@ -177,6 +177,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
     /** Its folder, for a past session, so the title can be written into its transcript. */
     cwd: z.string().min(1).max(4096).optional(),
   }),
+  /** B25: the check to carry on until it passes, or null for none. */
+  z.object({
+    type: z.literal("set_goal"),
+    sessionId: Id,
+    check: z.string().min(1).max(300).nullable(),
+  }),
   /** B22: of chats started side by side with the same message, the one you kept; recorded, the rest are closed. */
   z.object({
     type: z.literal("compare_chosen"),
@@ -269,6 +275,8 @@ export const SessionInfo = z.object({
   local: z.boolean().optional(),
   /** The most effort Settings allows (B18). Absent: no cap. */
   effortCap: Effort.optional(),
+  /** B25: the check Extreme approval carries on until it passes. */
+  goal: z.string().max(300).optional(),
   /** Where a local chat's words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel: z.string().max(120).optional(),
   /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */
@@ -297,7 +305,7 @@ export const SessionInfo = z.object({
       spentUsd: z.number(),
       /** Absent: no limit. */
       maxUsd: z.number().optional(),
-      ended: z.enum(["done", "turns", "spend", "stopped", "error", "stalled"]).optional(),
+      ended: z.enum(["done", "goal", "turns", "spend", "stopped", "error", "stalled"]).optional(),
     })
     .optional(),
 })

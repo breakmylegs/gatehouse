@@ -50,6 +50,8 @@ import {
   LIMIT_RESUME_PROMPT,
   RESUME_PROMPT,
   saysQueueEmpty,
+  goalOk,
+  goalPrompt,
   type CarryOnStatus,
 } from "./carry-on.js"
 import { planLimits, type PlanUsage } from "./plan-usage.js"
@@ -192,6 +194,8 @@ export interface SessionInfo {
   group?: string
   /** The most effort Settings allows (B18). Absent: no cap. */
   effortCap?: Effort
+  /** B25: the check Extreme approval carries on until. */
+  goal?: string
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
   historyFrom?: string
   /**
@@ -455,6 +459,8 @@ export class Session extends EventEmitter<SessionEvents> {
   #paused: SessionInfo["paused"]
   #resources: ResourceLevel = "high"
   readonly #account: string
+  /** B25: the check Extreme approval carries on until, or none. */
+  #goal: string | undefined
   /** Its job object's name, unique to this start, for changing the limits while it runs. */
   readonly #job = `Local\\Codehouse-${uuidv7()}`
   /** Tells the screen how a tool call was decided: the rule, its reason and who decided. Never the input. */
@@ -548,6 +554,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
+      ...(this.#goal ? { goal: this.#goal } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
@@ -1126,7 +1133,9 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit("event", { type: "carry_on", data })
     this.#send(
       data.restart !== true || this.#extreme
-        ? CARRY_ON_PROMPT
+        ? this.#goal
+          ? goalPrompt(this.#goal)
+          : CARRY_ON_PROMPT
         : data.crashed === true
           ? CRASH_RESUME_PROMPT
           : RESUME_PROMPT,
@@ -1301,6 +1310,39 @@ export class Session extends EventEmitter<SessionEvents> {
       throw new Error(`Settings limits effort to ${cap}, so this session cannot use ${effort}.`)
     await this.#q?.applyFlagSettings({ effortLevel: effort })
     this.#effort = effort
+    this.emit("state", this.info())
+  }
+
+  /**
+   * B25: a check to carry on until it passes, such as "npm test", or none. Used while Extreme approval carries on;
+   * recorded, because it changes what the session is told to do by itself.
+   */
+  async setGoal(check: string | undefined): Promise<void> {
+    if (check !== undefined && !goalOk(check))
+      throw new Error("A goal is one line of up to 300 characters.")
+    const recorded = await this.#deps.audit.record({
+      session: this.id,
+      event: "settings_changed",
+      channel: "desktop",
+      tool: "goal",
+      cwd: this.cwd,
+      project: this.project,
+      input: check === undefined ? { goal: null } : { goal: check.trim() },
+      verdict: {
+        outcome: "allow",
+        ruleId: check === undefined ? "goal-off" : "goal-set",
+        reason:
+          check === undefined
+            ? "The goal for this session was cleared from the desktop."
+            : "A goal was set for this session from the desktop: Extreme approval carries on until its check passes.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: this.#deps.policy()?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) throw new Error("It could not be recorded, so the goal was not changed.")
+    this.#goal = check?.trim()
     this.emit("state", this.info())
   }
 

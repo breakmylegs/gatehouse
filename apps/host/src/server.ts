@@ -498,6 +498,9 @@ export class HostServer {
       case "set_effort":
         await this.#session(cmd.sessionId).setEffort(cmd.effort)
         return undefined
+      case "set_goal":
+        await this.#session(cmd.sessionId).setGoal(cmd.check ?? undefined)
+        return undefined
       case "set_extreme":
         await this.#session(cmd.sessionId).setExtreme(cmd.on)
         return undefined

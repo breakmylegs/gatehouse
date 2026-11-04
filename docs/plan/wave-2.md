@@ -57,7 +57,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 
 | Id | Item | Status | Notes and acceptance |
 |---|---|---|---|
-| B25 | Goal mode (until a check passes) | partial | Extreme carry-on is close; add an explicit check command (an Approver-decided call) and stop on pass or limit |
+| B25 | Goal mode (until a check passes) | done (4 Nov) | Extreme carry-on is close; add an explicit check command (an Approver-decided call) and stop on pass or limit |
 | B26 | Auto-continue after the usage limit resets | done (3 Nov): a setting, on by default; Extreme limits still apply | Pause at the plan limit and start again on reset exist (owner, 31 Oct); confirm opt-in and the spend cap |
 | B27 | Review agent on a worktree diff | todo | Plan mode, read-only; findings linked to diff lines |
 | B28 | Security scan agent | todo | Read-only; patches only through B12 |

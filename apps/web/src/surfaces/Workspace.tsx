@@ -85,6 +85,7 @@ const poppedOut = new URLSearchParams(location.search).get("view") === "pane"
 import { attachedName, relInside, splitAttachments, type AttachedFile } from "../lib/attachments"
 import { FileChip } from "../components/FileChip"
 import { CompareBar } from "../components/CompareBar"
+import { GoalDialog } from "../components/GoalDialog"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -293,6 +294,7 @@ function SessionPane({
     savePaneView(sessionId, next)
   }
   const [renaming, setRenaming] = useState(false)
+  const [goalOpen, setGoalOpen] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -441,6 +443,15 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
+    // B25: carry on until a check passes, while Extreme approval carries on.
+    ...(chat
+      ? []
+      : [
+          {
+            label: session.goal ? "Change the goal..." : "Set a goal...",
+            onSelect: () => setGoalOpen(true),
+          },
+        ]),
     {
       label: session.pinned ? "Unpin" : "Pin to the top",
       onSelect: () =>
@@ -615,6 +626,20 @@ function SessionPane({
           </span>
         )}
       </header>
+      {goalOpen ? (
+        <GoalDialog
+          current={session.goal}
+          extreme={session.extreme === true}
+          onClose={() => setGoalOpen(false)}
+          onSave={(check) =>
+            void send({ type: "set_goal", sessionId: session.id, check }).then((r) =>
+              r.ok
+                ? toast(check ? `Goal set: carry on until ${check} passes.` : "Goal cleared.")
+                : toast.error(r.error?.message ?? "The goal was not changed"),
+            )
+          }
+        />
+      ) : null}
       {renaming ? (
         <RenameDialog
           current={session.title}
@@ -1061,7 +1086,15 @@ export function settingsSummary(s: SessionInfo, chat: boolean): string {
   const level = s.resources
     ? LEVEL_OPTIONS.find((o) => o.id === s.resources)?.label.split(":")[0]
     : undefined
-  return [model, effort ? `${effort} effort` : undefined, mode, level].filter(Boolean).join(", ")
+  return [
+    model,
+    effort ? `${effort} effort` : undefined,
+    mode,
+    level,
+    s.goal ? `goal: ${s.goal}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(", ")
 }
 
 /** A level for one session, applied at once to it and to everything it started (owner, 30 Oct). */

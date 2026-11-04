@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The session bar and the activity detail fold away, every pane follows, and the choice is kept (owner, 31 Oct, O3).
-import { cleanup, render, screen, within } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { useStore } from "../src/store"
@@ -84,6 +84,33 @@ describe("folding the session bar", () => {
     await userEvent.click(within(panes()[0]!).getByRole("button", { name: "Hide settings" }))
     const folded = within(panes()[0]!).getByRole("group", { name: "Session bar, folded" })
     expect(folded.textContent).toMatch(/High effort, Manual, Medium/)
+  })
+
+  it("says the goal when a session has one, and sets one from the pane's menu (B25)", async () => {
+    useStore.setState({
+      sessions: {
+        ...useStore.getState().sessions,
+        s1: { ...useStore.getState().sessions.s1!, goal: "npm test" },
+      },
+    })
+    render(<Workspace />)
+    await userEvent.click(within(panes()[0]!).getByRole("button", { name: "Hide settings" }))
+    expect(
+      within(panes()[0]!).getByRole("group", { name: "Session bar, folded" }).textContent,
+    ).toMatch(/goal: npm test/)
+    fireEvent.click(
+      within(panes()[0]!).getByRole("button", { name: /: switch, open beside, rename/ }),
+    )
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Change the goal..." }))
+    const box = await screen.findByRole("textbox", { name: "Carry on until this check passes" })
+    await userEvent.clear(box)
+    await userEvent.type(box, "npm run build{Enter}")
+    const { send } = await import("../src/store")
+    expect(vi.mocked(send)).toHaveBeenCalledWith({
+      type: "set_goal",
+      sessionId: "s1",
+      check: "npm run build",
+    })
   })
 
   it("is kept for next time", async () => {

@@ -783,6 +783,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
     case "carry_on_end": {
       const why: Record<string, string> = {
         done: "the build queue is empty",
+        goal: "the goal's check passed",
         turns: `it took ${String(data.turns)} turns by itself, the most allowed after one message`,
         spend: `it spent $${Number(data.spentUsd ?? 0).toFixed(2)} since your last message, the most allowed`,
         stopped: "you stopped it",
