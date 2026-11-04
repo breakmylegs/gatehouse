@@ -292,6 +292,23 @@ execFileSync(
   ],
   { stdio: "inherit" },
 )
+// Codehouse-Helper.exe: DPAPI sealing and the Windows file windows, without PowerShell (owner, 4 Nov). The same
+// arguments as HELPER_CSC_ARGS in apps/host/src/win-helper.ts, which builds it for a source checkout.
+execFileSync(
+  csc,
+  [
+    "/nologo",
+    "/optimize+",
+    "/target:winexe",
+    "/r:System.Security.dll",
+    "/r:System.Windows.Forms.dll",
+    "/r:System.Drawing.dll",
+    `/win32icon:${icoFile}`,
+    `/out:${path.join(dest, "Codehouse-Helper.exe")}`,
+    pk("Helper.cs"),
+  ],
+  { stdio: "inherit" },
+)
 for (const f of [wv2Core, wv2Forms, wv2Loader])
   fs.copyFileSync(f, path.join(dest, path.basename(f)))
 // The start-up picture the window shows while the Host starts (the page shows it again once it loads).

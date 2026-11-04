@@ -38,6 +38,49 @@ const SAVE_SCRIPT = [
   "$f.Close()",
 ].join("; ")
 
+const safeName = (name: string) => name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 200)
+const folderOrEmpty = (start?: string) =>
+  start && fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : ""
+
+/** What a window program printed: the path chosen, or undefined when you cancelled. */
+function chosen(
+  exe: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<string | undefined> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(exe, args, {
+      env: { ...process.env, ...env },
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    })
+    const chunks: Buffer[] = []
+    child.stdout.on("data", (c: Buffer) => chunks.push(c))
+    child.on("error", reject)
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        reject(new Error(`the window could not be opened (exit ${code ?? "unknown"})`))
+        return
+      }
+      const picked = Buffer.concat(chunks).toString("utf8").trim()
+      resolve(picked === "" ? undefined : picked)
+    })
+  })
+}
+
+/**
+ * The same two windows through Codehouse-Helper.exe (packaging/Helper.cs), with no PowerShell (owner, 4 Nov: "Why do
+ * I need powershell at all?"). The PowerShell ones below are the fallback where the helper cannot be had.
+ */
+export function helperPickers(exe: string): { pickFolder: FolderPicker; saveAs: SaveAsPicker } {
+  return {
+    pickFolder: (start) =>
+      chosen(exe, ["--pick-folder"], { CODEHOUSE_PICK_START: folderOrEmpty(start) }),
+    saveAs: (suggestedName) =>
+      chosen(exe, ["--save-as"], { CODEHOUSE_SAVE_NAME: safeName(suggestedName) }),
+  }
+}
+
 export const saveAsWithWindows: SaveAsPicker = (suggestedName) =>
   new Promise((resolve, reject) => {
     if (process.platform !== "win32") {

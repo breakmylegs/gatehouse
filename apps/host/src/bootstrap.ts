@@ -17,7 +17,8 @@ import { ProjectStore } from "./projects.js"
 import { findLimitsExe, limiter } from "./limits.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
-import { pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
+import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
+import { findCodehouseHelper } from "./win-helper.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -70,7 +71,7 @@ import { computeDigest } from "./analytics.js"
 import { recordsSince } from "./api.js"
 import { DigestScheduler } from "./digest.js"
 import { HostKillSwitch } from "./kill.js"
-import { DpapiProtector, PlainProtector, type Protector } from "./relay/protector.js"
+import { sealerFor, type Protector } from "./relay/protector.js"
 import { PhoneService } from "./relay/service.js"
 import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
@@ -476,20 +477,28 @@ export function createHost(opts: HostOptions = {}): Host {
     })
   })
 
-  const phoneStore = new PhoneStore(
-    path.join(gatehouseDataDir(env), "phone.json"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
-  )
+  // Codehouse's own Windows work needs no PowerShell (owner, 4 Nov: "Why do I need powershell at all?"): DPAPI and the
+  // file windows go through Codehouse-Helper.exe, found once when first needed. PowerShell is only the fallback where
+  // the helper cannot be had (a source checkout with no C# compiler).
+  let helperExe: string | null | undefined
+  const helper = (): string | undefined => {
+    if (helperExe === undefined)
+      helperExe =
+        findCodehouseHelper({
+          installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
+          repoRoot: REPO_ROOT,
+          dataDir: gatehouseDataDir(env),
+          log,
+        }) ?? null
+    return helperExe ?? undefined
+  }
+  const sealer = (): Protector => sealerFor({ given: opts.phoneProtector, helper })
+  const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
   // Push through ntfy: outbound only. Refused answers are recorded; good ones are recorded by the decision itself.
   // A server that needs a sign-in has its token or password sealed as Slack's tokens are (owner, 4 Nov).
-  const ntfySecrets = new NtfySecretStore(
-    path.join(gatehouseDataDir(env), "ntfy.sealed"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
-  )
+  const ntfySecrets = new NtfySecretStore(path.join(gatehouseDataDir(env), "ntfy.sealed"), sealer())
   const ntfy = new NtfyChannel({
     broker,
     settings: () => config.push?.ntfy,
@@ -519,8 +528,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // Slack through Socket Mode: outbound only. Its tokens are kept with the same protection as the phone keys.
   const slackSecrets = new SlackSecretStore(
     path.join(gatehouseDataDir(env), "slack.sealed"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+    sealer(),
   )
   const slack = new SlackChannel({
     broker,
@@ -552,8 +560,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const installDir = env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined
   const updateToken = new UpdateTokenStore(
     path.join(gatehouseDataDir(env), "update-token.sealed"),
-    opts.phoneProtector ??
-      (process.platform === "win32" ? new DpapiProtector() : new PlainProtector()),
+    sealer(),
   )
   // Test hooks only: a local stand-in for GitHub and the key its releases are signed with. Both must be set.
   const testBase = env.GATEHOUSE_UPDATE_BASE
@@ -829,8 +836,14 @@ export function createHost(opts: HostOptions = {}): Host {
       log,
       phone,
       usage,
-      pickFolder: pickFolderWithWindows,
-      saveAs: saveAsWithWindows,
+      pickFolder: (start) => {
+        const exe = helper()
+        return exe ? helperPickers(exe).pickFolder(start) : pickFolderWithWindows(start)
+      },
+      saveAs: (name) => {
+        const exe = helper()
+        return exe ? helperPickers(exe).saveAs(name) : saveAsWithWindows(name)
+      },
       localRelay,
       ntfy,
       ntfySecrets,

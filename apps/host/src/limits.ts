@@ -1,8 +1,7 @@
-import { execFile, execFileSync, spawn } from "node:child_process"
-import fs from "node:fs"
-import path from "node:path"
+import { execFile, spawn } from "node:child_process"
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk"
 import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
+import { findWindowsHelper, type HelperPlace } from "./win-helper.js"
 
 /**
  * How much of this computer a session may use (owner, 30 Oct): Low, Medium or High, applied by Codehouse-Limits.exe, which
@@ -140,41 +139,13 @@ export function limiter(exe: string): Limiter {
   }
 }
 
-/**
- * The helper, or undefined where it cannot be had (not Windows, or no C# compiler for a source checkout). Packaged,
- * it sits next to Codehouse.exe. From the source folder it is built once from packaging/Limits.cs into the data folder,
- * and again when the source is newer.
- */
-export function findLimitsExe(o: {
-  installDir: string | undefined
-  repoRoot: string
-  dataDir: string
-  log: (line: string) => void
-}): string | undefined {
-  if (process.platform !== "win32") return undefined
-  if (o.installDir) {
-    const exe = path.join(o.installDir, "Codehouse-Limits.exe")
-    return fs.existsSync(exe) ? exe : undefined
-  }
-  const source = path.join(o.repoRoot, "packaging", "Limits.cs")
-  const exe = path.join(o.dataDir, "bin", "Codehouse-Limits.exe")
-  try {
-    if (fs.existsSync(exe) && fs.statSync(exe).mtimeMs >= fs.statSync(source).mtimeMs) return exe
-    const csc = [
-      `${process.env.windir}\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe`,
-      `${process.env.windir}\\Microsoft.NET\\Framework\\v4.0.30319\\csc.exe`,
-    ].find((p) => fs.existsSync(p))
-    if (!csc) return undefined
-    fs.mkdirSync(path.dirname(exe), { recursive: true })
-    execFileSync(csc, ["/nologo", "/target:exe", "/optimize+", `/out:${exe}`, source], {
-      windowsHide: true,
-      stdio: "ignore",
-    })
-    return exe
-  } catch (e) {
-    o.log(
-      `the resource limits helper could not be built (${(e as Error).message}), so sessions run without limits`,
-    )
-    return undefined
-  }
+/** Codehouse-Limits.exe (packaging/Limits.cs), found or built as every helper is (win-helper.ts). */
+export function findLimitsExe(o: HelperPlace): string | undefined {
+  return findWindowsHelper({
+    ...o,
+    exe: "Codehouse-Limits.exe",
+    source: "Limits.cs",
+    cscArgs: ["/target:exe"],
+    what: "the resource limits helper, so sessions run without limits,",
+  })
 }
