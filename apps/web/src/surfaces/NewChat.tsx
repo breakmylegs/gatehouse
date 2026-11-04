@@ -4,6 +4,7 @@ import { api } from "../lib/api"
 import { keepChatWarm } from "../lib/warmChat"
 import { accountForNew, send, useStore } from "../store"
 import { MODELS, START_WAIT_MS, StartProgress } from "./Sessions"
+import { acceptLicence, licenceAccepted, useLicence } from "../lib/licence"
 
 /**
  * A chat: a conversation with Claude that is not about a project (owner, 30 Oct). It starts from what you say, gets a
@@ -67,6 +68,11 @@ export function NewChat() {
   }, [model, offerClaude, offerLocal, shownLocal])
   const nothingAllowed = !offerClaude && shownLocal.length === 0
   const localModel = model.startsWith("local:") ? model.slice(6) : undefined
+  // B19: a model on this computer is used only after you have seen its licence, once.
+  const [accepted, setAccepted] = useState(false)
+  useEffect(() => setAccepted(localModel ? licenceAccepted(localModel) : true), [localModel])
+  const licence = useLicence(localModel && !accepted ? localModel : undefined)
+  const licenceReady = !localModel || accepted
   // B22: the same first message to two to four models, side by side, to keep the best answer.
   const [comparing, setComparing] = useState(false)
   const [compareWith, setCompareWith] = useState<string[]>([])
@@ -258,12 +264,44 @@ export function NewChat() {
           </label>
           <button
             className="btn btn-primary"
-            disabled={busy || !text.trim() || nothingAllowed || !compareReady}
+            disabled={busy || !text.trim() || nothingAllowed || !compareReady || !licenceReady}
           >
             {busy ? "Starting…" : "Start the chat"}
           </button>
           <span className="text-[13px] text-mut">Ctrl+Enter starts it too.</span>
         </div>
+        {localModel && !accepted ? (
+          <div
+            className="panel grid gap-2 p-3"
+            role="group"
+            aria-label={`The licence for ${localModel}`}
+          >
+            <strong className="text-[14px]">Before you use {localModel}: its licence</strong>
+            {licence === undefined ? (
+              <p className="m-0 text-mut">Reading it from the runtime…</p>
+            ) : licence === null ? (
+              <p className="m-0 text-mut">
+                The runtime shows no licence for this model. Check its terms with whoever chose it
+                for you before you use it for work.
+              </p>
+            ) : (
+              <pre className="m-0 max-h-[30vh] overflow-auto whitespace-pre-wrap text-[12px]">
+                {licence}
+              </pre>
+            )}
+            <label className="flex items-center gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => {
+                  if (e.target.checked && localModel) acceptLicence(localModel)
+                  setAccepted(e.target.checked)
+                }}
+              />
+              I have read the licence and will use the model within it
+            </label>
+          </div>
+        ) : null}
         {comparing ? (
           <fieldset className="m-0 grid gap-1 rounded-md border border-line p-3">
             <legend className="px-1 text-[13px] font-semibold">Compare two to four models</legend>

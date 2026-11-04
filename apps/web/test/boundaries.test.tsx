@@ -108,6 +108,27 @@ describe("starting a chat in a project", () => {
   })
 })
 
+describe("a model on this computer (B19)", () => {
+  it("can start a chat only after you have seen its licence, once", async () => {
+    localStorage.clear()
+    projects = [{ name: "Client A", providers: ["local"] }]
+    render(<NewChat />)
+    fireEvent.change(await screen.findByRole("combobox", { name: /project/i }), {
+      target: { value: "Client A" },
+    })
+    fireEvent.change(screen.getByRole("textbox", { name: /talk about/i }), {
+      target: { value: "Summarise this" },
+    })
+    const gate = await screen.findByRole("group", { name: "The licence for tiny" })
+    expect(gate.textContent).toMatch(/shows no licence/)
+    const start = screen.getByRole("button", { name: "Start the chat" })
+    expect(start).toBeDisabled()
+    fireEvent.click(within(gate).getByRole("checkbox", { name: /I have read the licence/ }))
+    expect(start).toBeEnabled()
+    expect(localStorage.getItem("gatehouse.licence.tiny")).toBe("1")
+  })
+})
+
 describe("a project's providers", () => {
   it("are every provider until you untick one, keep at least one, and are saved as you change them", async () => {
     projects = [{ name: "Client A" }]

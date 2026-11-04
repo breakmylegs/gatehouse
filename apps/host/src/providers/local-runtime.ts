@@ -81,6 +81,35 @@ async function getJson(fetchFn: typeof fetch, url: string): Promise<unknown> {
   return (await res.json()) as unknown
 }
 
+/**
+ * B19: a model's licence, as an Ollama runtime on this computer reports it, so you can read it before you use the
+ * model. Undefined when the runtime is not Ollama, is elsewhere, or says none. At most 50,000 characters.
+ */
+export async function modelLicence(
+  cfg: LocalRuntimeConfig,
+  model: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string | undefined> {
+  if (cfg.kind !== "ollama" || addressProblem(cfg.url)) return undefined
+  if (!cfg.models.some((m) => m.name === model)) return undefined
+  try {
+    const res = await fetchFn(`${base(cfg.url)}/api/show`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model }),
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return undefined
+    const v = (await res.json()) as { license?: unknown }
+    return typeof v.license === "string" && v.license.trim()
+      ? v.license.slice(0, 50_000)
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Checks the runtime before a session uses it: where it listens, its version, and which listed models it has. */
 export async function checkRuntime(
   cfg: LocalRuntimeConfig,

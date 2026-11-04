@@ -3,9 +3,11 @@ import path from "node:path"
 import type { FastifyInstance } from "fastify"
 import { GatehouseConfig, writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "../hostaudit.js"
+import { machineProfile } from "./profile.js"
 import {
   addressProblem,
   checkRuntime,
+  modelLicence,
   runtimeLabel,
   RUNTIME_FIELDS,
   type LocalRuntimeConfig,
@@ -40,6 +42,17 @@ export function registerProviderRoutes(
   }
 
   app.get("/api/providers", async () => await view())
+
+  // B19: what this computer can run, and a model's licence before you use it. Read only; nothing leaves the computer.
+  app.get("/api/providers/profile", async () => await machineProfile())
+  app.get("/api/providers/licence", async (req, reply) => {
+    const model = (req.query as { model?: unknown }).model
+    const local = ctx.config().providers?.local as LocalRuntimeConfig | undefined
+    if (typeof model !== "string" || !local)
+      return reply.code(404).send({ error: "There is no such model on this computer." })
+    const licence = await modelLicence(local, model, ctx.fetchFn)
+    return { licence: licence ?? null }
+  })
 
   // B17: what a provider does with your words, as you recorded it. Recorded first, then saved by adding.
   app.put("/api/providers/boundary", async (req, reply) => {

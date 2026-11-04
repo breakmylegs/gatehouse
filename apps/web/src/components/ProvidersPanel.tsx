@@ -97,6 +97,17 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
   }
 
   const check = view?.check
+  // B19: what this computer can run, said where you choose models.
+  const [profile, setProfile] = useState<{
+    advice: string
+    memoryGb: number
+    gpu?: { name: string; memoryGb: number; atLeast: boolean }
+  }>()
+  useEffect(() => {
+    void api<typeof profile>("GET", "/api/providers/profile").then(
+      (r) => r.ok && r.data && setProfile(r.data),
+    )
+  }, [])
   return (
     <>
       <p className="m-0 text-xs text-mut">
@@ -165,6 +176,15 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
             </select>
           </label>
         </div>
+      ) : null}
+      {profile ? (
+        <p className="m-0 text-xs" role="note">
+          This computer: {profile.memoryGb} GB of memory
+          {profile.gpu
+            ? `, ${profile.gpu.name} (${profile.gpu.atLeast ? "at least " : ""}${profile.gpu.memoryGb} GB)`
+            : ", no graphics card Windows reports"}
+          . {profile.advice}
+        </p>
       ) : null}
       <label className="grid gap-1 text-sm">
         <span>
