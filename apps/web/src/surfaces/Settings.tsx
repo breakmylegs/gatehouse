@@ -28,6 +28,7 @@ function ScreenReaderSetting() {
   )
 }
 import { ProvidersPanel } from "../components/ProvidersPanel"
+import { RoutinesPanel } from "../components/RoutinesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { EFFORTS } from "../lib/modes"
@@ -709,6 +710,10 @@ export function Settings() {
                   </select>
                 </Field>
               </div>
+            </Group>
+
+            <Group section="sessions" title="Routines" gap="gap-2">
+              <RoutinesPanel />
             </Group>
 
             <Group section="sessions" title="How many at once" gap="gap-2" changed={limitChanged}>

@@ -55,6 +55,7 @@ import { localDay, type UsageStore } from "./usage.js"
 import type { PlanUsage } from "./plan-usage.js"
 import { ArtifactError, artifactHeaders, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
+import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
 import type { PhoneService } from "./relay/service.js"
 
@@ -85,6 +86,8 @@ export interface AdminContext {
   projects?: ProjectStore
   /** What chats remember. */
   memory?: MemoryStore
+  /** B34: routines, sessions that start themselves on a schedule. */
+  routines?: RoutineStore
   /** What chats show in a sandbox. */
   artifacts?: ArtifactStore
   /** Your saved prompts (W1-14). */
@@ -470,6 +473,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerInsightRoutes(app, ctx)
   registerProjectRoutes(app, ctx)
   registerMemoryRoutes(app, ctx)
+  registerRoutineRoutes(app, ctx)
   registerArtifactRoutes(app, ctx)
   registerLibraryRoutes(app, ctx)
   registerFilesRoutes(app, ctx)
@@ -959,6 +963,53 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const origin = `http://${String(req.headers.host ?? "127.0.0.1")}`
     for (const [k, v] of Object.entries(artifactHeaders(origin, found.kind))) reply.header(k, v)
     return reply.send(found.content)
+  })
+}
+
+/** B34: routines. Desktop only; each change is recorded by id, name and when, never by the prompt. */
+function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
+  const routines = ctx.routines
+  if (!routines) return
+  const record = (event: string, input: Record<string, unknown>) =>
+    ctx.audit.record({
+      session: "desktop",
+      event,
+      channel: "desktop",
+      tool: "routines",
+      input,
+      verdict: {
+        outcome: "allow",
+        ruleId: event.replaceAll("_", "-"),
+        reason: "Your routines were changed from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+  app.get("/api/routines", async () => ({ routines: routines.list() }))
+  app.put("/api/routines", async (req, reply) => {
+    try {
+      const r = await routines.put((req.body ?? {}) as Partial<Routine>)
+      await record("routine_saved", {
+        id: r.id,
+        name: r.name,
+        time: r.time,
+        days: r.days,
+        extreme: r.extreme === true,
+        enabled: r.enabled,
+      })
+      return { routine: r }
+    } catch (e) {
+      if (e instanceof RoutineError) return bad(reply, 422, e.message)
+      throw e
+    }
+  })
+  app.delete("/api/routines/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    if (!(await routines.remove(id))) return bad(reply, 404, "There is no such routine.")
+    await record("routine_removed", { id })
+    return { ok: true }
   })
 }
 

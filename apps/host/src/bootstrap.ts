@@ -4,6 +4,7 @@ import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel } from "./push/ntfy.js"
 import { LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
+import { RoutineScheduler, RoutineStore } from "./routines.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -288,6 +289,8 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   const projects = new ProjectStore(path.join(gatehouseDataDir(env), "projects"))
   const worktrees = new Worktrees(gatehouseDataDir(env))
+  // B34: routines, started as normal sessions on their days and times while Codehouse is open.
+  const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
   // What chats remember: redacted before it is written, with the same word list as everything else.
   const memory = new MemoryStore(path.join(gatehouseDataDir(env), "memory"), (t) =>
     redact(t, { terms: config.redactTerms }),
@@ -795,6 +798,7 @@ export function createHost(opts: HostOptions = {}): Host {
       sessionCwd: (id) => manager.get(id)?.cwd,
       projects,
       memory,
+      routines,
       artifacts,
       prompts,
       // The marketplace (W1-19): the main account's Claude Code, with no credential in its environment.
@@ -926,6 +930,37 @@ export function createHost(opts: HostOptions = {}): Host {
           .then(() => opts.onHealthChanged?.())
           .catch(() => undefined)
       limitPauser.start()
+      // B34: each routine through the same path as any session: kill switch, sign-in, organisation, limits.
+      new RoutineScheduler({
+        store: routines,
+        log,
+        start: async (r) => {
+          const recorded = await audit.record({
+            session: "desktop",
+            event: "routine_run",
+            channel: "host",
+            tool: "routines",
+            cwd: r.folder,
+            input: { id: r.id, name: r.name },
+            verdict: {
+              outcome: "allow",
+              ruleId: "routine-run",
+              reason: `The routine ${r.name} started at its time.`,
+              risk: 0,
+              decidedBy: "rules",
+              policyHash: store.current?.hash ?? "",
+            },
+            latencyMs: 0,
+          })
+          if (!recorded) throw new Error("it could not be recorded, so it did not start")
+          const session = await manager.start({
+            cwd: r.folder,
+            mode: "default",
+            ...(r.extreme ? { extreme: true } : {}),
+          })
+          session.prompt(r.prompt)
+        },
+      }).start()
       // In the background: the window opens at once and each session appears as it comes back.
       if (openSessions)
         void restoreOpenSessions(openSessions, {

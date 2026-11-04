@@ -71,7 +71,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 
 | Id | Item | Status | Notes and acceptance |
 |---|---|---|---|
-| B34 | Local routines (schedule, file and git triggers) | todo | Only while signed in; each run a normal session with Extreme limits; kill switch covers them |
+| B34 | Local routines (schedule, file and git triggers) | done for schedules (4 Nov); file and git triggers later | Only while signed in; each run a normal session with Extreme limits; kill switch covers them |
 | B35 | Phone starts a session from an approved template | no, safe variant later | Free text from the phone conflicts with rule 7 as amended; a signed template with fixed inputs is the safe variant |
 | B36 | Local OpenTelemetry export | done (4 Nov) | To 127.0.0.1 or a file by default, no prompt text, redacted |
 | B37 | Signed managed policy bundle from IT | done (4 Nov), docs/managed-policy.md | A policy file signed by an IT key, read-only location; tampering stops sessions starting |
