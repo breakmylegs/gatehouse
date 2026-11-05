@@ -107,6 +107,20 @@ describe("pausing a session", () => {
     expect(s.sdk.queries.at(-1)?.prompts).toEqual(["go on, I know"])
   })
 
+  it("started by you, holds until the pause would have ended, so the next look does not pause it again", async () => {
+    s.sdk.turn = async (api) => api.say("done")
+    const session = await s.manager.start({ cwd: s.repo })
+    const midnight = new Date(Date.now() + 3_600_000).toISOString()
+    await session.pause(120, midnight, "spend")
+    await session.resume("you")
+    expect(session.protectionOffUntil).toBe(Date.parse(midnight))
+    // The limit starting it again holds nothing.
+    const other = await s.manager.start({ cwd: s.repo })
+    await other.pause(95, midnight)
+    await other.resume("limit-reset")
+    expect(other.protectionOffUntil).toBeUndefined()
+  })
+
   it("stays paused while the kill switch is engaged, and starts again after", async () => {
     s.sdk.turn = async (api, text) => {
       if (text === "work") return holdUntilStopped(api)

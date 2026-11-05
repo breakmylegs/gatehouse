@@ -281,6 +281,9 @@ export interface SessionEvents {
  */
 export const START_TIMEOUT_MS = 300_000
 
+/** A pause with no end time: how long Start now holds before a limit may pause the session again (a plan window). */
+export const HOLD_MS = 5 * 3_600_000
+
 export interface SessionDeps {
   queryFn: QueryFn
   /** Your title, pin and archive for a Claude Code session id. Absent where they are not kept. */
@@ -492,6 +495,8 @@ export class Session extends EventEmitter<SessionEvents> {
   #compactAfterTurn = false
   /** Paused at the plan limit: nothing carries on by itself until it starts again. */
   #paused: SessionInfo["paused"]
+  /** Owner, 5 Nov: started again by you, so no limit pauses it again until this (epoch ms). */
+  #protectionOffUntil: number | undefined
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -1102,6 +1107,11 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#paused
   }
 
+  /** Until when no limit pauses this session again, because you started it while paused. */
+  get protectionOffUntil(): number | undefined {
+    return this.#protectionOffUntil
+  }
+
   /** Names a warm chat from the first message it is given, as a chat started then would be named. */
   label(title: string): void {
     this.#label = chatTitle(title)
@@ -1288,6 +1298,13 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!this.#paused) return
     const p = this.#paused
     this.#paused = undefined
+    // Owner, 5 Nov: Start now ran a few messages and the next look paused it again. Started by you, it carries on
+    // until that pause would have ended anyway (midnight for the spending cap, the reset for the plan limit).
+    if (by === "you") {
+      const until = p.until ? Date.parse(p.until) : NaN
+      this.#protectionOffUntil =
+        Number.isFinite(until) && until > Date.now() ? until : Date.now() + HOLD_MS
+    }
     await this.#auditLimit(
       "limit_resume",
       "limit-resume",
