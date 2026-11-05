@@ -13,6 +13,7 @@ import { registerDoctorRoutes } from "./doctor.js"
 import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
+import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -105,6 +106,8 @@ export interface AdminContext {
   chat?: ChatDeps
   /** While you were away, written by Claude (owner, 4 Nov). */
   recap?: RecapDeps
+  /** CH-04: importing a claude.ai export. */
+  chatImport?: ImportDeps
   /** What a chat was told it remembers when it started (CH-03). */
   sessionMemory?: (
     id: string,
@@ -509,6 +512,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
+  if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
   // CH-03: exactly what a chat was told it remembers, for its Memory panel. Already redacted when it was kept.
   app.get("/api/memory/given", async (req, reply) => {
     const id = String((req.query as { session?: unknown }).session ?? "")

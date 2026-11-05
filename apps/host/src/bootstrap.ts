@@ -889,7 +889,31 @@ export function createHost(opts: HostOptions = {}): Host {
       marketplace,
       evals,
       planUsage: (account, fresh) => manager.planUsage(account, fresh),
-      pickFiles: pickFilesWithWindows,
+      // The open window through Codehouse-Helper.exe; PowerShell only where the helper cannot be had (owner, 4 Nov).
+      pickFiles: () => {
+        const exe = helper()
+        return exe
+          ? helperPickers(exe).openFiles({ many: true, title: "Add files or photos" })
+          : pickFilesWithWindows()
+      },
+      // CH-04: importing a claude.ai export, the zip chosen in the open window and nowhere else.
+      chatImport: {
+        store: chatStore,
+        pickZip: async () => {
+          const exe = helper()
+          const picked = exe
+            ? await helperPickers(exe).openFiles({
+                many: false,
+                title: "Choose your claude.ai export",
+                filter: "claude.ai export (*.zip)|*.zip",
+              })
+            : (await pickFilesWithWindows()).filter((f) => f.toLowerCase().endsWith(".zip"))
+          return picked[0]
+        },
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+        tmpDir: os.tmpdir(),
+      },
       updates,
       health,
       claude: () => claudeVersion(findClaudeBinary),

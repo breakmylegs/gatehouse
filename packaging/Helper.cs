@@ -13,6 +13,9 @@ using System.Windows.Forms;
 //                                       cancelled. The starting folder comes in CODEHOUSE_PICK_START.
 //   Codehouse-Helper.exe --save-as      the normal save window; the file chosen on stdout. The suggested name comes in
 //                                       CODEHOUSE_SAVE_NAME.
+//   Codehouse-Helper.exe --open-files   the normal open window, several files; --open-file, one. Their paths on stdout,
+//                                       one to a line. Its title and file types come in CODEHOUSE_OPEN_TITLE and
+//                                       CODEHOUSE_OPEN_FILTER.
 //
 // Names and folders travel in environment variables, never on the command line, so none can become an argument.
 // Output is UTF-8 without a byte order mark. Exit code 0 is success (a cancelled window too), 1 a failure, 2 misuse.
@@ -37,6 +40,8 @@ static class Helper
                 case "--unprotect": return Seal(false);
                 case "--pick-folder": return PickFolder();
                 case "--save-as": return SaveAs();
+                case "--open-files": return OpenFiles(true);
+                case "--open-file": return OpenFiles(false);
                 default: return Usage();
             }
         }
@@ -49,7 +54,7 @@ static class Helper
 
     static int Usage()
     {
-        Console.Error.WriteLine("usage: Codehouse-Helper.exe --protect | --unprotect | --pick-folder | --save-as");
+        Console.Error.WriteLine("usage: Codehouse-Helper.exe --protect | --unprotect | --pick-folder | --save-as | --open-files | --open-file");
         return 2;
     }
 
@@ -86,6 +91,24 @@ static class Helper
             string start = Environment.GetEnvironmentVariable("CODEHOUSE_PICK_START");
             if (!string.IsNullOrEmpty(start) && Directory.Exists(start)) d.SelectedPath = start;
             if (d.ShowDialog(owner) == DialogResult.OK) Console.Out.Write(d.SelectedPath);
+        }
+        return 0;
+    }
+
+    /// <summary>The normal open window: one file, or several. Their paths on stdout, one to a line.</summary>
+    static int OpenFiles(bool many)
+    {
+        using (Form owner = Owner())
+        using (OpenFileDialog d = new OpenFileDialog())
+        {
+            d.Multiselect = many;
+            d.Title = Environment.GetEnvironmentVariable("CODEHOUSE_OPEN_TITLE") ?? (many ? "Add files or photos" : "Choose a file");
+            string filter = Environment.GetEnvironmentVariable("CODEHOUSE_OPEN_FILTER");
+            if (!string.IsNullOrEmpty(filter))
+            {
+                try { d.Filter = filter; } catch (ArgumentException) { }
+            }
+            if (d.ShowDialog(owner) == DialogResult.OK) Console.Out.Write(string.Join("\n", d.FileNames));
         }
         return 0;
     }

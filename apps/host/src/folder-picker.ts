@@ -72,8 +72,25 @@ function chosen(
  * The same two windows through Codehouse-Helper.exe (packaging/Helper.cs), with no PowerShell (owner, 4 Nov: "Why do
  * I need powershell at all?"). The PowerShell ones below are the fallback where the helper cannot be had.
  */
-export function helperPickers(exe: string): { pickFolder: FolderPicker; saveAs: SaveAsPicker } {
+/** Files chosen in the normal open window: one, or several. Nothing from a request reaches the window. */
+export type OpenPicker = (o: { many: boolean; title: string; filter?: string }) => Promise<string[]>
+
+export function helperPickers(exe: string): {
+  pickFolder: FolderPicker
+  saveAs: SaveAsPicker
+  openFiles: OpenPicker
+} {
   return {
+    openFiles: async (o) =>
+      (
+        (await chosen(exe, [o.many ? "--open-files" : "--open-file"], {
+          CODEHOUSE_OPEN_TITLE: o.title,
+          ...(o.filter ? { CODEHOUSE_OPEN_FILTER: o.filter } : {}),
+        })) ?? ""
+      )
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean),
     pickFolder: (start) =>
       chosen(exe, ["--pick-folder"], { CODEHOUSE_PICK_START: folderOrEmpty(start) }),
     saveAs: (suggestedName) =>
