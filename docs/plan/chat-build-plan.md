@@ -118,7 +118,8 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 - CH-04 importer: in progress. Done 5 Nov: the zip reader, the streaming parser, the mapping and the one-transaction import (ADR 0014).
 - CH-04 complete 5 Nov: the import screen, its route and audit entry. No flag: shipped with the viewer.
 - CH-05 viewer and search: done 5 Nov, apart from its Open in Claude and Continue locally buttons, which are CH-06 and CH-07.
-- Next: CH-06, Open in Claude.
+- CH-06 Open in Claude: done 5 Nov (ADR 0017).
+- Next: CH-07, Continue locally.
 
 ## 8. Owner decision (4 Nov 2026)
 

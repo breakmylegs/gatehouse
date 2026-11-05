@@ -90,6 +90,25 @@ function build(loose: boolean) {
     keepAwake: z.boolean().optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** Open in Claude (CH-06): where an imported chat opens in claude.ai. Absent: an Edge app window, Default profile. */
+    chatHandoff: z
+      .object({
+        target: z.enum(["edge", "browser", "app"]).optional(),
+        edgeProfile: z
+          .string()
+          .regex(/^(Default|Profile \d{1,3}|Guest Profile)$/)
+          .optional(),
+        appLink: z.boolean().optional(),
+        templates: z
+          .object({
+            chat: z.string().max(300).optional(),
+            project: z.string().max(300).optional(),
+            new: z.string().max(300).optional(),
+          })
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
     /**
      * Who you are to Claude, from Settings, Account and plan, Profile (owner, 4 Nov, after Claude's desktop app): what
      * it should call you and what best describes your work. Told to every session first. Absent: nothing.

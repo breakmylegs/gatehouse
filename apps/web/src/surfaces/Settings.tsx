@@ -61,6 +61,7 @@ interface Config {
   profile?: { callMe?: string; work?: string }
   keepAwake?: boolean
   recapByClaude?: boolean
+  chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
@@ -125,6 +126,10 @@ interface Values {
   awake: boolean
   /** While you were away, written by Claude. */
   recap: boolean
+  /** Open in Claude (CH-06). */
+  handoff: "edge" | "browser" | "app"
+  edgeProfile: string
+  appLink: boolean
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -160,6 +165,9 @@ function valuesOf(d: SettingsData): Values {
     work: c.profile?.work ?? "",
     awake: c.keepAwake !== false,
     recap: c.recapByClaude !== false,
+    handoff: c.chatHandoff?.target ?? "edge",
+    edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
+    appLink: c.chatHandoff?.appLink === true,
   }
 }
 
@@ -194,6 +202,18 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
   else body.recapByClaude = false
+  // Open in Claude: what this page sets, over anything else kept there (the address templates).
+  const handoff: Record<string, unknown> = {
+    ...((d.saved.chatHandoff as Record<string, unknown> | undefined) ?? {}),
+  }
+  delete handoff.target
+  delete handoff.edgeProfile
+  delete handoff.appLink
+  if (v.handoff !== "edge") handoff.target = v.handoff
+  if (v.edgeProfile !== "Default") handoff.edgeProfile = v.edgeProfile
+  if (v.appLink) handoff.appLink = true
+  if (Object.keys(handoff).length) body.chatHandoff = handoff
+  else delete body.chatHandoff
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -270,6 +290,9 @@ export const DEFAULT_VALUES: Values = {
   work: "",
   awake: true,
   recap: true,
+  handoff: "edge",
+  edgeProfile: "Default",
+  appLink: false,
 }
 const differs = (v: Values, keys: Array<keyof Values>) =>
   keys.some((k) => v[k] !== DEFAULT_VALUES[k])
@@ -1140,6 +1163,72 @@ export function Settings() {
 
             <Group section="privacy" title="Chats from claude.ai" gap="gap-2">
               <ClaudeImport />
+            </Group>
+
+            <Group
+              section="privacy"
+              title="Open in Claude"
+              gap="gap-2"
+              changed={differs(v, ["handoff", "edgeProfile", "appLink"])}
+            >
+              <p className="m-0 text-[13px] text-mut">
+                Where an imported chat opens in claude.ai. You sign in there, in Edge or the Claude
+                app; Codehouse never sees it and reads nothing back.
+              </p>
+              <fieldset className="m-0 grid gap-1 border-0 p-0">
+                <legend className="sr-only">Open in</legend>
+                {(
+                  [
+                    ["edge", "An Edge app window"],
+                    ["browser", "Your default browser"],
+                    ["app", "The Claude app"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="handoff"
+                      checked={v.handoff === value}
+                      onChange={() => change({ handoff: value }, "Open in Claude")}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+              <label className="flex items-center gap-2">
+                <span>Edge profile</span>
+                <select
+                  className="field !min-h-7 !py-0"
+                  value={v.edgeProfile}
+                  onChange={(e) => change({ edgeProfile: e.target.value }, "Open in Claude")}
+                >
+                  {[
+                    "Default",
+                    "Profile 1",
+                    "Profile 2",
+                    "Profile 3",
+                    "Profile 4",
+                    "Profile 5",
+                    "Guest Profile",
+                  ].map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.appLink}
+                  onChange={(e) => change({ appLink: e.target.checked }, "Open in Claude")}
+                />
+                Let the Claude app open them
+              </label>
+              <p className="m-0 text-xs text-mut">
+                The Claude app's link is not documented by Anthropic, so it is off unless you turn
+                it on. When the app is not installed, Edge is used instead.
+              </p>
             </Group>
 
             <Group section="phone" title="Notifications" gap="gap-2">

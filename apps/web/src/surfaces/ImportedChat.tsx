@@ -76,6 +76,25 @@ export function ImportedChat() {
           : "A chat kept in Codehouse."}
       </p>
       <div className="flex flex-wrap gap-2">
+        {c.kind === "imported" ? (
+          <button
+            type="button"
+            className="btn !min-h-7"
+            onClick={async () => {
+              // CH-06: in claude.ai itself, in a separate program (Settings, Privacy, Open in Claude).
+              const r = await api<{ target: string }>("POST", "/api/chat/handoff", {
+                conversation: c.id,
+              })
+              if (!r.ok)
+                return toast.error(r.error ?? "It could not be opened in claude.ai.", {
+                  id: "imported",
+                })
+              toast("Opened in claude.ai", { id: "imported" })
+            }}
+          >
+            Open in Claude
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn !min-h-7"

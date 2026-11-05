@@ -21,6 +21,7 @@ import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folde
 import { findCodehouseHelper } from "./win-helper.js"
 import { ChatStore } from "./chat/db.js"
 import { ChatRecorder } from "./chat/recorder.js"
+import { findEdge, hasAppLink, realLauncher } from "./chat/handoff.js"
 import { createRecapWriter } from "./recap-writer.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
@@ -895,6 +896,16 @@ export function createHost(opts: HostOptions = {}): Host {
         return exe
           ? helperPickers(exe).openFiles({ many: true, title: "Add files or photos" })
           : pickFilesWithWindows()
+      },
+      // CH-06: Open in Claude, in a separate program; nothing is read back.
+      chatHandoff: {
+        store: chatStore,
+        settings: () => config.chatHandoff ?? {},
+        launcher: realLauncher(helper),
+        findEdge: () => findEdge(),
+        hasAppLink: () => hasAppLink(),
+        audit,
+        policyHash: () => store.current?.hash ?? "",
       },
       // CH-04: importing a claude.ai export, the zip chosen in the open window and nowhere else.
       chatImport: {

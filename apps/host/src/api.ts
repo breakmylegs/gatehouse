@@ -14,6 +14,7 @@ import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
+import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -108,6 +109,8 @@ export interface AdminContext {
   recap?: RecapDeps
   /** CH-04: importing a claude.ai export. */
   chatImport?: ImportDeps
+  /** CH-06: Open in Claude. */
+  chatHandoff?: HandoffDeps
   /** What a chat was told it remembers when it started (CH-03). */
   sessionMemory?: (
     id: string,
@@ -513,6 +516,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
   if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
+  if (ctx.chatHandoff) registerHandoffRoutes(app, ctx.chatHandoff)
   // CH-03: exactly what a chat was told it remembers, for its Memory panel. Already redacted when it was kept.
   app.get("/api/memory/given", async (req, reply) => {
     const id = String((req.query as { session?: unknown }).session ?? "")
@@ -1415,6 +1419,7 @@ const LIVE_SETTINGS = [
   "profile",
   "keepAwake",
   "recapByClaude",
+  "chatHandoff",
   "providers",
 ] as const
 
