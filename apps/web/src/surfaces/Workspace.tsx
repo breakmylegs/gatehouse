@@ -478,6 +478,18 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
+    // Owner, 5 Nov: limit protection off for this session for a while; it comes back on by itself.
+    ...(protectedUntil(session)
+      ? [
+          {
+            label: "Turn limit protection back on",
+            onSelect: () => setProtection(session.id, null),
+          },
+        ]
+      : PROTECTION_HOURS.map((h) => ({
+          label: `Limit protection off for ${h === 1 ? "1 hour" : `${h} hours`}`,
+          onSelect: () => setProtection(session.id, h * 60),
+        }))),
     // B25: carry on until a check passes, while Extreme approval carries on.
     ...(chat
       ? []
@@ -885,6 +897,9 @@ function SessionPane({
         {session.state === "error" ? <StoppedLine session={session} /> : null}
         {session.state === "starting" ? <ComingBack session={session} /> : null}
         {session.paused ? <PausedLine session={session} paused={session.paused} /> : null}
+        {!session.paused && protectedUntil(session) ? (
+          <ProtectionOffLine session={session} />
+        ) : null}
         {pending[0] ? (
           <SessionRequest
             view={pending[0]}
@@ -1355,6 +1370,54 @@ function StoppedLine({ session }: { session: SessionInfo }) {
  * A session Codehouse paused at the plan's 5-hour limit (owner, 31 Oct): why, when it starts again by itself, and a
  * way to start it now.
  */
+/** Owner, 5 Nov: how long limit protection may be off for, in hours. At most a day; then it is on again by itself. */
+export const PROTECTION_HOURS = [1, 3, 8, 24] as const
+
+/** When limit protection comes back on for this session, if it is off now. */
+export function protectedUntil(session: SessionInfo): string | undefined {
+  const until = session.protectionOffUntil
+  return until && Date.parse(until) > Date.now() ? until : undefined
+}
+
+function setProtection(sessionId: string, offMinutes: number | null): void {
+  void send({ type: "set_limit_protection", sessionId, offMinutes }).then((r) => {
+    if (!r.ok) toast.error(r.error?.message ?? "Limit protection could not be changed")
+    else
+      toast(
+        offMinutes === null
+          ? "Limit protection is on again"
+          : "Limit protection is off for a while",
+        {
+          id: "protection",
+        },
+      )
+  })
+}
+
+/**
+ * Limit protection off for this session (owner, 5 Nov): neither the plan's 5-hour limit nor the spending cap pauses it
+ * until the time shown, and then both apply again by themselves.
+ */
+function ProtectionOffLine({ session }: { session: SessionInfo }) {
+  const until = protectedUntil(session)!
+  return (
+    <div role="status" className="pane-stopped">
+      <span>
+        <strong>Limit protection off</strong> until {clock(until) || "later today"}: the plan's
+        5-hour limit and the spending cap do not pause this session until then. It comes back on by
+        itself.
+      </span>
+      <button
+        type="button"
+        className="btn !min-h-7"
+        onClick={() => setProtection(session.id, null)}
+      >
+        Turn back on
+      </button>
+    </div>
+  )
+}
+
 function PausedLine({
   session,
   paused,
@@ -1395,6 +1458,22 @@ function PausedLine({
       >
         {busy ? "Starting" : "Start now"}
       </button>
+      <label className="flex items-center gap-1 text-[13px]">
+        <span>Or keep going for</span>
+        <select
+          className="field !min-h-7 !py-0"
+          aria-label="Turn limit protection off for"
+          value=""
+          onChange={(e) => e.target.value && setProtection(session.id, Number(e.target.value) * 60)}
+        >
+          <option value="">choose…</option>
+          {PROTECTION_HOURS.map((h) => (
+            <option key={h} value={h}>
+              {h === 1 ? "1 hour" : `${h} hours`}
+            </option>
+          ))}
+        </select>
+      </label>
       {/* B21: or carry a chat on now with a model you allow, no looser with your words than Claude. */}
       <FallbackButton session={session} />
     </div>

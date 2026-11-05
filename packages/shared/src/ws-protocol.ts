@@ -79,6 +79,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("force_stop"), sessionId: Id }),
   /** Starts a session again that Codehouse paused at the plan limit, before the limit resets. */
   z.object({ type: z.literal("resume_session"), sessionId: Id }),
+  /** Owner, 5 Nov: limit protection off for this session for so many minutes (at most a day), or null for on again. */
+  z.object({
+    type: z.literal("set_limit_protection"),
+    sessionId: Id,
+    offMinutes: z.number().int().min(1).max(1440).nullable(),
+  }),
   /** How much of this computer a session may use: Low, Medium or High. */
   z.object({
     type: z.literal("set_resources"),
@@ -293,6 +299,8 @@ export const SessionInfo = z.object({
   historyUntil: z.string().max(100).optional(),
   /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */
   worktree: z.object({ branch: z.string(), repo: z.string() }).optional(),
+  /** Owner, 5 Nov: neither the plan limit nor the spending cap pauses it until then; after it, both apply again. */
+  protectionOffUntil: z.string().optional(),
   /**
    * Paused because the plan's 5-hour limit reached its pause point. It starts again by itself when the limit resets
    * (`until`, when known), or when you start it.

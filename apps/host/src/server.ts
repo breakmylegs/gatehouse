@@ -489,6 +489,9 @@ export class HostServer {
         // A session Codehouse paused at the plan limit, started again by you before the limit resets.
         await this.#session(cmd.sessionId).resume("you")
         return undefined
+      case "set_limit_protection":
+        await this.#session(cmd.sessionId).setLimitProtection(cmd.offMinutes)
+        return undefined
       case "set_resources":
         await this.#session(cmd.sessionId).setResources(cmd.level)
         return undefined

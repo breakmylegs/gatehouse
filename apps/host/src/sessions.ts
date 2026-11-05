@@ -244,6 +244,8 @@ export interface SessionInfo {
   replaces?: string
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
+  /** Owner, 5 Nov: limit protection is off for this session until then. */
+  protectionOffUntil?: string
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
   paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" }
 }
@@ -606,6 +608,9 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
+      ...(this.#protectionOffUntil !== undefined && this.#protectionOffUntil > Date.now()
+        ? { protectionOffUntil: new Date(this.#protectionOffUntil).toISOString() }
+        : {}),
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
       ...(this.#opts.kind === "chat" && this.#opts.research ? { research: true } : {}),
@@ -1292,6 +1297,31 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     await this.#endPause(by)
     return true
+  }
+
+  /**
+   * Owner, 5 Nov: limit protection off for this session for a while you choose (at most a day), or on again. Off,
+   * neither the plan's 5-hour limit nor the spending cap pauses it, and one they had paused carries on; when the time
+   * is up both apply again by themselves. Each change is audited.
+   */
+  async setLimitProtection(offMinutes: number | null): Promise<void> {
+    let until: number | undefined
+    if (offMinutes !== null) {
+      const minutes = Math.min(Math.max(Math.round(offMinutes), 1), 24 * 60)
+      if (this.#paused) await this.resume("you")
+      until = Date.now() + minutes * 60_000
+    }
+    this.#protectionOffUntil = until
+    await this.#auditLimit(
+      "limit_protection",
+      "limit-protection",
+      until !== undefined ? { offMinutes, until: new Date(until).toISOString() } : { on: true },
+      until !== undefined
+        ? "You turned limit protection off for this session for a while: the plan limit and the spending cap do not pause it until then."
+        : "You turned limit protection back on for this session.",
+      "human-desktop",
+    )
+    this.emit("state", this.info())
   }
 
   async #endPause(by: "you" | "limit-reset"): Promise<void> {

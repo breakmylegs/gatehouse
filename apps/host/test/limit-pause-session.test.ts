@@ -219,3 +219,61 @@ describe("a pause across a restart", () => {
     await vi.waitFor(() => expect(s.sdk.queries.at(-1)?.prompts).toEqual([LIMIT_RESUME_PROMPT]))
   })
 })
+
+describe("limit protection off for a while (owner, 5 Nov)", () => {
+  it("lets a paused session carry on, keeps the limits from pausing it, and comes back on by itself", async () => {
+    s.sdk.turn = async (api) => api.say("ok")
+    const session = await s.manager.start({ cwd: s.repo })
+    await session.pause(96, RESET)
+    let now = Date.now()
+    const pauser = new LimitPauser({
+      sessions: () => [session],
+      planUsage: async () => limit(97),
+      now: () => now,
+      log: () => undefined,
+    })
+    await session.setLimitProtection(60)
+    expect(session.info().paused).toBeUndefined()
+    const until = Date.parse(session.info().protectionOffUntil!)
+    expect(until - Date.now()).toBeGreaterThan(59 * 60_000)
+    expect(until - Date.now()).toBeLessThanOrEqual(60 * 60_000)
+    // The limit is over the pause point, but protection is off: nothing pauses it.
+    await pauser.check()
+    expect(session.info().paused).toBeUndefined()
+    // An hour later it is on again by itself, and the limit pauses it.
+    now = until + 1
+    vi.spyOn(Date, "now").mockReturnValue(until + 1)
+    try {
+      await pauser.check()
+      expect(session.info().paused).toMatchObject({ percent: 97 })
+      expect(session.info().protectionOffUntil).toBeUndefined()
+    } finally {
+      vi.restoreAllMocks()
+    }
+    expect(records(session.id, "limit_protection")[0]?.verdict).toMatchObject({
+      ruleId: "limit-protection",
+      decidedBy: "human-desktop",
+    })
+  })
+
+  it("is on again at once when you turn it back on, and never off for more than a day", async () => {
+    s.sdk.turn = async (api) => api.say("ok")
+    const session = await s.manager.start({ cwd: s.repo })
+    await session.setLimitProtection(10_000)
+    expect(Date.parse(session.info().protectionOffUntil!) - Date.now()).toBeLessThanOrEqual(
+      24 * 60 * 60_000,
+    )
+    await session.setLimitProtection(null)
+    expect(session.info().protectionOffUntil).toBeUndefined()
+    const pauser = new LimitPauser({
+      sessions: () => [session],
+      planUsage: async () => limit(97),
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(session.info().paused).toMatchObject({ percent: 97 })
+    expect(
+      records(session.id, "limit_protection").map((r) => (r as { inputJson?: string }).inputJson),
+    ).toEqual([expect.stringContaining("offMinutes"), expect.stringContaining("on")])
+  })
+})
