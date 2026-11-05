@@ -866,6 +866,7 @@ export function createHost(opts: HostOptions = {}): Host {
       sessionCwd: (id) => manager.get(id)?.cwd,
       sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
       chat: { store: chatStore, recorder: chatRecorder },
+      sessionMemory: (id) => manager.get(id)?.memoryGiven(),
       // While you were away, written by Claude (owner, 4 Nov): redacted first, no tools, audited, and only when the
       // signed-in account passed the organisation check (invariant 14).
       recap: {

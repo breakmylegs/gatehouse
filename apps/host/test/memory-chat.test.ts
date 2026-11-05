@@ -204,6 +204,10 @@ describe("a chat started with memory", () => {
     expect(used).toHaveLength(1)
     expect(JSON.stringify(used[0])).toContain("Units")
     expect(JSON.stringify(used[0])).not.toContain("metric")
+    // CH-03: the chat keeps exactly what it was told, for its Memory panel.
+    expect(chat.memoryGiven()).toEqual([
+      { id: expect.any(String), scope: "global", topic: "Units", text: "Prefers metric." },
+    ])
   })
 
   it("says when there is nothing remembered yet, and does not record a use of nothing", async () => {
@@ -213,6 +217,7 @@ describe("a chat started with memory", () => {
     const o = s.sdk.queries.at(-1)?.options as { systemPrompt: string }
     expect(o.systemPrompt).toContain("You do not remember anything about them yet.")
     expect(s.records().some((r) => r.session === chat.id && r.event === "memory_used")).toBe(false)
+    expect(chat.memoryGiven()).toEqual([])
     s.deps.memory = store
   })
 

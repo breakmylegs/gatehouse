@@ -110,6 +110,7 @@ describe("a chat", () => {
     expect([...panels.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
       "Artifacts",
       "Sources",
+      "Memory",
     ])
     expect(screen.queryByRole("combobox", { name: /^Mode$/ })).toBeNull()
     expect(screen.getByText(/never changes files/)).toBeTruthy()

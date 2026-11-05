@@ -210,7 +210,7 @@ describe("in a chat", () => {
       within(panels)
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Artifacts", "Sources"])
+    ).toEqual(["Artifacts", "Sources", "Memory"])
     await userEvent.click(within(panels).getByRole("button", { name: "Artifacts" }))
     expect(await screen.findByTitle("Artifact: Logo, version 1")).toBeTruthy()
     unmount()

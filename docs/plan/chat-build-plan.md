@@ -114,7 +114,8 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 - CH-03 tool posture: done 4 Nov (ADR 0012, rule `chat-no-shell`). The outputs folder is deferred (ADR 0012) until rules can be scoped to one session's folder.
 - CH-03 finding chats: done 4 Nov (search in Ctrl+K, recency groups in the sidebar).
 - CH-03 artifact views: done 4 Nov (ADR 0019, Markdown and code).
-- Next in CH-03: memory shown as injected. Then CH-04, the claude.ai export importer.
+- CH-03 memory as given: done 5 Nov. CH-03 is complete, apart from the outputs folder (deferred, ADR 0012).
+- Next: CH-04, the claude.ai export importer.
 
 ## 8. Owner decision (4 Nov 2026)
 

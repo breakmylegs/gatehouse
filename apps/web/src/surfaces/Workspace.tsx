@@ -1,3 +1,4 @@
+import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
 import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
@@ -239,7 +240,7 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
   ended: "Ended",
 }
 
-type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources"
+type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources" | "memory"
 /** Each side panel's icon from the Codehouse pack. */
 const SIDE_ICON: Record<Side, IconName> = {
   plan: "plan",
@@ -248,6 +249,7 @@ const SIDE_ICON: Record<Side, IconName> = {
   terminal: "terminal",
   artifacts: "artifacts",
   sources: "sources",
+  memory: "memory",
 }
 const SIDE_LABEL: Record<Side, string> = {
   plan: "Plan",
@@ -256,6 +258,7 @@ const SIDE_LABEL: Record<Side, string> = {
   terminal: "Terminal",
   artifacts: "Artifacts",
   sources: "Sources",
+  memory: "Memory",
 }
 
 function SessionPane({
@@ -401,6 +404,8 @@ function SessionPane({
   const toggleSide = (t: Side) => setSide((s) => (s === t ? null : t))
   // An artifact's card in the transcript opens the Artifacts panel (Stitch, R8).
   const openArtifacts = useCallback(() => setSide("artifacts"), [])
+  // CH-03: exactly what this chat was told it remembers, when its Memory panel is open.
+  const memoryGiven = useMemoryGiven(sessionId, side === "memory")
   // Closing puts focus back on the button that opened it, so the keyboard does not lose its place.
   const closeRail = () => {
     const was = side
@@ -622,6 +627,19 @@ function SessionPane({
               <Icon name="sources" size={14} />
               Sources{sourceCount ? ` ${sourceCount}` : ""}
             </button>
+            <button
+              ref={(el) => {
+                tools.current.memory = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === "memory"}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide("memory")}
+            >
+              <Icon name="memory" size={14} />
+              Memory
+            </button>
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
@@ -839,6 +857,8 @@ function SessionPane({
               <ArtifactsPane sessionId={session.id} refresh={artifactSaves} />
             ) : side === "sources" ? (
               <SourcesPane items={transcript.items} />
+            ) : side === "memory" ? (
+              <MemoryGiven entries={memoryGiven} />
             ) : side === "terminal" ? (
               <TerminalPane sessionId={session.id} cwd={session.cwd} />
             ) : side === "changes" ? (

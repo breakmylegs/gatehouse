@@ -105,6 +105,10 @@ export interface AdminContext {
   chat?: ChatDeps
   /** While you were away, written by Claude (owner, 4 Nov). */
   recap?: RecapDeps
+  /** What a chat was told it remembers when it started (CH-03). */
+  sessionMemory?: (
+    id: string,
+  ) => Array<{ id: string; scope: string; topic: string; text: string }> | undefined
   /** B39: plugin evaluations, with and without a plugin, in Plan mode. */
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
@@ -505,6 +509,13 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
+  // CH-03: exactly what a chat was told it remembers, for its Memory panel. Already redacted when it was kept.
+  app.get("/api/memory/given", async (req, reply) => {
+    const id = String((req.query as { session?: unknown }).session ?? "")
+    const entries = ctx.sessionMemory?.(id)
+    if (!entries) return reply.code(404).send({ error: "There is no such session." })
+    return { entries }
+  })
   registerProviderRoutes(app, {
     audit: ctx.audit,
     config: ctx.config,

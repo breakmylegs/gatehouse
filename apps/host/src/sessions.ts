@@ -470,6 +470,7 @@ export const writtenKey = (file: string, cwd: string): string =>
   path.resolve(cwd, file).toLowerCase()
 
 export class Session extends EventEmitter<SessionEvents> {
+  #memoryGiven: Array<{ id: string; scope: string; topic: string; text: string }> = []
   readonly id: string
   readonly cwd: string
   readonly project: string
@@ -648,6 +649,13 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#opts.kind === "chat" && this.#deps.memory
         ? this.#deps.memory.forChat(project)
         : undefined
+    // Kept as given, so the chat can show exactly what Claude was told (CH-03).
+    this.#memoryGiven = (memory ?? []).map((m) => ({
+      id: m.id,
+      scope: m.scope,
+      topic: m.topic,
+      text: m.text,
+    }))
     if (memory?.length)
       await this.#deps.audit
         .record({
@@ -1044,6 +1052,11 @@ export class Session extends EventEmitter<SessionEvents> {
     if (before === "error" || before === "ended") return
     if (e instanceof SafetyError || e instanceof OrgGuardError || !isProcessCrash(e.message)) return
     this.emit("crashed", { wasRunning, message: e.message })
+  }
+
+  /** What this chat was told it remembers when it started, in the words it was given (CH-03). */
+  memoryGiven(): Array<{ id: string; scope: string; topic: string; text: string }> {
+    return this.#memoryGiven.map((m) => ({ ...m }))
   }
 
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
