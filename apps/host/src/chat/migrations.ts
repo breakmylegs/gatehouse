@@ -112,6 +112,11 @@ export const MIGRATIONS: readonly string[] = [
   `
   ALTER TABLE message ADD COLUMN cwd TEXT;
   `,
+  // 4 (CH-04): an imported conversation is found again by its claude.ai id, so importing again changes nothing.
+  `
+  ALTER TABLE conversation ADD COLUMN source_uuid TEXT;
+  CREATE UNIQUE INDEX conversation_source_uuid ON conversation(source_uuid) WHERE source_uuid IS NOT NULL;
+  `,
 ]
 
 export class ChatSchemaError extends Error {}

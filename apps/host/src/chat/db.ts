@@ -4,6 +4,7 @@ import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { migrate } from "./migrations.js"
 import { Tree, type BranchStep } from "./tree.js"
+import { ImportWriter, type ImportBatch } from "./import/writer.js"
 
 /**
  * Chat's own store (CH-02): conversations, their messages as a tree, projects, artifacts, memory and import batches,
@@ -211,6 +212,62 @@ export class ChatStore {
 
   close(): void {
     this.#db.close()
+  }
+
+  /** CH-04: one export, written in one transaction that ends with the writer's commit or rollback. */
+  beginImport(batch: ImportBatch): ImportWriter {
+    return new ImportWriter(this.#db, this.#redact, this.#newId, this.#now, batch)
+  }
+
+  /** What an import brought that waits for you: project instructions and memory, each to accept first. */
+  pendingImports(): {
+    projects: Array<{ id: string; name: string; instructions: string }>
+    memories: Array<{ id: string; scope: string; projectId: string | null; text: string }>
+  } {
+    return {
+      projects: (
+        this.#db
+          .prepare(
+            "SELECT id, name, instructions FROM project WHERE source = 'claude.ai' AND instructions_active = 0 AND instructions != ''",
+          )
+          .all() as unknown as Array<{ id: string; name: string; instructions: string }>
+      ).map((p) => ({ ...p })),
+      memories: (
+        this.#db
+          .prepare(
+            "SELECT id, scope, project_id, text FROM memory_entry WHERE source = 'claude.ai' AND active = 0 ORDER BY created_at",
+          )
+          .all() as unknown as Array<{
+          id: string
+          scope: string
+          project_id: string | null
+          text: string
+        }>
+      ).map((m) => ({ id: m.id, scope: m.scope, projectId: m.project_id, text: m.text })),
+    }
+  }
+
+  /** You accepted an imported project's instructions or a memory entry: only then can it be used. */
+  accept(kind: "project" | "memory", id: string): boolean {
+    const r =
+      kind === "project"
+        ? this.#db
+            .prepare(
+              "UPDATE project SET instructions_active = 1 WHERE id = ? AND source = 'claude.ai'",
+            )
+            .run(id)
+        : this.#db
+            .prepare("UPDATE memory_entry SET active = 1 WHERE id = ? AND source = 'claude.ai'")
+            .run(id)
+    return Number(r.changes) > 0
+  }
+
+  /** You turned down an imported memory entry: it is removed. */
+  dismissMemory(id: string): boolean {
+    const r = this.#db
+      .prepare("DELETE FROM memory_entry WHERE id = ? AND source = 'claude.ai' AND active = 0")
+      .run(id)
+    return Number(r.changes) > 0
   }
 
   #tx<T>(fn: () => T): T {
