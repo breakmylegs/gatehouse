@@ -78,11 +78,13 @@ const PROJECT = "project:"
 
 /**
  * Chats for the Chat side of the sidebar: pinned first, then one group for each project that has chats (by name), then
- * Chats for those in no project. Archived ones leave it, and ended ones when you hide them, as on the Code side.
+ * those in no project by when they were started (Today, Yesterday and so on, as in Claude's desktop app). Archived ones
+ * leave it, and ended ones when you hide them, as on the Code side.
  */
 export function groupChats(
   list: SessionInfo[],
   hide?: { ended: boolean; keep?: ReadonlySet<string | undefined> },
+  now: Date = new Date(),
 ): FolderGroup[] {
   const pinned: SessionInfo[] = []
   const loose: SessionInfo[] = []
@@ -106,8 +108,43 @@ export function groupChats(
         label: name,
         sessions: sessions.sort(newest),
       })),
-    ...(loose.length ? [{ folder: CHATS, label: "Chats", sessions: loose.sort(newest) }] : []),
+    ...byRecency(loose.sort(newest), now),
   ]
+}
+
+/** When a chat was started, in the groups Claude's desktop app uses (CH-03). */
+export const RECENCY = [
+  "Today",
+  "Yesterday",
+  "Previous 7 days",
+  "Previous 30 days",
+  "Older",
+] as const
+
+export function recencyOf(iso: string, now: Date): (typeof RECENCY)[number] {
+  const day = 86_400_000
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  // A time that cannot be read is Older; one in the future (a clock put back) is Today.
+  const t = new Date(iso).getTime()
+  if (t >= today) return "Today"
+  if (t >= today - day) return "Yesterday"
+  if (t >= today - 7 * day) return "Previous 7 days"
+  if (t >= today - 30 * day) return "Previous 30 days"
+  return "Older"
+}
+
+/** Chats in no project, newest first, in a group for each stretch of time that has any. */
+function byRecency(sorted: SessionInfo[], now: Date): FolderGroup[] {
+  const groups = new Map<string, SessionInfo[]>()
+  for (const s of sorted) {
+    const when = recencyOf(s.createdAt, now)
+    groups.set(when, [...(groups.get(when) ?? []), s])
+  }
+  return RECENCY.filter((r) => groups.has(r)).map((r) => ({
+    folder: `${CHATS}${r.toLowerCase().replace(/\s+/g, "-")}`,
+    label: r,
+    sessions: groups.get(r)!,
+  }))
 }
 
 export function groupByFolder(

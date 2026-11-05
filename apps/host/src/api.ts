@@ -8,7 +8,12 @@ import { registerExportRoutes } from "./export-api.js"
 import { registerPromptRoutes, type PromptStore } from "./prompts.js"
 import { registerMarketplaceRoutes, type Marketplace } from "./marketplace.js"
 import { registerEvalRoutes, type PluginEvaluator } from "./plugin-eval.js"
+import type { NtfySecretStore } from "./push/ntfy.js"
 import { registerDoctorRoutes } from "./doctor.js"
+import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
+import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
+import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
+import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -55,7 +60,7 @@ import {
 import type { HostAudit } from "./hostaudit.js"
 import { localDay, type UsageStore } from "./usage.js"
 import type { PlanUsage } from "./plan-usage.js"
-import { ArtifactError, artifactHeaders, type ArtifactStore } from "./artifacts.js"
+import { ArtifactError, artifactHeaders, EXT, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
@@ -95,10 +100,24 @@ export interface AdminContext {
   /** Your saved prompts (W1-14). */
   prompts?: PromptStore
   marketplace?: Marketplace
+  /** The token or password for an ntfy server that needs a sign-in, sealed. */
+  ntfySecrets?: NtfySecretStore
+  /** Chat's own store and what records into it (CH-03). */
+  chat?: ChatDeps
+  /** While you were away, written by Claude (owner, 4 Nov). */
+  recap?: RecapDeps
+  /** CH-04: importing a claude.ai export. */
+  chatImport?: ImportDeps
+  /** What a chat was told it remembers when it started (CH-03). */
+  sessionMemory?: (
+    id: string,
+  ) => Array<{ id: string; scope: string; topic: string; text: string }> | undefined
   /** B39: plugin evaluations, with and without a plugin, in Plan mode. */
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** Whether a running session wrote or edited the file at this full path. */
+  sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** An account's plan limits, read on one of its open sessions. */
   planUsage?: (account: string, fresh: boolean) => Promise<PlanUsage | undefined>
   /** The Windows file window for the composer's Add files. Injected so tests never open a window. */
@@ -490,6 +509,17 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerEvalRoutes(app, ctx)
   registerDoctorRoutes(app, ctx)
   registerWorktreeRoutes(app, ctx)
+  registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
+  if (ctx.chat) registerChatRoutes(app, ctx.chat)
+  if (ctx.recap) registerRecapRoutes(app, ctx.recap)
+  if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
+  // CH-03: exactly what a chat was told it remembers, for its Memory panel. Already redacted when it was kept.
+  app.get("/api/memory/given", async (req, reply) => {
+    const id = String((req.query as { session?: unknown }).session ?? "")
+    const entries = ctx.sessionMemory?.(id)
+    if (!entries) return reply.code(404).send({ error: "There is no such session." })
+    return { entries }
+  })
   registerProviderRoutes(app, {
     audit: ctx.audit,
     config: ctx.config,
@@ -624,8 +654,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
+  const ntfyStatus = () => {
+    const st = ctx.ntfy?.status() ?? { enabled: false, listening: false, sent: 0 }
+    return st.auth && !ctx.ntfySecrets?.has() ? { ...st, missingSecret: true } : st
+  }
   app.get("/api/push", async () => ({
-    ntfy: ctx.ntfy?.status() ?? { enabled: false, listening: false, sent: 0 },
+    ntfy: ntfyStatus(),
     slack: ctx.slack?.status() ?? { enabled: false, connected: false, hasTokens: false, sent: 0 },
   }))
   app.post("/api/push/slack/enable", async (req, reply) => {
@@ -683,6 +717,11 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       maxRisk?: unknown
       newTopics?: unknown
       topic?: unknown
+      /** none, token or basic; absent keeps what is set. */
+      auth?: unknown
+      user?: unknown
+      /** The token or password, given only when it changes. Sealed, never saved in the settings or recorded. */
+      secret?: unknown
     }
     // The topic the phone already has, typed back in. Only one Codehouse made, so it cannot be guessed.
     const typed = typeof b.topic === "string" ? ownTopic(b.topic) : undefined
@@ -709,13 +748,41 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       typeof b.maxRisk === "number" ? Math.max(0, Math.min(84, Math.round(b.maxRisk))) : 69
     const old = ctx.config().push?.ntfy
     const fresh = !old || (b.newTopics === true && !typed)
+    // A server that needs a sign-in (owner, 4 Nov): an access token, or a user name and password.
+    const auth =
+      b.auth === undefined
+        ? old?.auth
+        : b.auth === "token" || b.auth === "basic"
+          ? b.auth
+          : undefined
+    if (b.auth !== undefined && b.auth !== "none" && !auth)
+      return bad(reply, 400, "Choose no sign-in, an access token, or a user name and password.")
+    const user =
+      auth === "basic" ? (typeof b.user === "string" ? b.user.trim() : (old?.user ?? "")) : ""
+    if (auth === "basic" && (!user || user.includes(":") || user.length > 120))
+      return bad(reply, 400, "Give the ntfy user name (without a colon).")
+    const secret = typeof b.secret === "string" ? b.secret.trim() : ""
+    if (secret.length > 500 || /[\r\n]/.test(secret))
+      return bad(reply, 400, "That token or password is not one ntfy would take.")
+    const changedKind = auth !== old?.auth
+    if (auth && !secret && (changedKind || !ctx.ntfySecrets?.has()))
+      return bad(
+        reply,
+        400,
+        auth === "token" ? "Give the access token." : "Give the password for that user.",
+      )
+    if (auth && !ctx.ntfySecrets) return bad(reply, 501, "A sign-in cannot be kept safely here.")
     const ntfy: NtfySettings = {
       enabled: true,
       server: u.origin,
       topic: typed ?? (fresh ? randomTopic() : old.topic),
       replyTopic: fresh ? randomTopic() : old.replyTopic,
       maxRisk,
+      ...(auth ? { auth } : {}),
+      ...(auth === "basic" ? { user } : {}),
     }
+    if (auth && secret) await ctx.ntfySecrets?.save(secret)
+    if (!auth) ctx.ntfySecrets?.forget()
     await savePush(ntfy)
     ctx.ntfy.stop()
     ctx.ntfy.start()
@@ -724,8 +791,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       maxRisk,
       newTopics: fresh,
       ...(typed ? { typedTopic: true } : {}),
+      // Which sign-in and as whom, never the token or password.
+      signIn: auth ?? "none",
+      ...(auth === "basic" ? { user } : {}),
+      ...(secret ? { newSecret: true } : {}),
     })
-    return ctx.ntfy.status()
+    return ntfyStatus()
   })
   app.post("/api/push/ntfy/disable", async (_req, reply) => {
     if (!ctx.ntfy) return bad(reply, 501, "Push notifications are not available here.")
@@ -920,7 +991,7 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
       const a = store.read(String(q.session ?? ""), String(q.artifact ?? ""), Number(q.version))
       if (!a) return bad(reply, 404, "There is no such artifact.")
       return {
-        name: `${q.artifact}-v${Number(q.version)}.${a.kind}`,
+        name: `${q.artifact}-v${Number(q.version)}.${EXT[a.kind]}`,
         content: a.content,
         kind: a.kind,
       }
@@ -1341,6 +1412,9 @@ const LIVE_SETTINGS = [
   "telemetry",
   "spendCapUsd",
   "globalInstructions",
+  "profile",
+  "keepAwake",
+  "recapByClaude",
   "providers",
 ] as const
 

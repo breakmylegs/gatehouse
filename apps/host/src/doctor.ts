@@ -194,7 +194,9 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
           label: "PowerShell checker",
           state: "warn",
           detail: "Not running, so every PowerShell command comes to you.",
-          fix: "Install PowerShell 7 (pwsh), then restart Codehouse.",
+          // Owner, 4 Nov: it uses PowerShell 7 when installed and the Windows PowerShell every Windows has otherwise,
+          // so a checker that still does not run is almost always IT limiting PowerShell on this computer.
+          fix: "Restart Codehouse. If it still does not run, PowerShell may be limited on this computer (Constrained Language Mode or an application control policy): ask whoever looks after it.",
         },
   )
 

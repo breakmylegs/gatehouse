@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
-import { NtfyChannel } from "./push/ntfy.js"
+import { NtfyChannel, NtfySecretStore } from "./push/ntfy.js"
 import { LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
 import { RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
@@ -17,7 +17,12 @@ import { ProjectStore } from "./projects.js"
 import { findLimitsExe, limiter } from "./limits.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
-import { pickFolder, saveAs } from "./folder-picker.js"
+import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
+import { pickFolderWithMac, saveAsWithMac } from "./folder-picker-mac.js" // Mac fork
+import { findCodehouseHelper } from "./win-helper.js"
+import { ChatStore } from "./chat/db.js"
+import { ChatRecorder } from "./chat/recorder.js"
+import { createRecapWriter } from "./recap-writer.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -70,7 +75,7 @@ import { computeDigest } from "./analytics.js"
 import { recordsSince } from "./api.js"
 import { DigestScheduler } from "./digest.js"
 import { HostKillSwitch } from "./kill.js"
-import { platformProtector, type Protector } from "./relay/protector.js"
+import { sealerFor, type Protector } from "./relay/protector.js"
 import { PhoneService } from "./relay/service.js"
 import { PhoneStore } from "./relay/store.js"
 import type { HostApp } from "./server.js"
@@ -446,6 +451,19 @@ export function createHost(opts: HostOptions = {}): Host {
     if (exe) deps.limiter = limiter(exe)
   }
   manager = new SessionManager(deps)
+  // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
+  const chatStore = new ChatStore({
+    file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
+    redact: (v) => redact(v, { terms: config.redactTerms }),
+  })
+  const chatRecorder = new ChatRecorder(chatStore, (id) => manager.get(id)?.info(), log)
+  manager.on("prompted", ({ sessionId, text }) => chatRecorder.prompted(sessionId, text))
+  manager.on("message", ({ sessionId, message }) =>
+    chatRecorder.message(sessionId, message as unknown as Record<string, unknown>),
+  )
+  manager.on("session", (info) => {
+    if (info.state === "ended") chatRecorder.closed(info.id)
+  })
   // Pauses every session at 95% of the plan's 5-hour limit and starts them again when it resets (owner, 31 Oct).
   const limitPauser = new LimitPauser({
     sessions: () => manager.liveSessions(),
@@ -476,16 +494,32 @@ export function createHost(opts: HostOptions = {}): Host {
     })
   })
 
-  const phoneStore = new PhoneStore(
-    path.join(gatehouseDataDir(env), "phone.json"),
-    opts.phoneProtector ?? platformProtector(),
-  )
+  // Codehouse's own Windows work needs no PowerShell (owner, 4 Nov: "Why do I need powershell at all?"): DPAPI and the
+  // file windows go through Codehouse-Helper.exe, found once when first needed. PowerShell is only the fallback where
+  // the helper cannot be had (a source checkout with no C# compiler).
+  let helperExe: string | null | undefined
+  const helper = (): string | undefined => {
+    if (helperExe === undefined)
+      helperExe =
+        findCodehouseHelper({
+          installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
+          repoRoot: REPO_ROOT,
+          dataDir: gatehouseDataDir(env),
+          log,
+        }) ?? null
+    return helperExe ?? undefined
+  }
+  const sealer = (): Protector => sealerFor({ given: opts.phoneProtector, helper })
+  const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
   const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
   phoneHolder.svc = phone
   // Push through ntfy: outbound only. Refused answers are recorded; good ones are recorded by the decision itself.
+  // A server that needs a sign-in has its token or password sealed as Slack's tokens are (owner, 4 Nov).
+  const ntfySecrets = new NtfySecretStore(path.join(gatehouseDataDir(env), "ntfy.sealed"), sealer())
   const ntfy = new NtfyChannel({
     broker,
     settings: () => config.push?.ntfy,
+    secret: () => ntfySecrets.load(),
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
     log,
@@ -511,7 +545,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // Slack through Socket Mode: outbound only. Its tokens are kept with the same protection as the phone keys.
   const slackSecrets = new SlackSecretStore(
     path.join(gatehouseDataDir(env), "slack.sealed"),
-    opts.phoneProtector ?? platformProtector(),
+    sealer(),
   )
   const slack = new SlackChannel({
     broker,
@@ -543,7 +577,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const installDir = env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined
   const updateToken = new UpdateTokenStore(
     path.join(gatehouseDataDir(env), "update-token.sealed"),
-    opts.phoneProtector ?? platformProtector(),
+    sealer(),
   )
   // Test hooks only: a local stand-in for GitHub and the key its releases are signed with. Both must be set.
   const testBase = env.GATEHOUSE_UPDATE_BASE
@@ -819,11 +853,37 @@ export function createHost(opts: HostOptions = {}): Host {
       log,
       phone,
       usage,
-      pickFolder,
-      saveAs,
+      pickFolder: (start) => {
+        if (process.platform === "darwin") return pickFolderWithMac(start) // Mac fork
+        const exe = helper()
+        return exe ? helperPickers(exe).pickFolder(start) : pickFolderWithWindows(start)
+      },
+      saveAs: (name) => {
+        if (process.platform === "darwin") return saveAsWithMac(name) // Mac fork
+        const exe = helper()
+        return exe ? helperPickers(exe).saveAs(name) : saveAsWithWindows(name)
+      },
       localRelay,
       ntfy,
+      ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
+      chat: { store: chatStore, recorder: chatRecorder },
+      sessionMemory: (id) => manager.get(id)?.memoryGiven(),
+      // While you were away, written by Claude (owner, 4 Nov): redacted first, no tools, audited, and only when the
+      // signed-in account passed the organisation check (invariant 14).
+      recap: {
+        writer: createRecapWriter(),
+        enabled: () => config.recapByClaude !== false,
+        session: (id) => {
+          const i = manager.get(id)?.info()
+          return i ? { project: i.project, ...(i.local ? { local: true } : {}) } : undefined
+        },
+        orgOk: () => account.last()?.org.ok === true,
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+      },
       projects,
       memory,
       routines,
@@ -832,7 +892,31 @@ export function createHost(opts: HostOptions = {}): Host {
       marketplace,
       evals,
       planUsage: (account, fresh) => manager.planUsage(account, fresh),
-      pickFiles: pickFilesWithWindows,
+      // The open window through Codehouse-Helper.exe; PowerShell only where the helper cannot be had (owner, 4 Nov).
+      pickFiles: () => {
+        const exe = helper()
+        return exe
+          ? helperPickers(exe).openFiles({ many: true, title: "Add files or photos" })
+          : pickFilesWithWindows()
+      },
+      // CH-04: importing a claude.ai export, the zip chosen in the open window and nowhere else.
+      chatImport: {
+        store: chatStore,
+        pickZip: async () => {
+          const exe = helper()
+          const picked = exe
+            ? await helperPickers(exe).openFiles({
+                many: false,
+                title: "Choose your claude.ai export",
+                filter: "claude.ai export (*.zip)|*.zip",
+              })
+            : (await pickFilesWithWindows()).filter((f) => f.toLowerCase().endsWith(".zip"))
+          return picked[0]
+        },
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+        tmpDir: os.tmpdir(),
+      },
       updates,
       health,
       claude: () => claudeVersion(findClaudeBinary),

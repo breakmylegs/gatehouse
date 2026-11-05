@@ -1,3 +1,5 @@
+import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
   type PendingView,
@@ -238,7 +240,7 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
   ended: "Ended",
 }
 
-type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources"
+type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources" | "memory"
 /** Each side panel's icon from the Codehouse pack. */
 const SIDE_ICON: Record<Side, IconName> = {
   plan: "plan",
@@ -247,6 +249,7 @@ const SIDE_ICON: Record<Side, IconName> = {
   terminal: "terminal",
   artifacts: "artifacts",
   sources: "sources",
+  memory: "memory",
 }
 const SIDE_LABEL: Record<Side, string> = {
   plan: "Plan",
@@ -255,6 +258,7 @@ const SIDE_LABEL: Record<Side, string> = {
   terminal: "Terminal",
   artifacts: "Artifacts",
   sources: "Sources",
+  memory: "Memory",
 }
 
 function SessionPane({
@@ -343,6 +347,14 @@ function SessionPane({
       ),
     [transcript.items, view.detail, keepIds],
   )
+  // CH-03: the versions of each of your messages in a chat, for the "2 of 3" arrows.
+  const isChat = session?.kind === "chat"
+  const branchSteps = useBranchSteps(
+    session?.id ?? "",
+    isChat,
+    session?.state ?? "",
+    isChat ? transcript.items.filter((i) => i.kind === "user" && !i.queued).map((i) => i.id) : [],
+  )
   // Owner, 31 Oct: a quick way back to the latest, and a resumed or restarted session opens at its latest.
   const scroller = useRef<VirtuosoHandle>(null)
   const screenReader = useScreenReaderMode()
@@ -392,6 +404,8 @@ function SessionPane({
   const toggleSide = (t: Side) => setSide((s) => (s === t ? null : t))
   // An artifact's card in the transcript opens the Artifacts panel (Stitch, R8).
   const openArtifacts = useCallback(() => setSide("artifacts"), [])
+  // CH-03: exactly what this chat was told it remembers, when its Memory panel is open.
+  const memoryGiven = useMemoryGiven(sessionId, side === "memory")
   // Closing puts focus back on the button that opened it, so the keyboard does not lose its place.
   const closeRail = () => {
     const was = side
@@ -613,6 +627,19 @@ function SessionPane({
               <Icon name="sources" size={14} />
               Sources{sourceCount ? ` ${sourceCount}` : ""}
             </button>
+            <button
+              ref={(el) => {
+                tools.current.memory = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === "memory"}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide("memory")}
+            >
+              <Icon name="memory" size={14} />
+              Memory
+            </button>
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
@@ -702,78 +729,77 @@ function SessionPane({
                 onClose={closeFind}
               />
             ) : null}
-            {(() => {
-              // One message as drawn in either list.
-              const itemAt = (index: number, it: (typeof shownItems)[number]) => (
-                <div
-                  className={clsx(
-                    "pane-item mx-auto max-w-[860px]",
-                    hitSet.has(index) && "find-hit",
-                    index === current && "find-current",
-                  )}
-                >
-                  {it.kind === "group" ? (
-                    <ToolGroup
-                      tools={it.tools}
-                      onOpenArtifact={openArtifacts}
-                      onOpenFile={(file) => {
-                        const rel = relInside(session.cwd, file)
-                        if (rel) setOpened({ kind: "file", rel })
-                        else
-                          toast(
-                            "That file is outside this session's folder, so it opens in Explorer only.",
-                          )
-                      }}
-                    />
-                  ) : (
-                    <ItemView item={it} sessionId={session.id} />
-                  )}
-                </div>
-              )
-              return screenReader ? (
-                // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
-                <ol
-                  className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
-                  aria-label="Conversation"
-                >
-                  {shownItems.length === 0 ? (
-                    <li className="mx-auto max-w-[860px] p-6 text-mut">
-                      Nothing yet. Write a prompt below to start the work.
-                    </li>
-                  ) : null}
-                  {shownItems.map((it, index) => (
-                    <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
-                  ))}
-                </ol>
-              ) : (
-                <Virtuoso
-                  ref={scroller}
-                  style={{ height: "100%" }}
-                  data={shownItems}
-                  followOutput="smooth"
-                  atBottomThreshold={80}
-                  atBottomStateChange={(b) => {
-                    following.current = b
-                    setAtEnd(b)
-                  }}
-                  // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
-                  // unless you have scrolled up to read.
-                  totalListHeightChanged={() => {
-                    if (following.current) toLatest()
-                  }}
-                  initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
-                  computeItemKey={(_, it) => `${view.detail}:${it.id}`}
-                  itemContent={itemAt}
-                  components={{
-                    EmptyPlaceholder: () => (
-                      <p className="mx-auto max-w-[860px] p-6 text-mut">
+            <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
+              {(() => {
+                // One message as drawn in either list.
+                const itemAt = (index: number, it: (typeof shownItems)[number]) => (
+                  <div
+                    className={clsx(
+                      "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
+                      hitSet.has(index) && "find-hit",
+                      index === current && "find-current",
+                    )}
+                  >
+                    {it.kind === "group" ? (
+                      <ToolGroup
+                        tools={it.tools}
+                        onOpenArtifact={openArtifacts}
+                        onOpenFile={(file) => {
+                          // A file outside the folder opens by its full path; the Host lets the pane read it only if
+                          // this session wrote or edited it (owner, 4 Nov).
+                          setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
+                        }}
+                      />
+                    ) : (
+                      <ItemView item={it} sessionId={session.id} />
+                    )}
+                  </div>
+                )
+                return screenReader ? (
+                  // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
+                  <ol
+                    className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
+                    aria-label="Conversation"
+                  >
+                    {shownItems.length === 0 ? (
+                      <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
                         Nothing yet. Write a prompt below to start the work.
-                      </p>
-                    ),
-                  }}
-                />
-              )
-            })()}
+                      </li>
+                    ) : null}
+                    {shownItems.map((it, index) => (
+                      <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
+                    ))}
+                  </ol>
+                ) : (
+                  <Virtuoso
+                    ref={scroller}
+                    style={{ height: "100%" }}
+                    data={shownItems}
+                    followOutput="smooth"
+                    atBottomThreshold={80}
+                    atBottomStateChange={(b) => {
+                      following.current = b
+                      setAtEnd(b)
+                    }}
+                    // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
+                    // unless you have scrolled up to read.
+                    totalListHeightChanged={() => {
+                      if (following.current) toLatest()
+                    }}
+                    initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
+                    computeItemKey={(_, it) => `${view.detail}:${it.id}`}
+                    itemContent={itemAt}
+                    components={{
+                      EmptyPlaceholder: () => (
+                        <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+                          Nothing yet. Write a prompt below to start the work.
+                        </p>
+                      ),
+                    }}
+                  />
+                )
+              })()}
+            </BranchSteps.Provider>
             {atEnd || shownItems.length === 0 ? null : (
               <button
                 type="button"
@@ -831,6 +857,8 @@ function SessionPane({
               <ArtifactsPane sessionId={session.id} refresh={artifactSaves} />
             ) : side === "sources" ? (
               <SourcesPane items={transcript.items} />
+            ) : side === "memory" ? (
+              <MemoryGiven entries={memoryGiven} />
             ) : side === "terminal" ? (
               <TerminalPane sessionId={session.id} cwd={session.cwd} />
             ) : side === "changes" ? (
@@ -2018,7 +2046,7 @@ function SessionFacts({ sessionId }: { sessionId: string }) {
  * A run of tool calls as one line, "Ran 2 commands, read schema.ts", that opens to each call and its output. It
  * says when one of them is waiting for you.
  */
-const ToolGroup = memo(function ToolGroup({
+export const ToolGroup = memo(function ToolGroup({
   tools,
   onOpenArtifact,
   onOpenFile,
@@ -2170,8 +2198,11 @@ function UserMessage({
   images,
   sessionId,
   point,
+  itemId,
 }: {
   text: string
+  /** The item it is on screen, for its versions (CH-03). */
+  itemId?: string
   images?: Shown[]
   sessionId?: string
   /** Where Retry and Edit carry on from. */
@@ -2258,6 +2289,7 @@ function UserMessage({
       ) : null}
       {text ? (
         <div className="msg-actions">
+          {itemId ? <BranchNav itemId={itemId} /> : null}
           <CopyButton text={text} what="your message" />
           {sessionId && canFork && point ? (
             <button
@@ -2377,6 +2409,7 @@ export const ItemView = memo(function ItemView({
             text={item.text}
             images={item.images}
             sessionId={sessionId}
+            itemId={item.id}
             point={{
               ...(item.before ? { before: item.before } : {}),
               ...(item.first ? { first: true } : {}),

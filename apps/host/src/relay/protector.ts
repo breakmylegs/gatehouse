@@ -1,13 +1,11 @@
-import { execFile, spawn } from "node:child_process"
-import crypto from "node:crypto"
+import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { inlineScriptArgs, powerShellExe } from "@gatehouse/policy"
+import { keychainProtector } from "./protector-mac.js" // Mac fork
 
-/**
- * Keeps secrets off the disk in the clear. On Windows this is DPAPI for the current user; on a Mac, a key in the
- * login Keychain.
- */
+/** Keeps secrets off the disk in the clear. On Windows this is DPAPI for the current user. */
 export interface Protector {
   protect(bytes: Uint8Array): Promise<Uint8Array>
   unprotect(bytes: Uint8Array): Promise<Uint8Array>
@@ -28,17 +26,59 @@ function findScript(): string {
 }
 const DEFAULT_SCRIPT = findScript()
 
-export class DpapiProtector implements Protector {
-  constructor(
-    private readonly script = DEFAULT_SCRIPT,
-    private readonly pwsh = "pwsh",
-  ) {}
+/**
+ * DPAPI through Codehouse-Helper.exe (packaging/Helper.cs), with no PowerShell at all (owner, 4 Nov: "Why do I need
+ * powershell at all?"). It is the same Windows call as DpapiProtector, so each opens what the other sealed.
+ */
+export class HelperProtector implements Protector {
+  constructor(private readonly exe: string) {}
 
   #run(mode: "protect" | "unprotect", bytes: Uint8Array): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
       const child = execFile(
+        this.exe,
+        [`--${mode}`],
+        { timeout: 30_000, maxBuffer: 1 << 20, windowsHide: true },
+        (err, stdout) => {
+          if (err) return reject(new Error(`DPAPI ${mode} failed: ${err.message.split("\n")[0]}`))
+          resolve(new Uint8Array(Buffer.from(stdout.trim(), "base64")))
+        },
+      )
+      child.stdin?.on("error", () => undefined)
+      child.stdin?.end(Buffer.from(bytes).toString("base64"))
+    })
+  }
+
+  protect(bytes: Uint8Array) {
+    return this.#run("protect", bytes)
+  }
+  unprotect(bytes: Uint8Array) {
+    return this.#run("unprotect", bytes)
+  }
+}
+
+/**
+ * The fallback where the helper cannot be had (a source checkout with no C# compiler): DPAPI through PowerShell 7 if
+ * it is installed, otherwise the Windows PowerShell every Windows has (owner, 4 Nov).
+ */
+export class DpapiProtector implements Protector {
+  constructor(
+    private readonly script = DEFAULT_SCRIPT,
+    private readonly pwsh = powerShellExe(),
+  ) {}
+
+  #run(mode: "protect" | "unprotect", bytes: Uint8Array): Promise<Uint8Array> {
+    return new Promise((resolve, reject) => {
+      let args: string[]
+      try {
+        args = inlineScriptArgs(this.script, [mode])
+      } catch (e) {
+        reject(new Error(`DPAPI ${mode} failed: ${(e as Error).message}`))
+        return
+      }
+      const child = execFile(
         this.pwsh,
-        ["-NoProfile", "-NonInteractive", "-File", this.script, mode],
+        args,
         { timeout: 30_000, maxBuffer: 1 << 20, windowsHide: true },
         (err, stdout) => {
           if (err) return reject(new Error(`DPAPI ${mode} failed: ${err.message.split("\n")[0]}`))
@@ -57,120 +97,21 @@ export class DpapiProtector implements Protector {
   }
 }
 
-/** Runs /usr/bin/security with these arguments and this standard input, and gives back its exit code and output. */
-export type SecurityRunner = (
-  args: string[],
-  stdin?: string,
-) => Promise<{ code: number; stdout: string }>
-
-const runSecurity: SecurityRunner = (args, stdin) =>
-  new Promise((resolve, reject) => {
-    const child = spawn("/usr/bin/security", args, { stdio: ["pipe", "pipe", "ignore"] })
-    const chunks: Buffer[] = []
-    const timer = setTimeout(() => child.kill("SIGKILL"), 30_000)
-    child.stdout.on("data", (c: Buffer) => chunks.push(c))
-    child.on("error", (e) => {
-      clearTimeout(timer)
-      reject(e)
-    })
-    child.on("close", (code) => {
-      clearTimeout(timer)
-      resolve({ code: code ?? -1, stdout: Buffer.concat(chunks).toString("utf8") })
-    })
-    child.stdin.end(stdin ?? "")
-  })
-
-/** What `security find-generic-password` exits with when there is no such item. */
-const NOT_FOUND = 44
-const MAGIC = Buffer.from("kc1")
-const IV = 12
-const TAG = 16
-
 /**
- * On a Mac: AES-256-GCM with a random key kept in the login Keychain, the nearest Mac match for DPAPI's current
- * user scope. The key is made on first use and never changed, since that would strand what it sealed. It reaches
- * `security` on standard input, never as an argument, so it is never in the process list. If the Keychain cannot
- * be read (locked, refused, or an item that is not a key) nothing is sealed or opened, and no new key replaces it.
+ * Which protection Codehouse uses: one it was given (tests), else the helper (no PowerShell), else DPAPI through
+ * PowerShell on Windows, else none (other systems, until a port supplies its own, such as the Keychain on a Mac).
+ * The helper is looked for only when nothing was given, because finding it may build it.
  */
-export class KeychainProtector implements Protector {
-  #key: Promise<Buffer> | undefined
-
-  constructor(
-    private readonly run: SecurityRunner = runSecurity,
-    private readonly service = "Codehouse",
-    private readonly account = "sealing-key",
-  ) {}
-
-  async #find(): Promise<Buffer | undefined> {
-    const r = await this.run([
-      "find-generic-password",
-      "-s",
-      this.service,
-      "-a",
-      this.account,
-      "-w",
-    ])
-    if (r.code === NOT_FOUND) return undefined
-    if (r.code !== 0) throw new Error(`Keychain read failed (security exited ${r.code})`)
-    const hex = r.stdout.trim()
-    if (!/^[0-9a-f]{64}$/.test(hex)) throw new Error("The Keychain item is not a Codehouse key")
-    return Buffer.from(hex, "hex")
-  }
-
-  async #load(): Promise<Buffer> {
-    const found = await this.#find()
-    if (found) return found
-    // Without -U an existing item is never overwritten, so if another process made the key first, theirs is kept
-    // and read back below.
-    const fresh = crypto.randomBytes(32).toString("hex")
-    await this.run(
-      ["-i"],
-      `add-generic-password -s ${this.service} -a ${this.account} -w ${fresh}\n`,
-    )
-    const made = await this.#find()
-    if (!made) throw new Error("The Keychain did not keep the Codehouse key")
-    return made
-  }
-
-  #keyOnce(): Promise<Buffer> {
-    this.#key ??= this.#load().catch((e: unknown) => {
-      this.#key = undefined
-      throw e
-    })
-    return this.#key
-  }
-
-  async protect(bytes: Uint8Array) {
-    const key = await this.#keyOnce()
-    const iv = crypto.randomBytes(IV)
-    const c = crypto.createCipheriv("aes-256-gcm", key, iv)
-    const body = Buffer.concat([c.update(bytes), c.final()])
-    return new Uint8Array(Buffer.concat([MAGIC, iv, c.getAuthTag(), body]))
-  }
-
-  async unprotect(bytes: Uint8Array) {
-    const b = Buffer.from(bytes)
-    if (b.length < MAGIC.length + IV + TAG || !b.subarray(0, MAGIC.length).equals(MAGIC))
-      throw new Error("not protected by this protector")
-    const key = await this.#keyOnce()
-    const iv = b.subarray(MAGIC.length, MAGIC.length + IV)
-    const tag = b.subarray(MAGIC.length + IV, MAGIC.length + IV + TAG)
-    const d = crypto.createDecipheriv("aes-256-gcm", key, iv)
-    d.setAuthTag(tag)
-    return new Uint8Array(Buffer.concat([d.update(b.subarray(MAGIC.length + IV + TAG)), d.final()]))
-  }
-}
-
-let keychain: KeychainProtector | undefined
-
-/**
- * The protector for this computer: DPAPI on Windows and the Keychain on a Mac, the one Keychain protector shared so
- * the key is read once. Elsewhere there is none yet, and PlainProtector keeps the earlier behaviour.
- */
-export function platformProtector(platform: NodeJS.Platform = process.platform): Protector {
-  if (platform === "win32") return new DpapiProtector()
-  if (platform === "darwin") return (keychain ??= new KeychainProtector())
-  return new PlainProtector()
+export function sealerFor(o: {
+  given?: Protector | undefined
+  helper: () => string | undefined
+  platform?: NodeJS.Platform
+}): Protector {
+  if (o.given) return o.given
+  const exe = o.helper()
+  if (exe) return new HelperProtector(exe)
+  if ((o.platform ?? process.platform) === "darwin") return keychainProtector() // Mac fork
+  return (o.platform ?? process.platform) === "win32" ? new DpapiProtector() : new PlainProtector()
 }
 
 /** For tests on machines without DPAPI. It is not protection, and a test that uses it says so. */

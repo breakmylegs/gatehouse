@@ -1,5 +1,12 @@
+import { ClaudeImport } from "../components/ClaudeImport"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
+import {
+  AppearancePanel,
+  GoTo,
+  NotifyKindsSetting,
+  UsageLimitsPanel,
+} from "../components/SettingsPanels"
 import { TempFilesPanel } from "../components/TempFilesPanel"
 import { QuickKeyPanel } from "../components/QuickKeyPanel"
 import { VoiceSetting } from "../components/VoiceButton"
@@ -51,6 +58,9 @@ interface Config {
   spendCapUsd?: number
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
+  profile?: { callMe?: string; work?: string }
+  keepAwake?: boolean
+  recapByClaude?: boolean
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
@@ -108,6 +118,13 @@ interface Values {
   ecUsd: string
   /** What every session is told at its start. */
   instr: string
+  /** What Claude should call you, and your work (Profile). */
+  callMe: string
+  work: string
+  /** Keep the computer awake while a session works. */
+  awake: boolean
+  /** While you were away, written by Claude. */
+  recap: boolean
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -139,6 +156,10 @@ function valuesOf(d: SettingsData): Values {
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     instr: c.globalInstructions ?? "",
+    callMe: c.profile?.callMe ?? "",
+    work: c.profile?.work ?? "",
+    awake: c.keepAwake !== false,
+    recap: c.recapByClaude !== false,
   }
 }
 
@@ -160,6 +181,19 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.projectsFolder
   if (v.instr.trim()) body.globalInstructions = v.instr.trim()
   else delete body.globalInstructions
+  // Anything a newer version keeps beside the profile stays.
+  const { callMe: _c, work: _w, ...profileKeep } = d.saved.profile ?? {}
+  const profile = {
+    ...profileKeep,
+    ...(v.callMe.trim() ? { callMe: v.callMe.trim() } : {}),
+    ...(v.work.trim() ? { work: v.work.trim() } : {}),
+  }
+  if (Object.keys(profile).length) body.profile = profile
+  else delete body.profile
+  if (v.awake) delete body.keepAwake
+  else body.keepAwake = false
+  if (v.recap) delete body.recapByClaude
+  else body.recapByClaude = false
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -232,20 +266,53 @@ export const DEFAULT_VALUES: Values = {
   telEndpoint: "",
   ecUsd: "500",
   instr: "",
+  callMe: "",
+  work: "",
+  awake: true,
+  recap: true,
 }
 const differs = (v: Values, keys: Array<keyof Values>) =>
   keys.some((k) => v[k] !== DEFAULT_VALUES[k])
 
-/** The sections, in order. The one you last used is kept. */
-export const SECTIONS = [
-  ["general", "General"],
-  ["account", "Account and plan"],
-  ["sessions", "Sessions"],
-  ["phone", "Phone and notifications"],
-  ["privacy", "Privacy"],
-  ["updates", "Updates"],
+/**
+ * The sections, in groups and in order, as in Claude's desktop app (owner, 4 Nov): your preferences, this computer,
+ * and what you add. The one you last used is kept.
+ */
+export const SECTION_GROUPS = [
+  [
+    "Preferences",
+    [
+      ["general", "General"],
+      ["account", "Account and plan"],
+      ["privacy", "Privacy"],
+      ["usage", "Usage"],
+      ["capabilities", "Capabilities"],
+      ["sessions", "Sessions"],
+      ["phone", "Phone and notifications"],
+    ],
+  ],
+  [
+    "This computer",
+    [
+      ["system", "System"],
+      ["updates", "Updates"],
+      ["developer", "Developer"],
+    ],
+  ],
+  [
+    "Customize",
+    [
+      ["skills", "Skills"],
+      ["connectors", "Connectors"],
+      ["plugins", "Plugins"],
+    ],
+  ],
 ] as const
-type SectionId = (typeof SECTIONS)[number][0]
+type SectionEntry = (typeof SECTION_GROUPS)[number][1][number]
+export const SECTIONS: readonly SectionEntry[] = SECTION_GROUPS.flatMap(
+  ([, list]) => list as readonly SectionEntry[],
+)
+type SectionId = SectionEntry[0]
 const SECTION_KEY = "gatehouse.settings.section"
 function readSection(): SectionId {
   try {
@@ -454,10 +521,11 @@ export function Settings() {
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
+  const profileChanged = differs(v, ["callMe", "work"])
   const privacyChanged = differs(v, ["terms"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
   const sectionChanged: Partial<Record<SectionId, boolean>> = {
-    account: orgChanged,
+    account: orgChanged || profileChanged,
     sessions: extremeChanged || checkpointsChanged || instrChanged,
     phone: phoneChanged || digestChanged,
     privacy: privacyChanged,
@@ -494,16 +562,23 @@ export function Settings() {
             onChange={(e) => setSearch(e.target.value)}
           />
           <nav aria-label="Settings sections" className="settings-nav grid gap-0.5">
-            {SECTIONS.map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                aria-current={!query && section === id ? "page" : undefined}
-                onClick={() => setSection(id)}
-              >
-                <span>{label}</span>
-                {sectionChanged[id] ? <span className="text-xs text-acc">Changed</span> : null}
-              </button>
+            {SECTION_GROUPS.map(([heading, list]) => (
+              <div key={heading} role="group" aria-label={heading} className="grid gap-0.5">
+                <span className="settings-nav-heading" aria-hidden="true">
+                  {heading}
+                </span>
+                {list.map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    aria-current={!query && section === id ? "page" : undefined}
+                    onClick={() => setSection(id)}
+                  >
+                    <span>{label}</span>
+                    {sectionChanged[id] ? <span className="text-xs text-acc">Changed</span> : null}
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
         </div>
@@ -898,6 +973,117 @@ export function Settings() {
               <UpdatesPanel />
             </Group>
 
+            <Group section="account" title="Profile" gap="gap-3" changed={profileChanged}>
+              <Field
+                label="What should Claude call you?"
+                help="Told to every session at its start. Saved when you leave the box."
+              >
+                <input
+                  className="field max-w-sm"
+                  maxLength={60}
+                  value={v.callMe}
+                  onChange={(e) => edit({ callMe: e.target.value })}
+                  {...typed("Profile")}
+                />
+              </Field>
+              <Field
+                label="What best describes your work?"
+                help="For example: chief architect, consultant, data engineer. Saved when you leave the box."
+              >
+                <input
+                  className="field max-w-sm"
+                  maxLength={120}
+                  value={v.work}
+                  onChange={(e) => edit({ work: e.target.value })}
+                  {...typed("Profile")}
+                />
+              </Field>
+            </Group>
+
+            <Group section="general" title="Appearance" gap="gap-2">
+              <AppearancePanel />
+            </Group>
+
+            <Group section="usage" title="Your usage limits" gap="gap-2">
+              <UsageLimitsPanel />
+            </Group>
+
+            <Group section="capabilities" title="Memory" gap="gap-2">
+              <GoTo
+                text="Chats remember facts and preferences you ask them to keep, for every chat or for one project. You can see, change and forget each one."
+                label="View and manage memory"
+                route="memory"
+              />
+            </Group>
+
+            <Group section="capabilities" title="Artifacts" gap="gap-2">
+              <p className="m-0 text-[13.5px] text-mut">
+                A chat can show a page, a picture or a small tool beside the conversation. It runs
+                in a sandbox with no network and no access to this computer, and is labelled
+                AI-generated.
+              </p>
+            </Group>
+
+            <Group
+              section="system"
+              title="Keep the computer awake"
+              gap="gap-2"
+              changed={differs(v, ["awake"])}
+            >
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.awake}
+                  onChange={(e) => change({ awake: e.target.checked }, "Keep the computer awake")}
+                />
+                Keep the computer awake while a session works
+              </label>
+              <p className="m-0 text-xs text-mut">
+                So a long build is not cut off when Windows would sleep. The display can still turn
+                off, and closing the lid still puts the computer to sleep. In the Codehouse window
+                only.
+              </p>
+            </Group>
+
+            <Group section="system" title="Start and run" gap="gap-2">
+              <p className="m-0 text-[13.5px] text-mut">
+                Codehouse keeps running in the system tray when you close its window, so decisions
+                can still reach you; Quit Codehouse is in the tray menu. Starting it when you sign
+                in to Windows is chosen in the installer.
+              </p>
+            </Group>
+
+            <Group section="developer" title="Local MCP servers" gap="gap-2">
+              <p className="m-0 text-[13.5px] text-mut">
+                This computer&apos;s IT policy stops MCP servers that run as their own programs from
+                loading into a session, so Codehouse uses only servers inside the session (its own
+                Companion). A session that finds another one stops before it runs anything.
+              </p>
+            </Group>
+
+            <Group section="skills" title="Skills" gap="gap-2">
+              <GoTo
+                text="Skills are instructions Claude can use by name. Make one from a saved prompt in a session's project, or use those your projects and plugins bring."
+                label="Open Prompts"
+                route="prompts"
+              />
+            </Group>
+
+            <Group section="connectors" title="Connectors" gap="gap-2">
+              <p className="m-0 text-[13.5px] text-mut">
+                Connectors your organisation set up in Claude show under + in a session, in
+                Connectors. Each call to one goes to your rules like any other tool call.
+              </p>
+            </Group>
+
+            <Group section="plugins" title="Plugins" gap="gap-2">
+              <GoTo
+                text="Add plugins from the marketplaces Claude Code knows on this computer, see what each holds, and check whether one helps before you rely on it."
+                label="Open the Marketplace"
+                route="marketplace"
+              />
+            </Group>
+
             <Group section="general" title="Setup" gap="gap-2">
               <div>
                 <button
@@ -913,11 +1099,11 @@ export function Settings() {
               </div>
             </Group>
 
-            <Group section="general" title="Quick prompt" gap="gap-2">
+            <Group section="system" title="Quick prompt" gap="gap-2">
               <QuickKeyPanel />
             </Group>
 
-            <Group section="general" title="Telemetry" gap="gap-2" changed={telemetryChanged}>
+            <Group section="developer" title="Telemetry" gap="gap-2" changed={telemetryChanged}>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -948,8 +1134,12 @@ export function Settings() {
               <VoiceSetting />
             </Group>
 
-            <Group section="general" title="Temporary files" gap="gap-2">
+            <Group section="system" title="Temporary files" gap="gap-2">
               <TempFilesPanel />
+            </Group>
+
+            <Group section="privacy" title="Chats from claude.ai" gap="gap-2">
+              <ClaudeImport />
             </Group>
 
             <Group section="phone" title="Notifications" gap="gap-2">
@@ -978,9 +1168,33 @@ export function Settings() {
                 />
                 Show a browser notification when a decision is waiting
               </label>
+              <NotifyKindsSetting on={notify} />
               <p className="m-0 text-xs text-mut">
                 The notification never shows the command or file names. This choice applies to this
                 browser only.
+              </p>
+            </Group>
+
+            <Group
+              section="phone"
+              title="While you were away"
+              gap="gap-2"
+              changed={differs(v, ["recap"])}
+            >
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.recap}
+                  onChange={(e) => change({ recap: e.target.checked }, "While you were away")}
+                />
+                Have Claude write what happened in plain English
+              </label>
+              <p className="m-0 text-xs text-mut">
+                When you come back after ten minutes or more, a small model reads what you and
+                Claude said while you were away, with your private words taken out first, and writes
+                a few sentences: what was done, what is left and what waits on you. It has no tools
+                and is recorded in the audit log. A chat on a model on this computer is never sent.
+                Off, the card lists what happened instead.
               </p>
             </Group>
 

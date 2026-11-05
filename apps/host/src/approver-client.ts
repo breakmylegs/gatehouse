@@ -24,6 +24,8 @@ export interface EvaluateCtx {
   toolUseId?: string
   /** `options.mcpServer.source` from the SDK for mcp__ tools. */
   mcpSource?: string
+  /** A chat or a coding session (CH-03). */
+  sessionKind?: "code" | "chat"
 }
 
 /**

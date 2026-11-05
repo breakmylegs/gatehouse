@@ -12,6 +12,10 @@ interface NtfyStatus {
   sent: number
   /** Made before 29 Oct: capitals, and letters such as O and 0 that are easy to mix up on a phone. */
   oldStyle?: boolean
+  /** A server that needs a sign-in: which kind, and the user name. Never the token or password. */
+  auth?: "token" | "basic"
+  user?: string
+  missingSecret?: boolean
 }
 
 const LIMITS = [
@@ -34,6 +38,10 @@ export function PushPanel() {
   const [confirmNew, setConfirmNew] = useState(false)
   const [typing, setTyping] = useState(false)
   const [typed, setTyped] = useState("")
+  // A server that needs a sign-in (owner, 4 Nov): the token or password is sent once, then kept sealed by the Host.
+  const [signIn, setSignIn] = useState<"none" | "token" | "basic">("none")
+  const [user, setUser] = useState("")
+  const [secret, setSecret] = useState("")
   const filled = useRef(false)
 
   // Read every few seconds for the listening state; the boxes are filled once, so the check never undoes your typing.
@@ -45,6 +53,8 @@ export function PushPanel() {
       filled.current = true
       if (r.data.ntfy.server) setServer(r.data.ntfy.server)
       if (r.data.ntfy.maxRisk !== undefined) setMaxRisk(r.data.ntfy.maxRisk)
+      if (r.data.ntfy.auth) setSignIn(r.data.ntfy.auth)
+      if (r.data.ntfy.user) setUser(r.data.ntfy.user)
     }
   }, [])
   useEffect(() => {
@@ -61,9 +71,13 @@ export function PushPanel() {
       server,
       maxRisk,
       newTopics,
+      auth: signIn,
+      ...(signIn === "basic" ? { user } : {}),
+      ...(signIn !== "none" && secret.trim() ? { secret } : {}),
       ...(topic !== undefined ? { topic } : {}),
     })
     setBusy(false)
+    if (r.ok) setSecret("")
     if (!r.ok) setError(r.error ?? "ntfy could not be switched on")
     else if (topic !== undefined) {
       setTyping(false)
@@ -258,6 +272,60 @@ export function PushPanel() {
             ))}
           </select>
         </label>
+      </div>
+      <div className="grid gap-2">
+        <label className="grid max-w-md gap-1">
+          <span>Sign-in for this server</span>
+          <select
+            className="field"
+            value={signIn}
+            onChange={(e) => setSignIn(e.target.value as "none" | "token" | "basic")}
+          >
+            <option value="none">None (a public server such as ntfy.sh)</option>
+            <option value="token">Access token</option>
+            <option value="basic">User name and password</option>
+          </select>
+        </label>
+        {signIn === "basic" ? (
+          <label className="grid max-w-md gap-1">
+            <span>ntfy user name</span>
+            <input
+              className="field"
+              autoComplete="off"
+              value={user}
+              onChange={(e) => setUser(e.target.value)}
+            />
+          </label>
+        ) : null}
+        {signIn !== "none" ? (
+          <label className="grid max-w-md gap-1">
+            <span>{signIn === "token" ? "Access token" : "Password"}</span>
+            <input
+              className="field mono"
+              type="password"
+              autoComplete="off"
+              placeholder={
+                st?.auth === signIn && !st.missingSecret ? "Kept. Type a new one to change it" : ""
+              }
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+            />
+          </label>
+        ) : null}
+        {signIn !== "none" ? (
+          <p className="m-0 max-w-[72ch] text-xs text-mut">
+            Kept sealed for your Windows account on this computer, never in the settings file or the
+            log. The Approve and Deny buttons carry it too, because your phone sends them itself, so
+            use an ntfy user (or its token) that may read and write only Codehouse&apos;s two
+            topics.
+          </p>
+        ) : null}
+        {st?.missingSecret ? (
+          <p role="alert" className="m-0 text-[13px] text-sev">
+            The sign-in for this server is missing. Give the{" "}
+            {st.auth === "token" ? "token" : "password"} again and save.
+          </p>
+        ) : null}
       </div>
       {confirmNew ? (
         <div

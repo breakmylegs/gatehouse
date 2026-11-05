@@ -3,7 +3,7 @@
 // a Chats section for the rest; Code lists coding sessions by folder. The choice is kept, and it follows what you open.
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { groupChats } from "../src/lib/rail"
+import { groupChats, recencyOf } from "../src/lib/rail"
 
 vi.mock("../src/lib/connection", () => ({
   takeToken: () => "token",
@@ -83,7 +83,10 @@ describe("the Chat | Code switch", () => {
     const project = screen.getByRole("region", { name: /Centrica/ })
     expect(within(project).getAllByText(/RFP talking points|Volumes/)).toHaveLength(2)
     expect(
-      within(screen.getByRole("region", { name: /in Chats/ })).getByText("Prague trip"),
+      // A chat in no project is under when it was started, which depends on today (CH-03).
+      within(
+        screen.getByRole("region", { name: /in (Today|Yesterday|Previous \d+ days|Older)$/ }),
+      ).getByText("Prague trip"),
     ).toBeTruthy()
   })
 
@@ -105,13 +108,31 @@ describe("chats grouped for the Chat side", () => {
       chat("c", "C", "2026-11-03T00:00:00Z", { chatProject: "Alpha" }),
       chat("d", "D", "2026-11-04T00:00:00Z", { pinned: true, chatProject: "Alpha" }),
       chat("e", "E", "2026-11-05T00:00:00Z", { archived: true }),
-      chat("f", "F", "2026-11-06T00:00:00Z"),
+      chat("f", "F", "2026-11-06T09:00:00Z"),
     ]
-    expect(groupChats(list).map((g) => [g.label, g.sessions.map((s) => s.id)])).toEqual([
+    const now = new Date(2026, 10, 6, 18)
+    expect(
+      groupChats(list, undefined, now).map((g) => [g.label, g.sessions.map((s) => s.id)]),
+    ).toEqual([
       ["Pinned", ["d"]],
       ["Alpha", ["c"]],
       ["Zeta", ["a"]],
-      ["Chats", ["f", "b"]],
+      ["Today", ["f"]],
+      ["Previous 7 days", ["b"]],
     ])
+  })
+
+  it("puts chats in no project under when they were started, as in Claude's desktop app (CH-03)", () => {
+    const now = new Date(2026, 10, 6, 18)
+    const at = (d: number, h = 12) => new Date(2026, 10, d, h).toISOString()
+    expect(recencyOf(at(6, 0), now)).toBe("Today")
+    expect(recencyOf(at(5, 23), now)).toBe("Yesterday")
+    expect(recencyOf(at(5, 0), now)).toBe("Yesterday")
+    expect(recencyOf(at(4), now)).toBe("Previous 7 days")
+    expect(recencyOf(at(-1), now)).toBe("Previous 7 days")
+    expect(recencyOf(at(-10), now)).toBe("Previous 30 days")
+    expect(recencyOf(new Date(2026, 8, 1).toISOString(), now)).toBe("Older")
+    expect(recencyOf("not a date", now)).toBe("Older")
+    expect(recencyOf(at(9), now)).toBe("Today")
   })
 })

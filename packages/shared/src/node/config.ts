@@ -86,6 +86,17 @@ function build(loose: boolean) {
      * Read by older versions too, which keep it without using it.
      */
     globalInstructions: z.string().max(8000).optional(),
+    /** Keep the computer awake while a session works (owner, 4 Nov). Absent is on; false turns it off. */
+    keepAwake: z.boolean().optional(),
+    /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
+    recapByClaude: z.boolean().optional(),
+    /**
+     * Who you are to Claude, from Settings, Account and plan, Profile (owner, 4 Nov, after Claude's desktop app): what
+     * it should call you and what best describes your work. Told to every session first. Absent: nothing.
+     */
+    profile: z
+      .object({ callMe: z.string().max(60).optional(), work: z.string().max(120).optional() })
+      .optional(),
     /** When the daily digest is sent to the phone, local time. Null turns it off. Absent means 08:00. */
     digestTime: z.string().regex(TIME).nullable().optional(),
     /** Outbound-only push channels. Answers come back over a connection this computer opens. */
@@ -96,6 +107,9 @@ function build(loose: boolean) {
         topic: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
         replyTopic: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/),
         maxRisk: z.number().int().min(0).max(84),
+        /** A server that needs a sign-in: which kind, and the user name. The token or password is sealed apart. */
+        auth: z.enum(["token", "basic"]).optional(),
+        user: z.string().max(120).optional(),
       }).optional(),
       /** Slack, through Socket Mode. The tokens are kept encrypted elsewhere, never here. */
       slack: obj({

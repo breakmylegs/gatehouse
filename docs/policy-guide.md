@@ -52,6 +52,8 @@ judgeEligible: [network]
 | `pathGlobs` | Globs over the target paths. |
 | `pathInside` / `pathOutside` | `workspaceRoots`: the target is inside or outside every workspace root. |
 | `pathUnc` | `true`: the target is a UNC path or a device path. |
+| `mcpSource` | Where an MCP server came from, as the SDK reports it (`sdk` is the Companion). Allow rules need a listed source; deny and escalate rules skip a call only when its source is known and not listed. |
+| `sessionKinds` | `[chat]`, `[code]` or both: the kinds of session the rule applies in (CH-03, ADR 0012). A call that does not say counts as a coding session. A kind not in that list stops the rules from loading. |
 | `everySegmentMustMatch` | Optional, only `true` is accepted. Allow rules always need every segment. |
 | `risk` | 0 to 100, for escalate rules. |
 | `message` | Reason shown to the agent and the user. |

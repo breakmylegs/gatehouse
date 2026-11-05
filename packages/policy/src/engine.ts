@@ -183,6 +183,7 @@ export class PolicyEngine {
       policy,
       rootKey,
       mcpSource: ctx.mcpSource,
+      sessionKind: ctx.sessionKind ?? "code",
       projectName,
       ...(call.toolName === "WebFetch" && typeof input.url === "string" ? { url: input.url } : {}),
     }
@@ -347,6 +348,8 @@ interface MatchEnv {
   policy: Policy
   rootKey: string
   mcpSource: string | undefined
+  /** A chat or a coding session (CH-03). */
+  sessionKind: "code" | "chat"
   /** The project's folder name, lower case (B31). */
   projectName?: string
   /** The address a WebFetch reads (B31). */
@@ -402,6 +405,7 @@ function hasPathConstraint(rule: Rule): boolean {
 function matchRule(rule: Rule, env: MatchEnv, mode: Mode, withWrappers: boolean): RuleMatch | null {
   const { f } = env
   if (rule.exceptTools && matchAnyWildcard(rule.exceptTools, f.tool, false)) return null
+  if (rule.sessionKinds && !rule.sessionKinds.includes(env.sessionKind)) return null
   if (rule.mcpSource) {
     const known = env.mcpSource !== undefined
     const inList = known && rule.mcpSource.includes(env.mcpSource as string)

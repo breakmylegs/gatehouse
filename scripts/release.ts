@@ -22,6 +22,7 @@
 //
 // A version is major.minor from package.json and the number of commits, so every push to main is higher than the
 // one before. A working copy with uncommitted changes builds as -dev, which sorts before the release of that number.
+import { notesFor, parseLog, type Change } from "./platforms.js"
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
@@ -58,8 +59,11 @@ export function currentVersion(): { version: string; commit: string | undefined 
   return { version: `${major}.${minor}.${count}${dirty ? "-dev" : ""}`, commit }
 }
 
-/** The commit subjects since the last release tag, without conventional-commit prefixes. */
-function changes(): string[] {
+/**
+ * The commits since the last release tag, each with its subject (without the conventional-commit prefix), the files it
+ * touched and the platform those make it for (scripts/platforms.ts, for forks such as the Mac one).
+ */
+function changes(): Change[] {
   let range = "HEAD~30..HEAD"
   // Release tags are made on GitHub by gh release create, so fetch them, or the last release is not found here.
   try {
@@ -72,17 +76,14 @@ function changes(): string[] {
   } catch {
     // no earlier release: the last 30 commits
   }
+  const format = "--format=%x1e%H%x1f%s"
   let log = ""
   try {
-    log = git("log", range, "--no-merges", "--format=%s")
+    log = git("log", range, "--no-merges", format, "--name-only")
   } catch {
-    log = git("log", "-30", "--no-merges", "--format=%s")
+    log = git("log", "-30", "--no-merges", format, "--name-only")
   }
-  return log
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((s) => s.replace(/^[a-z]+(\([^)]*\))?!?:\s*/i, ""))
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+  return parseLog(log)
 }
 
 function releaseKey(): string {
@@ -145,7 +146,17 @@ if (cmd === "version") {
   if (v.version.includes("-"))
     throw new Error(`${v.version} has uncommitted changes and cannot be published.`)
   const list = changes()
-  const notes = list.map((s) => `- ${s}`).join("\n")
+  const notes = notesFor(list)
+  // Which change is for which platform, for a fork that pulls the newest features (owner, 4 Nov; docs/forks.md).
+  fs.mkdirSync(path.resolve(b), { recursive: true })
+  fs.writeFileSync(
+    path.join(path.resolve(b), "changes.json"),
+    JSON.stringify(
+      { version: v.version, ...(v.commit ? { commit: v.commit } : {}), changes: list },
+      null,
+      2,
+    ) + "\n",
+  )
   const routes = loadRoutes()
   if (!routes) throw new Error(NO_ROUTES)
   const setup = path.join(root, "dist-app", "Codehouse-Setup.exe")
@@ -183,6 +194,8 @@ if (cmd === "version") {
       notes || "- Small fixes.",
       "",
       "## The other files",
+      "",
+      "`changes.json` lists every change in this release with the files it touched and whether it is for every platform or Windows only, for forks of Codehouse on other systems (see docs/forks.md in the repository).",
       "",
       "`update.json`, `update.sig`, the other `.json` and `.sig` files and the `codeh-*.zip` files are what Codehouse's updater downloads, for this version and for copies installed before a rename: only the parts that changed, checked against a signature. You do not need them.",
       "",
@@ -229,6 +242,8 @@ if (cmd === "version") {
       [path.join(root, "scripts", "gate.mjs"), ...(last ? ["--base", last] : ["--full"])],
     )
   }
+  // Even with --skip-tests: a release never ships what the terms or the rules forbid (CH-01).
+  step("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")])
   step("package and check it", node, [path.join(root, "scripts", "package.mjs"), "--check"])
   step("installer", node, [path.join(root, "scripts", "installer.mjs")])
   const out = path.join(root, "dist-release")
@@ -261,6 +276,7 @@ if (cmd === "version") {
     "Codehouse-Setup-exe.zip",
     "update.json",
     "update.sig",
+    "changes.json",
     ...fs.readFileSync(path.join(out, "routes.txt"), "utf8").split(/\r?\n/).filter(Boolean),
     ...fs.readdirSync(out).filter((f) => /^codeh-.*\.zip$/.test(f)),
   ].map((f) => path.join(out, f))

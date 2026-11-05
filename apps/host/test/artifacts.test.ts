@@ -11,6 +11,7 @@ import {
   ArtifactError,
   artifactHeaders,
   ArtifactStore,
+  EXT,
   labelArtifact,
   MAX_ARTIFACT_BYTES,
   MAX_VERSIONS,
@@ -78,6 +79,27 @@ describe("keeping artifacts", () => {
     )
     expect(s.read(SESSION, "budget-chart", 3)).toBeUndefined()
     expect(s.read(SESSION, "nope", 1)).toBeUndefined()
+  })
+
+  it("keeps a document and code as text, the document marked in a comment Markdown does not show (CH-03)", async () => {
+    const s = fresh()
+    await s.save(SESSION, "Cover letter", "markdown", "# Dear Sam\n\nThank you.\n\n")
+    await s.save(SESSION, "Sort script", "code", "items.sort()\n")
+    expect(s.list(SESSION).map((x) => [x.id, x.kind])).toEqual([
+      ["cover-letter", "markdown"],
+      ["sort-script", "code"],
+    ])
+    expect(s.read(SESSION, "cover-letter", 1)?.content).toBe(
+      `# Dear Sam\n\nThank you.\n\n<!-- ${AI_MARK} -->\n`,
+    )
+    // Code is left exactly as written: its headers say it was made by AI.
+    expect(s.read(SESSION, "sort-script", 1)?.content).toBe("items.sort()\n")
+    expect(labelArtifact("markdown", `x <!-- ${AI_MARK} -->`)).toBe(`x <!-- ${AI_MARK} -->`)
+    expect(EXT.markdown).toBe("md")
+    expect(EXT.code).toBe("txt")
+    expect(artifactHeaders("http://x", "markdown")["content-type"]).toContain("text/markdown")
+    expect(artifactHeaders("http://x", "code")["content-type"]).toContain("text/plain")
+    expect(artifactHeaders("http://x", "code")["x-ai-generated"]).toBe(AI_MARK)
   })
 
   it("redacts before it writes, so a secret never reaches the file", async () => {

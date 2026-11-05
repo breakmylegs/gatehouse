@@ -68,6 +68,31 @@ describe("evaluate_permission", () => {
     ).toBe("no-rule")
   })
 
+  it("denies a shell or a file change asked for in a chat, and audits it with its rule id (CH-03, ADR 0012)", async () => {
+    const bash = { toolName: "Bash", input: { command: "git status" } }
+    const inChat = await r.call("evaluate_permission", {
+      ...bash,
+      ctx: ctx({ sessionId: "chat-1", sessionKind: "chat" }),
+    })
+    expect(inChat.structured).toMatchObject({ outcome: "deny", ruleId: "chat-no-shell" })
+    const write = await r.call("evaluate_permission", {
+      toolName: "Write",
+      input: { file_path: `${r.cwd}/notes.md`, content: "x" },
+      ctx: ctx({ sessionId: "chat-1", sessionKind: "chat" }),
+    })
+    expect(write.structured).toMatchObject({ outcome: "deny", ruleId: "chat-no-shell" })
+    const audited = records().filter((x) => x.session === "chat-1")
+    expect(audited.map((x) => [x.tool, x.verdict.ruleId, x.verdict.risk])).toEqual([
+      ["Bash", "chat-no-shell", expect.any(Number)],
+      ["Write", "chat-no-shell", expect.any(Number)],
+    ])
+    // The same command in a coding session, or a call that does not say, is judged as before.
+    for (const extra of [{ sessionKind: "code" }, {}])
+      expect(
+        (await r.call("evaluate_permission", { ...bash, ctx: ctx(extra) })).structured.ruleId,
+      ).toBe("safe-shell")
+  })
+
   it("uses the project root given, and a PowerShell command through the warm worker", async () => {
     const ps = await r.call("evaluate_permission", {
       toolName: "PowerShell",

@@ -23,6 +23,8 @@ export interface CanUseDeps {
   sessionId: string
   cwd: string
   projectRoot?: string
+  /** A chat or a coding session, for rules scoped to one (CH-03, ADR 0012). */
+  sessionKind?: "code" | "chat"
   project: string
   approver: Pick<ApproverClient, "evaluate">
   broker: Broker
@@ -173,6 +175,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
             sessionId: deps.sessionId,
             toolUseId: toolUseID,
             ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
+            ...(deps.sessionKind ? { sessionKind: deps.sessionKind } : {}),
             ...(options.mcpServer?.source !== undefined
               ? { mcpSource: options.mcpServer.source }
               : {}),
@@ -379,6 +382,7 @@ async function recheckEdited(
   const ctx = {
     cwd: deps.cwd,
     ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
+    ...(deps.sessionKind ? { sessionKind: deps.sessionKind } : {}),
   }
   const floor = await evaluateFloor(policy, { toolName, input: edited }, ctx, deps.pwsh)
   if (floor) {
@@ -398,6 +402,7 @@ async function recheckEdited(
       sessionId: deps.sessionId,
       toolUseId: options.toolUseID,
       ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
+      ...(deps.sessionKind ? { sessionKind: deps.sessionKind } : {}),
       ...(options.mcpServer?.source !== undefined ? { mcpSource: options.mcpServer.source } : {}),
     },
   )
@@ -414,6 +419,7 @@ async function rememberRule(
     const ctx = {
       cwd: deps.cwd,
       ...(deps.projectRoot !== undefined ? { projectRoot: deps.projectRoot } : {}),
+      ...(deps.sessionKind ? { sessionKind: deps.sessionKind } : {}),
     }
     const check = await checkRemember(
       deps.engine,

@@ -17,6 +17,11 @@ export const ruleSchema = {
     pathOutside: { const: "workspaceRoots" },
     pathUnc: { type: "boolean" },
     mcpSource: stringList,
+    sessionKinds: {
+      type: "array",
+      items: { enum: ["code", "chat"] },
+      minItems: 1,
+    },
     everySegmentMustMatch: { const: true },
     risk: { type: "integer", minimum: 0, maximum: 100 },
     message: { type: "string" },

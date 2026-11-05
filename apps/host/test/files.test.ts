@@ -17,6 +17,8 @@ const revealed: string[] = []
 let saveTo: string | undefined
 const copied: Array<{ event: string; input: Record<string, unknown> }> = []
 let audited = true
+// What the session wrote outside its folder (owner, 4 Nov).
+const written = new Set<string>()
 
 beforeAll(async () => {
   root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "gh-files-")))
@@ -32,6 +34,8 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(ws, "logo.bin"), Buffer.from([0, 1, 2, 3, 255]))
   fs.writeFileSync(path.join(ws, "site", "index.html"), "<h1>Weather</h1>")
   fs.writeFileSync(path.join(outside, "private.txt"), "not yours")
+  fs.writeFileSync(path.join(outside, "plan.md"), "# The plan Claude wrote\n")
+  fs.writeFileSync(path.join(outside, ".env"), "SECRET=2\n")
   try {
     fs.symlinkSync(outside, path.join(ws, "link"), "junction")
   } catch {
@@ -45,6 +49,7 @@ beforeAll(async () => {
   const ctx = {
     engine: new PolicyEngine({ getPolicy: () => store.current }),
     sessionCwd: (id: string) => (id === "s1" ? ws : undefined),
+    sessionWrote: (id: string, abs: string) => id === "s1" && written.has(abs.toLowerCase()),
     reveal: (abs: string) => void revealed.push(abs),
     saveAs: async () => saveTo,
     audit: { record: async (e: never) => (copied.push(e), audited) },
@@ -60,6 +65,38 @@ afterAll(async () => {
 })
 
 const get = (url: string) => app.inject({ method: "GET", url })
+
+describe("a file the session wrote outside its folder (owner, 4 Nov)", () => {
+  it("opens in the pane, copies out and shows in Explorer, while one it did not write stays refused", async () => {
+    const plan = path.join(outside, "plan.md")
+    const q = (p: string) => `session=s1&path=${encodeURIComponent(p)}`
+    expect((await get(`/api/files/read?${q(plan)}`)).statusCode).toBe(403)
+    written.add(plan.toLowerCase())
+    const r = await get(`/api/files/read?${q(plan)}`)
+    expect(r.json()).toMatchObject({ kind: "text", text: "# The plan Claude wrote\n" })
+    const shown = await app.inject({
+      method: "POST",
+      url: "/api/files/reveal",
+      payload: { session: "s1", path: plan },
+    })
+    expect(shown.statusCode).toBe(200)
+    expect(revealed.at(-1)).toBe(plan)
+    revealed.length = 0
+    expect((await get(`/api/files/read?${q(path.join(outside, "private.txt"))}`)).statusCode).toBe(
+      403,
+    )
+    expect(
+      (await get(`/api/files/read?session=s9&path=${encodeURIComponent(plan)}`)).statusCode,
+    ).toBe(404)
+  })
+
+  it("still never opens a secrets file, even one the session wrote", async () => {
+    const env = path.join(outside, ".env")
+    written.add(env.toLowerCase())
+    const r = await get(`/api/files/read?session=s1&path=${encodeURIComponent(env)}`)
+    expect(r.json()).toMatchObject({ kind: "blocked" })
+  })
+})
 
 describe("the files panel", () => {
   it("lists the session folder, folders first, without .git", async () => {

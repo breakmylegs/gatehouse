@@ -1,4 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
+import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { DYNAMIC_PLACEHOLDER } from "./paths.js"
@@ -32,6 +33,47 @@ export interface PwshWorkerOptions {
   pwsh?: string
   script?: string
   timeoutMs?: number
+  /** How long the worker may take to start. Windows PowerShell can take several seconds on a busy computer. */
+  startTimeoutMs?: number
+}
+
+/**
+ * Whether a file is there. PowerShell 7 from the Microsoft Store is an app execution alias in WindowsApps, which
+ * fs.existsSync reports as missing (4 Nov: the checker then used Windows PowerShell on a computer with PowerShell 7).
+ */
+function present(file: string): boolean {
+  try {
+    fs.lstatSync(file)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * PowerShell 7 when it is on the PATH, otherwise the Windows PowerShell 5.1 that every Windows 10 and 11 has (owner,
+ * 4 Nov: no version of PowerShell may be a hard dependency). Windows PowerShell is named by its full path, so a
+ * powershell.exe planted in a folder on the PATH is never the one started.
+ */
+export function powerShellExe(
+  env: NodeJS.ProcessEnv = process.env,
+  exists: (file: string) => boolean = present,
+): string {
+  if (process.platform !== "win32") return "pwsh"
+  const dirs = (env.PATH ?? env.Path ?? "").split(";").filter(Boolean)
+  if (dirs.some((d) => exists(path.join(d, "pwsh.exe")))) return "pwsh.exe"
+  return path.join(env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+}
+
+/**
+ * The arguments that run one of Codehouse's own scripts. Its text goes in as -Command rather than -File, because
+ * Windows PowerShell's execution policy is Restricted by default and refuses every script file, and turning the policy
+ * off for the process is what security tools look for. The script is read again each time, so an update is used.
+ */
+export function inlineScriptArgs(script: string, args: string[] = []): string[] {
+  const text = fs.readFileSync(script, "utf8").replace(/^\uFEFF/, "")
+  const command = `& {\n${text}\n} ${args.join(" ")}`.trimEnd()
+  return ["-NoProfile", "-NonInteractive", "-Command", command]
 }
 
 const CACHE_SIZE = 256
@@ -42,6 +84,8 @@ const DEFAULT_SCRIPT = path.resolve(here, "../../../scripts/ps-ast.ps1")
 /** A warm `pwsh` process that parses PowerShell text. Any failure rejects, never allows. */
 export class PwshWorker {
   readonly #opts: Required<PwshWorkerOptions>
+  /** Which PowerShell the worker runs, for the status and the doctor. */
+  readonly exe: string
   #child: ChildProcessWithoutNullStreams | undefined
   #starting: Promise<void> | undefined
   #pending = new Map<number, { resolve: (r: RawAnalysis) => void; reject: (e: Error) => void }>()
@@ -54,10 +98,12 @@ export class PwshWorker {
 
   constructor(opts: PwshWorkerOptions = {}) {
     this.#opts = {
-      pwsh: opts.pwsh ?? "pwsh",
+      pwsh: opts.pwsh ?? powerShellExe(),
       script: opts.script ?? DEFAULT_SCRIPT,
       timeoutMs: opts.timeoutMs ?? 4000,
+      startTimeoutMs: opts.startTimeoutMs ?? (opts.timeoutMs !== undefined ? opts.timeoutMs * 2 : 20_000),
     }
+    this.exe = this.#opts.pwsh
   }
 
   get running(): boolean {
@@ -87,11 +133,10 @@ export class PwshWorker {
       }
       let child: ChildProcessWithoutNullStreams
       try {
-        child = spawn(
-          this.#opts.pwsh,
-          ["-NoProfile", "-NonInteractive", "-File", this.#opts.script, "-Loop"],
-          { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
-        )
+        child = spawn(this.#opts.pwsh, inlineScriptArgs(this.#opts.script, ["-Loop"]), {
+          stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
+        })
       } catch (e) {
         fail(new PwshUnavailableError(`cannot start pwsh: ${String(e)}`))
         return
@@ -112,7 +157,7 @@ export class PwshWorker {
       })
       const timer = setTimeout(
         () => fail(new PwshUnavailableError("pwsh worker did not become ready")),
-        this.#opts.timeoutMs * 2,
+        this.#opts.startTimeoutMs,
       )
       this.#ready = (mode) => {
         clearTimeout(timer)

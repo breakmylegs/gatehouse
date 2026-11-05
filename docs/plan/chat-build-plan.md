@@ -1,4 +1,4 @@
-# Chat build: plan for the owner's approval (CH-01 to CH-08)
+# Chat build: the plan (CH-01 to CH-08), approved 4 Nov 2026 (section 8)
 
 Written 4 Nov 2026 in answer to the owner's Chat build prompt (`docs/plan/queue-2026-11-04.md`), which asks for this plan, section 11, before any code. Nothing here is built yet. Everything below was checked against the repository at commit 5b09de5 and the installed Agent SDK 0.3.310 (`sdk.d.ts`).
 
@@ -106,4 +106,29 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 7. Region and window screenshots need new C# code in the quick prompt. Fine to add?
 8. Chat is on today, so `chat.enabled` would be on by default; `chat.import.enabled` stays off until CH-04 passes. Agree?
 
-Recommended answers are given so the build can go ahead under the standing instruction to choose them, but this plan waits for your approval first, as your prompt asks.
+## Progress
+
+- CH-01 guardrails: done 4 Nov (commit ab7b882, released in 2.0.79).
+- CH-02 data model: done 4 Nov (ADR 0013, ADR 0015).
+- CH-03 native chat: in progress. Done 4 Nov: every chat recorded into the store, and the versions navigator (‹ 2 of 3 ›) for Retry and Edit.
+- CH-03 tool posture: done 4 Nov (ADR 0012, rule `chat-no-shell`). The outputs folder is deferred (ADR 0012) until rules can be scoped to one session's folder.
+- CH-03 finding chats: done 4 Nov (search in Ctrl+K, recency groups in the sidebar).
+- CH-03 artifact views: done 4 Nov (ADR 0019, Markdown and code).
+- CH-03 memory as given: done 5 Nov. CH-03 is complete, apart from the outputs folder (deferred, ADR 0012).
+- CH-04 importer: in progress. Done 5 Nov: the zip reader, the streaming parser, the mapping and the one-transaction import (ADR 0014).
+- CH-04 complete 5 Nov: the import screen, its route and audit entry. No flag: shipped with the viewer.
+- CH-05 viewer and search: done 5 Nov, apart from its Open in Claude and Continue locally buttons, which are CH-06 and CH-07.
+- Next: CH-06, Open in Claude.
+
+## 8. Owner decision (4 Nov 2026)
+
+"On the chat features and anything else that requires my input I want you to choose the best/recommended option for everything and continue build." So the plan is approved with these answers, and the build goes ahead in slice order:
+
+1. No API key fallback. Sign-in stays Anthropic's own flow only (invariant 6, ADR 0010).
+2. The prohibited-pattern check runs in `npm run gate` and `npm run release`, not GitHub Actions.
+3. Mermaid only after its licences are checked; until then diagrams stay SVG.
+4. Today's chats are indexed into the new store in place; their files are not touched.
+5. Open in Claude uses your normal Edge profile ("Default"), changeable in Settings. It is a separate, detached Edge window, and Codehouse reads nothing back.
+6. The import memory ceiling is 512 MB.
+7. Region and window screenshots in the quick prompt: yes.
+8. `chat.enabled` on by default; `chat.import.enabled` off until CH-04 passes.

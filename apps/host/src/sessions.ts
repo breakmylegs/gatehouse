@@ -240,6 +240,8 @@ export interface SessionInfo {
   localLabel?: string
   /** A fork from a point: its earlier conversation is shown up to this message only. */
   historyUntil?: string
+  /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
+  replaces?: string
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
@@ -269,6 +271,8 @@ export interface SessionEvents {
   ]
   /** Its Claude Code process crashed (not a stop Codehouse made), and whether it was working then. */
   crashed: [{ wasRunning: boolean; message: string }]
+  /** You sent a message. For the Host only (Chat's store, CH-03): it goes to no screen and no phone. */
+  prompted: [string]
 }
 
 /**
@@ -393,6 +397,8 @@ export interface StartSessionOptions {
   localModel?: string
   /** With resume and fork: carry on from this message (its uuid), for Retry and Edit. */
   resumeAt?: string
+  /** The session this one replaces in its pane (Retry and Edit). */
+  replaces?: string
   /** Start in a new git worktree of the repository cwd is in, from this base (its current commit when absent). */
   worktree?: { base?: string }
   /** The worktree it works in, once made (set by the manager, not the screen). */
@@ -459,7 +465,12 @@ class InputQueue implements AsyncIterable<SDKUserMessage> {
   }
 }
 
+/** How a written file is remembered: its full path, resolved against the session folder, in lower case. */
+export const writtenKey = (file: string, cwd: string): string =>
+  path.resolve(cwd, file).toLowerCase()
+
 export class Session extends EventEmitter<SessionEvents> {
+  #memoryGiven: Array<{ id: string; scope: string; topic: string; text: string }> = []
   readonly id: string
   readonly cwd: string
   readonly project: string
@@ -467,6 +478,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #deps: SessionDeps
   readonly #input = new InputQueue()
   readonly #decided = new Set<string>()
+  /** The files this session wrote or edited, by full path in lower case, while Codehouse runs. */
+  readonly #written = new Set<string>()
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
@@ -548,6 +561,11 @@ export class Session extends EventEmitter<SessionEvents> {
     deps.broker.on("resolved", this.#onBrokerChange)
   }
 
+  /** Whether this session wrote or edited the file at this full path. */
+  wrote(absPath: string): boolean {
+    return this.#written.has(writtenKey(absPath, this.cwd))
+  }
+
   info(): SessionInfo {
     return {
       id: this.id,
@@ -565,6 +583,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#error !== undefined ? { error: this.#error } : {}),
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
       ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
+      ...(this.#opts.replaces !== undefined ? { replaces: this.#opts.replaces } : {}),
       ...(this.#opts.inWorktree ? { worktree: this.#opts.inWorktree } : {}),
       ...(this.#opts.restore
         ? {
@@ -630,6 +649,13 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#opts.kind === "chat" && this.#deps.memory
         ? this.#deps.memory.forChat(project)
         : undefined
+    // Kept as given, so the chat can show exactly what Claude was told (CH-03).
+    this.#memoryGiven = (memory ?? []).map((m) => ({
+      id: m.id,
+      scope: m.scope,
+      topic: m.topic,
+      text: m.text,
+    }))
     if (memory?.length)
       await this.#deps.audit
         .record({
@@ -655,6 +681,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const agentsMd =
       this.#opts.kind !== "chat" ? await readAgentsMd(this.cwd, this.#deps.policy()) : undefined
     return composeInstructions({
+      profile: this.#deps.config().profile,
       global: this.#deps.config().globalInstructions,
       ...(agentsMd ? { agentsMd } : {}),
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
@@ -683,6 +710,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const hookDeps: SessionHookDeps = {
       sessionId: this.id,
       cwd: this.cwd,
+      sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
       policy: d.policy,
       pwsh: d.pwsh,
       audit: d.audit,
@@ -696,6 +724,7 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       approver: d.approver,
       verdicts: this.#verdicts,
+      onWritten: (file) => this.#written.add(writtenKey(file, this.cwd)),
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
     const onStderr = (data: string) => {
@@ -710,6 +739,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const canUse = createCanUseTool({
       sessionId: this.id,
       cwd: this.cwd,
+      sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
       project: this.project,
       approver: d.approver,
       broker: d.broker,
@@ -1024,10 +1054,16 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit("crashed", { wasRunning, message: e.message })
   }
 
+  /** What this chat was told it remembers when it started, in the words it was given (CH-03). */
+  memoryGiven(): Array<{ id: string; scope: string; topic: string; text: string }> {
+    return this.#memoryGiven.map((m) => ({ ...m }))
+  }
+
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
   prompt(text: string): void {
     this.#syncKnowledge()
     this.#send(text)
+    this.emit("prompted", text)
     this.#carry.started(this.#lastCost)
     // Your own message is you starting it again; the pause is over.
     if (this.#paused) void this.#endPause("you")
@@ -1454,6 +1490,8 @@ export interface ManagerEvents {
   session: [SessionInfo]
   message: [{ sessionId: string; message: SDKMessage }]
   event: [{ sessionId: string; type: string; data: Record<string, unknown> }]
+  /** You sent a message in a session (Host only). */
+  prompted: [{ sessionId: string; text: string }]
 }
 
 /** A chat's name from what was said first: one line, at most 80 characters. */
@@ -1742,6 +1780,9 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     session.on("event", (e) => {
       if (!hidden()) this.emit("event", { sessionId: session.id, type: e.type, data: e.data })
     })
+    session.on("prompted", (text) => {
+      if (!hidden()) this.emit("prompted", { sessionId: session.id, text })
+    })
     session.on("crashed", (c) => {
       if (hidden()) void this.#dropWarm("its Claude Code stopped")
       else void this.#afterCrash(session, c)
@@ -1758,6 +1799,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         JSON.stringify({
           day: new Date().toISOString().slice(0, 10),
           global: c.globalInstructions ?? "",
+          profile: c.profile ?? null,
           memory: memory.map((m) => [m.id, m.at]),
           policy: this.#deps.policy()?.hash ?? "",
         }),

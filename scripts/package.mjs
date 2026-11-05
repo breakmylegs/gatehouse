@@ -247,6 +247,7 @@ execFileSync(
     pk("Overlay.cs"),
     pk("Popout.cs"),
     pk("Hotkey.cs"),
+    pk("NavGuard.cs"),
     pk("Common.cs"),
   ],
   { stdio: "inherit" },
@@ -288,6 +289,23 @@ execFileSync(
     "/optimize+",
     `/out:${path.join(dest, "Codehouse-Limits.exe")}`,
     pk("Limits.cs"),
+  ],
+  { stdio: "inherit" },
+)
+// Codehouse-Helper.exe: DPAPI sealing and the Windows file windows, without PowerShell (owner, 4 Nov). The same
+// arguments as HELPER_CSC_ARGS in apps/host/src/win-helper.ts, which builds it for a source checkout.
+execFileSync(
+  csc,
+  [
+    "/nologo",
+    "/optimize+",
+    "/target:winexe",
+    "/r:System.Security.dll",
+    "/r:System.Windows.Forms.dll",
+    "/r:System.Drawing.dll",
+    `/win32icon:${icoFile}`,
+    `/out:${path.join(dest, "Codehouse-Helper.exe")}`,
+    pk("Helper.cs"),
   ],
   { stdio: "inherit" },
 )

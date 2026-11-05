@@ -58,6 +58,8 @@ internal static class Hosting
 
     /// <summary>A start-up step the Host reports: {"event":"progress","text":"Loading your rules"}</summary>
     internal static readonly Regex ProgressLine = new Regex(@"""event""\s*:\s*""progress""");
+    /// <summary>Keep the computer awake while a session works (owner, 4 Nov): {"event":"awake","on":true}.</summary>
+    internal static readonly Regex AwakeLine = new Regex(@"""event""\s*:\s*""awake"".*?""on""\s*:\s*(true|false)");
 
     /// <summary>A string field from a one-line JSON object, with JSON's escapes undone.</summary>
     internal static string JsonField(string line, string name)
@@ -246,6 +248,22 @@ internal static class Hosting
     internal static string Root()
     {
         return AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+    }
+
+    /// <summary>Sends a little JSON to the Host with the token from the ready URL. Best effort: a Host that has gone
+    /// away is not an error worth showing.</summary>
+    internal static void Post(string url, string route, string json)
+    {
+        try
+        {
+            string baseUrl = url.Substring(0, url.IndexOf('/', 8));
+            string token = url.Substring(url.IndexOf("#token=") + 7);
+            System.Net.WebClient c = new System.Net.WebClient();
+            c.Headers.Add("Authorization", "Bearer " + token);
+            c.Headers.Add("Content-Type", "application/json");
+            c.UploadString(baseUrl + route, json);
+        }
+        catch (Exception) { }
     }
 
     /// <summary>The address a check can call, and its token, from the ready URL.</summary>

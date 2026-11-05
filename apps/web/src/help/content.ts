@@ -75,13 +75,13 @@ In every mode the floor (secrets, destructive commands) is checked first and eve
 
 Sessions waiting on you are lit and come first. Each has a code and colour that also appear on the board and in the workspace. Choose **Open** to work in a session.
 
-**Retry and Edit** on any of your messages carry the conversation on from just before it: **Retry** sends the same words again, **Edit** lets you change them in place (Enter sends, Esc cancels). The new version takes the old one's place, and the old one is kept under Earlier sessions. Wait for Claude to finish first, or stop it. In a coding session, files changed after that point stay as they are.
+**Retry and Edit** on any of your messages carry the conversation on from just before it: **Retry** sends the same words again, **Edit** lets you change them in place (Enter sends, Esc cancels). The new version takes the old one's place. In a chat nothing is lost: the message shows arrows, ‹ 2 of 3 ›, to move between its versions, and each version carries on from where it left off. In a coding session the old one is kept under Earlier sessions. Wait for Claude to finish first, or stop it. In a coding session, files changed after that point stay as they are.
 
 **Find in this conversation**: press Ctrl+F in a session to find words in what was said, including commands, file paths and tool output. It says how many lines match and outlines the one shown; Enter goes to the next, Shift+Enter to the one before, and Esc closes it and puts you back in the prompt box.
 
 **Progress**: while Claude works through a plan, a card above the prompt box shows each step, ticked when done, glowing while in progress, an empty circle before, with how many are done. A long plan shows the steps around the current one; **Show all** opens it all. Each update to the plan in the conversation says how far it was.
 
-**Chat and Code** at the top of the sidebar switch between the two sides of Codehouse. Chat lists your chats: each project with its chats, then **Chats** for those in no project, with New chat, Projects, Memory and Prompts above. Code lists your coding sessions by folder, with New session and your pages above. It remembers the side you chose, and turns to the right side when you open a chat or a session from Search.
+**Chat and Code** at the top of the sidebar switch between the two sides of Codehouse. Chat lists your chats: each project with its chats, then those in no project by when you started them (Today, Yesterday, Previous 7 days, Previous 30 days, Older), with New chat, Projects, Memory and Prompts above. **Search** (Ctrl K) also finds what was said in your chats, under In your chats: pick one to open it where you left it. Code lists your coding sessions by folder, with New session and your pages above. It remembers the side you chose, and turns to the right side when you open a chat or a session from Search.
 
 **Ended sessions in the sidebar** are hidden by default, so the list shows what is working or needs you. A line at the bottom says how many are hidden and **Show** brings them back. The ... menu above the list switches this on or off, and **Archive all ended** puts every ended session away at once; they stay under Earlier sessions. A session that stopped with an error is never hidden, and neither is an ended one you have open.
 
@@ -97,7 +97,9 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - Say what you want to talk about and choose **Start the chat**. It opens like a session, and your chats are listed on the **Chat** side of the sidebar, under their project or under **Chats**.
 - Each chat gets a folder of its own in Codehouse's data folder, outside your projects, and always runs in Plan mode, so nothing on your computer changes.
 - **Research**: tick it when you start a chat and Claude plans the questions, searches the web, reads the best sources in full and puts a numbered citation after each claim. **Sources** at the top of any chat lists every search result it was shown and every page it read, numbered as Claude cites them, each opening in your browser and marked as from the web and untrusted. A search or web address that contains a term on your redaction list (Settings, Privacy) is refused before it leaves this computer, and Claude is asked to try again without it.
-- **Artifacts**: ask a chat for a page, a chart or a small tool and it can make one to show you. Each one shows as a card in the reply that made it, with **Open**; **Artifacts** at the top of the chat opens them all, newest first. Each save is a new version: choose a version, **Compare with the one before** to see what changed, or **Export** it as a file. An artifact runs in a sandbox: it can run its own scripts, but it cannot reach the internet, read your files, open windows or change Codehouse.
+- **Chats from claude.ai** (Settings, Privacy) imports the export zip claude.ai emails you: in claude.ai, Settings, Privacy, Export data. Your chats, projects and memory become read-only copies here, with your private words taken out, listed under **From claude.ai** in the sidebar and found by Search. A project's instructions and the memory that came with it are not used until you accept each one there. Importing the same zip again changes nothing. On a Team or Enterprise plan, Export data appears only once a workspace owner turns on Allow members to export their own data.
+- **Memory** at the top of a chat shows exactly what Claude was told it remembers when that chat started, in the words it was given and where each came from (every chat, or the project). Changes you make in Memory reach the next chat.
+- **Artifacts**: ask a chat for a page, a chart or a small tool and it can make one to show you. Each one shows as a card in the reply that made it, with **Open**; **Artifacts** at the top of the chat opens them all, newest first. Each save is a new version: choose a version, **Compare with the one before** to see what changed, or **Export** it as a file. A page or a picture runs in a sandbox: it can run its own scripts, but it cannot reach the internet, read your files, open windows or change Codehouse. A document (a letter, a plan, notes) or code is shown as text, so nothing in it runs: **Copy** it, or **Download** it as a file.
 - To keep instructions and files for a set of chats, make a project (Projects in the sidebar menu, or the sidebar if you pinned it) and choose it when you start a chat.
 - A chat is plain Claude: it has its own short instructions, not the coding ones, and reads none of your projects' notes or settings. The only tools it has are searching the web, reading a web page and reading files, as your choices in What Claude may do allow; it cannot change a file or run anything. **Attach a file** with + or by dropping it on the prompt box (a CSV, a PDF, a picture or a text file): it is copied into the chat's own folder and Claude reads it there. Ask for a chart of a CSV and Claude makes it as an artifact. A secrets file is never attached, and files over 20 MB are left out. Reading a file outside the chat's folder goes to the Approver, as it would in a coding session.
 - **Starting quickly:** while Start a chat (or the quick prompt) is open, Codehouse has a chat ready in the background, so your first message does not wait for Claude Code to start. It is a chat like any other, with the same checks, and it is put away after three minutes unused, or straight away when the computer is short of memory. A chat in a project, a research chat or one with another model starts as before.
@@ -134,6 +136,17 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - **Add** one with a title and its words. Write {{name}} for a blank: when you use the prompt, Codehouse asks for each one.
 - **Use** one from **+** beside any prompt box, under **Saved prompts**. It goes into the prompt box for you to read and send.
 - **Make it a skill in** a running session's project writes it as a Claude Code skill in that project's skills folder, so Claude can use it there by name. An existing skill is never overwritten, and each one made is in the audit log.`,
+  },
+  imported: {
+    id: "imported",
+    title: "Chats from claude.ai",
+    body: `An imported chat is a read-only copy of a claude.ai chat, made from the export zip claude.ai emails you (Settings, Privacy, Chats from claude.ai).
+
+- It reads like a chat here: your messages, Claude's answers, thinking folded away, and each tool call with its result. Steps Claude took in the cloud say **Cloud**.
+- A message you edited or asked again in claude.ai shows arrows, ‹ 2 of 3 ›, to move between its versions.
+- A file the export did not carry says **File content not included in the export**. A part Codehouse does not know is shown folded, and nothing in it runs.
+- **Export as Markdown** saves the version shown as a file.
+- Nothing can be added to it. Your private words were taken out when it was imported, and the chat says how many.`,
   },
   memory: {
     id: "memory",
@@ -202,11 +215,11 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **Fork** in the same menu starts a copy of the conversation beside it, in the same folder, and each carries on on its own (once Claude has finished what it is doing). **Hand off a side task...** starts a new session for something that came up: say what it should do, and choose In a new worktree to keep it off this session's files. Both keep the session's mode, approval, model, effort and account.
 
-**While you were away**: come back to Codehouse after ten minutes or more and each open session says, in a few lines over its transcript, what happened meanwhile: turns finished, files changed, requests decided and waiting, and whether it stopped. **Got it** puts the cards away.
+**While you were away**: come back to Codehouse after ten minutes or more and each open session says, in a few lines over its transcript, what happened meanwhile. Claude writes it in a few plain sentences: what was done, what is still left and anything waiting on you, with the short list underneath (turns finished, files changed, requests decided and waiting, and whether it stopped). To write it, a small model reads what you and Claude said while you were away, with your private words taken out first; it has no tools, and each one is in the audit log. A chat on a model on this computer is never sent. Turn it off in Settings, Phone and notifications, While you were away, and the card is the list alone. **Got it** puts the cards away.
 
 **Files**
 
-Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, read only, with Ctrl+F to search it, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. Files outside the session folder and secrets files are never shown.
+Files lists what Claude made or changed in this session, and the whole folder as a tree. Choose a file to open it next to the transcript: code and text with line numbers, read only, with Ctrl+F to search it, markdown formatted, pictures, and web pages shown as they look (choose Show the source to see the code). Show in Explorer opens the folder with the file selected. Open a local page shows a dev server running on this computer, such as http://localhost:5173. A file Claude wrote or edited outside the session folder also opens here from its card, with Copy and Save a copy, while Codehouse runs; any other file outside the folder, and every secrets file, is never shown.
 
 **Changes**
 
@@ -342,7 +355,7 @@ The log lives in your Codehouse data folder and never leaves this computer.`,
     title: "Devices",
     body: `Get requests on your phone away from your desk, in one of two ways.
 
-**Push notifications with ntfy** (works behind firewalls): switch it on, install the free ntfy app, and subscribe to the topic Codehouse shows. Each request arrives with Approve and Deny buttons. Everything goes out from this computer and your answer comes back over a connection Codehouse opens, so nothing has to reach in. A notification shows only the project, tool, risk and a short redacted summary. Each button works once, for that request, and Severe requests always need you at the desk. If your phone is subscribed to a different topic, choose **My phone has a different topic** and paste the one it has: Codehouse takes only a topic it made. **Make new topics** asks first, because your phone stops getting requests until you subscribe to the new one.
+**Push notifications with ntfy** (works behind firewalls): switch it on, install the free ntfy app, and subscribe to the topic Codehouse shows. Each request arrives with Approve and Deny buttons. Everything goes out from this computer and your answer comes back over a connection Codehouse opens, so nothing has to reach in. A notification shows only the project, tool, risk and a short redacted summary. Each button works once, for that request, and Severe requests always need you at the desk. If your phone is subscribed to a different topic, choose **My phone has a different topic** and paste the one it has: Codehouse takes only a topic it made. **Make new topics** asks first, because your phone stops getting requests until you subscribe to the new one. Your own ntfy server that needs a sign-in works too: under **Sign-in for this server** choose an access token, or a user name and password. Codehouse keeps the token or password sealed for your Windows account on this computer, never in the settings file or the log, and uses it to send, to listen and on the Approve and Deny buttons (your phone sends those itself). Give it an ntfy user that may only read and write Codehouse's two topics.
 
 **Push notifications with Slack** (also works behind firewalls): create a small Slack app from the manifest Codehouse shows, give its two tokens and your member id, and requests arrive as messages with Approve and Deny buttons. Only your own taps count, and the tokens are kept encrypted on this computer.
 
@@ -369,6 +382,18 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
     id: "settings",
     title: "Settings",
     body: `Settings are saved on this computer, as you change them: a switch or a choice at once, a typed box when you leave it or press Enter. A short message confirms each save, or says what was wrong.
+
+The sections come in three groups. **Preferences**: General, Account and plan, Privacy, Usage, Capabilities, Sessions, Phone and notifications. **This computer**: System, Updates, Developer. **Customize**: Skills, Connectors, Plugins, each a way to the page that holds them.
+
+**Appearance** (General) sets the theme (or following Windows), the text size and detail a conversation opens at until you change that pane, how wide a conversation runs, whether movement is reduced, and the font and size for code, files, diffs and command output. These are kept in this window only.
+
+**Your usage limits** (Usage) shows how much of your plan's 5-hour and weekly limits is used and when each resets, as the ring beside the prompt box does, with Refresh and a way to the Usage page.
+
+**Notifications** (Phone and notifications): with Windows notifications on, choose each kind: requests that need you, **Response completions** (a reply that took a while finishes while Codehouse is not in front) and the build queue being empty. A notification names only the session, never a command or a file.
+
+**Keep the computer awake** (System) stops Windows going to sleep while a session works or waits on you, so a long build is not cut off. The display can still turn off, and closing the lid still sleeps. It is on until you turn it off, and works in the Codehouse window.
+
+**Profile** (Account and plan) is what Claude should call you and what best describes your work. Every new session is told it first.
 
 **Instructions for every session** (Sessions) are your own words that every new session is told at its start, ahead of its project's and its own. They apply to sessions started after you save.
 

@@ -38,6 +38,18 @@ internal sealed class MainForm : Form
     [DllImport("user32.dll")]
     private static extern bool FlashWindowEx(ref FlashInfo info);
 
+    // Keep the computer awake while a session works (owner, 4 Nov). ES_CONTINUOUS | ES_SYSTEM_REQUIRED keeps it from
+    // sleeping; ES_CONTINUOUS alone lets it sleep again. The display may still turn off, and the lid still sleeps.
+    [DllImport("kernel32.dll")]
+    private static extern uint SetThreadExecutionState(uint flags);
+    private const uint EsContinuous = 0x80000000;
+    private const uint EsSystemRequired = 0x00000001;
+
+    private void KeepAwake(bool on)
+    {
+        SetThreadExecutionState(on ? EsContinuous | EsSystemRequired : EsContinuous);
+    }
+
     private readonly bool check;
     private readonly bool withRelay;
     private readonly bool startInTray;
@@ -246,6 +258,7 @@ internal sealed class MainForm : Form
                 else if (Hosting.ApplyLine.IsMatch(ev.Data)) { string line = ev.Data; OnUi(delegate { ApplyUpdate(line); }); }
                 else if (Hosting.RestartLine.IsMatch(ev.Data)) OnUi(delegate { Restart(); });
                 else if (Hosting.ProgressLine.IsMatch(ev.Data)) { string text = Hosting.JsonField(ev.Data, "text"); OnUi(delegate { Step(text); }); }
+                else if (Hosting.AwakeLine.IsMatch(ev.Data)) { bool on = Hosting.AwakeLine.Match(ev.Data).Groups[1].Value == "true"; OnUi(delegate { KeepAwake(on); }); }
                 else Remember(ev.Data);
             };
             host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
@@ -350,15 +363,7 @@ internal sealed class MainForm : Form
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = true;
         core.Settings.IsBuiltInErrorPageEnabled = false;
-        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
-        {
-            if (!IsOurs(e.Uri)) { e.Cancel = true; OpenExternal(e.Uri); }
-        };
-        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
-        {
-            e.Handled = true;
-            if (!IsOurs(e.Uri)) OpenExternal(e.Uri);
-        };
+        Guard(core);
         core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
         {
             // Only our own page is ever loaded, so notifications are the one thing it may ask for.
@@ -388,11 +393,35 @@ internal sealed class MainForm : Form
         TryNavigate();
     }
 
-    private bool IsOurs(string uri)
+    /// <summary>CH-01: a Codehouse window (this one, a pop-out or the quick prompt) shows only our own page
+    /// (packaging/NavGuard.cs). Anything else is cancelled, a web link opens in your browser, and the Host audits it.</summary>
+    internal void Guard(CoreWebView2 core)
     {
-        if (uri == null) return false;
-        if (uri.StartsWith("about:", StringComparison.OrdinalIgnoreCase) || uri.StartsWith("data:", StringComparison.OrdinalIgnoreCase)) return true;
-        return hostOrigin != null && uri.StartsWith(hostOrigin, StringComparison.OrdinalIgnoreCase);
+        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (Refused(e.Uri, "window")) e.Cancel = true;
+        };
+        core.FrameNavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (Refused(e.Uri, "frame")) e.Cancel = true;
+        };
+        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
+        {
+            e.Handled = true;
+            Refused(e.Uri, "new-window");
+        };
+    }
+
+    private bool Refused(string uri, string where)
+    {
+        NavAction a = NavGuard.Decide(uri, hostOrigin, where);
+        if (a == NavAction.Allow) return false;
+        if (a == NavAction.External) OpenExternal(uri);
+        string at = url;
+        string body = NavGuard.Report(where, uri, a);
+        if (at != null)
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate { Hosting.Post(at, "/api/shell/navigation", body); });
+        return true;
     }
 
     internal static void OpenExternal(string uri)
@@ -455,6 +484,8 @@ internal sealed class MainForm : Form
 
     private void OnHostExited()
     {
+        // Whatever the Host last said, nothing is working now.
+        KeepAwake(false);
         if (quitting) return;
         if (check) { Say("Check failed: the Host stopped.\r\n" + Tail()); Finish(1); return; }
         // How it ended, kept in host.log: a process ended by Windows (out of memory, a native crash) leaves no line of
@@ -553,7 +584,7 @@ internal sealed class MainForm : Form
         if (quick != null || env == null || url == null) return;
         int hash = url.IndexOf('#');
         string quickUrl = hash < 0 ? url + "?view=quick" : url.Substring(0, hash) + "?view=quick" + url.Substring(hash);
-        quick = new QuickOverlay(IsOurs, OpenExternal, delegate(string sent)
+        quick = new QuickOverlay(Guard, delegate(string sent)
         {
             // What the quick prompt sent: show the main window on that session, with your words in it.
             ShowWindow();
@@ -577,7 +608,7 @@ internal sealed class MainForm : Form
         int hash = url.IndexOf('#');
         string query = "?view=pane&session=" + session;
         string paneUrl = hash < 0 ? url + query : url.Substring(0, hash) + query + url.Substring(hash);
-        PopoutWindow w = new PopoutWindow(session, IsOurs, OpenExternal);
+        PopoutWindow w = new PopoutWindow(session, Guard);
         popouts[session] = w;
         w.FormClosed += delegate
         {

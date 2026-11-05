@@ -21,17 +21,15 @@ internal sealed class QuickOverlay : Form
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     private readonly WebView2 web = new WebView2();
-    private readonly Func<string, bool> isOurs;
-    private readonly Action<string> openExternal;
+    private readonly Action<CoreWebView2> guard;
     private readonly Action<string> onOpen;
     private IntPtr before;
     private bool ready;
 
     /// <param name="onOpen">Told what was sent (a little JSON: the session and your words) so the main window shows it.</param>
-    internal QuickOverlay(Func<string, bool> isOurs, Action<string> openExternal, Action<string> onOpen)
+    internal QuickOverlay(Action<CoreWebView2> guard, Action<string> onOpen)
     {
-        this.isOurs = isOurs;
-        this.openExternal = openExternal;
+        this.guard = guard;
         this.onOpen = onOpen;
         Text = "Codehouse quick prompt";
         FormBorderStyle = FormBorderStyle.None;
@@ -73,15 +71,7 @@ internal sealed class QuickOverlay : Form
         core.Settings.IsZoomControlEnabled = false;
         core.Settings.IsBuiltInErrorPageEnabled = false;
         core.Settings.AreDefaultContextMenusEnabled = true;
-        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
-        {
-            if (!isOurs(e.Uri)) { e.Cancel = true; openExternal(e.Uri); }
-        };
-        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
-        {
-            e.Handled = true;
-            if (!isOurs(e.Uri)) openExternal(e.Uri);
-        };
+        guard(core);
         core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
         {
             e.State = CoreWebView2PermissionState.Deny;

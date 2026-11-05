@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest"
-import {
-  KeychainProtector,
-  PlainProtector,
-  platformProtector,
-  DpapiProtector,
-  type SecurityRunner,
-} from "../src/relay/protector.js"
+import { DpapiProtector, PlainProtector, sealerFor } from "../src/relay/protector.js"
+import { KeychainProtector, type SecurityRunner } from "../src/relay/protector-mac.js"
 
 /**
  * A stand-in for /usr/bin/security with one login Keychain in memory. Like the real one, an add without -U never
@@ -92,9 +87,14 @@ describe("the Mac Keychain protector", () => {
     )
   })
 
-  it("is the protector on a Mac, DPAPI on Windows, and one shared Keychain protector per Host", () => {
-    expect(platformProtector("darwin")).toBeInstanceOf(KeychainProtector)
-    expect(platformProtector("darwin")).toBe(platformProtector("darwin"))
-    expect(platformProtector("win32")).toBeInstanceOf(DpapiProtector)
+  it("is what upstream's sealerFor gives on a Mac, one per Host, and never on Windows", () => {
+    const helper = () => undefined
+    const mac = sealerFor({ helper, platform: "darwin" })
+    expect(mac).toBeInstanceOf(KeychainProtector)
+    expect(sealerFor({ helper, platform: "darwin" })).toBe(mac)
+    expect(sealerFor({ helper, platform: "win32" })).toBeInstanceOf(DpapiProtector)
+    // A protector a test gives still wins.
+    const given = new PlainProtector()
+    expect(sealerFor({ given, helper, platform: "darwin" })).toBe(given)
   })
 })

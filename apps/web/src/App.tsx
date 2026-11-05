@@ -1,3 +1,4 @@
+import { useAppearance } from "./components/SettingsPanels"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { Toaster } from "sonner"
 import { Announcer } from "./components/Announcer"
@@ -28,6 +29,9 @@ const Workspace = lazy(() => import("./surfaces/Workspace").then((m) => ({ defau
 const NewChat = lazy(() => import("./surfaces/NewChat").then((m) => ({ default: m.NewChat })))
 const Usage = lazy(() => import("./surfaces/Usage").then((m) => ({ default: m.Usage })))
 const MemoryPage = lazy(() => import("./surfaces/Memory").then((m) => ({ default: m.MemoryPage })))
+const ImportedChat = lazy(() =>
+  import("./surfaces/ImportedChat").then((m) => ({ default: m.ImportedChat })),
+)
 const Marketplace = lazy(() =>
   import("./surfaces/Marketplace").then((m) => ({ default: m.Marketplace })),
 )
@@ -108,6 +112,8 @@ export function App() {
 
   // In the Codehouse window: the quick prompt's shortcut, and what the quick prompt sent (W1-15).
   useEffect(() => startShell(), [])
+  // Settings, General, Appearance: width, code font and size, and movement (owner, 4 Nov).
+  useAppearance()
 
   // First launch: the setup wizard, once. It can be run again from Settings.
   useEffect(() => {
@@ -216,6 +222,7 @@ export function App() {
                   {route === "marketplace" && <Marketplace />}
                   {route === "doctor" && <Doctor />}
                   {route === "home" && <Home />}
+                  {route === "imported" && <ImportedChat />}
                 </Suspense>
               </main>
               <HelpPane />

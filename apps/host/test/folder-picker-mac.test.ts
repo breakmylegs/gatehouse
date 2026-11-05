@@ -2,7 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, describe, expect, it } from "vitest"
-import { macFolderArgs, macPicked, macSaveArgs } from "../src/folder-picker.js"
+import { macFolderArgs, macPicked, macSaveArgs } from "../src/folder-picker-mac.js"
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-pick-"))
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))

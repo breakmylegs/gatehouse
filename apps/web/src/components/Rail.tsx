@@ -1,3 +1,4 @@
+import { ImportedChats } from "./ImportedChats"
 import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
 import { useEffect, useState } from "react"
@@ -502,6 +503,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
             )}
           </section>
         ))}
+        {mode === "chat" ? <ImportedChats /> : null}
         {hiddenEnded > 0 ? (
           <p className="m-0 px-2 text-[13px] text-shell-mut">
             {hiddenEnded === 1

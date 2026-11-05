@@ -7,8 +7,9 @@ import type { AdminContext } from "./api.js"
 
 /**
  * Files for the workspace: list a session's folder, read a file, preview a page, and reveal a file in Explorer.
- * Everything stays inside the session's own folder (real paths, so a junction cannot lead out), and anything the
- * policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. Nothing here writes a file.
+ * Everything stays inside the session's own folder (real paths, so a junction cannot lead out), except a file the
+ * session itself wrote or edited elsewhere, which can be read, copied out or shown in Explorer (owner, 4 Nov). Anything
+ * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. Nothing here writes a file.
  */
 
 const MAX_TEXT = 1024 * 1024
@@ -39,12 +40,14 @@ const bad = (reply: FastifyReply, status: number, error: string) =>
 export interface FilesDeps {
   /** The working folder of a running session. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** Whether the session wrote or edited the file at this full path (it may be outside its folder). */
+  sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** Opens Explorer with the file selected. Injected so tests never open a window. */
   reveal?: (absPath: string) => void
 }
 
 export const revealInExplorer = (abs: string): void => {
-  // On a Mac, Finder with the file selected. The path is absolute, so open never reads it as an option.
+  // Mac fork: on a Mac, Finder with the file selected. The path is absolute, so open never reads it as an option.
   if (process.platform === "darwin" && path.isAbsolute(abs)) {
     spawn("/usr/bin/open", ["-R", abs], { detached: true, stdio: "ignore" }).unref()
     return
@@ -90,6 +93,26 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
 
   const rootOf = (q: Record<string, unknown>): string | undefined =>
     typeof q.session === "string" ? ctx.sessionCwd?.(q.session) : undefined
+
+  /**
+   * A file the request names: inside the session's folder, or, given as a full path, one the session itself wrote or
+   * edited (owner, 4 Nov: a file Claude made elsewhere opened only in Explorer). Anything else outside is refused.
+   */
+  const locate = (q: Record<string, unknown>, root: string): { abs?: string; error?: string } => {
+    const given = typeof q.path === "string" ? q.path : ""
+    const inside = insideRoot(root, given)
+    if (inside.abs || !path.isAbsolute(given) || typeof q.session !== "string") return inside
+    let abs: string
+    try {
+      abs = real(given)
+    } catch {
+      return { error: "That file is not there." }
+    }
+    const wrote = ctx.sessionWrote
+    return wrote && (wrote(q.session, abs) || wrote(q.session, path.resolve(given)))
+      ? { abs }
+      : inside
+  }
 
   /** The floor decides what may be shown: a secrets file is never opened, even on your own screen. */
   const blocked = async (abs: string, cwd: string): Promise<string | undefined> => {
@@ -147,7 +170,7 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const q = req.query as Record<string, unknown>
     const root = rootOf(q)
     if (!root) return bad(reply, 404, "That session is not running.")
-    const where = insideRoot(root, typeof q.path === "string" ? q.path : "")
+    const where = locate(q, root)
     if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
     const st = fs.statSync(where.abs)
     if (st.isDirectory()) return bad(reply, 400, "That is a folder.")
@@ -177,7 +200,7 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const b = (req.body ?? {}) as Record<string, unknown>
     const root = rootOf(b)
     if (!root) return bad(reply, 404, "That session is not running.")
-    const where = insideRoot(root, typeof b.path === "string" ? b.path : "")
+    const where = locate(b, root)
     if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
     if (fs.statSync(where.abs).isDirectory()) return bad(reply, 400, "That is a folder.")
     const why = await blocked(where.abs, root)
@@ -211,7 +234,7 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const b = (req.body ?? {}) as Record<string, unknown>
     const root = rootOf(b)
     if (!root) return bad(reply, 404, "That session is not running.")
-    const where = insideRoot(root, typeof b.path === "string" ? b.path : "")
+    const where = locate(b, root)
     if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
     ;(ctx.reveal ?? revealInExplorer)(where.abs)
     return { ok: true }

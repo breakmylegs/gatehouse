@@ -9,7 +9,10 @@ import { writeFileAtomic } from "@gatehouse/shared/node"
  */
 export const MAX_ARTIFACT_BYTES = 500_000
 export const MAX_VERSIONS = 50
-export const ARTIFACT_KINDS = ["html", "svg"] as const
+export const ARTIFACT_KINDS = ["html", "svg", "markdown", "code"] as const
+
+/** Kinds shown as text, never run in a frame (CH-03): a document, and code to read or copy. */
+export const TEXT_KINDS: readonly ArtifactKind[] = ["markdown", "code"]
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number]
 
 export class ArtifactError extends Error {
@@ -35,10 +38,17 @@ export interface ArtifactSummary {
 
 /** A Host session id. Anything else never reaches the disk. */
 const SESSION = /^[0-9a-f-]{36}$/
-const EXT: Record<ArtifactKind, string> = { html: "html", svg: "svg" }
+export const EXT: Record<ArtifactKind, string> = {
+  html: "html",
+  svg: "svg",
+  markdown: "md",
+  code: "txt",
+}
 const TYPE: Record<ArtifactKind, string> = {
   html: "text/html; charset=utf-8",
   svg: "image/svg+xml; charset=utf-8",
+  markdown: "text/markdown; charset=utf-8",
+  code: "text/plain; charset=utf-8",
 }
 
 const slug = (title: string) =>
@@ -64,6 +74,10 @@ export const AI_MARK = "AI-generated with Claude in Codehouse"
  */
 export function labelArtifact(kind: ArtifactKind, content: string): string {
   if (content.includes(AI_MARK)) return content
+  // A document says so in a comment Markdown does not show; code is marked by its headers alone, since a comment
+  // there would depend on its language.
+  if (kind === "markdown") return `${content.replace(/\s+$/, "")}\n\n<!-- ${AI_MARK} -->\n`
+  if (kind === "code") return content
   if (kind === "svg") {
     const comment = `<!-- ${AI_MARK} -->`
     const at = content.search(/<svg[\s>]/i)

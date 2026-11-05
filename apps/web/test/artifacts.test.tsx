@@ -13,7 +13,7 @@ const SESSION = "019a0000-0000-7000-8000-0000000000aa"
 let artifacts: Array<{
   id: string
   title: string
-  kind: "html" | "svg"
+  kind: "html" | "svg" | "markdown" | "code"
   versions: Array<{ version: number; bytes: number; at: string }>
 }> = []
 const contents: Record<string, string> = {}
@@ -135,6 +135,33 @@ describe("the Artifacts panel", () => {
     )
   })
 
+  it("shows a document and code as text, never in a frame, and saves them as they are (CH-03)", async () => {
+    const at = "2026-11-01T09:00:00Z"
+    artifacts = [
+      { id: "plan", title: "Plan", kind: "markdown", versions: [{ version: 1, bytes: 9, at }] },
+      { id: "sort", title: "Sort", kind: "code", versions: [{ version: 1, bytes: 12, at }] },
+    ]
+    contents["plan@1"] = "# The plan\n\n- **First** step\n\n<script>alert(1)</script>"
+    contents["sort@1"] = "items.sort()"
+    render(<ArtifactsPane sessionId={SESSION} refresh={0} />)
+    // The newest is the code: shown in the code view, with no frame anywhere.
+    expect(await screen.findByText("items.sort()")).toBeTruthy()
+    expect(document.querySelector("iframe")).toBeNull()
+    expect(calls.some((c) => c.url === "/api/artifacts/open")).toBe(false)
+    await userEvent.click(screen.getByRole("button", { name: "Plan" }))
+    const doc = await screen.findByLabelText("Artifact: Plan, version 1")
+    expect(within(doc).getByRole("heading", { name: "The plan" })).toBeTruthy()
+    expect(within(doc).getByText("First").tagName).toBe("STRONG")
+    // Words written as HTML are not run, nor turned into a page element.
+    expect(doc.querySelector("script")).toBeNull()
+    expect(document.querySelector("iframe")).toBeNull()
+    expect(screen.getByText("Shown as text: nothing in it runs.")).toBeTruthy()
+    await userEvent.click(screen.getByRole("button", { name: "Download" }))
+    await waitFor(() =>
+      expect(saved[0]).toMatchObject({ text: contents["plan@1"], type: "text/markdown" }),
+    )
+  })
+
   it("exports a page that fetches nothing when opened from the file, as in the app (B45)", () => {
     const page = offlineExport("html", "<html><head><title>t</title></head><body>x</body></html>")
     expect(page).toBe(
@@ -183,7 +210,7 @@ describe("in a chat", () => {
       within(panels)
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Artifacts", "Sources"])
+    ).toEqual(["Artifacts", "Sources", "Memory"])
     await userEvent.click(within(panels).getByRole("button", { name: "Artifacts" }))
     expect(await screen.findByTitle("Artifact: Logo, version 1")).toBeTruthy()
     unmount()

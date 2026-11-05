@@ -18,16 +18,14 @@ internal sealed class PopoutWindow : Form
     internal static readonly Regex SessionId = new Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$");
 
     private readonly WebView2 web = new WebView2();
-    private readonly Func<string, bool> isOurs;
-    private readonly Action<string> openExternal;
+    private readonly Action<CoreWebView2> guard;
 
     internal readonly string Session;
 
-    internal PopoutWindow(string session, Func<string, bool> isOurs, Action<string> openExternal)
+    internal PopoutWindow(string session, Action<CoreWebView2> guard)
     {
         Session = session;
-        this.isOurs = isOurs;
-        this.openExternal = openExternal;
+        this.guard = guard;
         Text = "Codehouse";
         StartPosition = FormStartPosition.WindowsDefaultLocation;
         Size = new Size(900, 760);
@@ -49,15 +47,7 @@ internal sealed class PopoutWindow : Form
         core.Settings.IsStatusBarEnabled = false;
         core.Settings.IsZoomControlEnabled = true;
         core.Settings.IsBuiltInErrorPageEnabled = false;
-        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
-        {
-            if (!isOurs(e.Uri)) { e.Cancel = true; openExternal(e.Uri); }
-        };
-        core.NewWindowRequested += delegate(object s, CoreWebView2NewWindowRequestedEventArgs e)
-        {
-            e.Handled = true;
-            if (!isOurs(e.Uri)) openExternal(e.Uri);
-        };
+        guard(core);
         core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
         {
             e.State = e.PermissionKind == CoreWebView2PermissionKind.Notifications ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;

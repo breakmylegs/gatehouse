@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from "react"
 import { send, useStore } from "../store"
 
 /**
- * The shell the Host runs your commands in: zsh on a Mac, PowerShell on Windows. The page is always on the same
+ * Mac fork: the shell the Host runs your commands in: zsh on a Mac, PowerShell on Windows. The page is always on the same
  * computer as the Host, so the browser can say which.
  */
 export function terminalShell(userAgent = globalThis.navigator?.userAgent ?? "") {

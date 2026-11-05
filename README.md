@@ -39,7 +39,7 @@ You need Node 24 and Git. Quit Codehouse from its tray icon before running it ov
 
 - Windows 10 or 11, 64-bit, with Microsoft's WebView2 runtime (it is part of Windows 11).
 - A Claude account you can use with Claude Code. Codehouse signs you in through Claude Code's own sign-in in your browser. It never sees your password and never reads your tokens.
-- PowerShell 7 (`pwsh`) for the PowerShell command checker. Without it, PowerShell commands simply wait for you.
+- Nothing else. The PowerShell command checker uses PowerShell 7 (`pwsh`) when it is installed and the Windows PowerShell that comes with Windows otherwise.
 - About 1.5 GB of disk: Codehouse is about 470 MB, and an update keeps the version before it so you can go back.
 
 ## What it does

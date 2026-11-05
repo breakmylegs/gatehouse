@@ -91,7 +91,7 @@ export class TerminalManager extends EventEmitter {
       cwd,
       env: sanitiseEnv(this.#deps.env ?? process.env),
       windowsHide: true,
-      // Away from Windows the command leads its own process group, so Stop can end everything it started.
+      // Mac fork: away from Windows the command leads its own process group, so Stop can end everything it started.
       detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     })
@@ -140,7 +140,7 @@ export function defaultShell(platform: NodeJS.Platform = process.platform): {
   file: string
   args: (c: string) => string[]
 } {
-  if (platform === "darwin") return { file: "/bin/zsh", args: (c) => ["-f", "-c", c] }
+  if (platform === "darwin") return { file: "/bin/zsh", args: (c) => ["-f", "-c", c] } // Mac fork
   const args = (c: string) => ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", c]
   return { file: platform === "win32" ? pwshOrWindowsPowerShell() : "pwsh", args }
 }
@@ -164,7 +164,7 @@ function killTree(child: ChildProcess): void {
     )
   else
     try {
-      // The whole group the command leads (it was started detached), not only the shell.
+      // Mac fork: the whole group the command leads (it was started detached), not only the shell.
       process.kill(-child.pid, "SIGKILL")
     } catch {
       child.kill("SIGKILL")

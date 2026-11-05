@@ -38,6 +38,66 @@ const SAVE_SCRIPT = [
   "$f.Close()",
 ].join("; ")
 
+const safeName = (name: string) => name.replace(/[\\/:*?"<>|]/g, "_").slice(0, 200)
+const folderOrEmpty = (start?: string) =>
+  start && fs.existsSync(start) && fs.statSync(start).isDirectory() ? start : ""
+
+/** What a window program printed: the path chosen, or undefined when you cancelled. */
+function chosen(
+  exe: string,
+  args: string[],
+  env: Record<string, string>,
+): Promise<string | undefined> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(exe, args, {
+      env: { ...process.env, ...env },
+      stdio: ["ignore", "pipe", "ignore"],
+      windowsHide: true,
+    })
+    const chunks: Buffer[] = []
+    child.stdout.on("data", (c: Buffer) => chunks.push(c))
+    child.on("error", reject)
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        reject(new Error(`the window could not be opened (exit ${code ?? "unknown"})`))
+        return
+      }
+      const picked = Buffer.concat(chunks).toString("utf8").trim()
+      resolve(picked === "" ? undefined : picked)
+    })
+  })
+}
+
+/**
+ * The same two windows through Codehouse-Helper.exe (packaging/Helper.cs), with no PowerShell (owner, 4 Nov: "Why do
+ * I need powershell at all?"). The PowerShell ones below are the fallback where the helper cannot be had.
+ */
+/** Files chosen in the normal open window: one, or several. Nothing from a request reaches the window. */
+export type OpenPicker = (o: { many: boolean; title: string; filter?: string }) => Promise<string[]>
+
+export function helperPickers(exe: string): {
+  pickFolder: FolderPicker
+  saveAs: SaveAsPicker
+  openFiles: OpenPicker
+} {
+  return {
+    openFiles: async (o) =>
+      (
+        (await chosen(exe, [o.many ? "--open-files" : "--open-file"], {
+          CODEHOUSE_OPEN_TITLE: o.title,
+          ...(o.filter ? { CODEHOUSE_OPEN_FILTER: o.filter } : {}),
+        })) ?? ""
+      )
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean),
+    pickFolder: (start) =>
+      chosen(exe, ["--pick-folder"], { CODEHOUSE_PICK_START: folderOrEmpty(start) }),
+    saveAs: (suggestedName) =>
+      chosen(exe, ["--save-as"], { CODEHOUSE_SAVE_NAME: safeName(suggestedName) }),
+  }
+}
+
 export const saveAsWithWindows: SaveAsPicker = (suggestedName) =>
   new Promise((resolve, reject) => {
     if (process.platform !== "win32") {
@@ -89,87 +149,3 @@ export const pickFolderWithWindows: FolderPicker = (start) =>
       resolve(picked === "" ? undefined : picked)
     })
   })
-
-/**
- * The Mac windows, through osascript. As on Windows the script is fixed: the starting folder and the suggested name
- * are arguments to its run handler, never part of its text, so neither can become a command. Cancel is error -128,
- * which the script turns into no answer.
- */
-const MAC_FOLDER_SCRIPT = [
-  "on run argv",
-  "activate",
-  "try",
-  "if (count of argv) > 0 then",
-  'set f to choose folder with prompt "Choose the project folder" default location (POSIX file (item 1 of argv))',
-  "else",
-  'set f to choose folder with prompt "Choose the project folder"',
-  "end if",
-  "return POSIX path of f",
-  "on error number -128",
-  'return ""',
-  "end try",
-  "end run",
-]
-
-const MAC_SAVE_SCRIPT = [
-  "on run argv",
-  "activate",
-  "try",
-  'return POSIX path of (choose file name with prompt "Save a copy" default name (item 1 of argv))',
-  "on error number -128",
-  'return ""',
-  "end try",
-  "end run",
-]
-
-const script = (lines: string[]) => lines.flatMap((l) => ["-e", l])
-
-/** osascript's arguments for the folder window. Only an absolute folder that is there is passed on. */
-export function macFolderArgs(start?: string): string[] {
-  const ok =
-    start !== undefined &&
-    start.startsWith("/") &&
-    fs.existsSync(start) &&
-    fs.statSync(start).isDirectory()
-  return [...script(MAC_FOLDER_SCRIPT), ...(ok ? [start] : [])]
-}
-
-/**
- * osascript's arguments for the save window. The name loses the characters a Mac file name cannot have, and a
- * leading dash or dot, so osascript never reads it as an option and the copy is not hidden.
- */
-export function macSaveArgs(suggestedName: string): string[] {
-  const name =
-    suggestedName
-      .replace(/[\\/:*?"<>|]/g, "_")
-      .replace(/^[-.]+/, "_")
-      .slice(0, 200) || "copy"
-  return [...script(MAC_SAVE_SCRIPT), name]
-}
-
-/** What osascript printed, without the newline, and a folder without its trailing slash. */
-export function macPicked(out: string): string | undefined {
-  const p = out.trim()
-  if (p === "") return undefined
-  return p.length > 1 ? p.replace(/\/+$/, "") : p
-}
-
-function runOsascript(args: string[]): Promise<string | undefined> {
-  return new Promise((resolve, reject) => {
-    const child = spawn("/usr/bin/osascript", args, { stdio: ["ignore", "pipe", "ignore"] })
-    const chunks: Buffer[] = []
-    child.stdout.on("data", (c: Buffer) => chunks.push(c))
-    child.on("error", reject)
-    child.on("exit", () => resolve(macPicked(Buffer.concat(chunks).toString("utf8"))))
-  })
-}
-
-export const pickFolderWithMac: FolderPicker = (start) => runOsascript(macFolderArgs(start))
-export const saveAsWithMac: SaveAsPicker = (suggestedName) =>
-  runOsascript(macSaveArgs(suggestedName))
-
-/** The windows for this computer. */
-export const pickFolder: FolderPicker =
-  process.platform === "darwin" ? pickFolderWithMac : pickFolderWithWindows
-export const saveAs: SaveAsPicker =
-  process.platform === "darwin" ? saveAsWithMac : saveAsWithWindows
