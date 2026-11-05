@@ -28,6 +28,7 @@ export function CommandPalette() {
   const helpOpen = useStore((s) => s.helpOpen)
   const setHelpOpen = useStore((s) => s.setHelpOpen)
   const sessions = useSessionList()
+  const openImported = useStore((s) => s.openImported)
   const pending = usePending()
   const [query, setQuery] = useState("")
   const hits = useChatSearch(open ? query : "")
@@ -162,24 +163,35 @@ export function CommandPalette() {
               ))}
             </Command.Group>
           ) : null}
-          {hits.length > 0 ? (
-            // CH-03: what was said in your chats, from Chat's own store. The words you typed are in each value so
-            // the list's own filter keeps them.
-            <Command.Group heading="In your chats" className="text-[13px] text-mut">
-              {hits.map((h) => (
-                <Item
-                  key={h.messageId}
-                  value={`chat-hit ${h.messageId} ${query} ${h.title}`}
-                  onSelect={run(() => void openConversation(h.conversationId))}
-                >
-                  <span className="grid">
-                    <span>{h.title || "Untitled chat"}</span>
-                    <span className="text-[12px] font-normal text-mut">{h.snippet}</span>
-                  </span>
-                </Item>
-              ))}
-            </Command.Group>
-          ) : null}
+          {(
+            [
+              ["In your chats", hits.filter((h) => h.kind !== "imported")],
+              ["From claude.ai", hits.filter((h) => h.kind === "imported")],
+            ] as const
+          ).map(([heading, list]) =>
+            list.length > 0 ? (
+              // CH-03 and CH-05: what was said in your chats and in those imported from claude.ai, listed apart. The
+              // words you typed are in each value so the list's own filter keeps them.
+              <Command.Group key={heading} heading={heading} className="text-[13px] text-mut">
+                {list.map((h) => (
+                  <Item
+                    key={h.messageId}
+                    value={`chat-hit ${h.messageId} ${query} ${h.title}`}
+                    onSelect={run(() =>
+                      h.kind === "imported"
+                        ? openImported(h.conversationId)
+                        : void openConversation(h.conversationId),
+                    )}
+                  >
+                    <span className="grid">
+                      <span>{h.title || "Untitled chat"}</span>
+                      <span className="text-[12px] font-normal text-mut">{h.snippet}</span>
+                    </span>
+                  </Item>
+                ))}
+              </Command.Group>
+            ) : null,
+          )}
           <Command.Group heading="Commands" className="text-[13px] text-mut">
             {commandItems(rest.filter((c) => c.group === "Actions"))}
           </Command.Group>
@@ -198,6 +210,8 @@ interface ChatHit {
   messageId: string
   title: string
   snippet: string
+  /** native, fork or imported (CH-05). */
+  kind?: string
 }
 
 /** Searches your chats as you type, from two letters, a moment after you stop. */

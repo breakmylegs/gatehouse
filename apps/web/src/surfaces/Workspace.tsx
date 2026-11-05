@@ -2046,7 +2046,7 @@ function SessionFacts({ sessionId }: { sessionId: string }) {
  * A run of tool calls as one line, "Ran 2 commands, read schema.ts", that opens to each call and its output. It
  * says when one of them is waiting for you.
  */
-const ToolGroup = memo(function ToolGroup({
+export const ToolGroup = memo(function ToolGroup({
   tools,
   onOpenArtifact,
   onOpenFile,

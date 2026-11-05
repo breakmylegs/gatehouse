@@ -4,7 +4,10 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import { redact } from "@gatehouse/policy"
+import Fastify from "fastify"
+import { registerChatRoutes } from "../src/chat/api.js"
 import { ChatStore } from "../src/chat/db.js"
+import { ChatRecorder } from "../src/chat/recorder.js"
 import { ImportError, importExport } from "../src/chat/import/importer.js"
 import { ZipRefused } from "../src/chat/import/zip.js"
 import {
@@ -146,6 +149,48 @@ describe("importing a claude.ai export", () => {
     )
     await expect(r).rejects.toBeInstanceOf(ImportError)
     await expect(r).rejects.toMatchObject({ files: ["photos/cat.jpg", "notes.json"] })
+  })
+
+  it("serves an imported conversation as shown, with its attachments, and switches its branch (CH-05)", async () => {
+    const { store, run } = setup()
+    await run(singleLayout())
+    const app = Fastify()
+    registerChatRoutes(app, {
+      store,
+      recorder: new ChatRecorder(
+        store,
+        () => undefined,
+        () => undefined,
+      ),
+    })
+    const c = store
+      .listConversations({ kind: "imported" })
+      .find((x) => x.title === "Conversation 1")!
+    const got = (await app.inject({ url: `/api/chat/conversation?id=${c.id}` })).json() as {
+      steps: Array<{ message: { id: string; role: string }; index: number; siblings: string[] }>
+      attachments: Record<string, Array<{ fileName: string; included: boolean }>>
+    }
+    expect(got.steps.map((s) => [s.message.role, s.index, s.siblings.length])).toEqual([
+      ["user", 0, 1],
+      ["assistant", 1, 2],
+    ])
+    expect(got.attachments[got.steps[0]!.message.id]).toEqual([
+      expect.objectContaining({ fileName: "notes.md", included: true }),
+      expect.objectContaining({ fileName: "diagram.png", included: false }),
+    ])
+    const first = got.steps[1]!.siblings[0]!
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/chat/conversation/switch",
+          payload: { id: c.id, messageId: first },
+        })
+      ).statusCode,
+    ).toBe(200)
+    expect(shown(store, c.id)).toEqual(["Question 1 1/1", "First answer 1 1/2"])
+    expect((await app.inject({ url: "/api/chat/conversation?id=nothing" })).statusCode).toBe(404)
+    await app.close()
   })
 
   it("uses an imported project's instructions and memory only once you accept each one", async () => {

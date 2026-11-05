@@ -29,6 +29,9 @@ const Workspace = lazy(() => import("./surfaces/Workspace").then((m) => ({ defau
 const NewChat = lazy(() => import("./surfaces/NewChat").then((m) => ({ default: m.NewChat })))
 const Usage = lazy(() => import("./surfaces/Usage").then((m) => ({ default: m.Usage })))
 const MemoryPage = lazy(() => import("./surfaces/Memory").then((m) => ({ default: m.MemoryPage })))
+const ImportedChat = lazy(() =>
+  import("./surfaces/ImportedChat").then((m) => ({ default: m.ImportedChat })),
+)
 const Marketplace = lazy(() =>
   import("./surfaces/Marketplace").then((m) => ({ default: m.Marketplace })),
 )
@@ -219,6 +222,7 @@ export function App() {
                   {route === "marketplace" && <Marketplace />}
                   {route === "doctor" && <Doctor />}
                   {route === "home" && <Home />}
+                  {route === "imported" && <ImportedChat />}
                 </Suspense>
               </main>
               <HelpPane />

@@ -52,6 +52,8 @@ export type Route =
   | "marketplace"
   | "doctor"
   | "home"
+  /** CH-05: an imported claude.ai chat, read only. */
+  | "imported"
 
 export interface ResolvedView {
   id: string
@@ -123,6 +125,9 @@ export interface State {
   selectedRequest?: string
   /** A project chosen on the Projects page, for the new chat page to start in. Used once. */
   newChatProject?: string
+  /** CH-05: the imported chat the viewer shows. */
+  importedChat?: string
+  openImported: (id: string) => void
   /** B22: chats started side by side with the same message, and when, until you keep one. */
   compare?: { ids: string[]; at: number }
   theme: "light" | "dark"
@@ -343,6 +348,7 @@ export const useStore = create<State>((set, get) => ({
   setupDone: localStorage.getItem("gatehouse.setup") === "done",
 
   setRoute: (route) => set({ route }),
+  openImported: (importedChat) => set({ importedChat, route: "imported" }),
   selectSession: (selectedSession) =>
     set((s) => {
       if (selectedSession === undefined) return { selectedSession }

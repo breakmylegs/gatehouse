@@ -97,6 +97,7 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - Say what you want to talk about and choose **Start the chat**. It opens like a session, and your chats are listed on the **Chat** side of the sidebar, under their project or under **Chats**.
 - Each chat gets a folder of its own in Codehouse's data folder, outside your projects, and always runs in Plan mode, so nothing on your computer changes.
 - **Research**: tick it when you start a chat and Claude plans the questions, searches the web, reads the best sources in full and puts a numbered citation after each claim. **Sources** at the top of any chat lists every search result it was shown and every page it read, numbered as Claude cites them, each opening in your browser and marked as from the web and untrusted. A search or web address that contains a term on your redaction list (Settings, Privacy) is refused before it leaves this computer, and Claude is asked to try again without it.
+- **Chats from claude.ai** (Settings, Privacy) imports the export zip claude.ai emails you: in claude.ai, Settings, Privacy, Export data. Your chats, projects and memory become read-only copies here, with your private words taken out, listed under **From claude.ai** in the sidebar and found by Search. A project's instructions and the memory that came with it are not used until you accept each one there. Importing the same zip again changes nothing. On a Team or Enterprise plan, Export data appears only once a workspace owner turns on Allow members to export their own data.
 - **Memory** at the top of a chat shows exactly what Claude was told it remembers when that chat started, in the words it was given and where each came from (every chat, or the project). Changes you make in Memory reach the next chat.
 - **Artifacts**: ask a chat for a page, a chart or a small tool and it can make one to show you. Each one shows as a card in the reply that made it, with **Open**; **Artifacts** at the top of the chat opens them all, newest first. Each save is a new version: choose a version, **Compare with the one before** to see what changed, or **Export** it as a file. A page or a picture runs in a sandbox: it can run its own scripts, but it cannot reach the internet, read your files, open windows or change Codehouse. A document (a letter, a plan, notes) or code is shown as text, so nothing in it runs: **Copy** it, or **Download** it as a file.
 - To keep instructions and files for a set of chats, make a project (Projects in the sidebar menu, or the sidebar if you pinned it) and choose it when you start a chat.
@@ -135,6 +136,17 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - **Add** one with a title and its words. Write {{name}} for a blank: when you use the prompt, Codehouse asks for each one.
 - **Use** one from **+** beside any prompt box, under **Saved prompts**. It goes into the prompt box for you to read and send.
 - **Make it a skill in** a running session's project writes it as a Claude Code skill in that project's skills folder, so Claude can use it there by name. An existing skill is never overwritten, and each one made is in the audit log.`,
+  },
+  imported: {
+    id: "imported",
+    title: "Chats from claude.ai",
+    body: `An imported chat is a read-only copy of a claude.ai chat, made from the export zip claude.ai emails you (Settings, Privacy, Chats from claude.ai).
+
+- It reads like a chat here: your messages, Claude's answers, thinking folded away, and each tool call with its result. Steps Claude took in the cloud say **Cloud**.
+- A message you edited or asked again in claude.ai shows arrows, ‹ 2 of 3 ›, to move between its versions.
+- A file the export did not carry says **File content not included in the export**. A part Codehouse does not know is shown folded, and nothing in it runs.
+- **Export as Markdown** saves the version shown as a file.
+- Nothing can be added to it. Your private words were taken out when it was imported, and the chat says how many.`,
   },
   memory: {
     id: "memory",

@@ -1,3 +1,4 @@
+import { ClaudeImport } from "../components/ClaudeImport"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
 import {
@@ -1135,6 +1136,10 @@ export function Settings() {
 
             <Group section="system" title="Temporary files" gap="gap-2">
               <TempFilesPanel />
+            </Group>
+
+            <Group section="privacy" title="Chats from claude.ai" gap="gap-2">
+              <ClaudeImport />
             </Group>
 
             <Group section="phone" title="Notifications" gap="gap-2">

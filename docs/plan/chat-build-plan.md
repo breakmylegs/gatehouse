@@ -116,7 +116,9 @@ Each has a fail-closed test: an Approver error, timeout or malformed verdict on 
 - CH-03 artifact views: done 4 Nov (ADR 0019, Markdown and code).
 - CH-03 memory as given: done 5 Nov. CH-03 is complete, apart from the outputs folder (deferred, ADR 0012).
 - CH-04 importer: in progress. Done 5 Nov: the zip reader, the streaming parser, the mapping and the one-transaction import (ADR 0014).
-- Next in CH-04: the import screen, its route and audit entry, and the feature flag.
+- CH-04 complete 5 Nov: the import screen, its route and audit entry. No flag: shipped with the viewer.
+- CH-05 viewer and search: done 5 Nov, apart from its Open in Claude and Continue locally buttons, which are CH-06 and CH-07.
+- Next: CH-06, Open in Claude.
 
 ## 8. Owner decision (4 Nov 2026)
 

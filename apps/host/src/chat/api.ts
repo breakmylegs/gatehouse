@@ -62,6 +62,35 @@ export function registerChatRoutes(app: FastifyInstance, chat: ChatDeps): void {
     return { sdkSessionId: end.sdkSessionId, cwd: end.cwd }
   })
 
+  /** CH-05: one conversation as it is shown, read only: its branch with every sibling, attachments and artifacts. */
+  app.get("/api/chat/conversation", async (req, reply) => {
+    const q = z.object({ id: z.string().max(100) }).safeParse(req.query)
+    const c = q.success ? chat.store.conversation(q.data.id) : undefined
+    if (!c) return reply.code(404).send({ error: "There is no such chat." })
+    return {
+      conversation: c,
+      steps: chat.store
+        .branch(c.id)
+        .map((s) => ({ message: s.message, index: s.index, siblings: s.siblings })),
+      attachments: chat.store.attachmentsOf(c.id),
+      artifacts: chat.store.artifactsOf(c.id),
+    }
+  })
+
+  /** CH-05: shows another branch of a conversation, by one of its messages. */
+  app.post("/api/chat/conversation/switch", async (req, reply) => {
+    const b = z
+      .object({ id: z.string().max(100), messageId: z.string().max(100) })
+      .safeParse(req.body)
+    if (!b.success) return reply.code(400).send({ error: "not a branch" })
+    try {
+      return { leaf: chat.store.switchTo(b.data.id, b.data.messageId) }
+    } catch (e) {
+      if (e instanceof ChatStoreError) return reply.code(404).send({ error: e.message })
+      throw e
+    }
+  })
+
   app.get("/api/chat/conversations", async (req) => {
     const q = z
       .object({ kind: Kind.optional(), limit: z.coerce.number().int().min(1).max(1000).optional() })

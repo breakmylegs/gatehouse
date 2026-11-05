@@ -419,6 +419,69 @@ export class ChatStore {
     return r ? toMessage(r) : undefined
   }
 
+  /** A conversation's attachments by message: their names, and the words kept from them when the export had any. */
+  attachmentsOf(
+    conversationId: string,
+  ): Record<
+    string,
+    Array<{
+      fileName: string
+      fileType: string | null
+      size: number | null
+      text: string | null
+      included: boolean
+    }>
+  > {
+    const rows = this.#db
+      .prepare(
+        `SELECT a.message_id, a.file_name, a.file_type, a.size, a.extracted_text, a.content_included
+         FROM attachment a JOIN message m ON m.id = a.message_id WHERE m.conversation_id = ? ORDER BY a.rowid`,
+      )
+      .all(conversationId) as unknown as Array<{
+      message_id: string
+      file_name: string
+      file_type: string | null
+      size: number | null
+      extracted_text: string | null
+      content_included: number
+    }>
+    const out: ReturnType<ChatStore["attachmentsOf"]> = {}
+    for (const r of rows)
+      (out[r.message_id] ??= []).push({
+        fileName: r.file_name,
+        fileType: r.file_type,
+        size: r.size,
+        text: r.extracted_text,
+        included: r.content_included === 1,
+      })
+    return out
+  }
+
+  /** A conversation's artifacts, each with its versions in the order they were made. */
+  artifactsOf(conversationId: string): Array<{
+    id: string
+    title: string
+    type: string
+    versions: Array<{ createdAt: string; messageId: string | null; content: string }>
+  }> {
+    const arts = this.#db
+      .prepare("SELECT id, title, type FROM artifact WHERE conversation_id = ? ORDER BY rowid")
+      .all(conversationId) as unknown as Array<{ id: string; title: string; type: string }>
+    const versions = this.#db.prepare(
+      "SELECT created_at, message_id, content FROM artifact_version WHERE artifact_id = ? ORDER BY created_at, rowid",
+    )
+    return arts.map((a) => ({
+      ...a,
+      versions: (
+        versions.all(a.id) as unknown as Array<{
+          created_at: string
+          message_id: string | null
+          content: string
+        }>
+      ).map((v) => ({ createdAt: v.created_at, messageId: v.message_id, content: v.content })),
+    }))
+  }
+
   /** One message by its id. */
   message(id: string): Message | undefined {
     return this.#message(id)
