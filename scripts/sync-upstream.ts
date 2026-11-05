@@ -65,8 +65,17 @@ const other = changes.filter((c) => c.platform === "release" || c.platform === "
 if (other) console.log(`\nUpstream's release tools and documents: ${other}`)
 
 // The files the Mac code hooks into ("Mac fork" marks each hook) that upstream has changed: check the hooks after.
+// git grep exits 1 when nothing matches, which is not a failure here.
+const grep = spawnSync(
+  "git",
+  ["grep", "-l", "Mac fork", "HEAD", "--", "apps", "packages", "scripts"],
+  {
+    encoding: "utf8",
+  },
+)
+if (grep.status !== 0 && grep.status !== 1) fail("Could not look for the Mac hooks (git grep).")
 const hooked = new Set(
-  git("grep", "-l", "Mac fork", "HEAD", "--", "apps", "packages", "scripts")
+  grep.stdout
     .split("\n")
     .filter(Boolean)
     .map((l) => l.replace(/^HEAD:/, "")),
