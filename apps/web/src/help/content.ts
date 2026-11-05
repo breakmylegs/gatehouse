@@ -202,7 +202,7 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **Fork** in the same menu starts a copy of the conversation beside it, in the same folder, and each carries on on its own (once Claude has finished what it is doing). **Hand off a side task...** starts a new session for something that came up: say what it should do, and choose In a new worktree to keep it off this session's files. Both keep the session's mode, approval, model, effort and account.
 
-**While you were away**: come back to Codehouse after ten minutes or more and each open session says, in a few lines over its transcript, what happened meanwhile: turns finished, files changed, requests decided and waiting, and whether it stopped. **Got it** puts the cards away.
+**While you were away**: come back to Codehouse after ten minutes or more and each open session says, in a few lines over its transcript, what happened meanwhile. Claude writes it in a few plain sentences: what was done, what is still left and anything waiting on you, with the short list underneath (turns finished, files changed, requests decided and waiting, and whether it stopped). To write it, a small model reads what you and Claude said while you were away, with your private words taken out first; it has no tools, and each one is in the audit log. A chat on a model on this computer is never sent. Turn it off in Settings, Phone and notifications, While you were away, and the card is the list alone. **Got it** puts the cards away.
 
 **Files**
 

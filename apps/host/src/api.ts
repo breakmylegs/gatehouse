@@ -12,6 +12,7 @@ import type { NtfySecretStore } from "./push/ntfy.js"
 import { registerDoctorRoutes } from "./doctor.js"
 import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
+import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -102,6 +103,8 @@ export interface AdminContext {
   ntfySecrets?: NtfySecretStore
   /** Chat's own store and what records into it (CH-03). */
   chat?: ChatDeps
+  /** While you were away, written by Claude (owner, 4 Nov). */
+  recap?: RecapDeps
   /** B39: plugin evaluations, with and without a plugin, in Plan mode. */
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
@@ -501,6 +504,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerWorktreeRoutes(app, ctx)
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
+  if (ctx.recap) registerRecapRoutes(app, ctx.recap)
   registerProviderRoutes(app, {
     audit: ctx.audit,
     config: ctx.config,
@@ -1395,6 +1399,7 @@ const LIVE_SETTINGS = [
   "globalInstructions",
   "profile",
   "keepAwake",
+  "recapByClaude",
   "providers",
 ] as const
 

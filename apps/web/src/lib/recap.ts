@@ -118,6 +118,25 @@ export function useAwaySince(): number | undefined {
   return since
 }
 
+/**
+ * What was said while you were away, for Claude to sum up (owner, 4 Nov): your messages and Claude's own words, in
+ * order, from the first thing that happened after you left. Subagents' own words and tool calls are left out.
+ */
+export function recapLines(
+  items: Item[],
+  since: number,
+): Array<{ who: "you" | "claude"; text: string }> {
+  const start = items.findIndex((i) => "at" in i && after(i.at, since))
+  if (start < 0) return []
+  const out: Array<{ who: "you" | "claude"; text: string }> = []
+  for (const i of items.slice(start)) {
+    if (i.kind === "user" && i.text.trim()) out.push({ who: "you", text: i.text })
+    else if (i.kind === "text" && !i.subagent && i.text.trim())
+      out.push({ who: "claude", text: i.text })
+  }
+  return out
+}
+
 /** Got it: the recaps go until you are away again. */
 export function dismissRecap(): void {
   awaySince = undefined

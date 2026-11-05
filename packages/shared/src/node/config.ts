@@ -88,6 +88,8 @@ function build(loose: boolean) {
     globalInstructions: z.string().max(8000).optional(),
     /** Keep the computer awake while a session works (owner, 4 Nov). Absent is on; false turns it off. */
     keepAwake: z.boolean().optional(),
+    /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
+    recapByClaude: z.boolean().optional(),
     /**
      * Who you are to Claude, from Settings, Account and plan, Profile (owner, 4 Nov, after Claude's desktop app): what
      * it should call you and what best describes your work. Told to every session first. Absent: nothing.

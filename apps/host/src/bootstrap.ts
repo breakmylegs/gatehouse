@@ -21,6 +21,7 @@ import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folde
 import { findCodehouseHelper } from "./win-helper.js"
 import { ChatStore } from "./chat/db.js"
 import { ChatRecorder } from "./chat/recorder.js"
+import { createRecapWriter } from "./recap-writer.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -865,6 +866,20 @@ export function createHost(opts: HostOptions = {}): Host {
       sessionCwd: (id) => manager.get(id)?.cwd,
       sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
       chat: { store: chatStore, recorder: chatRecorder },
+      // While you were away, written by Claude (owner, 4 Nov): redacted first, no tools, audited, and only when the
+      // signed-in account passed the organisation check (invariant 14).
+      recap: {
+        writer: createRecapWriter(),
+        enabled: () => config.recapByClaude !== false,
+        session: (id) => {
+          const i = manager.get(id)?.info()
+          return i ? { project: i.project, ...(i.local ? { local: true } : {}) } : undefined
+        },
+        orgOk: () => account.last()?.org.ok === true,
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+      },
       projects,
       memory,
       routines,

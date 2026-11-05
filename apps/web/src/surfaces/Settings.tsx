@@ -59,6 +59,7 @@ interface Config {
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
   keepAwake?: boolean
+  recapByClaude?: boolean
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
@@ -121,6 +122,8 @@ interface Values {
   work: string
   /** Keep the computer awake while a session works. */
   awake: boolean
+  /** While you were away, written by Claude. */
+  recap: boolean
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -155,6 +158,7 @@ function valuesOf(d: SettingsData): Values {
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
     awake: c.keepAwake !== false,
+    recap: c.recapByClaude !== false,
   }
 }
 
@@ -187,6 +191,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.profile
   if (v.awake) delete body.keepAwake
   else body.keepAwake = false
+  if (v.recap) delete body.recapByClaude
+  else body.recapByClaude = false
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -262,6 +268,7 @@ export const DEFAULT_VALUES: Values = {
   callMe: "",
   work: "",
   awake: true,
+  recap: true,
 }
 const differs = (v: Values, keys: Array<keyof Values>) =>
   keys.some((k) => v[k] !== DEFAULT_VALUES[k])
@@ -1160,6 +1167,29 @@ export function Settings() {
               <p className="m-0 text-xs text-mut">
                 The notification never shows the command or file names. This choice applies to this
                 browser only.
+              </p>
+            </Group>
+
+            <Group
+              section="phone"
+              title="While you were away"
+              gap="gap-2"
+              changed={differs(v, ["recap"])}
+            >
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.recap}
+                  onChange={(e) => change({ recap: e.target.checked }, "While you were away")}
+                />
+                Have Claude write what happened in plain English
+              </label>
+              <p className="m-0 text-xs text-mut">
+                When you come back after ten minutes or more, a small model reads what you and
+                Claude said while you were away, with your private words taken out first, and writes
+                a few sentences: what was done, what is left and what waits on you. It has no tools
+                and is recorded in the audit log. A chat on a model on this computer is never sent.
+                Off, the card lists what happened instead.
               </p>
             </Group>
 
