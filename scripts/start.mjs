@@ -148,7 +148,31 @@ if (!ready) {
 say(`Ready on port ${ready.port}.`)
 say(`Open: ${ready.url}`)
 say("The part after #token= is private to this run. Do not share it.")
-lines.on("line", (line) => console.log(line))
+lines.on("line", (line) => {
+  if (!awakeEvent(line)) console.log(line)
+})
+
+/**
+ * Keep the computer awake while a session works. On Windows the window app does it when the Host says; with no
+ * window on a Mac, this launcher does, with caffeinate -i (no idle sleep; the display may still turn off and
+ * closing the lid still sleeps, as on Windows). -w ends it with the Host, whatever happens to this launcher.
+ */
+let caffeinate
+function awakeEvent(line) {
+  let j
+  try {
+    j = JSON.parse(line)
+  } catch {
+    return false
+  }
+  if (j?.event !== "awake") return false
+  if (process.platform !== "darwin") return true
+  if (j.on && !caffeinate) {
+    caffeinate = spawn("/usr/bin/caffeinate", ["-i", "-w", String(host.pid)], { stdio: "ignore" })
+    caffeinate.on("exit", () => (caffeinate = undefined))
+  } else if (!j.on && caffeinate) caffeinate.kill()
+  return true
+}
 
 if (flag("--relay")) {
   say("Starting the Relay (see docs/relay-local.md for the first-run address)...")
