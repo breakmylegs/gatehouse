@@ -90,6 +90,14 @@ function build(loose: boolean) {
     keepAwake: z.boolean().optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** Continue locally (CH-07): the turns kept word for word, and the characters of history before the rest is summed up. */
+    chatContinue: z
+      .object({
+        turns: z.number().int().min(1).max(200).optional(),
+        budgetChars: z.number().int().min(2000).max(400_000).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** Open in Claude (CH-06): where an imported chat opens in claude.ai. Absent: an Edge app window, Default profile. */
     chatHandoff: z
       .object({

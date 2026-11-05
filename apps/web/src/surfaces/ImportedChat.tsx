@@ -5,6 +5,7 @@ import { download } from "../lib/exportMarkdown"
 import { groupItems } from "../lib/groups"
 import { toItems, toMarkdown, type StoredAttachment, type StoredStep } from "../lib/imported"
 import { useStore } from "../store"
+import { ContinueDialog } from "../components/ContinueDialog"
 import { ItemView, ToolGroup } from "./Workspace"
 
 interface Loaded {
@@ -42,6 +43,7 @@ export function ImportedChat() {
   const id = useStore((s) => s.importedChat)
   const [data, setData] = useState<Loaded>()
   const [missing, setMissing] = useState(false)
+  const [continuing, setContinuing] = useState(false)
   const load = useCallback(async () => {
     if (!id) return
     const r = await api<Loaded>("GET", `/api/chat/conversation?id=${encodeURIComponent(id)}`)
@@ -69,6 +71,9 @@ export function ImportedChat() {
   }
   return (
     <div className="mx-auto grid max-w-[860px] gap-3 p-6">
+      {continuing ? (
+        <ContinueDialog conversation={c.id} onClose={() => setContinuing(false)} />
+      ) : null}
       <h1 className="m-0 text-[20px]">{c.title || "Untitled chat"}</h1>
       <p role="note" className="m-0 rounded-md border border-line bg-s2 px-3 py-2 text-[13.5px]">
         {c.kind === "imported"
@@ -76,6 +81,15 @@ export function ImportedChat() {
           : "A chat kept in Codehouse."}
       </p>
       <div className="flex flex-wrap gap-2">
+        {c.kind === "imported" ? (
+          <button
+            type="button"
+            className="btn btn-primary !min-h-7"
+            onClick={() => setContinuing(true)}
+          >
+            Continue locally
+          </button>
+        ) : null}
         {c.kind === "imported" ? (
           <button
             type="button"

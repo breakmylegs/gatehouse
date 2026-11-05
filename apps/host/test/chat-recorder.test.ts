@@ -149,6 +149,21 @@ describe("recording native chats", () => {
     expect(shown("s1b")).toEqual(["Hello 1/1", "Hi 1/1", "Still there? 1/1", "Yes 1/1"])
   })
 
+  it("files a chat carried on from claude.ai as a fork that says where it came from (CH-07)", () => {
+    const { store, sessions, rec, turn } = setup()
+    sessions.set("s1", {
+      kind: "chat",
+      sdkSessionId: "sdk1",
+      title: "Colours",
+      forkOf: { conversation: "imported-1", message: "m9" },
+    })
+    turn("s1", "Carry on", "Gladly", "u1")
+    expect(store.conversation(rec.conversationOf("s1")!)).toMatchObject({
+      kind: "fork",
+      provenance: { kind: "fork", fromConversation: "imported-1", fromMessage: "m9" },
+    })
+  })
+
   it("records only chats, and leaves out a subagent's steps and replayed history", () => {
     const { store, sessions, rec, turn } = setup()
     sessions.set("code", { kind: "code", sdkSessionId: "c1" })

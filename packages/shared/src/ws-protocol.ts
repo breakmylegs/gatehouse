@@ -301,6 +301,8 @@ export const SessionInfo = z.object({
   worktree: z.object({ branch: z.string(), repo: z.string() }).optional(),
   /** Owner, 5 Nov: neither the plan limit nor the spending cap pauses it until then; after it, both apply again. */
   protectionOffUntil: z.string().optional(),
+  /** CH-07: carried on here from an imported claude.ai chat, at this message of it. Not synced back. */
+  forkOf: z.object({ conversation: z.string(), message: z.string() }).optional(),
   /**
    * Paused because the plan's 5-hour limit reached its pause point. It starts again by itself when the limit resets
    * (`until`, when known), or when you start it.

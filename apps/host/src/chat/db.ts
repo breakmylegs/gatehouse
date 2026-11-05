@@ -262,6 +262,24 @@ export class ChatStore {
     return Number(r.changes) > 0
   }
 
+  /** CH-07: a project's instructions, for Continue locally when you choose to bring them. */
+  projectInstructions(projectId: string): string | undefined {
+    const r = this.#db.prepare("SELECT instructions FROM project WHERE id = ?").get(projectId) as
+      { instructions: string | null } | undefined
+    return r?.instructions?.trim() ? r.instructions : undefined
+  }
+
+  /** CH-07: the memory imported from claude.ai for every chat, for Continue locally when you choose to bring it. */
+  importedMemory(): string[] {
+    return (
+      this.#db
+        .prepare(
+          "SELECT text FROM memory_entry WHERE source = 'claude.ai' AND scope = 'global' ORDER BY created_at",
+        )
+        .all() as unknown as Array<{ text: string }>
+    ).map((m) => m.text)
+  }
+
   /** You turned down an imported memory entry: it is removed. */
   dismissMemory(id: string): boolean {
     const r = this.#db
@@ -420,9 +438,7 @@ export class ChatStore {
   }
 
   /** A conversation's attachments by message: their names, and the words kept from them when the export had any. */
-  attachmentsOf(
-    conversationId: string,
-  ): Record<
+  attachmentsOf(conversationId: string): Record<
     string,
     Array<{
       fileName: string

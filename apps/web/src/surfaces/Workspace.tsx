@@ -900,6 +900,12 @@ function SessionPane({
         {!session.paused && protectedUntil(session) ? (
           <ProtectionOffLine session={session} />
         ) : null}
+        {session.forkOf ? (
+          // CH-07: carried on from an imported claude.ai chat, and not synced back.
+          <p role="note" className="m-0 mb-1 text-[12.5px] text-mut">
+            Continued in Codehouse. Not synced to claude.ai.
+          </p>
+        ) : null}
         {pending[0] ? (
           <SessionRequest
             view={pending[0]}

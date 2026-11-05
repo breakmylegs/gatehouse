@@ -146,6 +146,7 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - A message you edited or asked again in claude.ai shows arrows, ‹ 2 of 3 ›, to move between its versions.
 - A file the export did not carry says **File content not included in the export**. A part Codehouse does not know is shown folded, and nothing in it runs.
 - **Export as Markdown** saves the version shown as a file.
+- **Continue locally** carries the chat on here as a new chat. First **Trust and continue** shows exactly what the new chat will be given: the history, its size and roughly how many tokens, and for a long chat a summary of the earlier part (the last 10 turns go in word for word). The project's instructions and the memory imported from claude.ai go with it only if you tick them. Your private words are taken out, and the history is given to Claude as a record, not as instructions. The new chat says **Continued in Codehouse. Not synced to claude.ai.**
 - **Open in Claude** opens the chat in claude.ai itself, in an Edge app window unless you chose your browser or the Claude app (Settings, Privacy, Open in Claude). You sign in there; Codehouse never sees it and reads nothing back.
 - Nothing can be added to it. Your private words were taken out when it was imported, and the chat says how many.`,
   },

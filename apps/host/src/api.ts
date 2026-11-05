@@ -15,6 +15,7 @@ import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
+import { registerContinueRoutes, type ContinueDeps } from "./chat/continue-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import type { Health } from "@gatehouse/shared"
@@ -111,6 +112,8 @@ export interface AdminContext {
   chatImport?: ImportDeps
   /** CH-06: Open in Claude. */
   chatHandoff?: HandoffDeps
+  /** CH-07: Continue locally. */
+  chatContinue?: ContinueDeps
   /** What a chat was told it remembers when it started (CH-03). */
   sessionMemory?: (
     id: string,
@@ -517,6 +520,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
   if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
   if (ctx.chatHandoff) registerHandoffRoutes(app, ctx.chatHandoff)
+  if (ctx.chatContinue) registerContinueRoutes(app, ctx.chatContinue)
   // CH-03: exactly what a chat was told it remembers, for its Memory panel. Already redacted when it was kept.
   app.get("/api/memory/given", async (req, reply) => {
     const id = String((req.query as { session?: unknown }).session ?? "")
@@ -1420,6 +1424,7 @@ const LIVE_SETTINGS = [
   "keepAwake",
   "recapByClaude",
   "chatHandoff",
+  "chatContinue",
   "providers",
 ] as const
 

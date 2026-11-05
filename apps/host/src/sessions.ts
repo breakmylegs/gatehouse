@@ -242,6 +242,8 @@ export interface SessionInfo {
   historyUntil?: string
   /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
   replaces?: string
+  /** CH-07: carried on here from an imported claude.ai chat, so it says it is not synced back. */
+  forkOf?: { conversation: string; message: string }
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
   /** Owner, 5 Nov: limit protection is off for this session until then. */
@@ -404,6 +406,8 @@ export interface StartSessionOptions {
   resumeAt?: string
   /** The session this one replaces in its pane (Retry and Edit). */
   replaces?: string
+  /** CH-07: carried on from an imported chat, at this message of it. */
+  forkOf?: { conversation: string; message: string }
   /** Start in a new git worktree of the repository cwd is in, from this base (its current commit when absent). */
   worktree?: { base?: string }
   /** The worktree it works in, once made (set by the manager, not the screen). */
@@ -591,6 +595,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
       ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
       ...(this.#opts.replaces !== undefined ? { replaces: this.#opts.replaces } : {}),
+      ...(this.#opts.forkOf !== undefined ? { forkOf: this.#opts.forkOf } : {}),
       ...(this.#opts.inWorktree ? { worktree: this.#opts.inWorktree } : {}),
       ...(this.#opts.restore
         ? {

@@ -22,6 +22,8 @@ import { findCodehouseHelper } from "./win-helper.js"
 import { ChatStore } from "./chat/db.js"
 import { ChatRecorder } from "./chat/recorder.js"
 import { findEdge, hasAppLink, realLauncher } from "./chat/handoff.js"
+import { DEFAULT_SEED } from "./chat/continue.js"
+import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
@@ -896,6 +898,27 @@ export function createHost(opts: HostOptions = {}): Host {
         return exe
           ? helperPickers(exe).openFiles({ many: true, title: "Add files or photos" })
           : pickFilesWithWindows()
+      },
+      // CH-07: Continue locally. The chat starts like any other (the organisation guard, Plan mode, the floor and the
+      // Approver), with the seed you saw in its instructions.
+      chatContinue: {
+        store: chatStore,
+        options: () => ({ ...DEFAULT_SEED, ...(config.chatContinue ?? {}) }),
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        summarise: createSummariser(),
+        start: async (o) =>
+          (
+            await manager.start({
+              cwd: "chat",
+              kind: "chat",
+              mode: "plan",
+              title: o.title,
+              instructions: o.seed,
+              forkOf: o.forkOf,
+            })
+          ).id,
+        audit,
+        policyHash: () => store.current?.hash ?? "",
       },
       // CH-06: Open in Claude, in a separate program; nothing is read back.
       chatHandoff: {
