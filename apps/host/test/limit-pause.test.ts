@@ -167,6 +167,48 @@ describe("pausing at the plan limit", () => {
   })
 })
 
+describe("extra usage and Start now (owner, 5 Nov)", () => {
+  const withExtra = (percent: number, used: number, limit = 4000): PlanUsage => ({
+    ...usage(percent),
+    extra: { used, limit, currency: "USD", percent: Math.round((100 * used) / limit) },
+  })
+
+  it("carries on into extra usage while some is left, and pauses only when it runs out", async () => {
+    const a = target("a")
+    const s = setup([a], { main: withExtra(100, 7.65) })
+    await s.pauser.check()
+    expect(a.calls).toEqual([])
+    // One the plan limit paused before starts again, since the work can carry on.
+    a.paused = { percent: 100, wasRunning: true, until: RESET }
+    await s.pauser.check()
+    expect(a.calls).toEqual(["resume"])
+    s.answers.main = withExtra(100, 4000)
+    s.clock.now += 10 * 60_000
+    await s.pauser.check()
+    expect(a.calls.at(-1)).toBe(`pause 100 ${RESET}`)
+  })
+
+  it("leaves a session you started alone, over the cap and at the plan limit, until its hold ends", async () => {
+    const a = target("a")
+    let clock = Date.parse("2026-11-05T09:00:00")
+    a.protectionOffUntil = clock + 3_600_000
+    const pauser = new LimitPauser({
+      sessions: () => [a],
+      planUsage: async () => usage(100),
+      now: () => clock,
+      spendToday: () => 92,
+      spendCap: () => 50,
+      log: () => undefined,
+    })
+    await pauser.check()
+    await pauser.check()
+    expect(a.calls).toEqual([])
+    clock += 3_600_000
+    await pauser.check()
+    expect(a.paused?.reason).toBe("spend")
+  })
+})
+
 describe("starting paused sessions again", () => {
   it("starts them again by themselves once the reset time has passed, and asks fresh while any is paused", async () => {
     const a = target("a")

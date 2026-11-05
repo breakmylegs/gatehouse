@@ -19,6 +19,11 @@ export interface PauseTarget {
   id: string
   account: string
   paused?: SessionInfo["paused"]
+  /**
+   * Owner, 5 Nov: limit protection turned off for this session until then (epoch ms). Neither the plan limit nor the
+   * spending cap pauses it meanwhile; after it, both apply again by themselves.
+   */
+  protectionOffUntil?: number
   pause(percent: number, until?: string, reason?: "spend"): Promise<void>
   resume(by: "limit-reset"): Promise<boolean>
 }
@@ -53,6 +58,12 @@ export function fiveHour(
 ): { percent: number; resetsAt?: string } | undefined {
   const l = u?.limits.filter((x) => x.group === "session").sort((a, b) => b.percent - a.percent)[0]
   return l ? { percent: l.percent, ...(l.resetsAt ? { resetsAt: l.resetsAt } : {}) } : undefined
+}
+
+/** Whether the organisation allows extra usage beyond the plan and some of it is left. */
+export function extraLeft(u: PlanUsage | undefined): boolean {
+  const x = u?.extra
+  return x !== undefined && x.limit > 0 && x.used < x.limit
 }
 
 /**
@@ -93,6 +104,16 @@ export class LimitPauser {
 
   async #check(): Promise<void> {
     const now = (this.#d.now ?? Date.now)()
+    // Owner, 5 Nov: a session with its protection turned off is left alone until the time it was turned off for, and
+    // one a limit had paused carries on. When that time passes it is looked at again like any other.
+    const unprotected = (s: PauseTarget) =>
+      s.protectionOffUntil !== undefined && now < s.protectionOffUntil
+    for (const s of this.#d.sessions())
+      if (unprotected(s) && s.paused)
+        await s
+          .resume("limit-reset")
+          .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
+    const sessions = () => this.#d.sessions().filter((s) => !unprotected(s))
     // B20: today's spending over every session, against the cap in Settings.
     const cap = this.#d.spendCap?.()
     const spent = this.#d.spendToday?.() ?? 0
@@ -100,7 +121,7 @@ export class LimitPauser {
     if (overSpend) {
       const midnight = new Date(now)
       midnight.setHours(24, 0, 0, 0)
-      for (const s of this.#d.sessions())
+      for (const s of sessions())
         if (!s.paused)
           await s
             .pause(Math.round((100 * spent) / cap), midnight.toISOString(), "spend")
@@ -109,8 +130,7 @@ export class LimitPauser {
     // Off pauses nothing new; a session paused already still starts again at the reset.
     const at = this.#d.pauseAt ? this.#d.pauseAt() : PAUSE_AT_PERCENT
     const byAccount = new Map<string, PauseTarget[]>()
-    for (const s of this.#d.sessions())
-      byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
+    for (const s of sessions()) byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
     for (const [account, list] of byAccount) {
       // A pause for spending is lifted at midnight or when the cap is raised or removed, not by the plan limit.
       const spendPaused = list.filter((s) => s.paused?.reason === "spend")
@@ -123,7 +143,10 @@ export class LimitPauser {
       }
       const paused = list.filter((s) => s.paused && s.paused.reason !== "spend")
       // Fresh when something is paused, so the reset is seen as soon as it happens.
-      const limit = fiveHour(await this.#d.planUsage(account, paused.length > 0))
+      const usage = await this.#d.planUsage(account, paused.length > 0)
+      // Owner, 5 Nov: with extra usage on and room left, the plan limit stops nothing: work carries on into extra
+      // usage, as Claude Code does. Only extra usage running out (or the spending cap) pauses.
+      const limit = extraLeft(usage) ? { percent: 0 } : fiveHour(usage)
       // B26: off, a paused session waits for you to start it, even after the reset. Pausing goes on as before.
       const resumeByItself = !this.#d.autoResume || this.#d.autoResume()
       for (const s of resumeByItself ? paused : []) {
