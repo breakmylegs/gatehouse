@@ -141,6 +141,28 @@ describe("settings save as you change them", () => {
     await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("worktreeLocation"))
   })
 
+  it("sets pull requests from worktree sessions, as drafts unless told, writing only what differs", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const create = await screen.findByRole("checkbox", { name: /Open a pull request/ })
+    expect((screen.getByRole("checkbox", { name: "As a draft" }) as HTMLInputElement).disabled).toBe(true)
+    fireEvent.click(create)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.pullRequests).toEqual({ create: true })
+    fireEvent.click(screen.getByRole("checkbox", { name: "As a draft" }))
+    await waitFor(() => expect(puts.at(-1)?.pullRequests).toEqual({ create: true, draft: false }))
+    const prefix = screen.getByRole("textbox", { name: /Branch prefix/ })
+    fireEvent.change(prefix, { target: { value: "--force" } })
+    fireEvent.blur(prefix)
+    await waitFor(() => expect(puts).toHaveLength(3))
+    expect(puts.at(-1)?.pullRequests).not.toHaveProperty("branchPrefix")
+    fireEvent.change(prefix, { target: { value: "pk/" } })
+    fireEvent.blur(prefix)
+    await waitFor(() =>
+      expect(puts.at(-1)?.pullRequests).toEqual({ create: true, draft: false, branchPrefix: "pk/" }),
+    )
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     await openSection("Account and plan")

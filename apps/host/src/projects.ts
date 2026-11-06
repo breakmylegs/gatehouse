@@ -282,6 +282,12 @@ export function composeInstructions(parts: {
   research?: boolean | undefined
   /** B23: the project's AGENTS.md, for a coding session, as read through the floor. */
   agentsMd?: string | undefined
+  /**
+   * Settings, Sessions, Pull requests: a session in a worktree opens a pull request for its branch when its work is
+   * done. The push and gh go through the rules like any command (git-remote: they ask a person, unless Extreme
+   * approval is on for the session).
+   */
+  pullRequest?: { branch: string; draft: boolean; fixChecks: boolean } | undefined
 }): string {
   const callMe = parts.profile?.callMe?.trim()
   const work = parts.profile?.work?.trim()
@@ -338,6 +344,18 @@ export function composeInstructions(parts: {
         `This project has an AGENTS.md, the instructions file other coding agents read. Follow it as you would CLAUDE.md, unless the person asks otherwise:\n${parts.agentsMd}`,
       ]
     : []
+  const pr = parts.pullRequest
+    ? [
+        [
+          `You are working in a git worktree of your own, on the branch ${parts.pullRequest.branch}. When the work the person asked for is finished and its tests pass, commit it, push this branch (git push -u origin ${parts.pullRequest.branch}) and open a pull request for it with gh pr create${parts.pullRequest.draft ? " --draft" : ""}, with a short title and a description of what changed and how it was checked. Never push another branch, and never force a push. The push and the pull request go through Codehouse's checks like any command.`,
+          ...(parts.pullRequest.fixChecks
+            ? [
+                "After opening it, look at its checks with gh pr checks. If one fails, fix the cause, commit and push again, until they pass or you need the person's help.",
+              ]
+            : []),
+        ].join(" "),
+      ]
+    : []
   if (
     !blocks.length &&
     !knowledge.length &&
@@ -345,7 +363,8 @@ export function composeInstructions(parts: {
     !artifacts.length &&
     !tidy.length &&
     !research.length &&
-    !agents.length
+    !agents.length &&
+    !pr.length
   )
     return ""
   return [
@@ -361,5 +380,6 @@ export function composeInstructions(parts: {
     ...tidy,
     ...research,
     ...agents,
+    ...pr,
   ].join("\n\n")
 }

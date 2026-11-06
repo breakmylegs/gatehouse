@@ -60,6 +60,7 @@ interface Config {
   spendCapUsd?: number
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
+  pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
@@ -123,6 +124,11 @@ interface Values {
   /** Where new worktrees go, and the folder when it is one you choose. */
   wtWhere: "beside" | "inside" | "folder"
   wtFolder: string
+  /** Pull requests from a session in a worktree. */
+  prPrefix: string
+  prCreate: boolean
+  prDraft: boolean
+  prFix: boolean
   telFile: boolean
   telEndpoint: string
   ecUsd: string
@@ -169,6 +175,10 @@ function valuesOf(d: SettingsData): Values {
     style: c.outputStyle ?? "",
     wtWhere: c.worktreeLocation?.where ?? "beside",
     wtFolder: c.worktreeLocation?.folder ?? "",
+    prPrefix: c.pullRequests?.branchPrefix ?? "codehouse/",
+    prCreate: c.pullRequests?.create === true,
+    prDraft: c.pullRequests?.draft !== false,
+    prFix: c.pullRequests?.fixChecks === true,
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -247,6 +257,21 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   // A name the Host accepts, or none: half-typed or odd names are not saved.
   if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
   else delete body.outputStyle
+  // Pull requests: only what differs from the defaults is written; anything a newer version keeps there stays.
+  const { branchPrefix: _bp, create: _cr, draft: _dr, fixChecks: _fc, ...prKeep } =
+    d.saved.pullRequests ?? {}
+  const prefix = v.prPrefix.trim()
+  const pr = {
+    ...prKeep,
+    ...(prefix && prefix !== "codehouse/" && BRANCH_PREFIX.test(prefix)
+      ? { branchPrefix: prefix }
+      : {}),
+    ...(v.prCreate ? { create: true } : {}),
+    ...(v.prDraft ? {} : { draft: false }),
+    ...(v.prFix ? { fixChecks: true } : {}),
+  }
+  if (Object.keys(pr).length) body.pullRequests = pr
+  else delete body.pullRequests
   // Beside the project is the default and is not written; anything a newer version keeps there stays.
   const { where: _w2, folder: _f2, ...wtKeep } = d.saved.worktreeLocation ?? { where: "beside" }
   const folder = v.wtFolder.trim().replace(/[\\/]+$/, "")
@@ -311,6 +336,10 @@ export const DEFAULT_VALUES: Values = {
   style: "",
   wtWhere: "beside",
   wtFolder: "",
+  prPrefix: "codehouse/",
+  prCreate: false,
+  prDraft: true,
+  prFix: false,
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
@@ -573,6 +602,7 @@ export function Settings() {
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
+  const prChanged = differs(v, ["prPrefix", "prCreate", "prDraft", "prFix"])
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
@@ -955,6 +985,54 @@ export function Settings() {
                   </span>
                 </Field>
               ) : null}
+            </Group>
+
+            <Group section="sessions" title="Pull requests" gap="gap-2" changed={prChanged}>
+              <Field
+                label="Branch prefix"
+                help="What the name of each new worktree's branch starts with, for example your initials and a slash. Letters, numbers, dots, dashes, underscores and slashes."
+              >
+                <input
+                  className="field mono"
+                  value={v.prPrefix}
+                  maxLength={40}
+                  spellCheck={false}
+                  onChange={(e) => edit({ prPrefix: e.target.value })}
+                  aria-invalid={v.prPrefix.trim() !== "" && !BRANCH_PREFIX.test(v.prPrefix.trim())}
+                  {...typed("Pull requests")}
+                />
+              </Field>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.prCreate}
+                  onChange={(e) => change({ prCreate: e.target.checked }, "Pull requests")}
+                />
+                Open a pull request when a session in a worktree finishes its work
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.prDraft}
+                  disabled={!v.prCreate}
+                  onChange={(e) => change({ prDraft: e.target.checked }, "Pull requests")}
+                />
+                As a draft
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.prFix}
+                  disabled={!v.prCreate}
+                  onChange={(e) => change({ prFix: e.target.checked }, "Pull requests")}
+                />
+                Fix checks that fail on it
+              </label>
+              <p className="m-0 text-[13px] text-mut">
+                Claude pushes the session's own branch and opens the pull request with gh. Each push
+                and each gh command asks you first, as always, unless Extreme approval is on for that
+                session. Sessions not in a worktree are never asked to push.
+              </p>
             </Group>
 
             <Group section="sessions" title="Effort" gap="gap-2" changed={effortChanged}>
@@ -1451,6 +1529,9 @@ function RestartPrompt({
     </div>
   )
 }
+
+/** A branch prefix as the Host accepts it (apps/host/src/worktrees.ts BRANCH_PREFIX). */
+const BRANCH_PREFIX = /^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/
 
 /** An output style's name as the Host accepts it (apps/host/src/safety.ts OUTPUT_STYLE_NAME). */
 const STYLE_NAME = /^[A-Za-z0-9][\w .-]{0,59}$/

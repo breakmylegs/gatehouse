@@ -175,4 +175,33 @@ describe("a session in a worktree", () => {
     expect(session.info().worktree).toEqual({ branch: w.branch, repo })
     await session.close()
   })
+
+  it("opens a pull request for its own branch when Settings says, as a draft, on a branch with your prefix", async () => {
+    s = await buildStack({
+      config: { pullRequests: { create: true, fixChecks: true, branchPrefix: "pk/" } },
+    })
+    const config = s.deps.config()
+    s.deps.worktrees = new Worktrees(path.join(dir, "data"), {
+      branchPrefix: () => config.pullRequests?.branchPrefix,
+    })
+    const prompt = () =>
+      JSON.stringify((s.sdk.queries.at(-1)?.options as { systemPrompt?: unknown }).systemPrompt)
+    const session = await s.manager.start({ cwd: repo, worktree: {} })
+    const w = s.deps.worktrees.records()[0]!
+    expect(w.branch).toMatch(/^pk\/\d{4}-\d{2}-\d{2}-[0-9a-f]{6}$/)
+    expect(prompt()).toContain(`git push -u origin ${w.branch}`)
+    expect(prompt()).toContain("gh pr create --draft")
+    expect(prompt()).toContain("gh pr checks")
+    await session.close()
+    // Not a draft when turned off; and a session outside a worktree is never told to push anything.
+    config.pullRequests = { create: true, draft: false }
+    await (await s.manager.start({ cwd: repo, worktree: {} })).close()
+    expect(prompt()).toMatch(/gh pr create[^-]/)
+    await (await s.manager.start({ cwd: repo })).close()
+    expect(prompt()).not.toContain("gh pr create")
+    // An unusable prefix falls back to codehouse/.
+    config.pullRequests = { branchPrefix: "--force" }
+    await (await s.manager.start({ cwd: repo, worktree: {} })).close()
+    expect(s.deps.worktrees.records().at(-1)?.branch).toMatch(/^codehouse\//)
+  })
 })

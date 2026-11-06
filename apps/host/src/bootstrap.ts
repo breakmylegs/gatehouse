@@ -305,6 +305,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const worktrees = new Worktrees(gatehouseDataDir(env), {
     place: () => config.worktreeLocation,
     roots: () => store.current?.rules.workspaceRoots ?? [],
+    branchPrefix: () => config.pullRequests?.branchPrefix,
   })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))

@@ -260,6 +260,24 @@ function build(loose: boolean) {
      * Owner's Settings overhaul (6 Nov): where new worktrees go. Absent: beside the project. A folder must be inside a
      * workspace root (checked when a worktree is made). Older versions keep it unused and put them beside.
      */
+    /**
+     * Owner's Settings overhaul (6 Nov): pull requests from a session in a worktree. The branch prefix new worktree
+     * branches get (absent: codehouse/), and whether such a session opens a pull request when done (as a draft unless
+     * draft is false) and fixes failing checks. Pushing and gh still go through the rules (git-remote). Older versions
+     * keep it unused.
+     */
+    pullRequests: z
+      .object({
+        branchPrefix: z
+          .string()
+          .regex(/^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/)
+          .optional(),
+        create: z.boolean().optional(),
+        draft: z.boolean().optional(),
+        fixChecks: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
     worktreeLocation: z
       .object({
         where: z.enum(["beside", "inside", "folder"]),

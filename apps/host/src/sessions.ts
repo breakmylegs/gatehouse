@@ -705,6 +705,16 @@ export class Session extends EventEmitter<SessionEvents> {
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",
       research: this.#opts.kind === "chat" && this.#opts.research === true,
+      // Settings, Pull requests: only a session in a worktree of its own, on its own branch.
+      ...(this.#opts.inWorktree && this.#deps.config().pullRequests?.create === true
+        ? {
+            pullRequest: {
+              branch: this.#opts.inWorktree.branch,
+              draft: this.#deps.config().pullRequests?.draft !== false,
+              fixChecks: this.#deps.config().pullRequests?.fixChecks === true,
+            },
+          }
+        : {}),
     })
   }
 

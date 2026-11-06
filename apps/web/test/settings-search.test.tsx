@@ -125,6 +125,7 @@ describe("Settings in sections", () => {
       "Changelog",
       "Output style",
       "Worktree location",
+      "Pull requests",
       "Setup",
       "Notifications",
       "Appearance",

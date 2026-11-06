@@ -60,6 +60,9 @@ function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
   })
 }
 
+/** A branch prefix from Settings: never an option, "..", "//" or a .lock name; git checks the rest. */
+export const BRANCH_PREFIX = /^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/
+
 /** A base is a branch, tag or commit name, never an option or a path out of the repository. */
 const BASE = /^(?!-)[\w./@^~-]{1,100}$/
 
@@ -84,14 +87,21 @@ export class Worktrees {
   readonly #file: string
   readonly #place: () => WorktreePlace | undefined
   readonly #roots: () => string[]
+  readonly #prefix: () => string | undefined
 
   constructor(
     dataDir: string,
-    o: { place?: () => WorktreePlace | undefined; roots?: () => string[] } = {},
+    o: {
+      place?: () => WorktreePlace | undefined
+      roots?: () => string[]
+      /** Settings, Pull requests: what each new branch's name starts with. Absent or unusable: codehouse/. */
+      branchPrefix?: () => string | undefined
+    } = {},
   ) {
     this.#file = path.join(dataDir, "worktrees.json")
     this.#place = o.place ?? (() => undefined)
     this.#roots = o.roots ?? (() => [])
+    this.#prefix = o.branchPrefix ?? (() => undefined)
   }
 
   /** The folder a new worktree of `repo` called `name` goes in, from Settings. */
@@ -184,7 +194,8 @@ export class Worktrees {
       )
     const name = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(3).toString("hex")}`
     const where = await this.#where(repo, name)
-    const branch = `codehouse/${name}`
+    const asked = this.#prefix()
+    const branch = `${asked && BRANCH_PREFIX.test(asked) ? asked : "codehouse/"}${name}`
     fs.mkdirSync(path.dirname(where), { recursive: true })
     await git(repo, ["worktree", "add", "-b", branch, "--", where, commit], 180_000)
     const rec: WorktreeRecord = {

@@ -1429,6 +1429,7 @@ const LIVE_SETTINGS = [
   "spendCapUsd",
   "outputStyle",
   "worktreeLocation",
+  "pullRequests",
   "globalInstructions",
   "profile",
   "keepAwake",
