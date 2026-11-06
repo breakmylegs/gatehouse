@@ -75,18 +75,21 @@ export function registerAttachRoutes(
   const blocked = async (abs: string, cwd: string) =>
     (await ctx.engine.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd }))
       .outcome === "deny"
-  const audit = (session: string, cwd: string, names: string[]) =>
+  // CH-08: a picture of the screen from the quick prompt is recorded as what it is, since pictures are not redacted.
+  const audit = (session: string, cwd: string, names: string[], capture = false) =>
     ctx.audit.record({
       session,
-      event: "files_attached",
+      event: capture ? "screen_capture" : "files_attached",
       channel: "desktop",
       tool: "attach",
       cwd,
       input: { names },
       verdict: {
         outcome: "allow",
-        ruleId: "files-attached",
-        reason: "Files were attached to a prompt from the desktop.",
+        ruleId: capture ? "screen-capture" : "files-attached",
+        reason: capture
+          ? "A picture of the screen was attached from the quick prompt. Pictures are not redacted."
+          : "Files were attached to a prompt from the desktop.",
         risk: 0,
         decidedBy: "human-desktop",
         policyHash: ctx.store.current?.hash ?? "",
@@ -179,7 +182,12 @@ export function registerAttachRoutes(
     const ext = type.split("/")[1] === "jpeg" ? "jpg" : type.split("/")[1]
     const name = given || `pasted.${ext}`
     const rel = copyIn(cwd, name, data)
-    await audit(String(b.session), cwd, [path.basename(rel)])
+    await audit(
+      String(b.session),
+      cwd,
+      [path.basename(rel)],
+      picture && b.source === "screen-capture",
+    )
     return { rel }
   })
 }

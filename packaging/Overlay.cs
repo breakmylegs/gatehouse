@@ -82,6 +82,7 @@ internal sealed class QuickOverlay : Form
             try { m = e.TryGetWebMessageAsString(); } catch (Exception) { }
             if (m == null) return;
             if (m == "quick-close") PutAway(true);
+            else if (m == "capture:region" || m == "capture:window") TakePicture(m == "capture:window");
             else if (m.StartsWith("quick-open:"))
             {
                 PutAway(false);
@@ -103,6 +104,24 @@ internal sealed class QuickOverlay : Form
         SetForegroundWindow(Handle);
         web.Focus();
         try { web.CoreWebView2.PostWebMessageAsString("quick-shown"); } catch (Exception) { }
+    }
+
+    /// <summary>CH-08: a picture of part of the screen, or of the window you were in, for the page to attach. This
+    /// window steps aside while it is taken, so it is not in the picture.</summary>
+    private void TakePicture(bool window)
+    {
+        Hide();
+        Application.DoEvents();
+        System.Threading.Thread.Sleep(200);
+        byte[] png = null;
+        try { png = window ? ScreenCapture.Window(before) : ScreenCapture.Region(); }
+        catch (Exception) { png = null; }
+        Show();
+        Activate();
+        SetForegroundWindow(Handle);
+        web.Focus();
+        try { web.CoreWebView2.PostWebMessageAsString(png != null ? "captured:" + Convert.ToBase64String(png) : "capture-none"); }
+        catch (Exception) { }
     }
 
     /// <summary>Hides it. After Esc the focus goes back to the program you were in.</summary>
