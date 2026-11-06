@@ -125,6 +125,8 @@ export interface State {
   selectedRequest?: string
   /** A project chosen on the Projects page, for the new chat page to start in. Used once. */
   newChatProject?: string
+  /** Ask about code: the code session chosen from its menu, for the new question page. Used once. */
+  newChatAbout?: string
   /** CH-05: the imported chat the viewer shows. */
   importedChat?: string
   openImported: (id: string) => void

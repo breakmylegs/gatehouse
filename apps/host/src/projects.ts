@@ -288,6 +288,11 @@ export function composeInstructions(parts: {
    * approval is on for the session).
    */
   pullRequest?: { branch: string; draft: boolean; fixChecks: boolean } | undefined
+  /**
+   * Ask about code (owner, 6 Nov): the code session this chat is about, and how it stood with the latest of what was
+   * said in it when the chat began (already redacted).
+   */
+  about?: { title: string; cwd: string; said: string } | undefined
 }): string {
   const callMe = parts.profile?.callMe?.trim()
   const work = parts.profile?.work?.trim()
@@ -344,6 +349,14 @@ export function composeInstructions(parts: {
         `This project has an AGENTS.md, the instructions file other coding agents read. Follow it as you would CLAUDE.md, unless the person asks otherwise:\n${parts.agentsMd}`,
       ]
     : []
+  const aboutCode = parts.about
+    ? [
+        [
+          `This chat is for questions about the code session "${parts.about.title}" and its code, asked from outside that session. Answer from the session's files and what has been said in it. The code is in ${parts.about.cwd}: read it with Read, Glob and Grep, using paths in that folder. You cannot change anything, and you never run commands; if the person wants a change, tell them what to ask the session itself. To see the latest of what has been said in the session and how it stands, use the read_session tool, since the session may have moved on since this chat began.`,
+          ...(parts.about.said ? [`When this chat began:\n${parts.about.said}`] : []),
+        ].join("\n\n"),
+      ]
+    : []
   const pr = parts.pullRequest
     ? [
         [
@@ -364,7 +377,8 @@ export function composeInstructions(parts: {
     !tidy.length &&
     !research.length &&
     !agents.length &&
-    !pr.length
+    !pr.length &&
+    !aboutCode.length
   )
     return ""
   return [
@@ -381,5 +395,6 @@ export function composeInstructions(parts: {
     ...research,
     ...agents,
     ...pr,
+    ...aboutCode,
   ].join("\n\n")
 }

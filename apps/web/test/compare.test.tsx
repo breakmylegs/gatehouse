@@ -36,7 +36,7 @@ const sent = () =>
 beforeEach(() => {
   n = 0
   vi.mocked(send).mockClear()
-  useStore.setState({ compare: undefined, panes: [], route: "chat", sessions: {}, transcripts: {} })
+  useStore.setState({ compare: undefined, panes: [], route: "chat", sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never }, transcripts: {} })
 })
 afterEach(cleanup)
 
@@ -47,7 +47,7 @@ describe("comparing answers", () => {
       target: { value: "Plan a launch" },
     })
     fireEvent.click(screen.getByRole("checkbox", { name: "Compare answers from several models" }))
-    const start = screen.getByRole("button", { name: "Start the chat" })
+    const start = screen.getByRole("button", { name: "Ask" })
     expect(start).toBeDisabled()
     fireEvent.click(screen.getByRole("checkbox", { name: "Opus 5.5" }))
     fireEvent.click(screen.getByRole("checkbox", { name: "Sonnet 5.5" }))

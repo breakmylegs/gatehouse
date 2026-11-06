@@ -43,7 +43,11 @@ export const PAGES: Array<{ route: Route; label: string; keywords?: string }> = 
   { route: "approvals", label: "Approvals", keywords: "needs you waiting requests" },
   { route: "sessions", label: "New session", keywords: "start earlier resume" },
   { route: "sessions", label: "All sessions", keywords: "list board earlier resume" },
-  { route: "chat", label: "New chat", keywords: "talk conversation" },
+  {
+    route: "chat",
+    label: "Ask about code",
+    keywords: "new question chat talk conversation session btw",
+  },
   { route: "workspace", label: "Workspace", keywords: "session conversation panes" },
   { route: "policy", label: "What Claude may do", keywords: "policy rules choices" },
   { route: "audit", label: "Audit log", keywords: "history decisions record" },

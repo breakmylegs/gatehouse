@@ -42,7 +42,7 @@ const info = (id: string, extra: Record<string, unknown> = {}) => ({
 
 beforeEach(() => {
   sent.length = 0
-  useStore.setState({ sessions: {}, transcripts: {}, panes: [], route: "chat" })
+  useStore.setState({ sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never }, transcripts: {}, panes: [], route: "chat" })
 })
 afterEach(cleanup)
 
@@ -50,10 +50,10 @@ describe("a chat", () => {
   it("starts from a long first message: only its start names the chat, and all of it is sent", async () => {
     const long = `Review this:\n${"word ".repeat(1000)}`
     render(<NewChat />)
-    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to talk about?" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
       target: { value: long },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     await waitFor(() => expect(sent.map((c) => c.type)).toEqual(["create_session", "prompt"]))
     expect(String(sent[0]!.title).length).toBeLessThanOrEqual(200)
     expect(sent[0]!.title).toMatch(/^Review this: word word/)
@@ -62,16 +62,17 @@ describe("a chat", () => {
 
   it("starts from what you say, in Plan mode, and opens with your words as the first message", async () => {
     render(<NewChat />)
-    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to talk about?" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
       target: { value: "How do vite proxies work?" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     await waitFor(() => expect(sent.map((c) => c.type)).toEqual(["create_session", "prompt"]))
     expect(warmed).toBeGreaterThan(0)
     expect(sent[0]).toMatchObject({
       kind: "chat",
       title: "How do vite proxies work?",
       mode: "plan",
+      about: "code1",
     })
     expect(sent[0]).not.toHaveProperty("research")
     expect(sent[1]).toEqual({ type: "prompt", sessionId: "c1", text: "How do vite proxies work?" })
@@ -81,14 +82,38 @@ describe("a chat", () => {
 
   it("starts a research chat when Research is ticked (W1-10)", async () => {
     render(<NewChat />)
-    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to talk about?" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
       target: { value: "What changed in Vite 8?" },
     })
     fireEvent.click(screen.getByRole("checkbox", { name: /Research/ }))
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     await waitFor(() =>
       expect(sent[0]).toMatchObject({ type: "create_session", kind: "chat", research: true }),
     )
+  })
+
+  it("asks only about an open code session: none open, nothing to ask about; one chosen from its menu comes chosen", async () => {
+    useStore.setState({ sessions: { talk: info("talk", { kind: "chat" }) as never } })
+    const { unmount } = render(<NewChat />)
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
+      target: { value: "How far has it got?" },
+    })
+    expect((screen.getByRole("button", { name: "Ask" }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText(/No code session is open/)).toBeTruthy()
+    unmount()
+    useStore.setState({
+      sessions: { a: info("a") as never, b: info("b") as never },
+      newChatAbout: "b",
+    })
+    render(<NewChat />)
+    const which = screen.getByRole("combobox", { name: "Which session" }) as HTMLSelectElement
+    expect(which.value).toBe("b")
+    expect(useStore.getState().newChatAbout).toBeUndefined()
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
+      target: { value: "What changed today?" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
+    await waitFor(() => expect(sent[0]).toMatchObject({ type: "create_session", about: "b" }))
   })
 
   it("is listed under Chats, after your projects", () => {
@@ -114,5 +139,20 @@ describe("a chat", () => {
     ])
     expect(screen.queryByRole("combobox", { name: /^Mode$/ })).toBeNull()
     expect(screen.getByText(/never changes files/)).toBeTruthy()
+  })
+
+  it("says which code session a question is about, and that it changes nothing", () => {
+    useStore.setState({
+      sessions: {
+        c1: info("c1", {
+          kind: "chat",
+          about: { id: "code1", title: "Codehouse", cwd: "C:/dev/gatehouse" },
+        }) as never,
+      },
+      selectedSession: "c1",
+    })
+    render(<Workspace />)
+    expect(screen.getByText(/About the code session Codehouse/)).toBeTruthy()
+    expect(screen.getByText(/never changes anything/)).toBeTruthy()
   })
 })

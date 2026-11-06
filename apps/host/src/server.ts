@@ -446,6 +446,7 @@ export class HostServer {
           ...(cmd.chatProject ? { chatProject: cmd.chatProject } : {}),
           ...(cmd.instructions ? { instructions: cmd.instructions } : {}),
           ...(cmd.research ? { research: true } : {}),
+          ...(cmd.about ? { aboutId: cmd.about } : {}),
           ...(cmd.account ? { account: cmd.account } : {}),
           ...(cmd.localModel ? { localModel: cmd.localModel } : {}),
           ...(cmd.resumeAt ? { resumeAt: cmd.resumeAt } : {}),

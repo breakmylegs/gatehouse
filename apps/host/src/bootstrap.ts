@@ -73,6 +73,7 @@ import { Broker } from "./broker.js"
 import { CheckpointManager } from "./checkpoints.js"
 import { createCompanionSdkServer } from "./companion-server.js"
 import { lookAtPage } from "./page-look.js"
+import { readAbout, type AboutDeps } from "./about-session.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
 import { computeDigest } from "./analytics.js"
@@ -301,6 +302,12 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     sessionMeta,
   )
+  // Ask about code: the linked session read from Claude Code's own record of it, and as it is now when it is open.
+  const aboutDeps = (): AboutDeps => ({
+    messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
+    live: (id) => manager.get(id)?.info(),
+    redact: (t) => redactString(t, { terms: config.redactTerms }),
+  })
   const projects = new ProjectStore(path.join(gatehouseDataDir(env), "projects"))
   // Where new worktrees go is read from Settings each time one is made; a folder must be inside a workspace root.
   const worktrees = new Worktrees(gatehouseDataDir(env), {
@@ -395,7 +402,9 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     checkpoints,
     account,
-    companion: ({ sessionId, cwd, kind, chatProject }) => ({
+    // Ask about code: how a linked code session stands and the latest of what was said in it, redacted.
+    aboutSaid: (about) => readAbout(about, aboutDeps()),
+    companion: ({ sessionId, cwd, kind, chatProject, about }) => ({
       companion: createCompanionSdkServer({
         sessionId,
         cwd,
@@ -428,6 +437,14 @@ export function createHost(opts: HostOptions = {}): Host {
         host: { notify: async (m) => (manager.notify(m.sessionId, m.text), true) },
         policy: () => store.current,
         redact: (v) => redact(v, { terms: config.redactTerms }),
+        // Ask about code: a chat about a code session reads it as it is now; it never writes to it.
+        ...(kind === "chat" && about
+          ? {
+              about: {
+                read: async () => ({ text: await readAbout(about, aboutDeps()) }),
+              },
+            }
+          : {}),
         // Browser tools (Settings, off unless turned on): a coding session may look at a page on this computer.
         ...(kind !== "chat" && config.browserTools === true
           ? {

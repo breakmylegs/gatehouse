@@ -74,12 +74,13 @@ describe("the Chat | Code switch", () => {
     expect(screen.queryByText("Prague trip")).toBeNull()
     expect(screen.getByRole("button", { name: /New session/ })).toBeTruthy()
 
-    fireEvent.click(within(side).getByRole("radio", { name: /Chat/ }))
+    // Owner, 6 Nov: the other side is Ask about code, for questions about your code sessions.
+    fireEvent.click(within(side).getByRole("radio", { name: /Ask about code/ }))
     expect(useStore.getState().route).toBe("chat")
     expect(localStorage.getItem("gatehouse.railMode")).toBe("chat")
     expect(screen.queryByText("shop")).toBeNull()
     expect(screen.queryByRole("button", { name: /New session/ })).toBeNull()
-    expect(screen.getByRole("button", { name: /New chat/ })).toBeTruthy()
+    expect(screen.getByRole("button", { name: /New question/ })).toBeTruthy()
     const project = screen.getByRole("region", { name: /Centrica/ })
     expect(within(project).getAllByText(/RFP talking points|Volumes/)).toHaveLength(2)
     expect(
@@ -96,7 +97,17 @@ describe("the Chat | Code switch", () => {
     act(() => useStore.setState({ route: "workspace", selectedSession: "c1" }))
     expect(screen.getByRole("radio", { name: /Code/ }).getAttribute("aria-checked")).toBe("true")
     act(() => useStore.setState({ route: "workspace", selectedSession: "h1" }))
-    expect(screen.getByRole("radio", { name: /Chat/ }).getAttribute("aria-checked")).toBe("true")
+    expect(screen.getByRole("radio", { name: /Ask about code/ }).getAttribute("aria-checked")).toBe(
+      "true",
+    )
+  })
+
+  it("asks about a code session from its menu: the new question page, with that session chosen", async () => {
+    render(<Rail onHide={() => undefined} />)
+    fireEvent.click(screen.getByRole("button", { name: "Actions for shop" }))
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Ask about this session..." }))
+    expect(useStore.getState()).toMatchObject({ route: "chat", newChatAbout: "c1" })
+    expect(localStorage.getItem("gatehouse.railMode")).toBe("chat")
   })
 })
 

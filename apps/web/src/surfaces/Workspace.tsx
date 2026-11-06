@@ -625,6 +625,12 @@ function SessionPane({
               </span>
               A chat in Plan mode: it reads files, and never changes them or searches the web
             </span>
+          ) : chat && session.about ? (
+            // Ask about code (owner, 6 Nov): which session it is about, and that it changes nothing.
+            <span className="truncate text-xs text-mut">
+              About the code session {session.about.title}: Claude reads its files and what was
+              said in it, and never changes anything
+            </span>
           ) : chat ? (
             <span className="truncate text-xs text-mut">
               {session.research ? "A research chat" : "A chat"}

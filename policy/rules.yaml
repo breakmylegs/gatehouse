@@ -60,6 +60,8 @@ allow:
   - { id: artifact-tools, tools: ["mcp__companion__save_artifact"], mcpSource: [sdk] }
   - { id: memory-tools, tools: ["mcp__companion__remember", "mcp__companion__recall", "mcp__companion__forget"],
       mcpSource: [sdk] }
+  # Ask about code (owner, 6 Nov): a chat about a code session reads it as it is now, redacted by the Host. Chats only.
+  - { id: session-read-tools, tools: ["mcp__companion__read_session"], mcpSource: [sdk], sessionKinds: [chat] }
   # Browser tools (Settings, off unless turned on): a coding session looks at a page on this computer. The Host takes
   # the picture only of localhost or 127.0.0.1, in a profile made for the one look, and redacts the text.
   - { id: page-look-tools, tools: ["mcp__companion__look_at_page"], mcpSource: [sdk], sessionKinds: [code] }

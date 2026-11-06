@@ -264,6 +264,7 @@ describe("golden corpus floor (the suite must not pass by finding nothing)", () 
       "memory-tools",
       "artifact-tools",
       "page-look-tools",
+      "session-read-tools",
       "claude-code-internal",
       "parse-error",
       "malformed-input",

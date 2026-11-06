@@ -46,7 +46,7 @@ const info = (kind?: "chat") => ({
 
 beforeEach(() => {
   hold = undefined
-  useStore.setState({ sessions: {}, transcripts: {}, panes: [], route: "chat", pending: {} })
+  useStore.setState({ sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never }, transcripts: {}, panes: [], route: "chat", pending: {} })
 })
 afterEach(() => {
   hold?.()
@@ -56,10 +56,10 @@ afterEach(() => {
 describe("starting a chat", () => {
   it("says it is starting your chat, and never Claude Code", async () => {
     render(<NewChat />)
-    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to talk about?" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
       target: { value: "How do vite proxies work?" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     expect(await screen.findByText("Starting your chat")).toBeTruthy()
     expect(document.body.textContent).not.toMatch(/Claude Code/)
   })

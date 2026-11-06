@@ -2,17 +2,32 @@ import { useEffect, useState } from "react"
 import { chatName } from "../lib/chatName"
 import { api } from "../lib/api"
 import { keepChatWarm } from "../lib/warmChat"
-import { accountForNew, send, useStore } from "../store"
+import { accountForNew, send, useSessionList, useStore } from "../store"
 import { MODELS, START_WAIT_MS, StartProgress } from "./Sessions"
 import { acceptLicence, licenceAccepted, useLicence } from "../lib/licence"
 
 /**
- * A chat: a conversation with Claude that is not about a project (owner, 30 Oct). It starts from what you say, gets a
- * folder of its own outside your projects, and is told it is a chat. The Host keeps it in Plan mode, so it never
- * changes files or runs commands; the Approver and the audit apply as everywhere else.
+ * Ask about code (owner, 6 Nov; a chat since 30 Oct): questions about one of your code sessions and its code, asked
+ * from outside it, so the session carries on undisturbed. It gets a folder of its own, reads the session's files and
+ * what was said in it, and the Host keeps it in Plan mode, so it never changes files or runs commands; the Approver
+ * and the audit apply as everywhere else.
  */
 export function NewChat() {
   const [text, setText] = useState("")
+  // The code session it is about: one chosen from its menu, or chosen here. Only open coding sessions.
+  const sessions = useSessionList()
+  const codeSessions = sessions.filter(
+    (s) => s.kind !== "chat" && !s.local && s.state !== "ended" && s.state !== "error",
+  )
+  const [about, setAbout] = useState(() => {
+    const chosen = useStore.getState().newChatAbout ?? ""
+    useStore.setState({ newChatAbout: undefined })
+    return chosen
+  })
+  useEffect(() => {
+    if (!about && codeSessions.length === 1) setAbout(codeSessions[0]!.id)
+  }, [about, codeSessions])
+  const aboutOpen = codeSessions.some((s) => s.id === about)
   const [model, setModel] = useState("")
   const [busy, setBusy] = useState(false)
   const [startedAt, setStartedAt] = useState(0)
@@ -87,7 +102,7 @@ export function NewChat() {
   async function start(e: React.FormEvent) {
     e.preventDefault()
     const said = text.trim()
-    if (!said || busy) return
+    if (!said || busy || !aboutOpen) return
     setBusy(true)
     setStartedAt(Date.now())
     setError(undefined)
@@ -107,6 +122,7 @@ export function NewChat() {
         ...(project ? { chatProject: project } : {}),
         ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
         ...(research && !localModel ? { research: true } : {}),
+        about,
       },
       START_WAIT_MS,
     )
@@ -114,7 +130,7 @@ export function NewChat() {
     if (!r.ok) {
       setError(
         r.error?.code === "timeout"
-          ? "This is taking longer than usual. If the chat starts it appears under Chats in the sidebar."
+          ? "This is taking longer than usual. If it starts it appears under Questions in the sidebar."
           : (r.error?.message ?? "The chat did not start"),
       )
       return
@@ -144,6 +160,7 @@ export function NewChat() {
           ...(local ? { localModel: local } : { model: m }),
           ...(project ? { chatProject: project } : {}),
           ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
+          about,
         },
         START_WAIT_MS,
       )
@@ -168,16 +185,41 @@ export function NewChat() {
   return (
     <div className="mx-auto grid max-w-[760px] gap-4 p-6">
       <div>
-        <h1 className="m-0">Start a chat</h1>
+        <h1 className="m-0">Ask about a code session</h1>
         <p className="m-0 mt-1 max-w-[62ch] text-mut">
-          A conversation with Claude rather than a coding session: questions, explanations, ideas
-          and writing. It runs in Plan mode, so Claude can read and look things up on the web but
-          never changes files or runs commands. Your chats are listed under Chats in the sidebar.
+          Ask about one of your code sessions and its code, from outside it, so the session carries
+          on undisturbed: how far it has got, what it changed, how something works. Claude reads the
+          session&apos;s files and what has been said in it, but never changes anything or runs
+          commands; to change something, ask the session itself. Your questions are listed under
+          Questions in the sidebar.
         </p>
       </div>
-      <form onSubmit={start} className="panel grid gap-3 p-4" aria-label="Start a chat">
+      <form onSubmit={start} className="panel grid gap-3 p-4" aria-label="Ask about a code session">
+        <label className="grid gap-1 sm:w-[420px]">
+          <span>Which session</span>
+          <select
+            className="field"
+            required
+            value={aboutOpen ? about : ""}
+            onChange={(e) => setAbout(e.target.value)}
+          >
+            <option value="" disabled>
+              Choose a code session
+            </option>
+            {codeSessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title ?? s.project} ({s.cwd})
+              </option>
+            ))}
+          </select>
+          {codeSessions.length === 0 ? (
+            <span className="text-xs text-warn">
+              No code session is open. Start or open one under Code first.
+            </span>
+          ) : null}
+        </label>
         <label className="grid gap-1">
-          <span>What do you want to talk about?</span>
+          <span>What do you want to know?</span>
           <textarea
             className="field"
             rows={4}
@@ -264,9 +306,16 @@ export function NewChat() {
           </label>
           <button
             className="btn btn-primary"
-            disabled={busy || !text.trim() || nothingAllowed || !compareReady || !licenceReady}
+            disabled={
+              busy ||
+              !text.trim() ||
+              !aboutOpen ||
+              nothingAllowed ||
+              !compareReady ||
+              !licenceReady
+            }
           >
-            {busy ? "Starting…" : "Start the chat"}
+            {busy ? "Starting…" : "Ask"}
           </button>
           <span className="text-[13px] text-mut">Ctrl+Enter starts it too.</span>
         </div>

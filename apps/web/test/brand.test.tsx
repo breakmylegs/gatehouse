@@ -3,7 +3,7 @@
 // files, not drawn by the build. Each icon a component names is in the pack's sprite, and each picture is on disk.
 import { readFileSync, existsSync } from "node:fs"
 import { join } from "node:path"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { cleanup, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { EMPTY_PICTURES, EmptyState } from "../src/components/EmptyState"
 import { Icon, ICON_NAMES, SPRITE } from "../src/components/Icon"
@@ -93,10 +93,8 @@ describe("the pack's spot pictures", () => {
   it("fill an empty sidebar: chats on the Chat side", () => {
     render(<Rail onHide={() => undefined} />)
     expect(document.querySelector('.empty-state[data-picture="empty-chats"]')).toBeTruthy()
-    expect(screen.getByText(/No chats yet/)).toBeTruthy()
-    // claude.ai chats come in from its export, so the empty list says where (owner, 6 Nov).
-    fireEvent.click(screen.getByRole("button", { name: "Bring in your chats from claude.ai" }))
-    expect(localStorage.getItem("gatehouse.settings.section")).toBe("privacy")
-    expect(useStore.getState().route).toBe("settings")
+    // Ask about code (owner, 6 Nov): the side is for questions about your code sessions, not claude.ai chats.
+    expect(screen.getByText(/No questions yet/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /claude\.ai/ })).toBeNull()
   })
 })

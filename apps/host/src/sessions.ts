@@ -31,6 +31,7 @@ import type { HostKillSwitch } from "./kill.js"
 import { pluginsWithMods } from "./marketplace.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
 import type { Worktrees } from "./worktrees.js"
+import type { SessionLink } from "./about-session.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -354,7 +355,11 @@ export interface SessionDeps {
     cwd: string
     kind?: "chat"
     chatProject?: string
+    /** Ask about code: the code session this chat is about. */
+    about?: SessionLink
   }) => Record<string, unknown>
+  /** Ask about code: how the linked session stands and the latest of what was said in it, redacted. */
+  aboutSaid?: (about: SessionLink) => Promise<string>
   managedDetected: () => Promise<boolean | undefined>
   localRulesPath?: string
   /** Tells the phone about a request that Extreme approval mode approved. */
@@ -382,6 +387,10 @@ export interface StartSessionOptions {
   instructions?: string
   /** A research chat (W1-10): it is given the research instruction. Ignored for a coding session. */
   research?: boolean
+  /** Ask about code (owner, 6 Nov): a chat about this code session, by its id; the manager looks it up. */
+  aboutId?: string
+  /** The code session this chat is about, as looked up (or as it was, when a chat comes back after a restart). */
+  about?: SessionLink
   /**
    * Brought back after Codehouse restarted: the same id, so the screen finds its panes again, and its original start
    * time. A chat keeps its folder.
@@ -619,6 +628,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
       ...(this.#opts.kind === "chat" && this.#opts.research ? { research: true } : {}),
+      ...(this.#opts.kind === "chat" && this.#opts.about ? { about: this.#opts.about } : {}),
       ...(this.#opts.evaluation ? { evaluation: this.#opts.evaluation } : {}),
       ...(this.#opts.localModel !== undefined
         ? { local: true, ...(this.#localLabel ? { localLabel: this.#localLabel } : {}) }
@@ -695,6 +705,15 @@ export class Session extends EventEmitter<SessionEvents> {
     // B23: a coding session's project may keep its instructions in AGENTS.md, for other coding agents.
     const agentsMd =
       this.#opts.kind !== "chat" ? await readAgentsMd(this.cwd, this.#deps.policy()) : undefined
+    // Ask about code: the linked session as it stands, and the latest of what was said in it, redacted.
+    const about =
+      this.#opts.kind === "chat" && this.#opts.about
+        ? {
+            title: this.#opts.about.title,
+            cwd: this.#opts.about.cwd,
+            said: (await this.#deps.aboutSaid?.(this.#opts.about).catch(() => "")) ?? "",
+          }
+        : undefined
     return composeInstructions({
       profile: this.#deps.config().profile,
       global: this.#deps.config().globalInstructions,
@@ -705,6 +724,7 @@ export class Session extends EventEmitter<SessionEvents> {
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",
       research: this.#opts.kind === "chat" && this.#opts.research === true,
+      ...(about ? { about } : {}),
       // Settings, Pull requests: only a session in a worktree of its own, on its own branch.
       ...(this.#opts.inWorktree && this.#deps.config().pullRequests?.create === true
         ? {
@@ -833,6 +853,7 @@ export class Session extends EventEmitter<SessionEvents> {
         cwd: this.cwd,
         ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
         ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
+        ...(this.#opts.kind === "chat" && this.#opts.about ? { about: this.#opts.about } : {}),
       }) as Options["mcpServers"],
       stderr: onStderr,
       // Inside a job object with the session's limits, when Codehouse can make one. Its stderr comes back to onStderr.
@@ -1410,6 +1431,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
       ...(this.#opts.research ? { research: true } : {}),
+      ...(this.#opts.about ? { about: this.#opts.about } : {}),
       ...(this.#sdkSessionId !== undefined ? { resume: this.#sdkSessionId } : {}),
     }
   }
@@ -1789,6 +1811,24 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       })
       opts = { ...opts, cwd: wt.path, inWorktree: { branch: wt.branch, repo: wt.repo } }
     }
+    // Ask about code (owner, 6 Nov): a chat about a code session open now, looked up by its id. The chat keeps where
+    // the session works and its conversation's id, so it can read them; it never writes to either.
+    if (opts.aboutId !== undefined && !opts.about) {
+      if (opts.kind !== "chat")
+        throw new SessionFolderError("Only a chat can be about a code session.")
+      const target = this.#sessions.get(opts.aboutId)?.info()
+      if (!target || target.kind === "chat")
+        throw new SessionFolderError("Choose a code session that is open to ask about.")
+      opts = {
+        ...opts,
+        about: {
+          id: target.id,
+          title: target.title ?? target.project,
+          cwd: target.cwd,
+          ...(target.sdkSessionId ? { sdkSessionId: target.sdkSessionId } : {}),
+        },
+      }
+    }
     // A project belongs to a chat only, and must exist.
     if (opts.chatProject) {
       if (opts.kind !== "chat") throw new SessionFolderError("Only a chat can belong to a project.")
@@ -1950,6 +1990,8 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       !opts.chatProject &&
       !opts.instructions &&
       !opts.research &&
+      opts.aboutId === undefined &&
+      opts.about === undefined &&
       opts.model === undefined &&
       opts.effort === undefined &&
       opts.resources === undefined &&

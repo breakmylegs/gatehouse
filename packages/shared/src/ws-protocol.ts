@@ -56,6 +56,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     instructions: z.string().max(8000).optional(),
     /** A research chat (W1-10): Claude plans its questions, searches, reads the best sources and cites each claim. */
     research: z.boolean().optional(),
+    /** Ask about code (owner, 6 Nov): the code session this chat is about, by its id. Chats only. */
+    about: z.string().max(100).optional(),
     /** A chat with a model on this computer instead of Claude (ADR 0011), by the name you allowed. */
     localModel: z
       .string()
@@ -285,6 +287,15 @@ export const SessionInfo = z.object({
   instructions: z.string().optional(),
   /** A research chat (W1-10). */
   research: z.boolean().optional(),
+  /** Ask about code (owner, 6 Nov): the code session this chat is about. */
+  about: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      cwd: z.string(),
+      sdkSessionId: z.string().optional(),
+    })
+    .optional(),
   /** B39: one run of a plugin's evaluation, with the plugin on or off. Not brought back after a restart. */
   evaluation: z.object({ plugin: z.string(), with: z.boolean() }).optional(),
   /** Runs on a model on this computer, not Claude (ADR 0011). `model` names it. */
