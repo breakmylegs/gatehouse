@@ -58,6 +58,7 @@ interface Config {
   maxSessions?: number
   spendCapUsd?: number
   outputStyle?: string
+  worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
@@ -118,6 +119,9 @@ interface Values {
   spendCap: string
   /** The output style new coding sessions start with, by name; "" for Claude Code's default. */
   style: string
+  /** Where new worktrees go, and the folder when it is one you choose. */
+  wtWhere: "beside" | "inside" | "folder"
+  wtFolder: string
   telFile: boolean
   telEndpoint: string
   ecUsd: string
@@ -162,6 +166,8 @@ function valuesOf(d: SettingsData): Values {
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
     style: c.outputStyle ?? "",
+    wtWhere: c.worktreeLocation?.where ?? "beside",
+    wtFolder: c.worktreeLocation?.folder ?? "",
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -240,6 +246,17 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   // A name the Host accepts, or none: half-typed or odd names are not saved.
   if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
   else delete body.outputStyle
+  // Beside the project is the default and is not written; anything a newer version keeps there stays.
+  const { where: _w2, folder: _f2, ...wtKeep } = d.saved.worktreeLocation ?? { where: "beside" }
+  const folder = v.wtFolder.trim().replace(/[\\/]+$/, "")
+  if (v.wtWhere === "beside" && !Object.keys(wtKeep).length) delete body.worktreeLocation
+  else if (v.wtWhere === "folder" && !folder) delete body.worktreeLocation
+  else
+    body.worktreeLocation = {
+      ...wtKeep,
+      where: v.wtWhere,
+      ...(v.wtWhere === "folder" ? { folder } : {}),
+    }
   if (v.telFile || v.telEndpoint.trim())
     body.telemetry = {
       ...(d.saved.telemetry ?? {}),
@@ -291,6 +308,8 @@ export const DEFAULT_VALUES: Values = {
   maxSessions: "",
   spendCap: "",
   style: "",
+  wtWhere: "beside",
+  wtFolder: "",
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
@@ -550,6 +569,7 @@ export function Settings() {
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
+  const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
@@ -874,6 +894,64 @@ export function Settings() {
                 onType={(style) => edit({ style })}
                 onDone={() => commit("Output style")}
               />
+            </Group>
+
+            <Group
+              section="sessions"
+              title="Worktree location"
+              gap="gap-2"
+              changed={worktreeChanged}
+            >
+              <Field
+                label="Where new worktrees go"
+                help="A session started in a worktree works in a separate copy of its project, on a branch of its own. Beside the project puts it in a folder next to the project's own. Inside the project puts it in the project's .codehouse folder, kept out of git on this computer; tools that search the whole project may see it. A folder you choose must be inside your workspace folders, or a session there could change nothing."
+              >
+                <select
+                  className="field"
+                  value={v.wtWhere}
+                  onChange={(e) =>
+                    change({ wtWhere: e.target.value as Values["wtWhere"] }, "Worktree location")
+                  }
+                >
+                  <option value="beside">Beside the project</option>
+                  <option value="inside">Inside the project</option>
+                  <option value="folder">A folder you choose</option>
+                </select>
+              </Field>
+              {v.wtWhere === "folder" ? (
+                <Field
+                  label="Worktree folder"
+                  help="Each project's worktrees go in a folder named after it in here, for example C:\dev\worktrees."
+                >
+                  <span className="flex flex-wrap gap-2">
+                    <input
+                      className="field mono min-w-[260px] flex-1"
+                      value={v.wtFolder}
+                      onChange={(e) => edit({ wtFolder: e.target.value })}
+                      spellCheck={false}
+                      {...typed("Worktree location")}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={async () => {
+                        const r = await api<{ path: string | null }>("POST", "/api/pick-folder", {
+                          start: v.wtFolder.trim(),
+                        })
+                        if (r.ok && r.data?.path)
+                          change({ wtFolder: r.data.path }, "Worktree location")
+                        else if (!r.ok)
+                          toast.error(
+                            r.error ?? "The folder window could not open. Type the folder instead.",
+                            { id: "settings" },
+                          )
+                      }}
+                    >
+                      Choose a folder...
+                    </button>
+                  </span>
+                </Field>
+              ) : null}
             </Group>
 
             <Group section="sessions" title="Effort" gap="gap-2" changed={effortChanged}>

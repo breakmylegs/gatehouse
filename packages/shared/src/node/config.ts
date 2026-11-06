@@ -256,6 +256,17 @@ function build(loose: boolean) {
       .string()
       .regex(/^[A-Za-z0-9][\w .-]{0,59}$/)
       .optional(),
+    /**
+     * Owner's Settings overhaul (6 Nov): where new worktrees go. Absent: beside the project. A folder must be inside a
+     * workspace root (checked when a worktree is made). Older versions keep it unused and put them beside.
+     */
+    worktreeLocation: z
+      .object({
+        where: z.enum(["beside", "inside", "folder"]),
+        folder: z.string().max(240).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** B09: the most sessions and chats open at once, 1 to 32. Absent: no limit. Older versions keep it unused. */
     maxSessions: z.number().int().min(1).max(32).optional(),
     effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),

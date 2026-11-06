@@ -63,11 +63,62 @@ function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
 /** A base is a branch, tag or commit name, never an option or a path out of the repository. */
 const BASE = /^(?!-)[\w./@^~-]{1,100}$/
 
+/**
+ * Where new worktrees go (Settings, Sessions, Worktree location; owner's Settings overhaul, 6 Nov). Absent or beside:
+ * <repo>.worktrees/<name>. Inside: <repo>/.codehouse/worktrees/<name>, kept out of git through the repository's own
+ * info/exclude, never its .gitignore. A folder: <folder>/<repo name>/<name>, only inside a workspace root, since a
+ * session anywhere else could change nothing.
+ */
+export interface WorktreePlace {
+  where: "beside" | "inside" | "folder"
+  folder?: string
+}
+
+/** Whether `p` is `root` or inside it, as Windows compares paths. */
+function within(root: string, p: string): boolean {
+  const rel = path.relative(path.resolve(root).toLowerCase(), path.resolve(p).toLowerCase())
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
+}
+
 export class Worktrees {
   readonly #file: string
+  readonly #place: () => WorktreePlace | undefined
+  readonly #roots: () => string[]
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    o: { place?: () => WorktreePlace | undefined; roots?: () => string[] } = {},
+  ) {
     this.#file = path.join(dataDir, "worktrees.json")
+    this.#place = o.place ?? (() => undefined)
+    this.#roots = o.roots ?? (() => [])
+  }
+
+  /** The folder a new worktree of `repo` called `name` goes in, from Settings. */
+  async #where(repo: string, name: string): Promise<string> {
+    const place = this.#place()
+    if (place?.where === "inside") {
+      const exclude = path.resolve(
+        repo,
+        (await git(repo, ["rev-parse", "--git-path", "info/exclude"])).trim(),
+      )
+      const line = "/.codehouse/worktrees/"
+      const now = fs.existsSync(exclude) ? fs.readFileSync(exclude, "utf8") : ""
+      if (!now.split(/\r?\n/).includes(line)) {
+        fs.mkdirSync(path.dirname(exclude), { recursive: true })
+        fs.appendFileSync(exclude, `${now && !now.endsWith("\n") ? "\n" : ""}${line}\n`)
+      }
+      return path.join(repo, ".codehouse", "worktrees", name)
+    }
+    if (place?.where === "folder" && place.folder) {
+      const folder = path.resolve(place.folder)
+      if (!path.isAbsolute(place.folder) || !this.#roots().some((r) => within(r, folder)))
+        throw new WorktreeError(
+          "The worktree folder in Settings is outside your workspace roots, so a session there could change nothing. Choose one inside them, or put worktrees beside the project.",
+        )
+      return path.join(folder, path.basename(repo), name)
+    }
+    return path.join(path.dirname(repo), `${path.basename(repo)}.worktrees`, name)
   }
 
   /** Every worktree Codehouse made, as recorded. Read tolerantly: a newer version's fields are kept. */
@@ -96,8 +147,8 @@ export class Worktrees {
   }
 
   /**
-   * Makes a worktree of the repository that holds `folder`, from `base` (its current commit when absent), in a
-   * folder beside the repository: <repo>.worktrees/<name>, on the branch codehouse/<name>.
+   * Makes a worktree of the repository that holds `folder`, from `base` (its current commit when absent), where
+   * Settings says (beside the repository unless told otherwise), on the branch codehouse/<name>.
    */
   async create(folder: string, base?: string): Promise<WorktreeRecord> {
     const baseName = base?.trim() || "HEAD"
@@ -132,7 +183,7 @@ export class Worktrees {
         `There is no branch, tag or commit called ${baseName} in that repository.`,
       )
     const name = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(3).toString("hex")}`
-    const where = path.join(path.dirname(repo), `${path.basename(repo)}.worktrees`, name)
+    const where = await this.#where(repo, name)
     const branch = `codehouse/${name}`
     fs.mkdirSync(path.dirname(where), { recursive: true })
     await git(repo, ["worktree", "add", "-b", branch, "--", where, commit], 180_000)

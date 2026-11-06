@@ -300,7 +300,11 @@ export function createHost(opts: HostOptions = {}): Host {
     sessionMeta,
   )
   const projects = new ProjectStore(path.join(gatehouseDataDir(env), "projects"))
-  const worktrees = new Worktrees(gatehouseDataDir(env))
+  // Where new worktrees go is read from Settings each time one is made; a folder must be inside a workspace root.
+  const worktrees = new Worktrees(gatehouseDataDir(env), {
+    place: () => config.worktreeLocation,
+    roots: () => store.current?.rules.workspaceRoots ?? [],
+  })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
   // What chats remember: redacted before it is written, with the same word list as everything else.

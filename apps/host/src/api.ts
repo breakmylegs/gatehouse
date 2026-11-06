@@ -1424,6 +1424,7 @@ const LIVE_SETTINGS = [
   "telemetry",
   "spendCapUsd",
   "outputStyle",
+  "worktreeLocation",
   "globalInstructions",
   "profile",
   "keepAwake",

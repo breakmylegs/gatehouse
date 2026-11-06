@@ -74,6 +74,28 @@ describe("making a worktree", () => {
     await expect(wts.create(plain)).rejects.toThrow(/not in a git repository/)
     expect(wts.records()).toHaveLength(1)
   })
+
+  it("goes where Settings says: inside the project, kept out of git, or a folder inside a workspace root only", async () => {
+    let place: { where: "beside" | "inside" | "folder"; folder?: string } = { where: "inside" }
+    const roots = [dir]
+    const wts = new Worktrees(path.join(dir, "data"), { place: () => place, roots: () => roots })
+    const inside = await wts.create(repo)
+    expect(path.dirname(inside.path)).toBe(path.join(repo, ".codehouse", "worktrees"))
+    // Kept out of git by the repository's own exclude file, once, never its .gitignore.
+    expect(git(repo, "status", "--porcelain")).toBe("")
+    expect(fs.existsSync(path.join(repo, ".gitignore"))).toBe(false)
+    await wts.create(repo)
+    const exclude = fs.readFileSync(path.join(repo, ".git", "info", "exclude"), "utf8")
+    expect(exclude.split("\n").filter((l) => l === "/.codehouse/worktrees/")).toHaveLength(1)
+    // A folder inside a workspace root: <folder>/<repo name>/<name>.
+    place = { where: "folder", folder: path.join(dir, "trees") }
+    const there = await wts.create(repo)
+    expect(path.dirname(there.path)).toBe(path.join(dir, "trees", "shop"))
+    // Outside every root, a session could change nothing: refused, and nothing made.
+    roots.splice(0, 1, path.join(dir, "elsewhere"))
+    await expect(wts.create(repo)).rejects.toThrow(/outside your workspace roots/)
+    expect(wts.records()).toHaveLength(3)
+  })
 })
 
 describe("removing a worktree", () => {

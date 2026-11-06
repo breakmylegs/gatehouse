@@ -120,6 +120,27 @@ describe("settings save as you change them", () => {
     await waitFor(() => expect(puts.at(-1)?.outputStyle).toBe("Team notes"))
   })
 
+  it("sets where new worktrees go, writing nothing for beside the project and a folder only once there is one", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const where = await screen.findByRole("combobox", { name: /Where new worktrees go/ })
+    expect((where as HTMLSelectElement).value).toBe("beside")
+    fireEvent.change(where, { target: { value: "inside" } })
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.worktreeLocation).toEqual({ where: "inside" })
+    fireEvent.change(where, { target: { value: "folder" } })
+    await waitFor(() => expect(puts).toHaveLength(2))
+    expect(puts[1]).not.toHaveProperty("worktreeLocation")
+    const folder = screen.getByRole("textbox", { name: /Worktree folder/ })
+    fireEvent.change(folder, { target: { value: "C:\\dev\\worktrees\\" } })
+    fireEvent.blur(folder)
+    await waitFor(() =>
+      expect(puts.at(-1)?.worktreeLocation).toEqual({ where: "folder", folder: "C:\\dev\\worktrees" }),
+    )
+    fireEvent.change(where, { target: { value: "beside" } })
+    await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("worktreeLocation"))
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     await openSection("Account and plan")
