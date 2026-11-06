@@ -25,6 +25,14 @@ export interface ArtifactClient {
   save(title: string, kind: string, content: string): Promise<ToolText>
 }
 
+/**
+ * Browser tools (owner's Settings overhaul, 6 Nov): Claude looks at a page on this computer, as a picture and its text.
+ * The Host takes the picture, only of localhost or 127.0.0.1, and redacts the text. Absent: the tool is not offered.
+ */
+export interface PageClient {
+  look(url: string): Promise<ToolText>
+}
+
 export interface CompanionDeps {
   sessionId: string
   cwd: string
@@ -36,6 +44,8 @@ export interface CompanionDeps {
   memory?: MemoryClient
   /** The chat's artifacts. Absent: the artifact tool is not offered. */
   artifacts?: ArtifactClient
+  /** Looking at local pages. Absent: the browser tool is not offered. */
+  pages?: PageClient
   now?: () => number
   checkpoint?: typeof defaultCheckpoint
 }
@@ -43,6 +53,8 @@ export interface CompanionDeps {
 export interface ToolText {
   text: string
   isError?: boolean
+  /** A picture to give Claude with the text (a PNG, base64). */
+  image?: string
 }
 
 function oneLine(text: string): string {
@@ -119,6 +131,12 @@ export class CompanionHandlers {
     return await this.#deps.artifacts.save(title, kind, content)
   }
 
+  async lookAtPage(url: string): Promise<ToolText> {
+    if (!this.#deps.pages)
+      return { text: "Browser tools are off for this session.", isError: true }
+    return await this.#deps.pages.look(url)
+  }
+
   async remember(topic: string, text: string, scope: "everyone" | "project"): Promise<ToolText> {
     if (!this.#deps.memory) return { text: "There is no memory in this session.", isError: true }
     return await this.#deps.memory.remember(topic, text, scope)
@@ -148,6 +166,7 @@ export interface CompanionToolDef {
     | "recall"
     | "forget"
     | "save_artifact"
+    | "look_at_page"
   description: string
   shape: z.ZodRawShape
   /**
@@ -287,5 +306,25 @@ export const ARTIFACT_TOOLS: readonly CompanionToolDef[] = [
     },
     run: (h, a) =>
       h.saveArtifact(String(a.title ?? ""), String(a.kind ?? ""), String(a.content ?? "")),
+  },
+]
+
+/**
+ * The browser tool, offered only to a coding session with Browser tools on in Settings: a look at a page this computer
+ * serves (a dev server, say), to check work. It cannot click, type or open anything on the internet.
+ */
+export const PAGE_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "look_at_page",
+    description:
+      "Look at a web page served on this computer, to check what you built: you get a picture of it (1280 by 800) and its text. Only addresses on this computer work: http://localhost or http://127.0.0.1, with a port and path if needed. Start the server first. The page cannot be clicked or typed into.",
+    shape: { url: z.string().min(1).max(2000) },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    run: (h, a) => h.lookAtPage(String(a.url ?? "")),
   },
 ]

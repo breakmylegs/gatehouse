@@ -4,6 +4,7 @@ import {
   CompanionHandlers,
   MEMORY_TOOLS,
   ARTIFACT_TOOLS,
+  PAGE_TOOLS,
   type CompanionDeps,
 } from "@gatehouse/companion"
 
@@ -22,6 +23,7 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
       ...COMPANION_TOOLS,
       ...(deps.memory ? MEMORY_TOOLS : []),
       ...(deps.artifacts ? ARTIFACT_TOOLS : []),
+      ...(deps.pages ? PAGE_TOOLS : []),
     ].map((def) =>
       tool(
         def.name,
@@ -30,7 +32,12 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
         async (args: Record<string, unknown>) => {
           const out = await def.run(handlers, args)
           return {
-            content: [{ type: "text" as const, text: out.text }],
+            content: [
+              ...(out.image
+                ? [{ type: "image" as const, data: out.image, mimeType: "image/png" }]
+                : []),
+              { type: "text" as const, text: out.text },
+            ],
             ...(out.isError ? { isError: true } : {}),
           }
         },

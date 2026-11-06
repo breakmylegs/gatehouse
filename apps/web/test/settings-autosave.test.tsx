@@ -163,6 +163,17 @@ describe("settings save as you change them", () => {
     )
   })
 
+  it("turns browser tools on, off unless chosen and not written when off", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const box = await screen.findByRole("checkbox", { name: /look at pages on this computer/ })
+    expect((box as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(box)
+    await waitFor(() => expect(puts.at(-1)?.browserTools).toBe(true))
+    fireEvent.click(box)
+    await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("browserTools"))
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     await openSection("Account and plan")

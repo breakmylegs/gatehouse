@@ -278,6 +278,11 @@ function build(loose: boolean) {
       })
       .passthrough()
       .optional(),
+    /**
+     * Owner's Settings overhaul (6 Nov): Browser tools. On, a coding session has look_at_page: a picture and the text
+     * of a page on this computer (localhost only). Absent or false: off. Older versions keep it unused.
+     */
+    browserTools: z.boolean().optional(),
     worktreeLocation: z
       .object({
         where: z.enum(["beside", "inside", "folder"]),

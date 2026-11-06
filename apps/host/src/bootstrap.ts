@@ -72,6 +72,7 @@ import { ApproverProcess, freePort, generateToken } from "./approver-process.js"
 import { Broker } from "./broker.js"
 import { CheckpointManager } from "./checkpoints.js"
 import { createCompanionSdkServer } from "./companion-server.js"
+import { lookAtPage } from "./page-look.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
 import { computeDigest } from "./analytics.js"
@@ -427,6 +428,18 @@ export function createHost(opts: HostOptions = {}): Host {
         host: { notify: async (m) => (manager.notify(m.sessionId, m.text), true) },
         policy: () => store.current,
         redact: (v) => redact(v, { terms: config.redactTerms }),
+        // Browser tools (Settings, off unless turned on): a coding session may look at a page on this computer.
+        ...(kind !== "chat" && config.browserTools === true
+          ? {
+              pages: {
+                look: (url: string) =>
+                  lookAtPage(url, {
+                    edge: () => findEdge(),
+                    redact: (t) => redactString(t, { terms: config.redactTerms }),
+                  }),
+              },
+            }
+          : {}),
       }),
     }),
     managedDetected,

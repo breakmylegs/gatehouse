@@ -25,6 +25,8 @@ interface Case {
   cwd?: string
   /** The SDK-reported source of an MCP server (`sdk`, `user`, ...). */
   src?: string
+  /** The session's kind (absent: a coding session, as the engine counts one that does not say). */
+  sk?: "chat" | "code"
   o?: "allow" | "deny" | "escalate"
   r?: string
   needs?: Needs
@@ -134,7 +136,11 @@ function withTempDir<T>(fn: (dir: string) => T): T {
 }
 
 async function runCase(c: Case): Promise<{ outcome?: string; ruleId?: string; loadError?: string }> {
-  const ctx = { cwd: c.cwd ? subst(c.cwd) : fwd(fx.ws), ...(c.src !== undefined ? { mcpSource: c.src } : {}) }
+  const ctx = {
+    cwd: c.cwd ? subst(c.cwd) : fwd(fx.ws),
+    ...(c.src !== undefined ? { mcpSource: c.src } : {}),
+    ...(c.sk !== undefined ? { sessionKind: c.sk } : {}),
+  }
   const call = { toolName: c.t ?? "", input: inputFor(c) }
   if (c.kind === "overlay" || c.kind === "remember") {
     return withTempDir(async (dir) => {
@@ -257,6 +263,7 @@ describe("golden corpus floor (the suite must not pass by finding nothing)", () 
       "companion-tools",
       "memory-tools",
       "artifact-tools",
+      "page-look-tools",
       "claude-code-internal",
       "parse-error",
       "malformed-input",

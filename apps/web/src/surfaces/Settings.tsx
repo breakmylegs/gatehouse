@@ -62,6 +62,7 @@ interface Config {
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
+  browserTools?: boolean
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
@@ -130,6 +131,8 @@ interface Values {
   prCreate: boolean
   prDraft: boolean
   prFix: boolean
+  /** Browser tools: a coding session may look at a page on this computer. */
+  browser: boolean
   telFile: boolean
   telEndpoint: string
   ecUsd: string
@@ -180,6 +183,7 @@ function valuesOf(d: SettingsData): Values {
     prCreate: c.pullRequests?.create === true,
     prDraft: c.pullRequests?.draft !== false,
     prFix: c.pullRequests?.fixChecks === true,
+    browser: c.browserTools === true,
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -273,6 +277,8 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   }
   if (Object.keys(pr).length) body.pullRequests = pr
   else delete body.pullRequests
+  if (v.browser) body.browserTools = true
+  else delete body.browserTools
   // Beside the project is the default and is not written; anything a newer version keeps there stays.
   const { where: _w2, folder: _f2, ...wtKeep } = d.saved.worktreeLocation ?? { where: "beside" }
   const folder = v.wtFolder.trim().replace(/[\\/]+$/, "")
@@ -341,6 +347,7 @@ export const DEFAULT_VALUES: Values = {
   prCreate: false,
   prDraft: true,
   prFix: false,
+  browser: false,
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
@@ -604,6 +611,7 @@ export function Settings() {
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
   const prChanged = differs(v, ["prPrefix", "prCreate", "prDraft", "prFix"])
+  const browserChanged = differs(v, ["browser"])
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
@@ -990,6 +998,24 @@ export function Settings() {
 
             <Group section="sessions" title="Viewer" gap="gap-2">
               <ViewerSetting />
+            </Group>
+
+            <Group section="sessions" title="Browser tools" gap="gap-2" changed={browserChanged}>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.browser}
+                  onChange={(e) => change({ browser: e.target.checked }, "Browser tools")}
+                />
+                Let coding sessions look at pages on this computer to check their work
+              </label>
+              <p className="m-0 text-[13px] text-mut">
+                Claude gets a picture of a page a server on this computer shows (localhost only), and
+                its text with your private words taken out. Pictures cannot be redacted. Edge takes
+                each picture out of sight, in a profile made for it and removed straight after; a look
+                takes about 20 seconds. Claude cannot click or type into the page. Applies to sessions
+                started from now on; chats never have it.
+              </p>
             </Group>
 
             <Group section="sessions" title="Pull requests" gap="gap-2" changed={prChanged}>

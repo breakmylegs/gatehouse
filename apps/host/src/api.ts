@@ -1430,6 +1430,7 @@ const LIVE_SETTINGS = [
   "outputStyle",
   "worktreeLocation",
   "pullRequests",
+  "browserTools",
   "globalInstructions",
   "profile",
   "keepAwake",
