@@ -278,3 +278,7 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 ## No live tool output (checked 4 Nov, B33)
 
 While a tool runs the SDK sends `tool_progress` (`tool_use_id`, `tool_name`, `elapsed_time_seconds`) and nothing of its output; the output comes in the tool result when it finishes. A background task's `task_started` and `task_progress` carry no output path; `task_notification` names `output_file` when the task ends. So a live read-only view of a running command waits for an SDK that streams it.
+
+## /btw side questions (6 Nov, sdk.d.ts 0.3.310)
+
+The bundled `sdk.mjs` has an `askSideQuestion` on the query object (Claude Code's own /btw), but `sdk.d.ts` does not declare it, so Codehouse does not use it. A /btw question is a separate one-turn `query()` instead, with the recap's options: `tools: []`, `permissionMode: "default"`, a `canUseTool` that denies, `maxTurns: 1`, `settingSources: []`, `persistSession: false`, `cwd` the temp folder, a sanitised `env` and an `outputFormat` json_schema. If `askSideQuestion` is typed in a later SDK it can replace this, once checked to run with no tools and nothing written to the session.

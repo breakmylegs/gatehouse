@@ -40,6 +40,8 @@ import { carryOnFrom } from "../lib/redo"
 import { findIn } from "../lib/find"
 import { FindBar } from "../components/FindBar"
 import { RecapCard } from "../components/RecapCard"
+import { SideAnswerCard } from "../components/SideAnswer"
+import { askSideQuestion } from "../lib/btw"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -110,6 +112,7 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/extreme", help: "Turn Extreme approval on or off for this session" },
   { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
+  { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
   { cmd: "/stop", help: "Stop the turn and anything in the background" },
   { cmd: "/close", help: "End this session" },
 ]
@@ -728,6 +731,7 @@ function SessionPane({
             }}
           >
             <RecapCard sessionId={session.id} />
+            <SideAnswerCard sessionId={session.id} />
             {finding ? (
               <FindBar
                 query={findQuery}
@@ -1844,6 +1848,16 @@ function Composer({
         case "/model":
           r = await send({ type: "set_model", sessionId, ...(arg ? { model: arg } : {}) })
           break
+        case "/btw": {
+          // A side question, answered from what was said while the session carries on; never sent to it.
+          if (!arg) {
+            toast("Write your question after /btw, for example /btw how far has it got?", { id: "btw" })
+            return
+          }
+          setText("")
+          void askSideQuestion(sessionId, arg, useStore.getState().transcripts[sessionId]?.items ?? [])
+          return
+        }
         case "/stop":
           r = await send({ type: "stop_session", sessionId })
           break

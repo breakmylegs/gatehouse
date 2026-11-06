@@ -13,6 +13,7 @@ import { registerDoctorRoutes } from "./doctor.js"
 import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
+import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
 import { registerContinueRoutes, type ContinueDeps } from "./chat/continue-api.js"
@@ -108,6 +109,8 @@ export interface AdminContext {
   chat?: ChatDeps
   /** While you were away, written by Claude (owner, 4 Nov). */
   recap?: RecapDeps
+  /** /btw: a side question about a session, answered without interrupting it (owner, 4 Nov). */
+  btw?: BtwDeps
   /** CH-04: importing a claude.ai export. */
   chatImport?: ImportDeps
   /** CH-06: Open in Claude. */
@@ -518,6 +521,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
+  if (ctx.btw) registerBtwRoutes(app, ctx.btw)
   if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
   if (ctx.chatHandoff) registerHandoffRoutes(app, ctx.chatHandoff)
   if (ctx.chatContinue) registerContinueRoutes(app, ctx.chatContinue)

@@ -258,7 +258,8 @@ Your own PowerShell commands in the session's folder, one at a time, with Up and
 - Under the box, one short line shows the model, the effort, the mode and, where Codehouse can limit them, this computer's processor and memory; hold the pointer over one to see what it is.
 - Beside them, two short bars show what the session uses now, every five seconds: the top one its share of this computer's processor, the lower one its memory, against its level's limit or, at High, this computer's memory. Each turns amber when it is nearly full. Hold the pointer over them for the numbers. They cover everything the session started, its commands and builds included.
 - In the sidebar and the strip at the top, a small icon shows each session's state: a turning ring while Claude works, an hourglass while it starts, a tick when it is ready for you, a bell when it needs you, two bars when it is paused and a warning sign when it stopped. Hold the pointer over it for the word.
-- Type / for commands: /plan, /default, /accept-edits, /auto, /extreme, /effort high, /model, /stop and /close.
+- Type / for commands: /plan, /default, /accept-edits, /auto, /extreme, /effort high, /model, /btw, /stop and /close.
+- **/btw** and a question (for example /btw how far has it got?) asks a side question about the session without interrupting it. Claude answers from what has been said in it, in a card above the prompt box, and the answer is not added to the conversation. It has no tools, sees your private words taken out first, and is not sent for a model on this computer.
 - When a request from this session is waiting, it appears above the composer with **Deny** and **Allow once** (Esc and Ctrl+Enter work while focus is inside it). More options opens the full card. A question or a plan shows in full there.
 
 **Todo list**

@@ -25,6 +25,7 @@ import { findEdge, hasAppLink, realLauncher } from "./chat/handoff.js"
 import { DEFAULT_SEED } from "./chat/continue.js"
 import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
+import { createBtwWriter } from "./btw.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -888,6 +889,18 @@ export function createHost(opts: HostOptions = {}): Host {
       recap: {
         writer: createRecapWriter(),
         enabled: () => config.recapByClaude !== false,
+        session: (id) => {
+          const i = manager.get(id)?.info()
+          return i ? { project: i.project, ...(i.local ? { local: true } : {}) } : undefined
+        },
+        orgOk: () => account.last()?.org.ok === true,
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+      },
+      // /btw (owner, 4 Nov): the same limits as the recap, asked for by you, so not turned off with it.
+      btw: {
+        writer: createBtwWriter(),
         session: (id) => {
           const i = manager.get(id)?.info()
           return i ? { project: i.project, ...(i.local ? { local: true } : {}) } : undefined
