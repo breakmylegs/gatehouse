@@ -1,4 +1,5 @@
 import { ClaudeImport } from "../components/ClaudeImport"
+import { SECTION_KEY } from "../lib/settingsSection"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
 import {
@@ -336,7 +337,6 @@ export const SECTIONS: readonly SectionEntry[] = SECTION_GROUPS.flatMap(
   ([, list]) => list as readonly SectionEntry[],
 )
 type SectionId = SectionEntry[0]
-const SECTION_KEY = "gatehouse.settings.section"
 function readSection(): SectionId {
   try {
     const k = localStorage.getItem(SECTION_KEY)

@@ -15,6 +15,7 @@ import {
 } from "../lib/rail"
 import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
+import { openSettingsAt } from "../lib/settingsSection"
 import { openExport } from "./ExportDialog"
 import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
@@ -359,6 +360,17 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 ? "No chats yet. Choose New chat to start one."
                 : "No sessions yet. Choose New session to start one."}
             </p>
+            {mode === "chat" ? (
+              // Owner, 6 Nov ("I still dont see my chats from claude.ai loaded"): claude.ai lets no app read your
+              // chats, so they come in from the export it emails you. Say where, from where they are looked for.
+              <button
+                type="button"
+                className="btn mt-2 !min-h-7"
+                onClick={() => openSettingsAt("privacy")}
+              >
+                Bring in your chats from claude.ai
+              </button>
+            ) : null}
           </EmptyState>
         ) : null}
         {groups.map((g) => (
