@@ -50,18 +50,24 @@ export function isOnlyAutoMemoryOff(settings: unknown): boolean {
   )
 }
 
+/** An output style's name as Settings may hold it: a few words, never a path or anything more. */
+export const OUTPUT_STYLE_NAME = /^[A-Za-z0-9][\w .-]{0,59}$/
+
 /**
- * The inline settings Codehouse may set, which can only turn things off: auto memory off (above), and installed plugins
- * off for one session (B39, a plugin's evaluation without it). A plugin can never be turned on here, and nothing else
- * may be set, since anything more could carry permission rules.
+ * The inline settings Codehouse may set: auto memory off (above), installed plugins off for one session (B39, a
+ * plugin's evaluation without it), and the output style chosen in Settings, by name (owner's Settings overhaul,
+ * 6 Nov). A plugin can never be turned on here, and nothing else may be set, since anything more could carry
+ * permission rules.
  */
-export function isOnlyTurningOff(settings: unknown): boolean {
+export function isSafeInlineSettings(settings: unknown): boolean {
   if (!settings || typeof settings !== "object" || Array.isArray(settings)) return false
   const s = settings as Record<string, unknown>
   const keys = Object.keys(s)
-  if (!keys.length || keys.some((k) => k !== "autoMemoryEnabled" && k !== "enabledPlugins"))
-    return false
+  const allowed = new Set(["autoMemoryEnabled", "enabledPlugins", "outputStyle"])
+  if (!keys.length || keys.some((k) => !allowed.has(k))) return false
   if ("autoMemoryEnabled" in s && s.autoMemoryEnabled !== false) return false
+  if ("outputStyle" in s && !(typeof s.outputStyle === "string" && OUTPUT_STYLE_NAME.test(s.outputStyle)))
+    return false
   if (!("enabledPlugins" in s)) return true
   const p = s.enabledPlugins
   if (!p || typeof p !== "object" || Array.isArray(p)) return false
@@ -91,7 +97,7 @@ export function assertSafeOptions(options: Options): void {
       `allowedTools has bare tool names (${bare.join(", ")}), which skip canUseTool`,
     )
   }
-  if (options.settings !== undefined && !isOnlyTurningOff(options.settings)) {
+  if (options.settings !== undefined && !isSafeInlineSettings(options.settings)) {
     throw new SafetyError(5, "inline settings are not allowed, they could carry permission rules")
   }
   if (options.permissionPromptToolName !== undefined) {

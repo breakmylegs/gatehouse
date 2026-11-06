@@ -102,6 +102,24 @@ describe("settings save as you change them", () => {
     expect(screen.getByRole("note").textContent).toMatch(/charged as extra usage/)
   })
 
+  it("sets the output style new coding sessions start with, by name, and leaves out a name it cannot use", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const style = await screen.findByRole("combobox", { name: /How Claude writes its answers/ })
+    expect((style as HTMLSelectElement).value).toBe("")
+    fireEvent.change(style, { target: { value: "Explanatory" } })
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.outputStyle).toBe("Explanatory")
+    fireEvent.change(style, { target: { value: "own" } })
+    const name = await screen.findByRole("textbox", { name: /Your style's name/ })
+    fireEvent.change(name, { target: { value: "../notes" } })
+    fireEvent.blur(name)
+    await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("outputStyle"))
+    fireEvent.change(name, { target: { value: "Team notes" } })
+    fireEvent.blur(name)
+    await waitFor(() => expect(puts.at(-1)?.outputStyle).toBe("Team notes"))
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     await openSection("Account and plan")

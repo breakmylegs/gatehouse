@@ -57,6 +57,7 @@ interface Config {
   effortCap?: string
   maxSessions?: number
   spendCapUsd?: number
+  outputStyle?: string
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
@@ -115,6 +116,8 @@ interface Values {
   effortCap: string
   maxSessions: string
   spendCap: string
+  /** The output style new coding sessions start with, by name; "" for Claude Code's default. */
+  style: string
   telFile: boolean
   telEndpoint: string
   ecUsd: string
@@ -158,6 +161,7 @@ function valuesOf(d: SettingsData): Values {
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
+    style: c.outputStyle ?? "",
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -233,6 +237,9 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.maxSessions
   if (v.spendCap) body.spendCapUsd = Number(v.spendCap)
   else delete body.spendCapUsd
+  // A name the Host accepts, or none: half-typed or odd names are not saved.
+  if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
+  else delete body.outputStyle
   if (v.telFile || v.telEndpoint.trim())
     body.telemetry = {
       ...(d.saved.telemetry ?? {}),
@@ -283,6 +290,7 @@ export const DEFAULT_VALUES: Values = {
   effortCap: "",
   maxSessions: "",
   spendCap: "",
+  style: "",
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
@@ -541,6 +549,7 @@ export function Settings() {
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const effortChanged = differs(v, ["effortCap"])
+  const styleChanged = differs(v, ["style"])
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
@@ -856,6 +865,15 @@ export function Settings() {
                   )}
                 </select>
               </Field>
+            </Group>
+
+            <Group section="sessions" title="Output style" gap="gap-2" changed={styleChanged}>
+              <OutputStyleField
+                value={v.style}
+                onChange={(style) => change({ style }, "Output style")}
+                onType={(style) => edit({ style })}
+                onDone={() => commit("Output style")}
+              />
             </Group>
 
             <Group section="sessions" title="Effort" gap="gap-2" changed={effortChanged}>
@@ -1346,6 +1364,72 @@ function RestartPrompt({
         </div>
       )}
     </div>
+  )
+}
+
+/** An output style's name as the Host accepts it (apps/host/src/safety.ts OUTPUT_STYLE_NAME). */
+const STYLE_NAME = /^[A-Za-z0-9][\w .-]{0,59}$/
+/** Claude Code's own styles. Yours live in its output-styles folder and are chosen by name. */
+const BUILT_IN_STYLES = ["Explanatory", "Learning"]
+
+/**
+ * Output style (owner's Settings overhaul): how Claude writes its answers in new coding sessions, by name. Chats have
+ * their own instructions and are not changed.
+ */
+function OutputStyleField({
+  value,
+  onChange,
+  onType,
+  onDone,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onType: (v: string) => void
+  onDone: () => void
+}) {
+  const [own, setOwn] = useState(value !== "" && !BUILT_IN_STYLES.includes(value))
+  const choice = own ? "own" : value
+  return (
+    <>
+      <Field
+        label="How Claude writes its answers in new coding sessions"
+        help="Default is Claude Code's usual way. Explanatory adds notes on why it did things; Learning leaves small parts for you to write. Your own style is one you saved in Claude Code's output styles folder, chosen by its name. Sessions already open keep theirs; chats are not changed."
+      >
+        <select
+          className="field"
+          value={choice}
+          onChange={(e) => {
+            const next = e.target.value
+            setOwn(next === "own")
+            onChange(next === "own" ? "" : next)
+          }}
+        >
+          <option value="">Default</option>
+          {BUILT_IN_STYLES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+          <option value="own">Your own…</option>
+        </select>
+      </Field>
+      {own ? (
+        <Field
+          label="Your style's name"
+          help="As its file names it, without .md. Letters, numbers, spaces, dots, dashes and underscores."
+        >
+          <input
+            className="field"
+            value={value}
+            maxLength={60}
+            onChange={(e) => onType(e.target.value)}
+            onBlur={onDone}
+            onKeyDown={(e) => e.key === "Enter" && onDone()}
+            aria-invalid={value.trim() !== "" && !STYLE_NAME.test(value.trim())}
+          />
+        </Field>
+      ) : null}
+    </>
   )
 }
 

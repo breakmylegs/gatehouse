@@ -13,7 +13,7 @@ import {
   type EvalSession,
   type EvaluatorDeps,
 } from "../src/plugin-eval.js"
-import { assertSafeOptions, isOnlyTurningOff } from "../src/safety.js"
+import { assertSafeOptions, isSafeInlineSettings } from "../src/safety.js"
 import { buildStack, type Stack } from "./stack.js"
 import type { HostAudit } from "../src/hostaudit.js"
 import type { Options } from "@anthropic-ai/claude-agent-sdk"
@@ -30,12 +30,20 @@ const suite = (tasks = [{ prompt: "What does it build with?", expect: "vite" }])
 
 describe("the inline settings a session may have", () => {
   it("may only turn things off: auto memory, and installed plugins for one session", () => {
-    expect(isOnlyTurningOff({ autoMemoryEnabled: false })).toBe(true)
-    expect(isOnlyTurningOff({ enabledPlugins: { "helper@local": false } })).toBe(true)
+    expect(isSafeInlineSettings({ autoMemoryEnabled: false })).toBe(true)
+    expect(isSafeInlineSettings({ enabledPlugins: { "helper@local": false } })).toBe(true)
     expect(
-      isOnlyTurningOff({ autoMemoryEnabled: false, enabledPlugins: { "helper@local": false } }),
+      isSafeInlineSettings({ autoMemoryEnabled: false, enabledPlugins: { "helper@local": false } }),
     ).toBe(true)
+    // The output style from Settings, by name only (owner's Settings overhaul, 6 Nov).
+    expect(isSafeInlineSettings({ outputStyle: "Explanatory" })).toBe(true)
+    expect(isSafeInlineSettings({ outputStyle: "My team's notes" })).toBe(false)
     for (const bad of [
+      { outputStyle: "../../evil" },
+      { outputStyle: "C:\\styles\\x.md" },
+      { outputStyle: "" },
+      { outputStyle: 3 },
+      { outputStyle: "Learning", permissions: { allow: ["Bash(*)"] } },
       { enabledPlugins: { "helper@local": true } },
       { enabledPlugins: { "helper@local": ["1.0"] } },
       { enabledPlugins: { "helper@local": false, "other@x": true } },
@@ -48,7 +56,7 @@ describe("the inline settings a session may have", () => {
       null,
       "settings.json",
     ])
-      expect(isOnlyTurningOff(bad), JSON.stringify(bad)).toBe(false)
+      expect(isSafeInlineSettings(bad), JSON.stringify(bad)).toBe(false)
     const safe = (settings: unknown) =>
       ({
         cwd: "C:/dev/x",

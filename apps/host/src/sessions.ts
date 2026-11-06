@@ -797,6 +797,10 @@ export class Session extends EventEmitter<SessionEvents> {
               ...(instructions ? { append: instructions } : {}),
             },
             settingSources: ["user", "project", "local"],
+            // The output style chosen in Settings, by name: an inline setting that carries nothing else.
+            ...(d.config().outputStyle
+              ? { settings: { outputStyle: d.config().outputStyle as string } }
+              : {}),
           }),
       includePartialMessages: true,
       // Its account's own Claude Code folder, and never a credential (invariant 6).

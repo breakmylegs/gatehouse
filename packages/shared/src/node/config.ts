@@ -248,6 +248,14 @@ function build(loose: boolean) {
     }).optional(),
     /** B20: the most spent a day, in dollars, over every session; at it, they pause until tomorrow. Absent: no cap. */
     spendCapUsd: z.number().min(1).max(10000).optional(),
+    /**
+     * Owner's Settings overhaul (6 Nov): the output style new coding sessions start with, by name (Claude Code's own
+     * Explanatory or Learning, or one of yours). Absent: Claude Code's default. Older versions keep it unused.
+     */
+    outputStyle: z
+      .string()
+      .regex(/^[A-Za-z0-9][\w .-]{0,59}$/)
+      .optional(),
     /** B09: the most sessions and chats open at once, 1 to 32. Absent: no limit. Older versions keep it unused. */
     maxSessions: z.number().int().min(1).max(32).optional(),
     effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),

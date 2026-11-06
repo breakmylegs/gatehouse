@@ -1423,6 +1423,7 @@ const LIVE_SETTINGS = [
   "maxSessions",
   "telemetry",
   "spendCapUsd",
+  "outputStyle",
   "globalInstructions",
   "profile",
   "keepAwake",
