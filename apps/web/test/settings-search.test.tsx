@@ -126,6 +126,7 @@ describe("Settings in sections", () => {
       "Output style",
       "Worktree location",
       "Pull requests",
+      "Viewer",
       "Setup",
       "Notifications",
       "Appearance",

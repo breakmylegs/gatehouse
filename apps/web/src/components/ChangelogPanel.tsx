@@ -28,7 +28,12 @@ function Notes({ text }: { text: string }) {
     <div className="grid gap-1 text-[14px] leading-relaxed">
       {lines.map((l, i) => {
         const heading = /^#{1,6}\s+(.*)$/.exec(l)
-        if (heading) return <h4 key={i} className="m-0 mt-2 text-[14px]">{heading[1]}</h4>
+        if (heading)
+          return (
+            <h4 key={i} className="m-0 mt-2 text-[14px]">
+              {heading[1]}
+            </h4>
+          )
         const item = /^\s*[-*]\s+(.*)$/.exec(l)
         if (item)
           return (
@@ -99,7 +104,12 @@ export function ChangelogPanel({ current }: { current?: string }) {
         </section>
       ) : null}
       <div>
-        <button type="button" className="btn !min-h-7" disabled={busy} onClick={() => void load(true)}>
+        <button
+          type="button"
+          className="btn !min-h-7"
+          disabled={busy}
+          onClick={() => void load(true)}
+        >
           {busy ? "Reading…" : "Read it again"}
         </button>
       </div>

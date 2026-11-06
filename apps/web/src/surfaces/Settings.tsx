@@ -3,6 +3,7 @@ import { SECTION_KEY } from "../lib/settingsSection"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
 import { ChangelogPanel } from "../components/ChangelogPanel"
+import { ViewerSetting } from "../components/ViewerSetting"
 import {
   AppearancePanel,
   GoTo,
@@ -985,6 +986,10 @@ export function Settings() {
                   </span>
                 </Field>
               ) : null}
+            </Group>
+
+            <Group section="sessions" title="Viewer" gap="gap-2">
+              <ViewerSetting />
             </Group>
 
             <Group section="sessions" title="Pull requests" gap="gap-2" changed={prChanged}>

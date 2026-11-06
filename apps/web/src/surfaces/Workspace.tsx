@@ -42,6 +42,12 @@ import { FindBar } from "../components/FindBar"
 import { RecapCard } from "../components/RecapCard"
 import { SideAnswerCard } from "../components/SideAnswer"
 import { askSideQuestion } from "../lib/btw"
+import {
+  LOCAL_PAGE,
+  OpenLocalPage,
+  readViewerPrefs,
+  useOpenWhatClaudeWrites,
+} from "../lib/viewerPrefs"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -330,6 +336,22 @@ function SessionPane({
   useEffect(() => {
     if (opened?.kind === "browser") setLastUrl(opened.url)
   }, [opened])
+  // Settings, Viewer: a page or picture Claude writes opens in the viewer by itself, and a link to a page on this
+  // computer opens there (kept in this window, read at each use).
+  const cwd = session?.cwd
+  const openWritten = useCallback(
+    (file: string) => {
+      if (cwd) setOpened({ kind: "file", rel: relInside(cwd, file) ?? file })
+    },
+    [cwd],
+  )
+  useOpenWhatClaudeWrites(
+    selected,
+    selected ? transcript.items : undefined,
+    openWritten,
+    readViewerPrefs().autoOpen,
+  )
+  const openLocalPage = useCallback((url: string) => setOpened({ kind: "browser", url }), [])
 
   // Runs of tool calls read as one line each, opened on demand.
   // Calls refused or waiting on you stay in Summary (W1-12).
@@ -720,122 +742,124 @@ function SessionPane({
 
       <div className="pane-body min-h-0">
         <DetailView.Provider value={view.detail}>
-          <section
-            aria-label="Transcript"
-            className="pane-transcript relative min-h-0"
-            onKeyDown={(e) => {
-              if (e.ctrlKey && e.shiftKey && e.key === "End") {
-                e.preventDefault()
-                toLatest()
-              }
-            }}
-          >
-            <RecapCard sessionId={session.id} />
-            <SideAnswerCard sessionId={session.id} />
-            {finding ? (
-              <FindBar
-                query={findQuery}
-                count={hits.length}
-                at={Math.min(findAt, Math.max(0, hits.length - 1))}
-                onQuery={(q) => {
-                  setFindQuery(q)
-                  setFindAt(0)
-                }}
-                onStep={stepFind}
-                onClose={closeFind}
-              />
-            ) : null}
-            <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
-              {(() => {
-                // One message as drawn in either list.
-                const itemAt = (index: number, it: (typeof shownItems)[number]) => (
-                  <div
-                    className={clsx(
-                      "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
-                      hitSet.has(index) && "find-hit",
-                      index === current && "find-current",
-                    )}
-                  >
-                    {it.kind === "group" ? (
-                      <ToolGroup
-                        tools={it.tools}
-                        onOpenArtifact={openArtifacts}
-                        onOpenFile={(file) => {
-                          // A file outside the folder opens by its full path; the Host lets the pane read it only if
-                          // this session wrote or edited it (owner, 4 Nov).
-                          setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
-                        }}
-                      />
-                    ) : (
-                      <ItemView item={it} sessionId={session.id} />
-                    )}
-                  </div>
-                )
-                return screenReader ? (
-                  // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
-                  <ol
-                    className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
-                    aria-label="Conversation"
-                  >
-                    {shownItems.length === 0 ? (
-                      <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
-                        Nothing yet. Write a prompt below to start the work.
-                      </li>
-                    ) : null}
-                    {shownItems.map((it, index) => (
-                      <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
-                    ))}
-                  </ol>
-                ) : (
-                  <Virtuoso
-                    ref={scroller}
-                    style={{ height: "100%" }}
-                    data={shownItems}
-                    followOutput="smooth"
-                    atBottomThreshold={80}
-                    atBottomStateChange={(b) => {
-                      following.current = b
-                      setAtEnd(b)
-                    }}
-                    // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
-                    // unless you have scrolled up to read.
-                    totalListHeightChanged={() => {
-                      if (following.current) toLatest()
-                    }}
-                    initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
-                    computeItemKey={(_, it) => `${view.detail}:${it.id}`}
-                    itemContent={itemAt}
-                    components={{
-                      EmptyPlaceholder: () => (
-                        <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+          <OpenLocalPage.Provider value={openLocalPage}>
+            <section
+              aria-label="Transcript"
+              className="pane-transcript relative min-h-0"
+              onKeyDown={(e) => {
+                if (e.ctrlKey && e.shiftKey && e.key === "End") {
+                  e.preventDefault()
+                  toLatest()
+                }
+              }}
+            >
+              <RecapCard sessionId={session.id} />
+              <SideAnswerCard sessionId={session.id} />
+              {finding ? (
+                <FindBar
+                  query={findQuery}
+                  count={hits.length}
+                  at={Math.min(findAt, Math.max(0, hits.length - 1))}
+                  onQuery={(q) => {
+                    setFindQuery(q)
+                    setFindAt(0)
+                  }}
+                  onStep={stepFind}
+                  onClose={closeFind}
+                />
+              ) : null}
+              <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
+                {(() => {
+                  // One message as drawn in either list.
+                  const itemAt = (index: number, it: (typeof shownItems)[number]) => (
+                    <div
+                      className={clsx(
+                        "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
+                        hitSet.has(index) && "find-hit",
+                        index === current && "find-current",
+                      )}
+                    >
+                      {it.kind === "group" ? (
+                        <ToolGroup
+                          tools={it.tools}
+                          onOpenArtifact={openArtifacts}
+                          onOpenFile={(file) => {
+                            // A file outside the folder opens by its full path; the Host lets the pane read it only if
+                            // this session wrote or edited it (owner, 4 Nov).
+                            setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
+                          }}
+                        />
+                      ) : (
+                        <ItemView item={it} sessionId={session.id} />
+                      )}
+                    </div>
+                  )
+                  return screenReader ? (
+                    // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
+                    <ol
+                      className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
+                      aria-label="Conversation"
+                    >
+                      {shownItems.length === 0 ? (
+                        <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
                           Nothing yet. Write a prompt below to start the work.
-                        </p>
-                      ),
-                    }}
-                  />
-                )
-              })()}
-            </BranchSteps.Provider>
-            {atEnd || shownItems.length === 0 ? null : (
-              <button
-                type="button"
-                className="jump-latest"
-                aria-label="Jump to latest"
-                onClick={() => toLatest(true)}
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                  <path
-                    d="M8 2.5v10M3.5 8.5 8 13l4.5-4.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            )}
-          </section>
+                        </li>
+                      ) : null}
+                      {shownItems.map((it, index) => (
+                        <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <Virtuoso
+                      ref={scroller}
+                      style={{ height: "100%" }}
+                      data={shownItems}
+                      followOutput="smooth"
+                      atBottomThreshold={80}
+                      atBottomStateChange={(b) => {
+                        following.current = b
+                        setAtEnd(b)
+                      }}
+                      // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
+                      // unless you have scrolled up to read.
+                      totalListHeightChanged={() => {
+                        if (following.current) toLatest()
+                      }}
+                      initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
+                      computeItemKey={(_, it) => `${view.detail}:${it.id}`}
+                      itemContent={itemAt}
+                      components={{
+                        EmptyPlaceholder: () => (
+                          <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+                            Nothing yet. Write a prompt below to start the work.
+                          </p>
+                        ),
+                      }}
+                    />
+                  )
+                })()}
+              </BranchSteps.Provider>
+              {atEnd || shownItems.length === 0 ? null : (
+                <button
+                  type="button"
+                  className="jump-latest"
+                  aria-label="Jump to latest"
+                  onClick={() => toLatest(true)}
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      d="M8 2.5v10M3.5 8.5 8 13l4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
+            </section>
+          </OpenLocalPage.Provider>
         </DetailView.Provider>
         {opened ? (
           <Viewer
@@ -1442,9 +1466,9 @@ function PausedLine({
         // B20: today's spending over every session reached the cap in Settings.
         <span>
           <strong>Paused.</strong> Today's extra spending beyond your plan reached the most Settings
-          allows a day, so
-          Codehouse stopped this session{paused.wasRunning ? " part way through a turn" : ""}. It
-          starts again by itself tomorrow, or sooner if you raise the limit in Settings, Sessions.
+          allows a day, so Codehouse stopped this session
+          {paused.wasRunning ? " part way through a turn" : ""}. It starts again by itself tomorrow,
+          or sooner if you raise the limit in Settings, Sessions.
         </span>
       ) : (
         <span>
@@ -1851,11 +1875,17 @@ function Composer({
         case "/btw": {
           // A side question, answered from what was said while the session carries on; never sent to it.
           if (!arg) {
-            toast("Write your question after /btw, for example /btw how far has it got?", { id: "btw" })
+            toast("Write your question after /btw, for example /btw how far has it got?", {
+              id: "btw",
+            })
             return
           }
           setText("")
-          void askSideQuestion(sessionId, arg, useStore.getState().transcripts[sessionId]?.items ?? [])
+          void askSideQuestion(
+            sessionId,
+            arg,
+            useStore.getState().transcripts[sessionId]?.items ?? [],
+          )
           return
         }
         case "/stop":
@@ -2453,7 +2483,29 @@ function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
     </div>
   )
 }
-const MARKDOWN_PARTS = { pre: CodeBlock }
+/**
+ * A link in Claude's words. One to a page on this computer opens in the pane's viewer when Settings, Viewer says so;
+ * every other link goes where it always went (the window sends it to your browser).
+ */
+function TranscriptLink({ href, children, ...rest }: ComponentProps<"a">) {
+  const openHere = useContext(OpenLocalPage)
+  const local = typeof href === "string" && LOCAL_PAGE.test(href)
+  return (
+    <a
+      {...rest}
+      href={href}
+      onClick={(e) => {
+        if (!local || !openHere || !readViewerPrefs().localLinks) return
+        e.preventDefault()
+        openHere(href!)
+      }}
+    >
+      {children}
+    </a>
+  )
+}
+
+const MARKDOWN_PARTS = { pre: CodeBlock, a: TranscriptLink }
 
 /**
  * What Claude said. Copy gives the Markdown to a plain editor and the formatted text to Word or Outlook, as the
