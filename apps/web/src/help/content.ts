@@ -537,6 +537,8 @@ Earlier sessions are listed for the main account only, for now. Your laptop's ma
 3. Choose **Update now**. Codehouse downloads only the parts that changed, checks them against its release signature, and builds the new version beside the one you are using. You can keep working while it does.
 4. Codehouse then closes, switches to the new version and opens again by itself, usually within a minute. Open sessions come back by themselves, in the same panes, with what was said in them and the settings they had. A turn that was running stops: send a message to carry on.
 
+**Settings, Changelog** shows what was new in every version: pick one from the list, which gives each version and the day it was released. It is read from GitHub when you open it (at most once an hour unless you choose Read it again), and the copy last read is shown when GitHub cannot be reached.
+
 With **Download a new version as soon as it is found** on (it is, unless you turn it off), step 3 has already happened by the time you see the button, so Update is quick. Nothing changes until you choose Update.
 
 **Skipping and going back**

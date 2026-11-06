@@ -2,6 +2,7 @@ import { ClaudeImport } from "../components/ClaudeImport"
 import { SECTION_KEY } from "../lib/settingsSection"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
+import { ChangelogPanel } from "../components/ChangelogPanel"
 import {
   AppearancePanel,
   GoTo,
@@ -347,6 +348,7 @@ export const SECTION_GROUPS = [
     [
       ["system", "System"],
       ["updates", "Updates"],
+      ["changelog", "Changelog"],
       ["developer", "Developer"],
     ],
   ],
@@ -461,6 +463,7 @@ export function Settings() {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const notify = useStore((s) => s.notify)
+  const appVersion = useStore((s) => s.update?.current)
   const setNotify = useStore((s) => s.setNotify)
   const [section, setSectionState] = useState<SectionId>(readSection)
   const [search, setSearch] = useState("")
@@ -1090,6 +1093,10 @@ export function Settings() {
 
             <Group section="updates" title="Updates" gap="gap-2">
               <UpdatesPanel />
+            </Group>
+
+            <Group section="changelog" title="Changelog" gap="gap-2">
+              <ChangelogPanel {...(appVersion ? { current: appVersion } : {})} />
             </Group>
 
             <Group section="account" title="Profile" gap="gap-3" changed={profileChanged}>

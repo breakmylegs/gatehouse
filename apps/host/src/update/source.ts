@@ -6,6 +6,7 @@
  */
 import crypto from "node:crypto"
 import fs from "node:fs"
+import { CHANGELOG_FILE, MAX_CHANGELOG } from "./changelog.js"
 import { UPDATE_FILE, UPDATE_SIGNATURE } from "./tree.js"
 
 /** Like UPDATE_FILE, never changed by a rename: every installed copy looks here. */
@@ -166,6 +167,30 @@ export class GitHubSource implements UpdateSource {
     if (!bytes || !sig) throw new UpdateError("A release file disappeared while it was read.")
     this.#assets.set(versionIn(bytes), assets)
     return { bytes, signature: sig.toString("utf8") }
+  }
+
+  /**
+   * The newest release's changelog.json (every release's notes), for the changelog in Settings. Unsigned, because it
+   * is only text to read; undefined when the release has none (one made before it existed).
+   */
+  async changelog(): Promise<Buffer | undefined> {
+    if (!this.#token())
+      return this.#small(
+        this.#web(`releases/latest/download/${CHANGELOG_FILE}`),
+        "application/octet-stream",
+        MAX_CHANGELOG,
+      )
+    const meta = await this.#small(
+      this.#api("releases/latest"),
+      "application/vnd.github+json",
+      4 * 1024 * 1024,
+    )
+    if (!meta) return undefined
+    const rel = JSON.parse(meta.toString("utf8")) as {
+      assets?: Array<{ name?: string; url?: string }>
+    }
+    const url = rel.assets?.find((a) => a.name === CHANGELOG_FILE)?.url
+    return url ? this.#small(url, "application/octet-stream", MAX_CHANGELOG) : undefined
   }
 
   async download(

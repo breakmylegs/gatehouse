@@ -34,6 +34,12 @@ import {
   type LegacyRoute,
 } from "../apps/host/src/update/publish.js"
 import { writeZip } from "../apps/host/src/update/zip.js"
+import {
+  CHANGELOG_FILE,
+  parseChangelog,
+  whatIsNew,
+  type ChangelogEntry,
+} from "../apps/host/src/update/changelog.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const REPO = "breakmylegs/gatehouse"
@@ -130,6 +136,29 @@ function step(
   })
 }
 
+/**
+ * Every published release's notes and date, from GitHub through gh (signed in already, since gh publishes the release),
+ * for the changelog in Settings (owner, 4 Nov). Drafts have no date and are left out.
+ */
+function publishedReleases(): ChangelogEntry[] {
+  const out = execFileSync(
+    "gh",
+    [
+      "api",
+      "--paginate",
+      `repos/${REPO}/releases?per_page=100`,
+      "--jq",
+      '.[] | select(.published_at != null) | {version: (.tag_name | ltrimstr("v")), date: .published_at, body: (.body // "")}',
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  )
+  return out
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { version: string; date: string; body: string })
+    .map((r) => ({ version: r.version, date: r.date, notes: whatIsNew(r.body) }))
+}
+
 const [cmd, a, b] = process.argv.slice(2)
 if (cmd === "version") {
   console.log(currentVersion().version)
@@ -157,6 +186,19 @@ if (cmd === "version") {
       2,
     ) + "\n",
   )
+  // Every release's notes, this one first, in one file the changelog in Settings reads (owner, 4 Nov).
+  const history = JSON.stringify(
+    {
+      releases: [
+        { version: v.version, date: new Date().toISOString(), notes: notes || "- Small fixes." },
+        ...publishedReleases().filter((r) => r.version !== v.version),
+      ],
+    },
+    null,
+    1,
+  )
+  if (!parseChangelog(history)?.length) throw new Error("The changelog could not be made.")
+  fs.writeFileSync(path.join(path.resolve(b), CHANGELOG_FILE), history + "\n")
   const routes = loadRoutes()
   if (!routes) throw new Error(NO_ROUTES)
   const setup = path.join(root, "dist-app", "Codehouse-Setup.exe")
@@ -196,6 +238,8 @@ if (cmd === "version") {
       "## The other files",
       "",
       "`changes.json` lists every change in this release with the files it touched and whether it is for every platform or Windows only, for forks of Codehouse on other systems (see docs/forks.md in the repository).",
+      "",
+      "`changelog.json` holds every release's notes and date, for the changelog in Codehouse's Settings.",
       "",
       "`update.json`, `update.sig`, the other `.json` and `.sig` files and the `codeh-*.zip` files are what Codehouse's updater downloads, for this version and for copies installed before a rename: only the parts that changed, checked against a signature. You do not need them.",
       "",
@@ -277,6 +321,7 @@ if (cmd === "version") {
     "update.json",
     "update.sig",
     "changes.json",
+    CHANGELOG_FILE,
     ...fs.readFileSync(path.join(out, "routes.txt"), "utf8").split(/\r?\n/).filter(Boolean),
     ...fs.readdirSync(out).filter((f) => /^codeh-.*\.zip$/.test(f)),
   ].map((f) => path.join(out, f))

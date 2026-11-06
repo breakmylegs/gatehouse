@@ -25,6 +25,7 @@ import { readItModels } from "./providers/it-models.js"
 import { registerHousekeepingRoutes } from "./housekeeping.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
+import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
@@ -157,6 +158,8 @@ export interface AdminContext {
   }
   /** Updates to Codehouse itself. Absent in tests that do not need it. */
   updates?: UpdateService
+  /** The changelog in Settings (owner, 4 Nov): every release's notes, read from the releases and kept for offline. */
+  changelog?: ChangelogStore
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -511,6 +514,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerFilesRoutes(app, ctx)
   registerAttachRoutes(app, ctx)
   registerUpdateRoutes(app, ctx)
+  if (ctx.changelog) registerChangelogRoutes(app, ctx.changelog)
   registerHousekeepingRoutes(app, ctx)
   registerExportRoutes(app, ctx)
   registerPromptRoutes(app, ctx)

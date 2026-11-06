@@ -89,6 +89,7 @@ import { SessionMetaStore } from "./session-meta.js"
 import { localDay, UsageStore } from "./usage.js"
 import { UpdateService } from "./update/service.js"
 import { GitHubSource } from "./update/source.js"
+import { ChangelogStore } from "./update/changelog.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -606,14 +607,20 @@ export function createHost(opts: HostOptions = {}): Host {
       ? fs.readFileSync(env.GATEHOUSE_UPDATE_KEY_FILE, "utf8")
       : undefined
   if (testBase) log(`updates come from ${testBase} (a test setting)`)
+  const updateSource = new GitHubSource({
+    token: () => updateToken.get(),
+    ...(testBase ? { base: testBase } : {}),
+  })
+  // The changelog in Settings: read from the same releases, only when Settings asks, and kept for offline.
+  const changelog = new ChangelogStore({
+    file: path.join(gatehouseDataDir(env), "updates", "changelog.json"),
+    fetch: () => updateSource.changelog(),
+  })
   const updates = new UpdateService({
     installDir,
     sourceVersion: installDir ? "0.0.0-source" : sourceVersion(),
     dir: path.join(gatehouseDataDir(env), "updates"),
-    source: new GitHubSource({
-      token: () => updateToken.get(),
-      ...(testBase ? { base: testBase } : {}),
-    }),
+    source: updateSource,
     ...(testKey ? { keys: [testKey] } : {}),
     settings: () => {
       const u = config.updates ?? { checkEveryMinutes: 30, skipped: [], downloadInBackground: true }
@@ -979,6 +986,7 @@ export function createHost(opts: HostOptions = {}): Host {
         tmpDir: os.tmpdir(),
       },
       updates,
+      changelog,
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,
