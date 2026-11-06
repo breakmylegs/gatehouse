@@ -1276,7 +1276,7 @@ export class Session extends EventEmitter<SessionEvents> {
         ...(until ? { until } : {}),
       },
       reason === "spend"
-        ? "Today's spending reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
+        ? "Today's extra spending beyond the plan reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
         : `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
       "rules",
     )

@@ -2,7 +2,7 @@ import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel, NtfySecretStore } from "./push/ntfy.js"
-import { LimitPauser, pausePoint } from "./limit-pause.js"
+import { ExtraSpendToday, LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
 import { RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
@@ -466,14 +466,27 @@ export function createHost(opts: HostOptions = {}): Host {
   manager.on("session", (info) => {
     if (info.state === "ended") chatRecorder.closed(info.id)
   })
+  const extraSpend = new ExtraSpendToday({
+    file: path.join(gatehouseDataDir(env), "extra-spend-today.json"),
+    today: () => localDay(new Date()),
+  })
   // Pauses every session at 95% of the plan's 5-hour limit and starts them again when it resets (owner, 31 Oct).
   const limitPauser = new LimitPauser({
     sessions: () => manager.liveSessions(),
     planUsage: (account, fresh) => manager.planUsage(account, fresh),
     pauseAt: () => pausePoint(config.planLimitPause),
-    // B20: today's spending over every session, and the cap on it.
-    spendToday: () => usage.snapshot().byDay[localDay(new Date())]?.costUsd ?? 0,
+    // B20: what was really spent today, and the cap on it. Owner, 6 Nov: a Claude session runs on the plan, so the
+    // API price it reports is not money spent and never counts; a model through a gateway may charge, so its does.
+    spendToday: () => {
+      const day = localDay(new Date())
+      const cells = usage.report(day, day).days[day] ?? {}
+      return manager
+        .liveSessions()
+        .filter((s) => s.info().local === true)
+        .reduce((n, s) => n + (cells[s.id]?.total.costUsd ?? 0), 0)
+    },
     spendCap: () => config.spendCapUsd,
+    extraToday: (account, used) => extraSpend.spent(account, used),
     autoResume: () => config.planLimitPause?.noAutoResume !== true,
     log,
   })

@@ -1437,7 +1437,8 @@ function PausedLine({
       {paused.reason === "spend" ? (
         // B20: today's spending over every session reached the cap in Settings.
         <span>
-          <strong>Paused.</strong> Today's spending reached the most Settings allows a day, so
+          <strong>Paused.</strong> Today's extra spending beyond your plan reached the most Settings
+          allows a day, so
           Codehouse stopped this session{paused.wasRunning ? " part way through a turn" : ""}. It
           starts again by itself tomorrow, or sooner if you raise the limit in Settings, Sessions.
         </span>

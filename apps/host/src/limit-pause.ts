@@ -1,3 +1,6 @@
+import fs from "node:fs"
+import path from "node:path"
+import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import type { PlanUsage } from "./plan-usage.js"
 
@@ -36,12 +39,76 @@ export interface LimitPauserDeps {
   now?: () => number
   /** Where to pause, read at each look (Settings): a percentage, or undefined for never. Absent: PAUSE_AT_PERCENT. */
   pauseAt?: () => number | undefined
-  /** B20: today's spending over every session, and the cap on it (undefined for none). */
+  /**
+   * B20: what was really spent today, and the cap on it (undefined for none). Owner, 6 Nov ("the sessions keep pausing
+   * even though we are nowhere near the limit"): work inside a plan costs nothing more, so the API price a session
+   * reports never counts. What counts is this, the sessions that pay as they go (a model through a gateway), plus the
+   * extra usage each account spent today, which the pauser adds from its plan reading through extraToday.
+   */
   spendToday?: () => number
   spendCap?: () => number | undefined
+  /** How much of an account's extra usage was spent today, from the amount used so far this month. */
+  extraToday?: (account: string, used: number) => number
   /** B26: whether a paused session starts again by itself when the limit resets. Absent: yes (owner, 31 Oct). */
   autoResume?: () => boolean
   log: (line: string) => void
+}
+
+/**
+ * How much extra usage each account spent today. Claude Code reports only the amount used so far this month, so the
+ * first amount seen each day is kept (in a file, so a restart does not forget it) and today's spending is what was used
+ * since. When the month starts again the amount falls, and the new amount becomes the start. A Host that first opens
+ * part way through a day counts from then.
+ */
+export class ExtraSpendToday {
+  #state: { day: string; start: Record<string, number> }
+  readonly #file: string | undefined
+  readonly #today: () => string
+  #writing: Promise<void> = Promise.resolve()
+
+  constructor(o: { file?: string; today: () => string }) {
+    this.#file = o.file
+    this.#today = o.today
+    this.#state = { day: o.today(), start: {} }
+    try {
+      const saved = o.file ? (JSON.parse(fs.readFileSync(o.file, "utf8")) as unknown) : undefined
+      const s = saved as { day?: unknown; start?: unknown } | undefined
+      if (s && typeof s.day === "string" && s.start && typeof s.start === "object")
+        this.#state = { ...s, day: s.day, start: s.start as Record<string, number> }
+    } catch {
+      // None yet, or unreadable: counting starts now.
+    }
+  }
+
+  spent(account: string, used: number): number {
+    const day = this.#today()
+    if (this.#state.day !== day) this.#state = { ...this.#state, day, start: {} }
+    const start = this.#state.start[account]
+    if (typeof start !== "number" || !Number.isFinite(start) || used < start) {
+      this.#state.start[account] = used
+      this.#save()
+      return 0
+    }
+    return used - start
+  }
+
+  #save(): void {
+    const file = this.#file
+    if (!file) return
+    const text = JSON.stringify(this.#state) + "\n"
+    this.#writing = this.#writing
+      .then(() => {
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        return writeFileAtomic(file, text)
+      })
+      // Kept in memory; the file is written again with the next start.
+      .catch(() => undefined)
+  }
+
+  /** Waits for the file to be written (tests). */
+  flushed(): Promise<void> {
+    return this.#writing
+  }
 }
 
 /** The pause point from the settings: off, a percentage, or the default. */
@@ -114,9 +181,23 @@ export class LimitPauser {
           .resume("limit-reset")
           .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
     const sessions = () => this.#d.sessions().filter((s) => !unprotected(s))
-    // B20: today's spending over every session, against the cap in Settings.
+    const byAccount = new Map<string, PauseTarget[]>()
+    for (const s of sessions()) byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
+    const usageOf = new Map<string, PlanUsage | undefined>()
+    for (const [account, list] of byAccount)
+      // Fresh when something is paused for the plan limit, so the reset is seen as soon as it happens.
+      usageOf.set(
+        account,
+        await this.#d.planUsage(
+          account,
+          list.some((s) => s.paused && s.paused.reason !== "spend"),
+        ),
+      )
+    // B20: what was really spent today, against the cap in Settings: pay-as-you-go sessions and extra usage.
     const cap = this.#d.spendCap?.()
-    const spent = this.#d.spendToday?.() ?? 0
+    let spent = this.#d.spendToday?.() ?? 0
+    for (const [account, u] of usageOf)
+      if (u?.extra && this.#d.extraToday) spent += this.#d.extraToday(account, u.extra.used)
     const overSpend = cap !== undefined && spent >= cap
     if (overSpend) {
       const midnight = new Date(now)
@@ -129,8 +210,6 @@ export class LimitPauser {
     }
     // Off pauses nothing new; a session paused already still starts again at the reset.
     const at = this.#d.pauseAt ? this.#d.pauseAt() : PAUSE_AT_PERCENT
-    const byAccount = new Map<string, PauseTarget[]>()
-    for (const s of sessions()) byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
     for (const [account, list] of byAccount) {
       // A pause for spending is lifted at midnight or when the cap is raised or removed, not by the plan limit.
       const spendPaused = list.filter((s) => s.paused?.reason === "spend")
@@ -142,8 +221,7 @@ export class LimitPauser {
           .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
       }
       const paused = list.filter((s) => s.paused && s.paused.reason !== "spend")
-      // Fresh when something is paused, so the reset is seen as soon as it happens.
-      const usage = await this.#d.planUsage(account, paused.length > 0)
+      const usage = usageOf.get(account)
       // Owner, 5 Nov: with extra usage on and room left, the plan limit stops nothing: work carries on into extra
       // usage, as Claude Code does. Only extra usage running out (or the spending cap) pauses.
       const limit = extraLeft(usage) ? { percent: 0 } : fiveHour(usage)

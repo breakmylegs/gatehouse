@@ -839,7 +839,7 @@ export function Settings() {
               </Field>
               <Field
                 label="Most spending a day, over every session"
-                help="What Claude costs at API prices, as each session reports it. At the limit every session pauses until midnight, or until you raise it; Start now starts one sooner. Models on this computer cost nothing."
+                help="Only money really spent: extra usage beyond your plan, and models through a gateway that charge. Work inside your plan costs nothing more, so it never counts; the plan limit has its own pause. At the limit every session pauses until midnight, or until you raise it; Start now starts one sooner."
               >
                 <select
                   className="field"

@@ -783,7 +783,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
         : `Extreme approval: carrying on by itself, turn ${String(data.turn)}${typeof data.of === "number" ? ` of ${data.of}` : ""}.`
     case "paused":
       if (data.reason === "spend")
-        return "Paused: today's spending reached the most Settings allows a day. It starts again by itself tomorrow."
+        return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
     case "resumed":
       return data.by === "you"
