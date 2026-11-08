@@ -33,6 +33,7 @@ import { inClaudeRange, rangeText } from "./claude-range.js"
 import type { Worktrees } from "./worktrees.js"
 import type { SessionLink } from "./about-session.js"
 import { LoopGuard, LOOP_REPEATS } from "./loop-guard.js"
+import { STUCK_MS, StuckWatch } from "./stuck-watch.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -272,6 +273,7 @@ export interface SessionEvents {
         | "carry_on_end"
         | "load"
         | "queue_empty"
+        | "stuck"
       data: Record<string, unknown>
     },
   ]
@@ -501,6 +503,11 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #written = new Set<string>()
   /** G19: the same failure again and again, with nothing changed in between. */
   readonly #loop = new LoopGuard()
+  /** O16: a turn with nothing from Claude for two minutes, and nothing waiting for you, is said to be possibly stuck. */
+  readonly #stuck = new StuckWatch({
+    waiting: () => this.#deps.broker.countFor(this.id) > 0,
+    onStuck: () => this.emit("event", { type: "stuck", data: { minutes: STUCK_MS / 60_000 } }),
+  })
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
@@ -1018,6 +1025,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   #onMessage(msg: SDKMessage): void {
     const m = msg as unknown as Record<string, unknown>
+    // O16: anything from Claude means the turn is alive.
+    this.#stuck.seen()
     if (typeof m.session_id === "string" && m.session_id !== this.#sdkSessionId) {
       this.#sdkSessionId = m.session_id
       this.emit("state", this.info())
@@ -1056,6 +1065,7 @@ export class Session extends EventEmitter<SessionEvents> {
     if (msg.type === "result") {
       this.#deps.usage.record(this.id, this.project, m)
       this.#running = false
+      this.#stuck.stop()
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
       // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
@@ -1133,6 +1143,7 @@ export class Session extends EventEmitter<SessionEvents> {
       throw new Error(`The session has ${this.#state}`)
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
     this.#running = true
+    this.#stuck.start()
     this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
     this.#input.push(text)
   }
@@ -1233,6 +1244,7 @@ export class Session extends EventEmitter<SessionEvents> {
     await this.#q?.interrupt()
     if (this.#state === "running" || this.#state === "waiting") {
       this.#running = false
+      this.#stuck.stop()
       this.#setState("idle")
     }
   }
@@ -1589,6 +1601,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   async close(): Promise<void> {
+    this.#stuck.stop()
     this.#deps.broker.cancelSession(this.id, "The session was closed")
     this.#input.end()
     this.#q?.close()

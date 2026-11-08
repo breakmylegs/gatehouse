@@ -74,6 +74,7 @@ import { CheckpointManager } from "./checkpoints.js"
 import { createCompanionSdkServer } from "./companion-server.js"
 import { lookAtPage } from "./page-look.js"
 import { readAbout, type AboutDeps } from "./about-session.js"
+import { noteFor } from "./carry-on.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
 import { computeDigest } from "./analytics.js"
@@ -756,7 +757,7 @@ export function createHost(opts: HostOptions = {}): Host {
       void phone
         .notify("notify", { title: "Claude", body: String(data.text), project })
         .catch(() => undefined)
-    else if (type === "queue_empty")
+    else if (type === "queue_empty") {
       void phone
         .notify("notify", {
           title: "Build queue empty",
@@ -764,7 +765,16 @@ export function createHost(opts: HostOptions = {}): Host {
           project,
         })
         .catch(() => undefined)
-    else if (type === "stop")
+      void ntfy.note("build queue empty", "Claude has finished its queue.", project)
+    } else if (type === "carry_on_end" || type === "stuck") {
+      // O16: the end of an Extreme run, and a turn that may be stuck, reach your phone too. A run that ended because
+      // the queue is empty is told above, and one you stopped needs no telling.
+      const words = noteFor(type, data)
+      if (words) {
+        void phone.notify("notify", { ...words, project }).catch(() => undefined)
+        void ntfy.note(words.title.toLowerCase(), words.body, project)
+      }
+    } else if (type === "stop")
       void phone
         .notify("stop", { title: "Session finished", body: "", project })
         .catch(() => undefined)

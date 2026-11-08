@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { CarryOn, carryOnLimits, recommendedAnswers, saysQueueEmpty } from "../src/carry-on.js"
+import {
+  CarryOn,
+  carryOnLimits,
+  noteFor,
+  recommendedAnswers,
+  saysQueueEmpty,
+} from "../src/carry-on.js"
 
 const run = (turns = 3, usd = 5) => new CarryOn(() => ({ turns, usd }))
 const ok = (text = "Done the next item.", costUsd?: number) => ({
@@ -17,6 +23,19 @@ describe("Extreme approval carrying on by itself", () => {
     expect(c.next(ok("All built.\nQUEUE EMPTY"))).toMatchObject({ go: false, why: "done" })
     expect(c.next(ok())).toBeUndefined()
     expect(c.status()).toMatchObject({ turns: 2, ended: "done" })
+  })
+
+  it("tells the phone why a run ended and when a turn may be stuck, and nothing for a queue emptied or a stop (O16)", () => {
+    expect(noteFor("carry_on_end", { why: "turns", turns: 200 })).toMatchObject({
+      title: "Stopped at the turn limit",
+      body: expect.stringContaining("after 200 automatic turns"),
+    })
+    expect(noteFor("carry_on_end", { why: "spend", turns: 1 })?.body).toContain("1 automatic turn,")
+    for (const why of ["goal", "stalled", "error"])
+      expect(noteFor("carry_on_end", { why, turns: 3 }), why).toBeDefined()
+    expect(noteFor("carry_on_end", { why: "done", turns: 3 })).toBeUndefined()
+    expect(noteFor("carry_on_end", { why: "stopped", turns: 3 })).toBeUndefined()
+    expect(noteFor("stuck", {})?.title).toBe("Possibly stuck")
   })
 
   it("counts QUEUE EMPTY and GOAL MET only as the reply's last line, never quoted part way through (O11)", () => {

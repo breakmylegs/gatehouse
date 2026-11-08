@@ -327,6 +327,31 @@ export class NtfyChannel {
     }
   }
 
+  /**
+   * A plain note with no buttons (backlog O16): a run of Extreme approval ended, a session may be stuck, the build queue
+   * is empty. It carries the project and a few words, redacted first, as a request notification may (invariant 9).
+   */
+  async note(title: string, body: string, project: string): Promise<void> {
+    const s = this.#d.settings()
+    if (!s?.enabled) return
+    try {
+      const auth = await ntfyAuthHeader(s, this.#d.secret)
+      const res = await (this.#d.fetchImpl ?? fetch)(s.server.replace(/\/$/, ""), {
+        method: "POST",
+        headers: { "content-type": "application/json", ...auth },
+        body: JSON.stringify({
+          topic: s.topic,
+          title: this.#d.redact(`Codehouse: ${project}: ${title}`),
+          message: this.#d.redact(body),
+          priority: 3,
+        }),
+      })
+      if (!res.ok) throw new Error(`ntfy answered ${res.status}`)
+    } catch (e) {
+      this.#d.log(`ntfy: a note was not sent: ${(e as Error).message}`)
+    }
+  }
+
   /** Sends a plain test message, with no buttons. */
   async test(): Promise<{ ok: boolean; error?: string; id?: string; at?: string }> {
     const s = this.#d.settings()

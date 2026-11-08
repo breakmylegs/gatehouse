@@ -259,6 +259,26 @@ describe("ntfy push", () => {
   })
 })
 
+describe("plain notes (backlog O16)", () => {
+  it("sends a note with no buttons, its words redacted, and nothing when switched off", async () => {
+    const t = setup()
+    await t.channel.note(
+      "possibly stuck",
+      "Nothing from Claude about AcmeCorp for two minutes.",
+      "AcmeCorp portal",
+    )
+    const body = t.posts.at(-1)!.body
+    expect(body.topic).toBe(t.settings.topic)
+    expect(body.actions).toBeUndefined()
+    expect(JSON.stringify(body)).not.toContain("AcmeCorp")
+    expect(String(body.title)).toContain("possibly stuck")
+    const sent = t.posts.length
+    t.settings.enabled = false
+    await t.channel.note("x", "y", "z")
+    expect(t.posts.length).toBe(sent)
+  })
+})
+
 describe("topics and the test notification", () => {
   it("says when the topic is the older kind, and keeps sending to it until you replace it", async () => {
     const t = setup()
