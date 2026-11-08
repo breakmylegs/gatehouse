@@ -53,7 +53,14 @@ export interface NtfyStatus {
    * offers a new one, and only you replace it, because the phone has to subscribe again.
    */
   oldStyle?: boolean
+  /** How it listens: a live stream, or asking every few seconds where the server holds streams back. */
+  mode?: "stream" | "poll"
 }
+
+/** How long the live stream may take to begin before Codehouse asks instead, and how often it asks then. */
+export const STREAM_WAIT_MS = 15_000
+export const POLL_EVERY_MS = 3_000
+const POLL_TIMEOUT_MS = 20_000
 
 export interface NtfyDeps {
   broker: Broker
@@ -71,6 +78,9 @@ export interface NtfyDeps {
   onChange?: () => void
   /** The token or password for a server that needs a sign-in, from its sealed store. */
   secret?: () => Promise<string | undefined>
+  /** Tests only: STREAM_WAIT_MS and POLL_EVERY_MS. */
+  streamWaitMs?: number
+  pollEveryMs?: number
 }
 
 /**
@@ -171,6 +181,12 @@ export class NtfyChannel {
   readonly #d: NtfyDeps
   readonly #codes: PushCodes
   #abort: AbortController | undefined
+  /**
+   * Which listening loop is the current one. A user's report (8 Nov, a self-hosted ntfy with a sign-in): saving the
+   * settings stops and starts at once, the old loop saw itself still running, said "Listening failed: This operation
+   * was aborted" and carried on beside the new one, each replacing the other's connection, so it never settled.
+   */
+  #generation = 0
   #status: NtfyStatus = { enabled: false, listening: false, sent: 0 }
   #onCreated = (v: PendingView) => void this.notify(v)
   #onResolved = ({ id }: { id: string }) => this.#codes.forget(id)
@@ -204,12 +220,14 @@ export class NtfyChannel {
     this.#running = true
     this.#d.broker.on("created", this.#onCreated)
     this.#d.broker.on("resolved", this.#onResolved)
-    void this.#listen()
+    void this.#listen(++this.#generation)
     this.#d.onChange?.()
   }
 
   stop(): void {
     this.#running = false
+    // The loop listening now is over: one started later must not be mistaken for it (a save stops and starts at once).
+    this.#generation++
     this.#d.broker.off("created", this.#onCreated)
     this.#d.broker.off("resolved", this.#onResolved)
     this.#abort?.abort()
@@ -219,12 +237,14 @@ export class NtfyChannel {
     this.#d.onChange?.()
   }
 
-  /** Listening started or stopped. */
-  #listening(listening: boolean, lastError?: string): void {
+  /** Listening started or stopped, and how: over a live stream, or by asking every few seconds. */
+  #listening(listening: boolean, lastError?: string, mode?: "stream" | "poll"): void {
     const was = this.#status.listening
+    const { mode: _old, ...rest } = this.#status
     this.#status = {
-      ...this.#status,
+      ...rest,
       listening,
+      ...(listening && mode ? { mode } : {}),
       ...(lastError !== undefined || listening ? { lastError } : {}),
     }
     if (listening !== was) this.#d.onChange?.()
@@ -354,24 +374,79 @@ export class NtfyChannel {
     return this.#codes.answer(decision, id, given)
   }
 
-  /** Listens to the reply topic over an outbound stream, reconnecting with a growing pause. */
-  async #listen(): Promise<void> {
+  /** One line of the reply topic's JSON: moves on past it, and answers a request when it is a reply. */
+  #line(line: string, since: { id: string }): void {
+    if (!line.trim()) return
+    try {
+      const msg = JSON.parse(line) as { id?: string; event?: string; message?: string }
+      if (msg.id) since.id = msg.id
+      if (msg.event === "message" && typeof msg.message === "string") this.handleReply(msg.message)
+    } catch {
+      // A line that is not JSON is ignored.
+    }
+  }
+
+  /**
+   * Listens to the reply topic: over a live outbound stream where the server sends one, and otherwise by asking for new
+   * replies every few seconds. A user's report (8 Nov): a self-hosted ntfy behind a proxy that holds back streamed
+   * answers never sent the stream's first bytes, so Codehouse waited forever and never listened. If the stream has not
+   * begun within STREAM_WAIT_MS, it asks (poll=1) instead, which such proxies pass at once.
+   */
+  async #listen(generation: number): Promise<void> {
     let pause = 1000
-    let since = String(Math.floor((this.#d.now ?? Date.now)() / 1000))
-    while (this.#running) {
+    const since = { id: String(Math.floor((this.#d.now ?? Date.now)() / 1000)) }
+    let polling = false
+    // Only the current loop may run, change the status or reconnect; an older one just ends.
+    const current = () => this.#running && generation === this.#generation
+    while (current()) {
       const s = this.#d.settings()
       if (!s?.enabled) break
-      this.#abort = new AbortController()
+      const abort = new AbortController()
+      this.#abort = abort
+      const base = `${s.server.replace(/\/$/, "")}/${s.replyTopic}/json`
+      let waitedTooLong = false
       try {
         const auth = await ntfyAuthHeader(s, this.#d.secret)
-        const res = await (this.#d.fetchImpl ?? fetch)(
-          `${s.server.replace(/\/$/, "")}/${s.replyTopic}/json?since=${since}`,
-          { signal: this.#abort.signal, headers: auth },
+        if (!current()) break
+        const timer = setTimeout(
+          () => {
+            waitedTooLong = true
+            abort.abort()
+          },
+          polling ? POLL_TIMEOUT_MS : (this.#d.streamWaitMs ?? STREAM_WAIT_MS),
         )
-        if (!res.ok || !res.body) throw new Error(`ntfy answered ${res.status}`)
-        this.#listening(true)
+        let res: Response
+        try {
+          res = await (this.#d.fetchImpl ?? fetch)(
+            polling ? `${base}?poll=1&since=${since.id}` : `${base}?since=${since.id}`,
+            { signal: abort.signal, headers: auth },
+          )
+        } finally {
+          if (!polling) clearTimeout(timer)
+        }
+        if (!res.ok || (!polling && !res.body))
+          throw new Error(
+            res.status === 401 || res.status === 403
+              ? `ntfy refused the sign-in for the reply topic (${res.status}): this user must be allowed to read it`
+              : `ntfy answered ${res.status}`,
+          )
+        if (!current()) {
+          abort.abort()
+          break
+        }
+        if (polling) {
+          // One answer with every reply since the last, then the connection closes.
+          const text = await res.text()
+          clearTimeout(timer)
+          for (const line of text.split("\n")) this.#line(line, since)
+          this.#listening(true, undefined, "poll")
+          pause = 1000
+          await new Promise((r) => setTimeout(r, this.#d.pollEveryMs ?? POLL_EVERY_MS))
+          continue
+        }
+        this.#listening(true, undefined, "stream")
         pause = 1000
-        const reader = res.body.getReader()
+        const reader = res.body!.getReader()
         const decoder = new TextDecoder()
         let buf = ""
         for (;;) {
@@ -380,25 +455,27 @@ export class NtfyChannel {
           buf += decoder.decode(value, { stream: true })
           let nl: number
           while ((nl = buf.indexOf("\n")) >= 0) {
-            const line = buf.slice(0, nl).trim()
+            this.#line(buf.slice(0, nl), since)
             buf = buf.slice(nl + 1)
-            if (!line) continue
-            try {
-              const msg = JSON.parse(line) as { id?: string; event?: string; message?: string }
-              if (msg.id) since = msg.id
-              if (msg.event === "message" && typeof msg.message === "string")
-                this.handleReply(msg.message)
-            } catch {
-              // A line that is not JSON is ignored.
-            }
           }
         }
       } catch (e) {
-        if (!this.#running) break
-        this.#listening(false, `Listening failed: ${(e as Error).message}`)
+        if (!current()) break
+        if (waitedTooLong && !polling) {
+          // The stream never began: the server, or a proxy in front of it, holds it back. Ask instead.
+          polling = true
+          this.#d.log(
+            "ntfy: the live stream did not begin, so Codehouse asks for replies every few seconds",
+          )
+          continue
+        }
+        this.#listening(
+          false,
+          `Listening failed: ${waitedTooLong ? "the server did not answer in time" : (e as Error).message}`,
+        )
       }
+      if (!current()) break
       this.#listening(false)
-      if (!this.#running) break
       await new Promise((r) => setTimeout(r, pause))
       pause = Math.min(pause * 2, 30_000)
     }

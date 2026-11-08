@@ -16,6 +16,8 @@ interface NtfyStatus {
   auth?: "token" | "basic"
   user?: string
   missingSecret?: boolean
+  /** Listening over a live stream, or by asking every few seconds. */
+  mode?: "stream" | "poll"
 }
 
 const LIMITS = [
@@ -237,7 +239,9 @@ export function PushPanel() {
           </ol>
           <p aria-live="polite" className="sign m-0 text-[14px]">
             {st?.listening
-              ? "Listening for your answers."
+              ? st.mode === "poll"
+                ? "Listening for your answers, by asking the server every few seconds: it, or a proxy in front of it, holds back live updates."
+                : "Listening for your answers."
               : "Not listening yet. It retries by itself."}{" "}
             Sent {st?.sent ?? 0} request notification{st?.sent === 1 ? "" : "s"} this run.
           </p>

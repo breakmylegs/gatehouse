@@ -172,6 +172,91 @@ describe("ntfy push", () => {
     expect((await t.decision).outcome).toBe("allow")
     listening.stop()
   })
+
+  /** A stream that stays open, as ntfy's does, and ends with an abort error when its request is aborted. */
+  const openStream = (open: Set<AbortSignal>) =>
+    (async (url: string, init?: RequestInit) => {
+      if (!String(url).includes("/json")) return new Response("{}", { status: 200 })
+      const signal = init?.signal as AbortSignal
+      open.add(signal)
+      const body = new ReadableStream({
+        start(c) {
+          signal.addEventListener("abort", () => {
+            open.delete(signal)
+            c.error(new DOMException("This operation was aborted", "AbortError"))
+          })
+        },
+      })
+      return new Response(body, { status: 200 })
+    }) as typeof fetch
+
+  it("keeps one listener after a save stops and starts it, and never reports its own stop as a failure (user report, 8 Nov)", async () => {
+    const t = setup()
+    const open = new Set<AbortSignal>()
+    const channel = new NtfyChannel({
+      broker: t.broker,
+      settings: () => t.settings,
+      redact: (x) => x,
+      expiryMs: () => 60_000,
+      onRefused: () => undefined,
+      log: () => undefined,
+      fetchImpl: openStream(open),
+    })
+    channel.start()
+    await vi.waitFor(() => expect(channel.status().listening).toBe(true))
+    // What saving the settings does.
+    channel.stop()
+    channel.start()
+    await vi.waitFor(() => expect(channel.status().listening).toBe(true))
+    await new Promise((r) => setTimeout(r, 1500))
+    expect(channel.status().lastError).toBeUndefined()
+    expect(channel.status()).toMatchObject({ listening: true, mode: "stream" })
+    expect(open.size).toBe(1)
+    channel.stop()
+    expect(open.size).toBe(0)
+  })
+
+  it("asks for replies every few seconds when the server holds the live stream back (a proxy that buffers)", async () => {
+    const t = setup()
+    await t.channel.notify(t.view)
+    const allow = bodies(t.posts[0]!)[0]![1]
+    let asked = 0
+    const channel = new NtfyChannel({
+      broker: t.broker,
+      settings: () => t.settings,
+      redact: (x) => x,
+      expiryMs: () => 60_000,
+      onRefused: () => undefined,
+      log: () => undefined,
+      streamWaitMs: 50,
+      pollEveryMs: 20,
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        const u = String(url)
+        if (u.includes("poll=1")) {
+          asked++
+          return new Response(
+            asked === 2
+              ? JSON.stringify({ id: "m1", event: "message", message: allow }) + "\n"
+              : "",
+            { status: 200 },
+          )
+        }
+        // The live stream: its first bytes never come, until the request is given up.
+        return new Promise<Response>((_resolve, reject) =>
+          (init?.signal as AbortSignal).addEventListener("abort", () =>
+            reject(new DOMException("This operation was aborted", "AbortError")),
+          ),
+        )
+      }) as typeof fetch,
+    })
+    const original = t.channel.handleReply.bind(t.channel)
+    channel.handleReply = (text: string) => original(text)
+    channel.start()
+    expect((await t.decision).outcome).toBe("allow")
+    expect(channel.status()).toMatchObject({ listening: true, mode: "poll" })
+    expect(channel.status().lastError).toBeUndefined()
+    channel.stop()
+  })
 })
 
 describe("topics and the test notification", () => {
