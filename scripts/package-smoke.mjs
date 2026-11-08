@@ -30,6 +30,10 @@ const env = {
   GATEHOUSE_HOST_PORT: "0",
 }
 
+// The start-time budget (docs/performance.md): a fresh copy, as an install or update leaves it, ready in this long.
+// Over it is said, not failed, because another program busy on the computer slows a start too.
+const START_BUDGET_MS = 30_000
+const startedAt = Date.now()
 const con = spawn(path.join(dist, "Codehouse-Console.exe"), ["--no-browser"], {
   env,
   stdio: ["ignore", "pipe", "pipe"],
@@ -45,6 +49,20 @@ try {
     if (!url) await new Promise((r) => setTimeout(r, 300))
   }
   if (!url) throw new Error(`the packaged copy did not start:\n${out.slice(-2000)}`)
+  const startMs = Date.now() - startedAt
+  say(
+    `${startMs <= START_BUDGET_MS ? "ok  " : "SLOW"} started in ${(startMs / 1000).toFixed(1)} s (budget ${START_BUDGET_MS / 1000} s)`,
+  )
+  // Kept beside the package (not in git), one line a check, so each release's start time can be compared.
+  try {
+    const version = JSON.parse(fs.readFileSync(path.join(dist, "release.json"), "utf8")).version
+    fs.appendFileSync(
+      path.join(path.dirname(dist), "start-times.jsonl"),
+      JSON.stringify({ at: new Date().toISOString(), version, startMs, budgetMs: START_BUDGET_MS }) + "\n",
+    )
+  } catch {
+    // only a record
+  }
   const origin = url.slice(0, url.indexOf("/#"))
   const token = url.slice(url.indexOf("#token=") + 7)
   const call = async (method, p, body) => {

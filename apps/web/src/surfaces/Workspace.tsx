@@ -59,6 +59,7 @@ import { PlanMeter } from "../components/PlanMeter"
 import { MODELS, StartProgress } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
+import { MoreLines, shownLines } from "../components/MoreLines"
 import { PictureViewer } from "../components/PictureViewer"
 import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
@@ -2883,32 +2884,38 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
 
 /** Line diff with +/- markers as well as colour, so it reads in any theme and without colour. */
 function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
-  const parts = useMemo(() => diffLines(oldText, newText), [oldText, newText])
-  return (
-    <pre className="cmd max-h-96 overflow-auto !p-0" aria-label="Changes">
-      {parts.flatMap((p, i) =>
+  const [all, setAll] = useState(false)
+  const lines = useMemo(
+    () =>
+      diffLines(oldText, newText).flatMap((p, i) =>
         p.value
           .replace(/\n$/, "")
           .split("\n")
-          .map((line, j) => (
-            <div
-              key={`${i}-${j}`}
-              className={clsx(
-                "px-3",
-                p.added && "bg-hi font-semibold",
-                p.removed && "text-sev line-through decoration-1",
-              )}
-            >
-              <span aria-hidden="true" className="mr-2 inline-block w-3 select-none">
-                {p.added ? "+" : p.removed ? "-" : " "}
-              </span>
-              <span className="sr-only">
-                {p.added ? "Added: " : p.removed ? "Removed: " : "Unchanged: "}
-              </span>
-              {line}
-            </div>
-          )),
-      )}
+          .map((line, j) => ({ key: `${i}-${j}`, line, added: p.added, removed: p.removed })),
+      ),
+    [oldText, newText],
+  )
+  return (
+    <pre className="cmd max-h-96 overflow-auto !p-0" aria-label="Changes">
+      {shownLines(lines, all).map((l) => (
+        <div
+          key={l.key}
+          className={clsx(
+            "px-3",
+            l.added && "bg-hi font-semibold",
+            l.removed && "text-sev line-through decoration-1",
+          )}
+        >
+          <span aria-hidden="true" className="mr-2 inline-block w-3 select-none">
+            {l.added ? "+" : l.removed ? "-" : " "}
+          </span>
+          <span className="sr-only">
+            {l.added ? "Added: " : l.removed ? "Removed: " : "Unchanged: "}
+          </span>
+          {l.line}
+        </div>
+      ))}
+      <MoreLines total={lines.length} all={all} onShow={() => setAll(true)} />
     </pre>
   )
 }

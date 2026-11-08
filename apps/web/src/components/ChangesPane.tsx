@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { clock } from "../lib/format"
 import { structuredPatch } from "diff"
 import { DiffView } from "./CodeViews"
+import { MoreLines, shownLines } from "./MoreLines"
 
 /** One change in a file (as packages/shared/src/node/checkpoint.ts counts them). */
 interface Hunk {
@@ -393,6 +394,7 @@ function ChangeList({
 }
 
 function DiffText({ text }: { text: string }) {
+  const [all, setAll] = useState(false)
   if (!text)
     return (
       <p className="m-0 border-t border-line px-2.5 py-2 text-[12.5px] text-mut">
@@ -402,7 +404,7 @@ function DiffText({ text }: { text: string }) {
   const lines = text.split("\n").filter((l) => !/^(diff --git|index |--- |\+\+\+ )/.test(l))
   return (
     <pre className="m-0 max-h-80 overflow-auto border-t border-line bg-s2 py-1 text-[12px] leading-[1.5]">
-      {lines.map((l, i) => (
+      {shownLines(lines, all).map((l, i) => (
         <div
           key={i}
           className={clsx(
@@ -415,6 +417,7 @@ function DiffText({ text }: { text: string }) {
           {l || " "}
         </div>
       ))}
+      <MoreLines total={lines.length} all={all} onShow={() => setAll(true)} />
     </pre>
   )
 }
