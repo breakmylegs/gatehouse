@@ -94,6 +94,44 @@ describe("@ for files in the prompt box (backlog F15)", () => {
   })
 })
 
+describe("/tell another session (backlog G18)", () => {
+  it("sends your message to the open session with that code, and refuses one that is not open", async () => {
+    const { sessionCode } = await import("../src/lib/codes")
+    const other = {
+      id: "s2",
+      cwd: "C:/dev/api",
+      project: "api",
+      mode: "default" as const,
+      state: "idle" as const,
+      pendingApprovals: 0,
+      createdAt: "2026-11-03T09:00:00Z",
+    }
+    useStore.setState({ sessions: { ...useStore.getState().sessions, s2: other as never } })
+    const code = sessionCode(other)
+    render(<Workspace />)
+    const box = screen.getByRole("textbox", { name: "Prompt" }) as HTMLTextAreaElement
+    fireEvent.change(box, {
+      target: { value: `/tell ${code.toLowerCase()} run the tests\nand report` },
+    })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await waitFor(() =>
+      expect(send).toHaveBeenCalledWith({
+        type: "tell",
+        from: "s1",
+        to: "s2",
+        text: "run the tests\nand report",
+      }),
+    )
+    vi.mocked(send).mockClear()
+    fireEvent.change(box, { target: { value: "/tell ZZ 999 hello" } })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(vi.mocked(send).mock.calls.some(([c]) => (c as { type?: string }).type === "tell")).toBe(
+      false,
+    )
+  })
+})
+
 describe("the prompt box", () => {
   it("starts one line high, with the add and send buttons inside the same box", () => {
     render(<Workspace />)

@@ -192,6 +192,9 @@ describe("a session in a worktree", () => {
     expect(prompt()).toContain(`git push -u origin ${w.branch}`)
     expect(prompt()).toContain("gh pr create --draft")
     expect(prompt()).toContain("gh pr checks")
+    // G15: a cap on attempts, and never merging by itself.
+    expect(prompt()).toContain("at most 3 times in all")
+    expect(prompt()).toContain("Never merge the pull request yourself")
     await session.close()
     // Not a draft when turned off; and a session outside a worktree is never told to push anything.
     config.pullRequests = { create: true, draft: false }

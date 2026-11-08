@@ -480,6 +480,33 @@ export class HostServer {
       case "prompt":
         this.#session(cmd.sessionId).prompt(cmd.text)
         return undefined
+      case "tell": {
+        // G18: your message to another session, sent from this one's prompt box. It is yours, so it is a prompt like
+        // any other there; the record says where it came from and went, and how long it was, never the words.
+        if (cmd.from === cmd.to)
+          throw new Error("Use the prompt box itself to talk to this session.")
+        const target = this.#session(cmd.to)
+        this.#session(cmd.from)
+        target.prompt(cmd.text)
+        await this.#opts.app.audit.record({
+          session: cmd.to,
+          event: "message_relayed",
+          channel: "desktop",
+          tool: "session",
+          cwd: target.cwd,
+          input: { from: cmd.from, to: cmd.to, chars: cmd.text.length },
+          verdict: {
+            outcome: "allow",
+            ruleId: "message-relayed",
+            reason: "You sent a message to this session from another session's prompt box (/tell).",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        return undefined
+      }
       case "interrupt":
         await this.#session(cmd.sessionId).interrupt()
         return undefined

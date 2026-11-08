@@ -4,7 +4,7 @@ import path from "node:path"
 import http from "node:http"
 import net from "node:net"
 import os from "node:os"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import WebSocket from "ws"
 import type { Health, ServerEvent } from "@gatehouse/shared"
 import { WS_SUBPROTOCOL } from "@gatehouse/shared"
@@ -635,6 +635,32 @@ describe("commands over the WebSocket", () => {
     await c.waitFor("audit", (e) => (e.record as { event: string }).event === "files_undone")
     await c.send({ type: "close_session", sessionId })
   }, 240_000)
+
+  it("sends a message from one session's prompt box to another and records where, never the words (G18)", async () => {
+    s.sdk.turn = async () => undefined
+    const a = (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    const b = (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    const told = await c.send({
+      type: "tell",
+      from: a.sessionId,
+      to: b.sessionId,
+      text: "run the secret tests",
+    })
+    expect(told.ok).toBe(true)
+    await vi.waitFor(() =>
+      expect(s.sdk.queries.some((q) => q.prompts.includes("run the secret tests"))).toBe(true),
+    )
+    const rec = await c.waitFor(
+      "audit",
+      (e) => (e.record as { event: string }).event === "message_relayed",
+    )
+    expect(JSON.stringify(rec.record)).not.toContain("secret tests")
+    expect((await c.send({ type: "tell", from: a.sessionId, to: a.sessionId, text: "x" })).ok).toBe(
+      false,
+    )
+    await c.send({ type: "close_session", sessionId: a.sessionId })
+    await c.send({ type: "close_session", sessionId: b.sessionId })
+  }, 120_000)
 
   it("lists past sessions and refreshes the account", async () => {
     expect((await c.send({ type: "list_history", dir: "C:/x" })).data).toEqual([

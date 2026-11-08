@@ -121,6 +121,10 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
   { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
+  {
+    cmd: "/tell",
+    help: "Send a message to another session by its code, e.g. /tell GT 407 run the tests",
+  },
   { cmd: "/stop", help: "Stop the turn and anything in the background" },
   { cmd: "/close", help: "End this session" },
 ]
@@ -1930,6 +1934,40 @@ function Composer({
             useStore.getState().transcripts[sessionId]?.items ?? [],
           )
           return
+        }
+        case "/tell": {
+          // G18: a message to another open session, by its code, without leaving this one.
+          const m = /^\/tell\s+([A-Za-z]{2,3})\s*(\d{3})\s+([\s\S]+)$/i.exec(t)
+          if (!m) {
+            toast(
+              "Write /tell, a session's code and your message, for example /tell GT 407 run the tests",
+              {
+                id: "tell",
+              },
+            )
+            return
+          }
+          const code = `${m[1]!.toUpperCase()} ${m[2]}`
+          const target = Object.values(useStore.getState().sessions).find(
+            (s) => sessionCode(s) === code && s.state !== "ended" && s.state !== "error",
+          )
+          if (!target || target.id === sessionId) {
+            toast.error(
+              target ? "That is this session: just write here." : `No open session is ${code}.`,
+            )
+            return
+          }
+          r = await send({ type: "tell", from: sessionId, to: target.id, text: m[3]! })
+          if (r.ok) {
+            addUserText(
+              target.id,
+              m[3]!,
+              undefined,
+              target.state === "running" || target.state === "waiting",
+            )
+            toast(`Sent to ${code}`, { id: "tell" })
+          }
+          break
         }
         case "/stop":
           r = await send({ type: "stop_session", sessionId })

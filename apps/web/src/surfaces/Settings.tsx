@@ -1057,7 +1057,7 @@ export function Settings() {
                   disabled={!v.prCreate}
                   onChange={(e) => change({ prFix: e.target.checked }, "Pull requests")}
                 />
-                Fix checks that fail on it
+                Fix checks that fail on it (up to three tries, then it tells you)
               </label>
               <p className="m-0 text-[13px] text-mut">
                 Claude pushes the session's own branch and opens the pull request with gh. Each push

@@ -74,6 +74,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** New chat or the quick prompt is open: have a chat ready for the first message (the warm chat). */
   z.object({ type: z.literal("warm_chat") }),
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
+  /** G18: a message you send to another session from this one's prompt box (/tell), recorded by who sent it where. */
+  z.object({
+    type: z.literal("tell"),
+    from: Id,
+    to: Id,
+    text: z.string().min(1).max(100_000),
+  }),
   z.object({ type: z.literal("interrupt"), sessionId: Id }),
   /** Stops the turn and every background task now. */
   z.object({ type: z.literal("stop_session"), sessionId: Id }),
