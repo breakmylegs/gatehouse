@@ -23,13 +23,37 @@ interface PsResult {
   problems: { file: string; line: number; reason: string }[]
 }
 
-function runPs(dir: string): { code: number; result: PsResult } {
+/**
+ * The shells the script must agree in: PowerShell 7 and, on Windows, the Windows PowerShell 5.1 built into it (owner,
+ * 4 Nov: no PowerShell version is a hard dependency).
+ */
+const WINDOWS_POWERSHELL = process.env.SystemRoot
+  ? path.join(process.env.SystemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+  : undefined
+const SHELLS: Array<{ name: string; exe: string; args: string[] }> = [
+  { name: "PowerShell 7", exe: "pwsh", args: [] },
+  ...(WINDOWS_POWERSHELL && fs.existsSync(WINDOWS_POWERSHELL)
+    ? [
+        {
+          name: "Windows PowerShell 5.1",
+          exe: WINDOWS_POWERSHELL,
+          args: ["-ExecutionPolicy", "Bypass"],
+        },
+      ]
+    : []),
+]
+
+function runPs(dir: string, shell = SHELLS[0]!): { code: number; result: PsResult } {
   const r = spawnSync(
-    "pwsh",
-    ["-NoProfile", "-NonInteractive", "-File", SCRIPT, "-Dir", dir, "-Json"],
+    shell.exe,
+    ["-NoProfile", "-NonInteractive", ...shell.args, "-File", SCRIPT, "-Dir", dir, "-Json"],
     { encoding: "utf8" },
   )
-  return { code: r.status ?? -1, result: JSON.parse(r.stdout) as PsResult }
+  try {
+    return { code: r.status ?? -1, result: JSON.parse(r.stdout) as PsResult }
+  } catch {
+    throw new Error(`${shell.name} gave no result: ${r.stdout} ${r.stderr}`.slice(0, 2000))
+  }
 }
 
 const where = (problems: { file: string; line: number }[]) =>
@@ -37,12 +61,14 @@ const where = (problems: { file: string; line: number }[]) =>
 
 function agree(dir: string): { ok: boolean; problems: string[] } {
   const node = verifyAudit(dir)
-  const { code, result } = runPs(dir)
-  expect(result.ok).toBe(node.ok)
-  expect(code).toBe(node.ok ? 0 : 1)
-  expect(result.records).toBe(node.records)
-  expect(result.files).toBe(node.files)
-  expect(where(result.problems)).toEqual(where(node.problems))
+  for (const shell of SHELLS) {
+    const { code, result } = runPs(dir, shell)
+    expect(result.ok, shell.name).toBe(node.ok)
+    expect(code, shell.name).toBe(node.ok ? 0 : 1)
+    expect(result.records, shell.name).toBe(node.records)
+    expect(result.files, shell.name).toBe(node.files)
+    expect(where(result.problems), shell.name).toEqual(where(node.problems))
+  }
   return { ok: node.ok, problems: where(node.problems) }
 }
 

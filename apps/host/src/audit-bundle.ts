@@ -15,10 +15,10 @@ export const BUNDLE_NOTE = `This is the Codehouse audit log: every decision, as 
 
 To check that nothing in it was changed, removed or reordered, unzip it into a folder of its own and run:
 
-  pwsh -NoProfile -File verify-audit.ps1 -Dir <that folder>
+  powershell -NoProfile -ExecutionPolicy Bypass -File verify-audit.ps1 -Dir <that folder>
 
-That needs PowerShell 7 (pwsh), not the Windows PowerShell 5.1 built into Windows.
-From a Codehouse source checkout, npm run audit:verify -- <that folder> does the same with Node.
+That is the Windows PowerShell built into Windows; PowerShell 7 works too (pwsh -NoProfile -File verify-audit.ps1 -Dir
+<that folder>). From a Codehouse source checkout, npm run audit:verify -- <that folder> does the same with Node.
 
 head.json names the last record in this bundle. Records written after the bundle was made are not in it.
 `

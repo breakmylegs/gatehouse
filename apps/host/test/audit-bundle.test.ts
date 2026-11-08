@@ -58,7 +58,9 @@ describe("the audit bundle", () => {
       "verify-audit.ps1",
     ])
     expect(verifyAudit(out)).toMatchObject({ ok: true, records: 5 })
-    expect(fs.readFileSync(path.join(out, "VERIFY.txt"), "utf8")).toContain("verify-audit.ps1 -Dir")
+    expect(fs.readFileSync(path.join(out, "VERIFY.txt"), "utf8")).toContain(
+      "powershell -NoProfile -ExecutionPolicy Bypass -File verify-audit.ps1 -Dir",
+    )
     // One byte changed in a record: the chain no longer holds.
     const f = path.join(out, "audit-2026-10.jsonl")
     fs.writeFileSync(f, fs.readFileSync(f, "utf8").replace("echo 1", "echo 7"))

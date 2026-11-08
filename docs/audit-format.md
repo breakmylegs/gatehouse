@@ -64,7 +64,7 @@ All writers append through `AuditWriter` (the Approver now, the Host as well fro
 
 ## Exporting
 
-The Audit page's Export saves a zip (`/api/audit/bundle`) holding the month files as they are, a `head.json` for the last record in the zip (made from what was copied, so it always agrees), `VERIFY.txt`, and `verify-audit.ps1`. Unzipped into a folder of its own, it passes `pwsh -File verify-audit.ps1 -Dir <folder>` (PowerShell 7) and `npm run audit:verify -- <folder>`, and one changed byte fails both. Each export is recorded as `audit_exported`.
+The Audit page's Export saves a zip (`/api/audit/bundle`) holding the month files as they are, a `head.json` for the last record in the zip (made from what was copied, so it always agrees), `VERIFY.txt`, and `verify-audit.ps1`. Unzipped into a folder of its own, it passes `powershell -ExecutionPolicy Bypass -File verify-audit.ps1 -Dir <folder>` (the Windows PowerShell 5.1 built into Windows; `pwsh` works too) and `npm run audit:verify -- <folder>`, and one changed byte fails both. Each export is recorded as `audit_exported`.
 
 ## What this does and does not protect against
 
