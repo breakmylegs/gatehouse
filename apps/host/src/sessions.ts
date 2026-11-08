@@ -32,6 +32,7 @@ import { pluginsWithMods } from "./marketplace.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
 import type { Worktrees } from "./worktrees.js"
 import type { SessionLink } from "./about-session.js"
+import { LoopGuard, LOOP_REPEATS } from "./loop-guard.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -498,6 +499,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #decided = new Set<string>()
   /** The files this session wrote or edited, by full path in lower case, while Codehouse runs. */
   readonly #written = new Set<string>()
+  /** G19: the same failure again and again, with nothing changed in between. */
+  readonly #loop = new LoopGuard()
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
@@ -770,6 +773,11 @@ export class Session extends EventEmitter<SessionEvents> {
       approver: d.approver,
       verdicts: this.#verdicts,
       onWritten: (file) => this.#written.add(writtenKey(file, this.cwd)),
+      // G19: the same failure three times in a row with nothing changed stops the turn.
+      onToolOutcome: (tool, input, error) => {
+        if (error === undefined) return this.#loop.succeeded(tool, input)
+        if (this.#loop.failed(tool, input, error)) void this.#stopForLoop(tool)
+      },
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
     const onStderr = (data: string) => {
@@ -1199,8 +1207,24 @@ export class Session extends EventEmitter<SessionEvents> {
     return await q.getContextUsage({ detail: "summary" })
   }
 
+  /**
+   * G19: the same call failed the same way LOOP_REPEATS times in a row with nothing changed in between, so the turn
+   * stops (and Extreme stops carrying on), recorded, and the screen says why. Your next message starts afresh.
+   */
+  async #stopForLoop(tool: string): Promise<void> {
+    if (!this.#running) return
+    await this.#auditLimit(
+      "loop_stopped",
+      "loop-guard",
+      { tool, repeats: LOOP_REPEATS },
+      `The same ${tool} call failed the same way ${LOOP_REPEATS} times in a row with nothing changed in between, so Codehouse stopped the turn.`,
+      "rules",
+    ).catch(() => undefined)
+    await this.interrupt("loop").catch((e: Error) => this.#deps.log(`loop stop: ${e.message}`))
+  }
+
   /** Stops the running turn. The screen hears first, so the result that follows reads as stopped, not failed. */
-  async interrupt(by: "you" | "kill-switch" | "plan-limit" = "you"): Promise<void> {
+  async interrupt(by: "you" | "kill-switch" | "plan-limit" | "loop" = "you"): Promise<void> {
     // Stopping a turn stops Extreme carrying on, until your next message, and a compact that was to follow it.
     this.#carry.stopped()
     this.#compactAfterTurn = false
@@ -1282,7 +1306,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /** Stops everything now: the running turn and every background task. */
-  async stop(by: "you" | "kill-switch" | "plan-limit" = "you"): Promise<void> {
+  async stop(by: "you" | "kill-switch" | "plan-limit" | "loop" = "you"): Promise<void> {
     await this.interrupt(by)
     const q = this.#q as unknown as { stopTask?: (id: string) => Promise<void> } | undefined
     await Promise.allSettled([...this.#background.keys()].map((id) => q?.stopTask?.(id)))

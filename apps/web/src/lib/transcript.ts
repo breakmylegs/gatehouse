@@ -127,7 +127,7 @@ export interface Transcript {
   todos: Todo[]
   seq: number
   /** Who stopped the running turn, until its result arrives. */
-  stopping?: "you" | "kill-switch" | "plan-limit"
+  stopping?: "you" | "kill-switch" | "plan-limit" | "loop"
   /** A tool result came back after a queued message was sent: Claude's next answer has seen it. */
   pickup?: boolean
   /** The id (uuid) of the newest message of the conversation seen, for Retry and Edit. */
@@ -283,7 +283,10 @@ function delivered(t: Transcript): Transcript {
 const hasQueued = (t: Transcript) => t.items.some((i) => i.kind === "user" && i.queued)
 
 /** The Host stopped the running turn: its result says so, instead of reading as an error. */
-export function markStopping(t: Transcript, by: "you" | "kill-switch" | "plan-limit"): Transcript {
+export function markStopping(
+  t: Transcript,
+  by: "you" | "kill-switch" | "plan-limit" | "loop",
+): Transcript {
   return { ...t, stopping: by }
 }
 
@@ -396,7 +399,9 @@ export function reduce(t: Transcript, message: unknown): Transcript {
             ? "You stopped this turn."
             : stopping === "plan-limit"
               ? "Codehouse paused this turn because the plan's 5-hour limit is nearly used up."
-              : "The kill switch stopped this turn."
+              : stopping === "loop"
+                ? "Codehouse stopped this turn: the same command failed the same way three times in a row, with nothing changed in between. Look at what it tried, then tell it how to go on."
+                : "The kill switch stopped this turn."
           : str(m.result) ||
             (isError ? (FAILED[str(m.subtype)] ?? "Claude Code did not say why.") : "Done"),
         isError,

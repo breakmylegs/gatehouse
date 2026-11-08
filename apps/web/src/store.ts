@@ -538,7 +538,10 @@ export const useStore = create<State>((set, get) => ({
           return
         }
         if (e.event === "interrupted") {
-          const by = e.data.by === "kill-switch" || e.data.by === "plan-limit" ? e.data.by : "you"
+          const by =
+            e.data.by === "kill-switch" || e.data.by === "plan-limit" || e.data.by === "loop"
+              ? e.data.by
+              : "you"
           set((s) => ({
             transcripts: {
               ...s.transcripts,

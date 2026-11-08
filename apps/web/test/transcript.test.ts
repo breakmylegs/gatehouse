@@ -204,6 +204,11 @@ describe("transcript reducer", () => {
       text: "The kill switch stopped this turn.",
       isError: false,
     })
+    // G19: the loop guard says why it stopped the turn.
+    expect(reduce(markStopping(t, "loop"), failed).items.at(-1)).toMatchObject({
+      text: expect.stringMatching(/same command failed the same way three times/),
+      isError: false,
+    })
     // A turn that finished just before the stop: your next message clears it.
     expect(addUser(markStopping(t, "you"), "next").stopping).toBeUndefined()
   })

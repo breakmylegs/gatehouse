@@ -108,6 +108,8 @@ export interface SessionHookDeps {
   provenance?: Provenance
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
+  /** G19: how each call ended: with the error when it failed, undefined when it worked. */
+  onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => void
   /** G22: commits are checked for secrets unless this is false (tests only). */
   scanCommits?: boolean
   /** Tests only: stands in for reading the commit. */
@@ -259,6 +261,14 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
       return NO_DECISION
     try {
+      // G19: the loop guard hears how each call ended.
+      deps.onToolOutcome?.(
+        input.tool_name,
+        input.tool_input,
+        input.hook_event_name === "PostToolUseFailure" && input.is_interrupt !== true
+          ? String(input.error ?? "")
+          : undefined,
+      )
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(input.tool_response)
