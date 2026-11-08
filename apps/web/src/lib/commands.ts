@@ -1,4 +1,5 @@
 import type { Route } from "../store"
+import { applyLayout, LAYOUTS } from "./layouts"
 
 /**
  * Everything the palette (Ctrl+K) can do, in one list, so a menu and the palette cannot drift apart (owner's plan,
@@ -166,6 +167,14 @@ export function buildCommands(c: CommandContext): AppCommand[] {
       keywords: "sidebar list",
       run: () => c.fire("codeh:hide-ended"),
     },
+    // U8: four layouts in one step.
+    ...LAYOUTS.map((l) => ({
+      id: `layout:${l.id}`,
+      label: l.label,
+      group: "Actions" as const,
+      keywords: `layout arrange panes ${l.keywords}`,
+      run: () => applyLayout(l.id),
+    })),
   ]
   return [...pages, ...actions]
 }
