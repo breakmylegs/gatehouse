@@ -14,8 +14,20 @@ export const RESUME_PROMPT =
 export const LIMIT_RESUME_PROMPT =
   "Codehouse paused you because the plan's 5-hour limit was nearly used up, which stopped your last turn part way. You may carry on now. Continue from where you were, without starting again."
 
-const QUEUE_EMPTY = /\bQUEUE EMPTY\b/
-const GOAL_MET = /\bGOAL MET\b/
+/**
+ * Whether a reply ends with the line `word` (O11: it matched anywhere, so a reply that only quoted the instruction ended
+ * the run). Only the last line with words counts; markdown around it (bold, a quote mark, a full stop) is allowed.
+ */
+function endsWithLine(text: string, word: string): boolean {
+  const last = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .at(-1)
+  return last !== undefined && new RegExp(`^[>*_\`\\s]*${word}[*_\`.!\\s]*$`).test(last)
+}
+const QUEUE_EMPTY = { test: (t: string) => endsWithLine(t, "QUEUE EMPTY") }
+const GOAL_MET = { test: (t: string) => endsWithLine(t, "GOAL MET") }
 
 /** B25: a goal is one line, the check to run, such as "npm test". */
 export const MAX_GOAL = 300

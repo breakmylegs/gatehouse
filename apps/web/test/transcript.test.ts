@@ -87,6 +87,87 @@ describe("transcript reducer", () => {
     t = reduce(t, assistant([{ type: "text", text: "more" }]))
     expect(t.todos.length).toBe(2)
   })
+  it("keeps the task list from Claude Code's task tools too: created, updated by id, removed (O10)", () => {
+    const result = (id: string, text: string, structured?: unknown) => ({
+      type: "user",
+      ...(structured ? { tool_use_result: structured } : {}),
+      message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] },
+    })
+    let t = reduce(
+      emptyTranscript(),
+      assistant([
+        {
+          type: "tool_use",
+          id: "c1",
+          name: "TaskCreate",
+          input: { subject: "Write the parser", description: "x" },
+        },
+        {
+          type: "tool_use",
+          id: "c2",
+          name: "TaskCreate",
+          input: { subject: "Test it", description: "y", activeForm: "Testing it" },
+        },
+      ]),
+    )
+    expect(t.todos.map((x) => [x.content, x.status])).toEqual([
+      ["Write the parser", "pending"],
+      ["Test it", "pending"],
+    ])
+    t = reduce(t, result("c1", "Task #1 created successfully: Write the parser"))
+    t = reduce(t, result("c2", "created", { task: { id: "2", subject: "Test it" } }))
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u1",
+          name: "TaskUpdate",
+          input: { taskId: "1", status: "completed" },
+        },
+      ]),
+    )
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u2",
+          name: "TaskUpdate",
+          input: { taskId: "2", status: "in_progress" },
+        },
+      ]),
+    )
+    expect(t.todos.map((x) => [x.content, x.status, x.activeForm])).toEqual([
+      ["Write the parser", "completed", undefined],
+      ["Test it", "in_progress", "Testing it"],
+    ])
+    // An update for a task it does not know changes nothing; a deleted one goes.
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u3",
+          name: "TaskUpdate",
+          input: { taskId: "9", status: "completed" },
+        },
+      ]),
+    )
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u4",
+          name: "TaskUpdate",
+          input: { taskId: "1", status: "deleted" },
+        },
+      ]),
+    )
+    expect(t.todos.map((x) => x.content)).toEqual(["Test it"])
+  })
+
   it("records the end of a turn and marks subagent text", () => {
     let t = reduce(emptyTranscript(), {
       type: "result",

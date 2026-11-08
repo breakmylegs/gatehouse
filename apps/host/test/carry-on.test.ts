@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { CarryOn, carryOnLimits, recommendedAnswers } from "../src/carry-on.js"
+import { CarryOn, carryOnLimits, recommendedAnswers, saysQueueEmpty } from "../src/carry-on.js"
 
 const run = (turns = 3, usd = 5) => new CarryOn(() => ({ turns, usd }))
 const ok = (text = "Done the next item.", costUsd?: number) => ({
@@ -17,6 +17,26 @@ describe("Extreme approval carrying on by itself", () => {
     expect(c.next(ok("All built.\nQUEUE EMPTY"))).toMatchObject({ go: false, why: "done" })
     expect(c.next(ok())).toBeUndefined()
     expect(c.status()).toMatchObject({ turns: 2, ended: "done" })
+  })
+
+  it("counts QUEUE EMPTY and GOAL MET only as the reply's last line, never quoted part way through (O11)", () => {
+    expect(saysQueueEmpty("All built.\n\n**QUEUE EMPTY**\n")).toBe(true)
+    expect(saysQueueEmpty("All built.\nQUEUE EMPTY.")).toBe(true)
+    for (const text of [
+      "When nothing is left, I will end with the line QUEUE EMPTY. Next: the parser.",
+      "QUEUE EMPTY\nActually one more item: the parser.",
+      "The queue is not QUEUE EMPTY yet",
+      "",
+    ])
+      expect(saysQueueEmpty(text), text).toBe(false)
+    const c = run()
+    c.started()
+    expect(c.next(ok("I must not end with GOAL MET until it passes.\nStill fixing."))).toEqual({
+      go: true,
+      turn: 1,
+      of: 3,
+    })
+    expect(c.next(ok("Checked.\nGOAL MET"))).toMatchObject({ go: false, why: "goal" })
   })
 
   it("stops at the most automatic turns, and at the spend since your message", () => {
@@ -45,7 +65,9 @@ describe("Extreme approval carrying on by itself", () => {
   })
 
   it("keeps going with no limit when Settings says so, and an older reader still gets a number", () => {
-    const c = new CarryOn(() => carryOnLimits({ turns: 500, usd: 1000, noTurnLimit: true, noSpendLimit: true }))
+    const c = new CarryOn(() =>
+      carryOnLimits({ turns: 500, usd: 1000, noTurnLimit: true, noSpendLimit: true }),
+    )
     c.started()
     for (let i = 1; i <= 600; i++) expect(c.next(ok("next", i * 10))).toEqual({ go: true, turn: i })
     expect(c.status()).not.toHaveProperty("maxTurns")

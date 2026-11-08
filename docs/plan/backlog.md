@@ -158,7 +158,7 @@ Not resolved here.
 | O19 | A look that feels more like Claude Code and Codex, less retro (31 Oct) | In U15. See C4. |
 | O20 | Chat with what the Claude desktop app has: deep research, plugins and skills (31 Oct) | In G5 and O1. |
 | O8 | Export loses the start of long sessions and is not redacted | In G10. |
-| O10 | The Plan panel ignores TaskCreate and TaskUpdate | In G17. |
-| O11 | QUEUE EMPTY matches anywhere in a reply | In G17. |
+| O10 | The Plan panel ignores TaskCreate and TaskUpdate | Done 8 Nov (BUILD_REPORT). |
+| O11 | QUEUE EMPTY matches anywhere in a reply | Done 8 Nov: only the reply's last line counts (BUILD_REPORT). |
 | O13 | Preview tokens outlive their session. The local browser frame allows same origin for any localhost port. | Hardening, Wave 2. A page on another port is a different origin and cannot read Codehouse's storage, and the Host refuses its Origin. Low risk. |
 | O16 | Stuck detection runs only in the window, and the end of an Extreme run reaches no phone | In G19. |
