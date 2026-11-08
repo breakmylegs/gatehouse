@@ -1,0 +1,11 @@
+# G21: characters you cannot see. In a command or a path any invisible or direction character goes to a person, even
+# where a rule would allow the call; in written text only direction overrides and tag characters do.
+- { t: Bash, cmd: "git status", o: allow, r: safe-shell, note: "the same command without them is allowed" }
+- { t: Bash, cmd: "git status\u202E", o: escalate, r: hidden-unicode, note: "a right-to-left override" }
+- { t: Bash, cmd: "git st\u200Batus", o: escalate, r: hidden-unicode, note: "a zero-width space" }
+- { t: PowerShell, cmd: "Get-ChildItem\u2066 x\u2069", o: escalate, r: hidden-unicode, note: "isolates" }
+- { t: Read, p: "${WS}/README\u200D.md", o: escalate, r: hidden-unicode, note: "a joiner in a path" }
+- { t: Write, in: { file_path: "${WS}/src/a.ts", content: "if (isAdmin) { /* \u202E } \u2066 */ grant() }" }, o: escalate, r: hidden-unicode, note: "Trojan Source in code" }
+- { t: Write, in: { file_path: "${WS}/src/a.ts", content: "say \U000E0069\U000E0067 hi" }, o: escalate, r: hidden-unicode, note: "tag characters smuggling text" }
+- { t: MultiEdit, in: { file_path: "${WS}/src/a.ts", edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: "x\u2067y" }] }, o: escalate, r: hidden-unicode, note: "in one of several edits" }
+- { t: Write, in: { file_path: "${WS}/src/a.ts", content: "const team = '\U0001F469\u200D\U0001F4BB'" }, o: allow, r: edit-workspace-source, note: "a joiner in an emoji is ordinary text" }

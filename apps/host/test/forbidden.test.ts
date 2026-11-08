@@ -52,6 +52,24 @@ describe("the prohibited-pattern check", () => {
     ])
   })
 
+  it("fails on a character you cannot see, but not on a byte order mark at the start of a file (G21)", () => {
+    const override = String.fromCodePoint(0x202e)
+    const tag = String.fromCodePoint(0xe0041)
+    const bom = String.fromCodePoint(0xfeff)
+    expect(
+      seeded({
+        "apps/host/src/g.ts": `const isAdmin = false /*${override} } ${override} if (isAdmin) */`,
+        "apps/host/src/h.ts": `const note = "hello${tag}"`,
+        "apps/host/src/i.ts": `const s = "a${bom}b"`,
+        "scripts/j.ps1": `${bom}Write-Output "ok"`,
+      }),
+    ).toEqual([
+      "apps/host/src/g.ts hidden-unicode",
+      "apps/host/src/h.ts hidden-unicode",
+      "apps/host/src/i.ts hidden-unicode",
+    ])
+  })
+
   it("lets the build's own screenshot check use a debugging port, but never on Anthropic's sites", () => {
     const remote = "--remote-" + "debugging-port=9222"
     expect(seeded({ "scripts/screenshots.ts": `args.push("${remote}")` })).toEqual([])

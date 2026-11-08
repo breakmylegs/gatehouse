@@ -44,7 +44,7 @@ async function firstChar(s: Source): Promise<string | undefined> {
   const stream = await s.zip.stream(s.entry)
   try {
     for await (const chunk of stream) {
-      const m = /[^\s﻿]/.exec((chunk as Buffer).toString("utf8"))
+      const m = /[^\s\uFEFF]/.exec((chunk as Buffer).toString("utf8"))
       if (m) return m[0]
     }
     return undefined

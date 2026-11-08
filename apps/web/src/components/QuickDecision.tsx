@@ -5,6 +5,7 @@ import { decide } from "../lib/decide"
 import { commandText, riskBand } from "../lib/format"
 import { useStore } from "../store"
 import { RiskBadge } from "./RiskBadge"
+import { ShowHidden } from "./ShowHidden"
 
 const isShell = (tool: string) => tool === "Bash" || tool === "PowerShell"
 
@@ -153,7 +154,9 @@ export function QuickDecision({
             <span>{isShell(req.toolName) ? "Command" : "Target"}</span>
             <span className="mono">{req.toolName}</span>
           </div>
-          <pre className="cmd max-h-24 overflow-auto !py-1.5 !text-[13px]">{shown.text}</pre>
+          <pre className="cmd max-h-24 overflow-auto !py-1.5 !text-[13px]">
+            <ShowHidden text={shown.text} />
+          </pre>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 [&_.btn]:gap-2">

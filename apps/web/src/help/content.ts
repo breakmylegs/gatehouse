@@ -477,7 +477,7 @@ Every decision, automatic or yours, is written to a tamper-evident audit log.`,
     body: `Each request goes through three layers, in this order:
 
 1. **The floor.** A fixed list of things that are always blocked: reading secrets and credentials, destructive commands, writing outside your folders, and a commit by Claude that would add what looks like a key or a private key (it names the kind and the file, never the value; if it is not a real secret, commit it yourself in the Terminal). Nothing can allow these.
-2. **The rules.** Allow and deny rules, including the ones you remembered. Commands are parsed properly, so a safe command hiding a dangerous one is caught.
+2. **The rules.** Allow and deny rules, including the ones you remembered. Commands are parsed properly, so a safe command hiding a dangerous one is caught. A command or path holding characters you cannot see (invisible or direction-changing ones), or code being written that holds the kinds used to hide meaning, always comes to you, whatever rule would allow it, and the card shows each such character as its code in brackets.
 3. **You.** Anything left waits for you, with the exact command, the rule that held it and why.
 
 If anything goes wrong while deciding, the request waits for you or is denied. It is never allowed by mistake.`,

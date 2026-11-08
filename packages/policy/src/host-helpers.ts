@@ -66,6 +66,8 @@ const STRUCTURAL = new Set([
   "pwsh-execution-policy",
   "engine-error",
   "policy-unavailable",
+  // G21: a command with characters you cannot see is never remembered.
+  "hidden-unicode",
 ])
 
 /**

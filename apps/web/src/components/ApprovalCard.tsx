@@ -10,6 +10,7 @@ import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
 import { RiskBadge } from "./RiskBadge"
 import { SessionCode } from "./SessionCode"
+import { hasHidden, ShowHidden } from "./ShowHidden"
 
 const COLLAPSE_LINES = 12
 const COLLAPSE_CHARS = 1500
@@ -253,13 +254,20 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 {shownParts.map((p, i) =>
                   p.hit ? (
                     <mark key={i} className="seg">
-                      {p.text}
+                      <ShowHidden text={p.text} />
                     </mark>
                   ) : (
-                    <span key={i}>{p.text}</span>
+                    <span key={i}>
+                      <ShowHidden text={p.text} />
+                    </span>
                   ),
                 )}
               </pre>
+              {hasHidden(command) ? (
+                <p role="note" className="m-0 mt-1.5 text-[13px] font-semibold text-sev">
+                  It holds characters you cannot see, shown above as their codes in brackets.
+                </p>
+              ) : null}
               <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13px] text-mut">
                 {segments.length > 0 ? (
                   <span>Underlined: the part that caused the escalation.</span>

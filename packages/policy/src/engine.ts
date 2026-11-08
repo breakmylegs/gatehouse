@@ -2,6 +2,7 @@ import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
+import { hiddenCharacters } from "./hidden.js"
 import { compileGlobs, matchAnyWildcard } from "./match.js"
 import { findProjectRoot, isInside, realKey, relativeTo, type ResolvedPath } from "./paths.js"
 import type { PwshWorker } from "./pwsh.js"
@@ -50,6 +51,14 @@ const BUILTIN = {
   },
 } as const
 
+/** Backlog G21: a call carrying characters you cannot see goes to a person, whatever rule would allow it. */
+export const HIDDEN_UNICODE = {
+  ruleId: "hidden-unicode",
+  reason:
+    "It contains characters you cannot see (shown as their codes on the card), which can make a command or code mean something other than it looks.",
+  risk: 80,
+} as const
+
 export interface BuiltInRule {
   ruleId: string
   reason: string
@@ -59,6 +68,7 @@ export interface BuiltInRule {
 /** Rule ids the engine produces without any rule in the file. Used to explain a verdict. */
 export const BUILTIN_RULES: readonly BuiltInRule[] = [
   ...Object.values(BUILTIN),
+  HIDDEN_UNICODE,
   {
     ruleId: "shell-obfuscation",
     reason: "The command uses an encoded, dynamic or piped-to-shell form.",
@@ -226,6 +236,10 @@ export class PolicyEngine {
     if (fl.downloadString) escalations.push(BUILTIN.download)
     if (fl.registryWrite) escalations.push(BUILTIN.registry)
     if (fl.executionPolicy) escalations.push(BUILTIN.execPolicy)
+    // G21: no rule, remembered or not, lets an invisible character through unseen.
+    const hidden = hiddenCharacters(call)
+    if (hidden.length)
+      escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
     // Flags the floor did not choose to deny still escalate.
     if (fl.encodedCommand || fl.invokeExpression || fl.dynamicInvocation || fl.evalDynamic || fl.pipeToShell) {
       escalations.push({

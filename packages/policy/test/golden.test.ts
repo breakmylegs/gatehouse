@@ -195,6 +195,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "11-powershell": 45,
   "12-overlays": 14,
   "13-remember": 12,
+  "14-hidden-unicode": 8,
 }
 
 for (const { category, cases } of corpus) {
@@ -264,6 +265,7 @@ describe("golden corpus floor (the suite must not pass by finding nothing)", () 
       "memory-tools",
       "artifact-tools",
       "page-look-tools",
+      "hidden-unicode",
       "session-read-tools",
       "claude-code-internal",
       "parse-error",

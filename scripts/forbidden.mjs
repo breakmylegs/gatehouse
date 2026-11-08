@@ -57,6 +57,13 @@ export const CHECKS = [
     files: /(^|\/)package(-lock)?\.json$/,
   },
   {
+    id: "hidden-unicode",
+    why: "no file holds a character you cannot see (backlog G21: write it as a \\u escape), so code reads as it runs",
+    // Direction overrides and isolates, zero-width space, word joiner, tag characters, and a byte order mark anywhere
+    // but the very start of a file (some PowerShell scripts need one there).
+    re: /[\u202A-\u202E\u2066-\u2069\u200B\u2060]|[\u{E0000}-\u{E007F}]|(?<!^)\uFEFF/u,
+  },
+  {
     id: "claude-app-data",
     why: "the Claude desktop app's own data (its cookies, storage and sign-in) is never read",
     // The app's folders are spelt "Claude"; an added account's own "claude" folder under Gatehouse is not one of them.

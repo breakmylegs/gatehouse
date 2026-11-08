@@ -266,6 +266,16 @@ mark.seg {
   padding: 0 1px;
 }
 
+/* Backlog G21: a character you cannot see, drawn as its code. */
+mark.hidden-char {
+  background: transparent;
+  color: var(--c-sev);
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
+}
+
 /* Small field labels, as on a pass: a quiet word above the value it names. */
 .lbl {
   display: block;
