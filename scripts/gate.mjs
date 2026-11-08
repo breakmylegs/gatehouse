@@ -313,7 +313,7 @@ if (fullReason) {
       failures.push("named tests")
   }
   const window = present.filter((f) =>
-    /^packaging\/(CodehouseApp|Overlay|Popout|Hotkey|NavGuard|Capture|Common|Launcher|Helper|Limits)\.cs$|^scripts\/package\.mjs$|^packaging\/installer\.iss$/.test(
+    /^packaging\/(CodehouseApp|Overlay|Popout|Hotkey|NavGuard|Capture|Backdrop|Common|Launcher|Helper|Limits)\.cs$|^scripts\/package\.mjs$|^packaging\/installer\.iss$/.test(
       f,
     ),
   )
