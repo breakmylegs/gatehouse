@@ -151,6 +151,16 @@ describe("audit endpoints", () => {
     expect(res.headers["content-disposition"]).toContain("attachment")
     expect(res.body.trim().split("\n").length).toBe(3)
   })
+
+  it("exports a bundle that can be checked, as a zip, and records that it did (G30)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/audit/bundle" })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers["content-type"]).toContain("application/zip")
+    expect(res.headers["content-disposition"]).toMatch(/codehouse-audit-\d{4}-\d{2}-\d{2}\.zip/)
+    expect(res.rawPayload.subarray(0, 2).toString()).toBe("PK")
+    const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+    expect(log.body).toContain('"event":"audit_exported"')
+  })
 })
 
 describe("policy endpoints", () => {

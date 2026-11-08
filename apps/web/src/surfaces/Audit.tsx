@@ -156,7 +156,9 @@ export function Audit() {
         <button
           className="btn"
           onClick={async () => {
-            const e = await download("/api/audit/export", "gatehouse-audit.jsonl")
+            // G30: a zip anyone can check, with the verifier and how to run it.
+            const day = new Date().toISOString().slice(0, 10)
+            const e = await download("/api/audit/bundle", `codehouse-audit-${day}.zip`)
             if (e) setError(e)
           }}
         >

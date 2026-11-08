@@ -1018,6 +1018,8 @@ export function createHost(opts: HostOptions = {}): Host {
       },
       updates,
       changelog,
+      // G30: the verifier that goes in each audit bundle (scripts\verify-audit.ps1, in the app folder too).
+      auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,

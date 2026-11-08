@@ -26,6 +26,7 @@ import { registerHousekeepingRoutes } from "./housekeeping.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
 import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
+import { makeAuditBundle } from "./audit-bundle.js"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
@@ -160,6 +161,8 @@ export interface AdminContext {
   updates?: UpdateService
   /** The changelog in Settings (owner, 4 Nov): every release's notes, read from the releases and kept for offline. */
   changelog?: ChangelogStore
+  /** G30: the PowerShell verifier, put in each audit bundle. */
+  auditVerifier?: string
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -364,6 +367,33 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       problems: r.problems.slice(0, 50),
       moreProblems: Math.max(0, r.problems.length - 50),
     }
+  })
+
+  // G30: the log as a zip anyone can check, with the verifier and a note; each one made is recorded.
+  app.get("/api/audit/bundle", async (_req, reply) => {
+    const { zip, records } = await makeAuditBundle(ctx.auditDir, ctx.auditVerifier)
+    await ctx.audit.record({
+      session: "host",
+      event: "audit_exported",
+      channel: "desktop",
+      tool: "audit",
+      input: { records, bytes: zip.length },
+      verdict: {
+        outcome: "allow",
+        ruleId: "audit-exported",
+        reason: "The audit log was exported as a bundle that can be checked.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    const day = new Date().toISOString().slice(0, 10)
+    return reply
+      .header("content-type", "application/zip")
+      .header("content-disposition", `attachment; filename="codehouse-audit-${day}.zip"`)
+      .header("cache-control", "no-store")
+      .send(zip)
   })
 
   app.get("/api/audit/export", async (_req, reply) => {
