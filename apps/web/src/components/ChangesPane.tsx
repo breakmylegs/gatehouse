@@ -5,6 +5,10 @@ import { clock } from "../lib/format"
 import { structuredPatch } from "diff"
 import { DiffView } from "./CodeViews"
 import { MoreLines, shownLines } from "./MoreLines"
+import { composeIn } from "../lib/compose"
+import { describeDecision } from "../lib/decision"
+import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
+import { commentKey, reviewMessage, type ReviewComment } from "../lib/reviewComments"
 
 /** One change in a file (as packages/shared/src/node/checkpoint.ts counts them). */
 interface Hunk {
@@ -41,12 +45,16 @@ const KIND: Record<FileChange["change"], string> = {
   deleted: "Removed",
 }
 
+/** Comments on changes, kept while the pane is open, by commentKey. */
+type Comments = Record<string, ReviewComment>
+
 /**
  * What a session changed, file by file, since one of its checkpoints (its first unless you choose another), with
  * the diff of each and Undo. Undo puts a file back as it was then; a checkpoint is saved first, so an undo can
- * itself be undone from an earlier point in this list.
+ * itself be undone from an earlier point in this list. Each change says which decision allowed the edit that made
+ * it, and can take a comment; the comments from every file go to the prompt box together (G13).
  */
-export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
+export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string }) {
   const seq = useStore((s) => s.transcripts[sessionId]?.seq ?? 0)
   const [data, setData] = useState<Changes>()
   const [ref, setRef] = useState<string>()
@@ -54,6 +62,8 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [confirm, setConfirm] = useState<string[]>()
   const [busy, setBusy] = useState(false)
+  const [comments, setComments] = useState<Comments>({})
+  const said = Object.values(comments).filter((c) => c.text.trim())
 
   const load = useCallback(async () => {
     const r = await send({ type: "changes", sessionId, ...(ref ? { ref } : {}) })
@@ -172,9 +182,12 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
                   ) : (
                     <FileDiff
                       sessionId={sessionId}
+                      cwd={cwd}
                       at={since.ref}
                       file={f}
                       onUndone={() => void load()}
+                      comments={comments}
+                      setComments={setComments}
                     />
                   )
                 ) : null}
@@ -186,7 +199,30 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
               Some diffs are cut short because they are long. The files themselves are complete.
             </p>
           ) : null}
-          <div>
+          <div className="flex flex-wrap gap-2">
+            {said.length ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    composeIn(sessionId, reviewMessage(said))
+                    setComments({})
+                    toast(
+                      `${said.length === 1 ? "Your comment is" : `Your ${said.length} comments are`} in the prompt box. Read and send.`,
+                      { id: "changes" },
+                    )
+                  }}
+                >
+                  {said.length === 1
+                    ? "Put 1 comment in the prompt box"
+                    : `Put ${said.length} comments in the prompt box`}
+                </button>
+                <button type="button" className="btn" onClick={() => setComments({})}>
+                  Clear the comments
+                </button>
+              </>
+            ) : null}
             <button
               type="button"
               className="btn"
@@ -236,14 +272,20 @@ export function ChangesPane({ sessionId }: { sessionId: string; cwd: string }) {
  */
 function FileDiff({
   sessionId,
+  cwd,
   at,
   file,
   onUndone,
+  comments,
+  setComments,
 }: {
   sessionId: string
+  cwd: string
   at: string
   file: FileChange
   onUndone: () => void
+  comments: Comments
+  setComments: (f: (c: Comments) => Comments) => void
 }) {
   const [sides, setSides] = useState<{ before?: string; after?: string }>()
   const [failed, setFailed] = useState(false)
@@ -269,11 +311,14 @@ function FileDiff({
       {file.change === "modified" && sides.before !== undefined && sides.after !== undefined ? (
         <ChangeList
           sessionId={sessionId}
+          cwd={cwd}
           at={at}
           path={file.path}
           before={sides.before}
           after={sides.after}
           onUndone={onUndone}
+          comments={comments}
+          setComments={setComments}
         />
       ) : null}
     </div>
@@ -307,28 +352,58 @@ async function sha256(text: string): Promise<string> {
 }
 
 /**
- * Each change in a changed file, with Undo this change (B12). It asks first; the Host puts back only that change,
- * and only if the file is still as shown, after a safety checkpoint, and records it.
+ * Each change in a changed file: which decision allowed the edit that made it, a comment, and (when the file has more
+ * than one) Undo this change (B12). Undo asks first; the Host puts back only that change, and only if the file is
+ * still as shown, after a safety checkpoint, and records it.
  */
 function ChangeList({
   sessionId,
+  cwd,
   at,
   path,
   before,
   after,
   onUndone,
+  comments,
+  setComments,
 }: {
   sessionId: string
+  cwd: string
   at: string
   path: string
   before: string
   after: string
   onUndone: () => void
+  comments: Comments
+  setComments: (f: (c: Comments) => Comments) => void
 }) {
   const hunks = changesIn(before, after)
   const [asking, setAsking] = useState<number>()
+  const [writing, setWriting] = useState<number>()
   const [busy, setBusy] = useState(false)
-  if (hunks.length < 2) return null
+  const items = useStore((s) => s.transcripts[sessionId]?.items)
+  const decisions = useStore((s) => s.decisions)
+  const edits = editsOn(items ?? [], path, cwd)
+  const whose = (h: Hunk) => {
+    const origin = originOf(
+      edits,
+      linesOf(after, h.afterStart, h.afterLines),
+      linesOf(before, h.beforeStart, h.beforeLines),
+    )
+    if (!origin) return "Not from an edit Claude made in this session: a command, or you."
+    const d = decisions[origin.toolUseId]
+    return d ? `${origin.name}: ${describeDecision(d).line}` : `Made by Claude's ${origin.name}.`
+  }
+  const quoteOf = (h: Hunk) =>
+    h.afterLines
+      ? linesOf(after, h.afterStart, h.afterLines)
+      : linesOf(before, h.beforeStart, h.beforeLines)
+  const setText = (h: Hunk, text: string) =>
+    setComments((c) => ({
+      ...c,
+      [commentKey(path, h.afterStart)]: { path, where: changeWords(h), quote: quoteOf(h), text },
+    }))
+  if (!hunks.length) return null
   const undo = async (i: number) => {
     setBusy(true)
     const r = await send({
@@ -352,42 +427,84 @@ function ChangeList({
   return (
     <section aria-label={`Changes in ${path}`} className="mt-2 grid gap-1">
       <ol className="m-0 grid list-none gap-1 p-0">
-        {hunks.map((h, i) => (
-          <li key={i} className="flex flex-wrap items-center gap-2 text-[13px]">
-            <span>{changeWords(h)}</span>
-            {asking === i ? (
-              <span
-                role="group"
-                aria-label="Confirm undoing this change"
-                className="flex items-center gap-2"
-              >
-                <span className="text-mut">
-                  Put it back as it was? A checkpoint is saved first.
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-primary !min-h-7"
-                  disabled={busy}
-                  onClick={() => void undo(i)}
-                >
-                  Undo this change
-                </button>
-                <button type="button" className="btn !min-h-7" onClick={() => setAsking(undefined)}>
-                  Cancel
-                </button>
+        {hunks.map((h, i) => {
+          const comment = comments[commentKey(path, h.afterStart)]?.text ?? ""
+          return (
+            <li key={i} className="grid gap-1 text-[13px]">
+              <span className="flex flex-wrap items-center gap-2">
+                <span>{changeWords(h)}</span>
+                {writing !== i ? (
+                  <button
+                    type="button"
+                    className="btn !min-h-7 !px-2 !text-[12.5px]"
+                    aria-label={`${comment ? "Change the comment on" : "Comment on"}: ${changeWords(h)}`}
+                    onClick={() => setWriting(i)}
+                  >
+                    {comment ? "Comment (1)" : "Comment"}
+                  </button>
+                ) : null}
+                {hunks.length < 2 ? null : asking === i ? (
+                  <span
+                    role="group"
+                    aria-label="Confirm undoing this change"
+                    className="flex items-center gap-2"
+                  >
+                    <span className="text-mut">
+                      Put it back as it was? A checkpoint is saved first.
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-primary !min-h-7"
+                      disabled={busy}
+                      onClick={() => void undo(i)}
+                    >
+                      Undo this change
+                    </button>
+                    <button
+                      type="button"
+                      className="btn !min-h-7"
+                      onClick={() => setAsking(undefined)}
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn !min-h-7 !px-2 !text-[12.5px]"
+                    aria-label={`Undo: ${changeWords(h)}`}
+                    onClick={() => setAsking(i)}
+                  >
+                    Undo…
+                  </button>
+                )}
               </span>
-            ) : (
-              <button
-                type="button"
-                className="btn !min-h-7 !px-2 !text-[12.5px]"
-                aria-label={`Undo: ${changeWords(h)}`}
-                onClick={() => setAsking(i)}
-              >
-                Undo…
-              </button>
-            )}
-          </li>
-        ))}
+              <span className="text-[12.5px] text-mut">{whose(h)}</span>
+              {writing === i ? (
+                <span className="grid gap-1">
+                  <textarea
+                    className="field min-h-14 text-[13px]"
+                    aria-label={`Your comment on: ${changeWords(h)}`}
+                    value={comment}
+                    autoFocus
+                    onChange={(e) => setText(h, e.target.value)}
+                  />
+                  <span>
+                    <button
+                      type="button"
+                      className="btn !min-h-7"
+                      onClick={() => setWriting(undefined)}
+                    >
+                      Done
+                    </button>
+                  </span>
+                </span>
+              ) : comment ? (
+                <span className="text-[12.5px]">Your comment: {comment}</span>
+              ) : null}
+            </li>
+          )
+        })}
       </ol>
     </section>
   )
