@@ -167,6 +167,65 @@ describe("transcript reducer", () => {
     )
     expect(t.todos.map((x) => x.content)).toEqual(["Test it"])
   })
+  it("ties a step to the commits made while it was in progress, and marks one ticked after failing tests (G17)", () => {
+    const todo = (id: string, todos: Array<[string, string]>) =>
+      assistant([
+        {
+          type: "tool_use",
+          id,
+          name: "TodoWrite",
+          input: { todos: todos.map(([content, status]) => ({ content, status })) },
+        },
+      ])
+    const run = (id: string, command: string, text: string, isError = false) => [
+      assistant([{ type: "tool_use", id, name: "Bash", input: { command } }]),
+      {
+        type: "user",
+        message: {
+          content: [{ type: "tool_result", tool_use_id: id, is_error: isError, content: text }],
+        },
+      },
+    ]
+    let t = emptyTranscript()
+    for (const m of [
+      todo("w1", [
+        ["Write the parser", "in_progress"],
+        ["Test it", "pending"],
+      ]),
+      ...run(
+        "b1",
+        'git add . && git commit -m "parser"',
+        "[main 1a2b3c4d] parser\n 1 file changed",
+      ),
+      ...run("b2", "npm test", "1 failed", true),
+      // Written again whole: the first step keeps its commit; the second is ticked while the tests fail.
+      todo("w2", [
+        ["Write the parser", "completed"],
+        ["Test it", "completed"],
+      ]),
+    ])
+      t = reduce(t, m)
+    expect(t.todos).toEqual([
+      {
+        content: "Write the parser",
+        status: "completed",
+        commits: ["1a2b3c4"],
+        afterFailedTests: true,
+      },
+      { content: "Test it", status: "completed", afterFailedTests: true },
+    ])
+    // Tests passing later do not clear a mark already given; a step ticked after they pass has none.
+    for (const m of [
+      ...run("b3", "npx vitest run", "all passed"),
+      todo("w3", [
+        ["Write the parser", "completed"],
+        ["Test it", "completed"],
+        ["Tidy", "completed"],
+      ]),
+    ])
+      t = reduce(t, m)
+    expect(t.todos.map((x) => x.afterFailedTests ?? false)).toEqual([true, true, false])
+  })
 
   it("records the end of a turn and marks subagent text", () => {
     let t = reduce(emptyTranscript(), {

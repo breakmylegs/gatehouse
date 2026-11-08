@@ -41,7 +41,10 @@ function Mark({ status }: { status: Todo["status"] }) {
   )
 }
 
-/** The steps, each with its mark and, for screen readers, its state in words. */
+/**
+ * The steps, each with its mark and, for screen readers, its state in words; the commits made during it, and a word
+ * when it was ticked while the last test run had failed (G17).
+ */
 export function StepList({ todos, limit }: { todos: Todo[]; limit?: number }) {
   const shown = limit !== undefined && todos.length > limit ? visible(todos, limit) : todos
   return (
@@ -61,6 +64,18 @@ export function StepList({ todos, limit }: { todos: Todo[]; limit?: number }) {
             {t.status === "in_progress" && t.activeForm ? t.activeForm : t.content}
             <span className="sr-only">{`, ${STATE_WORDS[t.status]}`}</span>
           </span>
+          {t.afterFailedTests ? (
+            <span className="text-[12px] font-semibold">Ticked while the tests were failing</span>
+          ) : null}
+          {t.commits?.length ? (
+            <span
+              className="mono ml-auto shrink-0 text-[12px] text-mut"
+              title="Commits made during this step"
+            >
+              <span className="sr-only">Commits: </span>
+              {t.commits.join(", ")}
+            </span>
+          ) : null}
         </li>
       ))}
     </ol>
