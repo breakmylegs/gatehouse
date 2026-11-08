@@ -85,6 +85,9 @@ export function QuickDecision({
     </button>
   )
 
+  // Backlog U4: a Severe request is never allowed from a row, where its command is not shown; Read it first opens
+  // the full card. Deny stays one click.
+  const severe = riskBand(req.verdict.risk) === "Severe"
   if (variant === "row")
     return (
       <div
@@ -94,7 +97,13 @@ export function QuickDecision({
       >
         <div className="flex gap-1.5 [&_.btn]:!min-h-7 [&_.btn]:!px-2.5 [&_.btn]:!text-[13px]">
           {denyBtn}
-          {allowBtn}
+          {severe ? (
+            <button type="button" className="btn btn-strong" onClick={onMore}>
+              Read it first
+            </button>
+          ) : (
+            allowBtn
+          )}
         </div>
         {error ? (
           <p role="alert" className="m-0 text-[12.5px] font-semibold text-sev">

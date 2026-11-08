@@ -21,7 +21,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 - Rows are oldest first, like departures. The time cell shows how long the request has waited.
 - A row lit in yellow is new: you have not looked at it yet. It stops being lit once you open it.
 - Each row shows the session code (for example AT 830), the project, what Claude wants to do and the risk.
-- A permission request has **Deny** and **Allow once** on its row, so you can decide it without opening it. Open it to read everything first, or to answer a question or a plan.
+- A permission request has **Deny** and **Allow once** on its row, so you can decide it without opening it. A Severe one (risk 85 and over) has **Read it first** instead of Allow once, which opens it, so it is never allowed without its command in front of you. Open any to read everything first, or to answer a question or a plan.
 
 **Deciding**
 

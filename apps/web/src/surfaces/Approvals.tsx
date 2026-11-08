@@ -132,7 +132,11 @@ export function Approvals() {
                 </button>
                 {p.request.kind === "permission" ? (
                   <div className="absolute bottom-2.5 right-3.5">
-                    <QuickDecision view={p} variant="row" />
+                    <QuickDecision
+                      view={p}
+                      variant="row"
+                      onMore={() => select(p.request.id)}
+                    />
                   </div>
                 ) : null}
               </div>
