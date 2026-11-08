@@ -230,7 +230,7 @@ What the session changed, file by file, since its first checkpoint (or one you c
 
 **Terminal**
 
-Your own PowerShell commands in the session's folder, one at a time, with Up and Down for earlier ones. They do not go through the Approver, like a PowerShell window you open yourself, and each is written to the audit log first. A program that asks a question as it runs gets no answer: Stop ends it. The kill switch stops it too.
+Your own PowerShell commands in the session's folder, one at a time, with Up and Down for earlier ones. They do not go through the Approver, like a PowerShell window you open yourself, and each is written to the audit log first. A program that asks a question as it runs gets no answer: Stop ends it. The kill switch stops it too. **Ask Claude about this** puts what you selected in the output, or else the last command and what it printed, in the session's prompt box as a quote, for you to add your question and send.
 
 **The composer**
 

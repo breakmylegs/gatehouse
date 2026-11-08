@@ -1,5 +1,6 @@
 import clsx from "clsx"
 import { useEffect, useId, useRef, useState } from "react"
+import { composeIn, quoteOutput } from "../lib/compose"
 import { send, useStore } from "../store"
 
 /**
@@ -26,6 +27,28 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
     const el = out.current
     if (el) el.scrollTop = el.scrollHeight
   }, [chunks.length])
+
+  /**
+   * Ask Claude about this (backlog F22): what you selected in the output, or else the last command and what it printed,
+   * goes into the session's prompt box as a quote for you to add your question to. Nothing is sent by itself.
+   */
+  function askAbout() {
+    const sel = window.getSelection()
+    const picked =
+      sel && out.current && sel.anchorNode && out.current.contains(sel.anchorNode)
+        ? sel.toString()
+        : ""
+    let text = picked.trim()
+    if (!text) {
+      const last = chunks.findLastIndex((c) => c.stream === "cmd")
+      text = chunks
+        .slice(Math.max(0, last))
+        .map((c) => c.text)
+        .join("")
+    }
+    if (!text.trim()) return
+    composeIn(sessionId, quoteOutput(text))
+  }
 
   async function run(e: React.FormEvent) {
     e.preventDefault()
@@ -104,11 +127,20 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
         <button type="button" className="btn !min-h-8" onClick={() => termClear(sessionId)}>
           Clear
         </button>
+        <button
+          type="button"
+          className="btn !min-h-8"
+          disabled={chunks.length === 0}
+          onClick={askAbout}
+        >
+          Ask Claude about this
+        </button>
       </form>
       <p className="m-0 text-[12.5px] text-mut">
         Your own commands, one at a time. They do not go through the Approver, like a PowerShell
         window you open yourself, and each is recorded in the audit log. A program that asks a
-        question as it runs gets no answer: Stop ends it.
+        question as it runs gets no answer: Stop ends it. Ask Claude about this puts what you
+        selected, or the last command and its output, in the prompt box for your question.
       </p>
     </div>
   )

@@ -42,6 +42,7 @@ import { FindBar } from "../components/FindBar"
 import { RecapCard } from "../components/RecapCard"
 import { SideAnswerCard } from "../components/SideAnswer"
 import { askSideQuestion } from "../lib/btw"
+import { COMPOSE_EVENT, composeIn } from "../lib/compose"
 import {
   LOCAL_PAGE,
   OpenLocalPage,
@@ -2466,11 +2467,6 @@ function UserMessage({
   )
 }
 
-/** Puts text in a session's prompt box, for Edit on a message you sent: you change it there and send it again. */
-function composeIn(sessionId: string, text: string): void {
-  window.dispatchEvent(new CustomEvent(COMPOSE_EVENT, { detail: { sessionId, text } }))
-}
-const COMPOSE_EVENT = "codeh:compose"
 
 /** A code block with its language and a Copy button, as in the ChatGPT and Claude apps (owner, 1 Nov). */
 function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {

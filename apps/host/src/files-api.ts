@@ -83,8 +83,16 @@ export function insideRoot(root: string, rel: string): { abs?: string; error?: s
 }
 
 export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & FilesDeps): void {
-  // Preview addresses: /preview/<token>/<path>. A token belongs to one session folder and lasts while Codehouse runs.
-  const previews = new Map<string, string>()
+  // Preview addresses: /preview/<token>/<path>. A token belongs to one session and its folder, and ends when that
+  // session closes or no longer works there (backlog O13: they used to last while Codehouse ran).
+  const previews = new Map<string, { root: string; session: string }>()
+  const liveRoot = (token: string): string | undefined => {
+    const p = previews.get(token)
+    if (!p) return undefined
+    if (ctx.sessionCwd?.(p.session) === p.root) return p.root
+    previews.delete(token)
+    return undefined
+  }
 
   const rootOf = (q: Record<string, unknown>): string | undefined =>
     typeof q.session === "string" ? ctx.sessionCwd?.(q.session) : undefined
@@ -183,9 +191,11 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const b = (req.body ?? {}) as Record<string, unknown>
     const root = rootOf(b)
     if (!root) return bad(reply, 404, "That session is not running.")
-    for (const [t, r] of previews) if (r === root) return { base: `/preview/${t}/` }
+    const session = String(b.session)
+    for (const [t, p] of previews)
+      if (p.root === root && p.session === session) return { base: `/preview/${t}/` }
     const token = randomBytes(24).toString("base64url")
-    previews.set(token, root)
+    previews.set(token, { root, session })
     return { base: `/preview/${token}/` }
   })
 
@@ -240,7 +250,7 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
   app.get("/preview/:token/*", async (req, reply) => {
     const { token } = req.params as { token: string }
     const rest = (req.params as Record<string, string>)["*"] ?? ""
-    const root = previews.get(token)
+    const root = liveRoot(token)
     if (!root) return bad(reply, 404, "This preview has ended.")
     let rel: string
     try {
