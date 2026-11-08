@@ -151,6 +151,17 @@ describe("the files panel", () => {
     expect((await get("/preview/not-a-token/site/index.html")).statusCode).toBe(404)
   })
 
+  it("finds files by what you type after @, best matches first, never through a junction (F15)", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/files/find?session=s1&q=a.t" })
+    expect(r.json().files).toEqual(["src/a.ts"])
+    const readme = (await app.inject({ method: "GET", url: "/api/files/find?session=s1&q=read" })).json()
+    expect(readme.files[0]).toBe("README.md")
+    // The junction to a folder outside, and .git, are not searched.
+    const priv = (await app.inject({ method: "GET", url: "/api/files/find?session=s1&q=private" })).json()
+    expect(priv.files).toEqual([])
+    expect((await app.inject({ method: "GET", url: "/api/files/find?session=nope&q=a" })).statusCode).toBe(404)
+  })
+
   it("ends a preview address when its session closes, and does not bring it back (O13)", async () => {
     const { base } = (
       await app.inject({ method: "POST", url: "/api/files/preview", payload: { session: "s1" } })

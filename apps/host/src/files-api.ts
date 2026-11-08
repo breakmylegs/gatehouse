@@ -82,6 +82,75 @@ export function insideRoot(root: string, rel: string): { abs?: string; error?: s
   return { abs: targetReal }
 }
 
+/** Folders never searched for @: version control, dependencies and build output. */
+const SKIP_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  "coverage",
+  ".turbo",
+  ".venv",
+  "__pycache__",
+  "target",
+  "bin",
+  "obj",
+])
+/** The most entries one search looks at, how deep it goes, and how many it returns. */
+const FIND_VISIT = 20_000
+const FIND_DEPTH = 12
+const FIND_MAX = 20
+
+/**
+ * Files under `root` (relative, forward slashes) whose name or path holds `query`, ignoring case: a name starting with
+ * it first, then a name holding it, then a path holding it, shorter paths first. Links and junctions are never followed,
+ * and the walk stops after FIND_VISIT entries. An empty query gives the files nearest the top.
+ */
+export function findFiles(root: string, query: string): string[] {
+  const q = query.toLowerCase().replace(/\\/g, "/")
+  const hits: Array<{ rel: string; rank: number }> = []
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }]
+  let visited = 0
+  while (queue.length && visited < FIND_VISIT) {
+    const { dir, depth } = queue.shift()!
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const d of entries) {
+      if (++visited > FIND_VISIT) break
+      const full = path.join(dir, d.name)
+      if (d.isSymbolicLink()) continue
+      if (d.isDirectory()) {
+        if (!SKIP_DIRS.has(d.name) && depth < FIND_DEPTH)
+          queue.push({ dir: full, depth: depth + 1 })
+        continue
+      }
+      if (!d.isFile()) continue
+      const rel = path.relative(root, full).split(path.sep).join("/")
+      const name = d.name.toLowerCase()
+      const rank = !q
+        ? 3
+        : name.startsWith(q)
+          ? 0
+          : name.includes(q)
+            ? 1
+            : rel.toLowerCase().includes(q)
+              ? 2
+              : -1
+      if (rank >= 0) hits.push({ rel, rank })
+    }
+  }
+  return hits
+    .sort((a, b) => a.rank - b.rank || a.rel.length - b.rel.length || a.rel.localeCompare(b.rel))
+    .slice(0, FIND_MAX)
+    .map((h) => h.rel)
+}
+
 export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & FilesDeps): void {
   // Preview addresses: /preview/<token>/<path>. A token belongs to one session and its folder, and ends when that
   // session closes or no longer works there (backlog O13: they used to last while Codehouse ran).
@@ -122,6 +191,15 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const v = await ctx.engine.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd })
     return v.outcome === "deny" ? v.reason : undefined
   }
+
+  // F15 (backlog): files in the session's folder whose name or path holds what you typed after @, for the prompt box.
+  app.get("/api/files/find", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const query = typeof q.q === "string" ? q.q.slice(0, 200) : ""
+    return { files: findFiles(real(root), query) }
+  })
 
   app.get("/api/files/list", async (req, reply) => {
     const q = req.query as Record<string, unknown>

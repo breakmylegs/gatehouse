@@ -13,20 +13,25 @@ floor:
                 "**/.aws/**", "**/.azure/**", "**/.ssh/**", "**/.claude/.credentials.json",
                 "**/.credentials.json", "**/Gatehouse/accounts/**"]
     message: "Secrets files are blocked by policy. Ask the user to provide the values instead."
+  # F2 (backlog): a rule that stops a call says what to do instead, so Claude can take the safer way by itself.
   - id: obfuscated-shell
     powershell: { encodedCommand: true, invokeExpression: true, dynamicInvocation: true }
     bash: { evalDynamic: true, pipeToShell: true }
+    message: "Encoded, dynamic or piped-to-shell commands are blocked, because what would run cannot be read first. Instead, write the command out in full, or save it as a script file in the project and run that file."
   - id: critical-paths
     pathGlobs: ["C:/Windows/**", "C:/Program Files/**", "C:/Program Files (x86)/**"]
     tools: [Edit, Write, MultiEdit, Bash, PowerShell]
+    message: "Windows and program folders are never changed. Instead, work inside the project folder, and ask the person if something there needs changing."
 
 deny:
   - id: outside-workspace-write
     tools: [Edit, Write, MultiEdit, NotebookEdit]
     pathOutside: workspaceRoots
+    message: "Writing outside your workspace folders is not allowed. Instead, write inside the project folder; if the file really belongs elsewhere, ask the person to add that folder as a workspace folder in Settings."
   - id: destructive-shell
     commands: ["rm -rf /*", "rm -rf ~*", "Remove-Item * -Recurse -Force*", "format *", "diskpart*",
                "git push --force*", "git push -f*", "git reset --hard*", "git clean -fdx*"]
+    message: "This command can destroy work that cannot be got back. Instead: git push --force-with-lease rather than a force push; git stash or a new branch rather than git reset --hard; git clean -n to see what would be removed; delete named files rather than whole trees. Or ask the person to run it themselves."
   # A chat runs no command and changes no file (CH-03, ADR 0012). Its tool list has none of these; this is the second
   # wall. A call that does not say which kind of session it is from counts as a coding session.
   - id: chat-no-shell

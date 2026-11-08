@@ -43,6 +43,7 @@ import { RecapCard } from "../components/RecapCard"
 import { SideAnswerCard } from "../components/SideAnswer"
 import { askSideQuestion } from "../lib/btw"
 import { COMPOSE_EVENT, composeIn } from "../lib/compose"
+import { chooseMention, mentionAt, writeRanges } from "../lib/mentions"
 import {
   LOCAL_PAGE,
   OpenLocalPage,
@@ -629,8 +630,8 @@ function SessionPane({
           ) : chat && session.about ? (
             // Ask about code (owner, 6 Nov): which session it is about, and that it changes nothing.
             <span className="truncate text-xs text-mut">
-              About the code session {session.about.title}: Claude reads its files and what was
-              said in it, and never changes anything
+              About the code session {session.about.title}: Claude reads its files and what was said
+              in it, and never changes anything
             </span>
           ) : chat ? (
             <span className="truncate text-xs text-mut">
@@ -1707,6 +1708,41 @@ function Composer({
     else localStorage.removeItem(draftKey)
   }, [text, draftKey])
   const [active, setActive] = useState(0)
+  // F15: the @ word at the cursor, and the session's files that match it.
+  const [mention, setMention] = useState<{ start: number; query: string }>()
+  const [found, setFound] = useState<string[]>([])
+  const [foundAt, setFoundAt] = useState(0)
+  useEffect(() => {
+    if (!mention) {
+      setFound([])
+      return
+    }
+    let gone = false
+    const t = setTimeout(() => {
+      void api<{ files: string[] }>(
+        "GET",
+        `/api/files/find?session=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(mention.query)}`,
+      ).then((r) => {
+        if (gone) return
+        setFound(r.ok && r.data ? r.data.files : [])
+        setFoundAt(0)
+      })
+    }, 120)
+    return () => {
+      gone = true
+      clearTimeout(t)
+    }
+  }, [mention, sessionId])
+  const pickMention = (rel: string) => {
+    if (!mention) return
+    const next = chooseMention(text, mention, rel)
+    setText(next.text)
+    setMention(undefined)
+    requestAnimationFrame(() => {
+      area.current?.focus()
+      area.current?.setSelectionRange(next.caret, next.caret)
+    })
+  }
   const area = useRef<HTMLTextAreaElement>(null)
   const addUserText = useStore((s) => s.addUserText)
   const meta = useStore((s) => s.meta[sessionId])
@@ -1943,12 +1979,16 @@ function Composer({
     }
     // What Claude gets: your words, then a reference to each file and picture, which it opens.
     const named = [...files.map((f) => f.rel), ...pastedRels].map((rel) => `@${rel}`).join(" ")
-    const full = [t, named, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
+    // F15: "@file:10-20" written out as "@file (lines 10 to 20)", so Claude reads those lines.
+    const said = writeRanges(t)
+    const full = [said, named, pictures.map((p) => `@${p.rel}`).join(" ")]
+      .filter(Boolean)
+      .join("\n\n")
     // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.
     const st = useStore.getState().sessions[sessionId]?.state
     addUserText(
       sessionId,
-      [t, named].filter(Boolean).join("\n\n"),
+      [said, named].filter(Boolean).join("\n\n"),
       pictures.map((p) => ({ url: p.url, name: p.name })),
       st === "running" || st === "waiting",
     )
@@ -1983,6 +2023,30 @@ function Composer({
               >
                 <span className="mono font-semibold">{c.cmd}</span>
                 <span className="text-mut">{c.help}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {mention && found.length > 0 && matches.length === 0 ? (
+        <ul
+          role="listbox"
+          aria-label="Files"
+          className="panel absolute bottom-full left-0 z-10 mb-1 m-0 w-[460px] max-w-full list-none p-1"
+        >
+          {found.map((rel, i) => (
+            <li key={rel} role="option" aria-selected={i === foundAt}>
+              <button
+                className={clsx(
+                  "mono w-full truncate rounded border-0 bg-transparent px-2 py-1 text-left text-[13px]",
+                  i === foundAt && "bg-s2",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  pickMention(rel)
+                }}
+              >
+                {rel}
               </button>
             </li>
           ))}
@@ -2114,14 +2178,36 @@ function Composer({
           rows={1}
           maxLength={100_000}
           disabled={disabled}
-          title="Enter sends, Shift+Enter adds a line, / for commands"
-          placeholder={disabled ? "This session has ended" : "Write a prompt, or / for commands"}
+          title="Enter sends, Shift+Enter adds a line, / for commands, @ for files"
+          placeholder={
+            disabled ? "This session has ended" : "Write a prompt, / for commands, @ for files"
+          }
           value={text}
           onChange={(e) => {
             setText(e.target.value)
             setActive(0)
+            setMention(mentionAt(e.target.value, e.target.selectionStart ?? e.target.value.length))
           }}
           onKeyDown={(e) => {
+            if (mention && found.length > 0) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault()
+                setFoundAt(
+                  (a) => (a + (e.key === "ArrowDown" ? 1 : -1) + found.length) % found.length,
+                )
+                return
+              }
+              if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+                e.preventDefault()
+                pickMention(found[foundAt] ?? found[0]!)
+                return
+              }
+            }
+            if (mention && e.key === "Escape") {
+              e.preventDefault()
+              setMention(undefined)
+              return
+            }
             if (matches.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
               e.preventDefault()
               setActive(
@@ -2466,7 +2552,6 @@ function UserMessage({
     </div>
   )
 }
-
 
 /** A code block with its language and a Copy button, as in the ChatGPT and Claude apps (owner, 1 Nov). */
 function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
