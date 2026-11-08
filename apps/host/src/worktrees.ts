@@ -12,6 +12,7 @@ import path from "node:path"
 import type { FastifyInstance } from "fastify"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
+import { MergeError, mergeBack, previewMerge } from "./worktree-merge.js"
 
 export class WorktreeError extends Error {}
 
@@ -283,7 +284,10 @@ function folderBytes(dir: string): number {
   return total
 }
 
-/** GET /api/worktrees and POST /api/worktrees/remove: the cleanup panel. Each removal is recorded first. */
+/**
+ * GET /api/worktrees, POST /api/worktrees/remove, and merging back: the cleanup panel. Each removal and merge is
+ * recorded first.
+ */
 export function registerWorktreeRoutes(
   app: FastifyInstance,
   ctx: { worktrees?: Worktrees; audit: HostAudit; openIn?: (folder: string) => boolean },
@@ -326,6 +330,59 @@ export function registerWorktreeRoutes(
       return reply
         .code(e instanceof WorktreeError ? 409 : 500)
         .send({ error: (e as Error).message })
+    }
+  })
+
+  // Merge back (G14): what the branch brings first, then the merge of exactly that, recorded before it happens.
+  const recordOf = (p: unknown) =>
+    typeof p === "string" && p.length <= 4096
+      ? ctx.worktrees?.records().find((w) => samePath(w.path, p))
+      : undefined
+  app.get("/api/worktrees/merge-preview", async (req, reply) => {
+    if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
+    const rec = recordOf((req.query as { path?: unknown }).path)
+    if (!rec) return reply.code(404).send({ error: "Codehouse did not make that worktree." })
+    try {
+      return await previewMerge(rec)
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/worktrees/merge", async (req, reply) => {
+    if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
+    const b = (req.body ?? {}) as { path?: unknown; into?: unknown; tip?: unknown }
+    const rec = recordOf(b.path)
+    if (!rec) return reply.code(404).send({ error: "Codehouse did not make that worktree." })
+    if (
+      typeof b.into !== "string" ||
+      b.into.length > 255 ||
+      typeof b.tip !== "string" ||
+      !/^[0-9a-f]{40,64}$/.test(b.tip)
+    )
+      return reply.code(422).send({ error: "Look at what it brings before merging." })
+    const recorded = await ctx.audit.record({
+      session: "desktop",
+      event: "worktree_merged",
+      channel: "desktop",
+      tool: "git",
+      cwd: "",
+      input: { path: rec.path, branch: rec.branch, into: b.into, tip: b.tip },
+      verdict: {
+        outcome: "allow",
+        ruleId: "worktree-merged",
+        reason: "A worktree's branch was merged back into its checkout from the desktop, after its diff was shown.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded)
+      return reply.code(503).send({ error: "It could not be recorded, so it was not merged." })
+    try {
+      return await mergeBack(rec, { into: b.into, tip: b.tip })
+    } catch (e) {
+      return reply.code(e instanceof MergeError ? 409 : 500).send({ error: (e as Error).message })
     }
   })
 }
