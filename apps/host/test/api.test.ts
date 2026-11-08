@@ -255,6 +255,42 @@ describe("remember rules", () => {
     })
     expect((await post({ id })).statusCode).toBe(404)
   })
+
+  it("says when each was added and last used, from the audit log (G29)", async () => {
+    const localPath = path.join(root, "rules.local.yaml")
+    const used = await appendRemember(localPath, { tool: "Bash", command: "npm run dev" })
+    const idle = await appendRemember(localPath, { tool: "Bash", command: "npm run lint" })
+    ctx.store.load()
+    await ctx.audit.record({
+      session: "s1",
+      event: "evaluate_permission",
+      channel: "approver",
+      tool: "Bash",
+      input: { command: "npm run dev" },
+      verdict: {
+        outcome: "allow",
+        ruleId: used.id,
+        reason: "Allowed by rule.",
+        risk: 0,
+        decidedBy: "rules",
+        policyHash: "h",
+      },
+      latencyMs: 1,
+    })
+    const rules = (await get("/api/policy/remember/usage")).rules as Array<{
+      id: string
+      uses: number
+      createdAt?: string
+      lastUsed?: string
+    }>
+    const a = rules.find((r) => r.id === used.id)!
+    const b = rules.find((r) => r.id === idle.id)!
+    expect(a).toMatchObject({ uses: 1 })
+    expect(a.lastUsed).toBeTruthy()
+    expect(a.createdAt).toBeTruthy()
+    expect(b).toMatchObject({ uses: 0 })
+    expect(b.lastUsed).toBeUndefined()
+  })
 })
 
 describe("settings endpoints", () => {

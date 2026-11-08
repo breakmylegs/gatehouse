@@ -283,7 +283,7 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
 - **Levels**: Careful (reads, and changes code, tests and docs), Balanced (for building an app: any file in your folders, git on this computer, building, testing, running your app and reading the web) and Hands-off (Balanced, and installing packages for your project). Sending code away and anything risky always ask. Under each level: up to five everyday requests it lets Claude do by itself and five it asks you about, worked out by the real rules for that level in a project inside your first workspace folder.
 - **Switches**: change one thing at a time, for example let Claude install packages without asking. Each change saves at once; Undo in the message puts it back.
 - **Always blocked**: what no level or rule can allow.
-- **Learned from you**: things you allowed three times or more, offered as one exact rule, and the answers you made permanent (Ask me again removes one).
+- **Learned from you**: things you allowed three times or more, offered as one exact rule, and the answers you made permanent (Ask me again removes one). Each says how often it was used this year and when last; one not used for 90 days (or since you added it, if never) is marked, and one button asks you again about all of those.
 - **Try it**: what would happen if Claude wanted to run a command, change or read a file, or open a page, and which choice decides it, with your choices now or with any level. Trying a level saves nothing.
 
 **Advanced** is the full studio, below.

@@ -40,6 +40,7 @@ import {
   loadPolicy,
   PolicyEngine,
   PolicyLoadError,
+  readRememberEntries,
   removeRemember,
   replay,
   type LoadOptions,
@@ -498,6 +499,39 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       `policy activated (${hash.slice(0, 12)}), audit ${recorded ? "recorded" : "NOT recorded"}`,
     )
     return { ok: true, hash, audited: recorded, rulesYamlHash: sha(b.yaml) }
+  })
+
+  // G29 (backlog): when each remembered rule was added and last used, from the audit log of the past year, so one you
+  // no longer use can be seen and removed.
+  app.get("/api/policy/remember/usage", async (_req, reply) => {
+    const localPath = ctx.loadOptions.localPath
+    let entries: ReturnType<typeof readRememberEntries> = []
+    try {
+      entries = localPath ? readRememberEntries(localPath) : []
+    } catch (e) {
+      return bad(reply, 422, (e as Error).message)
+    }
+    const used = new Map<string, { uses: number; lastUsed: string }>()
+    for (const r of recordsSince(ctx.auditDir, Date.now() - 365 * DAY)) {
+      if (r.verdict.outcome !== "allow" || !r.verdict.ruleId.startsWith("remember-")) continue
+      const was = used.get(r.verdict.ruleId)
+      used.set(r.verdict.ruleId, {
+        uses: (was?.uses ?? 0) + 1,
+        lastUsed: was && was.lastUsed > r.ts ? was.lastUsed : r.ts,
+      })
+    }
+    return {
+      rules: entries.map((e) => {
+        const id = `remember-${e.id}`
+        const u = used.get(id)
+        return {
+          id,
+          ...(e.createdAt ? { createdAt: e.createdAt } : {}),
+          uses: u?.uses ?? 0,
+          ...(u ? { lastUsed: u.lastUsed } : {}),
+        }
+      }),
+    }
   })
 
   app.post("/api/policy/remember/remove", async (req, reply) => {

@@ -182,6 +182,14 @@ export async function appendRemember(
 }
 
 /** Removes one remember rule from rules.local.yaml (only the desktop does this). Accepts the id with or without the `remember-` prefix. */
+/** The remember entries as they are kept, with when each was added (G29). None when there is no file yet. */
+export function readRememberEntries(localPath: string): RememberEntry[] {
+  if (!fs.existsSync(localPath)) return []
+  const checked = checkRememberFile(parseYaml(fs.readFileSync(localPath, "utf8")))
+  if (!checked.ok) throw new Error(`rules.local.yaml is not valid: ${checked.errors.join("; ")}`)
+  return checked.value.remember
+}
+
 export async function removeRemember(localPath: string, id: string): Promise<{ removed: boolean }> {
   if (!fs.existsSync(localPath)) return { removed: false }
   const checked = checkRememberFile(parseYaml(fs.readFileSync(localPath, "utf8")))

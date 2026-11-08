@@ -344,6 +344,32 @@ export function PolicyChoices({ onAdvanced }: { onAdvanced: () => void }) {
   )
 }
 
+interface RuleUsage {
+  id: string
+  createdAt?: string
+  lastUsed?: string
+  uses: number
+}
+
+/** A remembered rule nobody has used for this long is worth asking about again (G29). */
+export const STALE_DAYS = 90
+
+/** Not used for STALE_DAYS: since it was last used, or since it was added if it never was. Unknown is not stale. */
+export function isStale(u: RuleUsage | undefined, now: number): boolean {
+  const since = u?.lastUsed ?? u?.createdAt
+  if (!since) return false
+  return now - Date.parse(since) >= STALE_DAYS * 86_400_000
+}
+
+function usedLine(u: RuleUsage | undefined): string {
+  if (!u) return ""
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+  if (u.lastUsed)
+    return `Used ${u.uses} time${u.uses === 1 ? "" : "s"} this year, last on ${day(u.lastUsed)}.`
+  return u.createdAt ? `Not used since you added it on ${day(u.createdAt)}.` : "Not used this year."
+}
+
 /** Approvals you keep giving, offered as rules, and the answers you already made permanent. */
 function Learned({
   sug,
@@ -370,6 +396,30 @@ function Learned({
   }
   const what = (r: PolicyBits["remember"][number]) =>
     r.commands?.[0] ?? r.paths?.[0] ?? (r.tools ?? []).join(", ")
+  // G29: when each was added and last used; one unused for 90 days is marked, and can go with the others in one step.
+  const [usage, setUsage] = useState<Record<string, RuleUsage>>({})
+  const ids = remember.map((r) => r.id).join(",")
+  useEffect(() => {
+    void api<{ rules: RuleUsage[] }>("GET", "/api/policy/remember/usage").then((r) => {
+      if (r.ok && r.data) setUsage(Object.fromEntries(r.data.rules.map((u) => [u.id, u])))
+    })
+  }, [ids])
+  const now = Date.now()
+  const stale = remember.filter((r) => isStale(usage[r.id], now))
+  async function removeUnused() {
+    for (const r of stale) {
+      const res = await api("POST", "/api/policy/remember/remove", { id: r.id })
+      if (!res.ok)
+        return toast.error(res.error ?? "Not every one could be removed", { id: "policy" })
+    }
+    toast(
+      `Removed ${stale.length}: Claude asks you about ${stale.length === 1 ? "it" : "them"} again.`,
+      {
+        id: "policy",
+      },
+    )
+    await onChanged()
+  }
   return (
     <section aria-labelledby="learn-h" className="grid gap-3">
       <div>
@@ -413,13 +463,28 @@ function Learned({
           <ul className="m-0 list-none divide-y divide-line border-y border-line p-0">
             {remember.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-3 py-2">
-                <span className="mono min-w-0 flex-1 [overflow-wrap:anywhere]">{what(r)}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="mono [overflow-wrap:anywhere]">{what(r)}</span>
+                  <span className="block text-[13px] text-mut">
+                    {usedLine(usage[r.id])}
+                    {isStale(usage[r.id], now) ? (
+                      <strong className="ml-1 text-tx">Not used for 90 days.</strong>
+                    ) : null}
+                  </span>
+                </span>
                 <button type="button" className="btn" onClick={() => void remove(r.id, what(r))}>
                   Ask me again
                 </button>
               </li>
             ))}
           </ul>
+          {stale.length ? (
+            <div>
+              <button type="button" className="btn" onClick={() => void removeUnused()}>
+                Ask me again about the {stale.length} not used for 90 days
+              </button>
+            </div>
+          ) : null}
         </>
       ) : null}
     </section>
