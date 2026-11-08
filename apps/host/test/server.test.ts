@@ -662,6 +662,27 @@ describe("commands over the WebSocket", () => {
     await c.send({ type: "close_session", sessionId: b.sessionId })
   }, 120_000)
 
+  it("records a review finding you dismiss (G16)", async () => {
+    s.sdk.turn = async () => undefined
+    const a = (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    const r = await c.send({
+      type: "review_dismiss",
+      sessionId: a.sessionId,
+      file: "src/pay.ts",
+      summary: "The amount is not checked.",
+    })
+    expect(r.ok).toBe(true)
+    const rec = await c.waitFor(
+      "audit",
+      (e) => (e.record as { event: string }).event === "review_finding_dismissed",
+    )
+    expect(rec.record).toMatchObject({
+      session: a.sessionId,
+      verdict: { ruleId: "review-dismissed", decidedBy: "human-desktop" },
+    })
+    await c.send({ type: "close_session", sessionId: a.sessionId })
+  }, 120_000)
+
   it("lists past sessions and refreshes the account", async () => {
     expect((await c.send({ type: "list_history", dir: "C:/x" })).data).toEqual([
       { sessionId: "old", dir: "C:/x" },

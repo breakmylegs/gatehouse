@@ -507,6 +507,30 @@ export class HostServer {
         })
         return undefined
       }
+      case "review_dismiss": {
+        // G16: a finding on a review card you chose not to fix. Recorded (redacted, like every record) before the card
+        // lets it go; not recorded, it stays.
+        const s = this.#session(cmd.sessionId)
+        const recorded = await this.#opts.app.audit.record({
+          session: cmd.sessionId,
+          event: "review_finding_dismissed",
+          channel: "desktop",
+          tool: "review",
+          cwd: s.cwd,
+          input: { file: cmd.file, summary: cmd.summary },
+          verdict: {
+            outcome: "deny",
+            ruleId: "review-dismissed",
+            reason: "You dismissed a finding from a review of this session's changes.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!recorded) throw new Error("It could not be recorded, so it stays.")
+        return undefined
+      }
       case "interrupt":
         await this.#session(cmd.sessionId).interrupt()
         return undefined

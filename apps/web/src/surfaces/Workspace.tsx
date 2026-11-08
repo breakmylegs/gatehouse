@@ -60,6 +60,7 @@ import { MODELS, StartProgress } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
+import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
 import { PictureViewer } from "../components/PictureViewer"
 import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
@@ -2592,11 +2593,21 @@ function UserMessage({
   )
 }
 
-/** A code block with its language and a Copy button, as in the ChatGPT and Claude apps (owner, 1 Nov). */
+/**
+ * A code block with its language and a Copy button, as in the ChatGPT and Claude apps (owner, 1 Nov). A review's
+ * findings block (G16) shows as the review card instead, when it reads as findings.
+ */
 function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
   const pre = useRef<HTMLPreElement>(null)
-  const code = isValidElement<{ className?: string }>(children) ? children : undefined
+  const code = isValidElement<{ className?: string; children?: unknown }>(children)
+    ? children
+    : undefined
   const language = /language-([\w+#.-]+)/.exec(code?.props.className ?? "")?.[1]
+  const findings =
+    language === REVIEW_FENCE && typeof code?.props.children === "string"
+      ? parseFindings(code.props.children)
+      : undefined
+  if (findings) return <ReviewCard findings={findings} />
   return (
     <div className="code-block">
       <div className="code-head">
@@ -2712,7 +2723,11 @@ export const ItemView = memo(function ItemView({
         </>
       )
     case "text":
-      return <ClaudeText text={item.text} at={item.at} subagent={item.subagent} />
+      return (
+        <ReviewSession.Provider value={sessionId}>
+          <ClaudeText text={item.text} at={item.at} subagent={item.subagent} />
+        </ReviewSession.Provider>
+      )
     case "thinking":
       return (
         <details className="text-mut" open={verbose || undefined}>

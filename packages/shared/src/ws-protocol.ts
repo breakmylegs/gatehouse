@@ -81,6 +81,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
     to: Id,
     text: z.string().min(1).max(100_000),
   }),
+  /** G16: you dismissed a finding on a review card; recorded before it goes from the card. */
+  z.object({
+    type: z.literal("review_dismiss"),
+    sessionId: Id,
+    file: z.string().min(1).max(300),
+    summary: z.string().min(1).max(500),
+  }),
   z.object({ type: z.literal("interrupt"), sessionId: Id }),
   /** Stops the turn and every background task now. */
   z.object({ type: z.literal("stop_session"), sessionId: Id }),

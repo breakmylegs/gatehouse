@@ -5,6 +5,7 @@ import { clock } from "../lib/format"
 import { structuredPatch } from "diff"
 import { DiffView } from "./CodeViews"
 import { MoreLines, shownLines } from "./MoreLines"
+import { REVIEW_PROMPT } from "./ReviewCard"
 import { composeIn } from "../lib/compose"
 import { describeDecision } from "../lib/decision"
 import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
@@ -223,6 +224,19 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                 </button>
               </>
             ) : null}
+            <button
+              type="button"
+              className="btn"
+              title="Claude reviews these changes and lists what it finds, for you to fix or dismiss one by one"
+              onClick={() => {
+                composeIn(sessionId, REVIEW_PROMPT)
+                toast("A review request is in the prompt box. Send it when ready.", {
+                  id: "changes",
+                })
+              }}
+            >
+              Ask for a review
+            </button>
             <button
               type="button"
               className="btn"
