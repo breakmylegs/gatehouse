@@ -1,4 +1,11 @@
 import { fromOutside, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
+import {
+  makesCommit,
+  scanCommit,
+  secretReason,
+  SECRET_IN_COMMIT_RULE,
+  type Found,
+} from "./commit-scan.js"
 import type { HookCallback, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk"
 import { evaluateFloor, type Policy, type PwshWorker } from "@gatehouse/policy"
 import type { Verdict } from "@gatehouse/shared"
@@ -101,6 +108,10 @@ export interface SessionHookDeps {
   provenance?: Provenance
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
+  /** G22: commits are checked for secrets unless this is false (tests only). */
+  scanCommits?: boolean
+  /** Tests only: stands in for reading the commit. */
+  commitScanner?: (cwd: string, command: string) => Promise<Found[]>
   log: (line: string) => void
 }
 
@@ -151,6 +162,39 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           latencyMs: 0,
         })
         return denyOutput(`${hit.reason} (rule ${hit.ruleId})`)
+      }
+      // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person.
+      if (deps.scanCommits !== false && makesCommit(input.tool_name, toolInput)) {
+        let found: Found[]
+        try {
+          found = await (deps.commitScanner ?? scanCommit)(cwd, String(toolInput.command))
+        } catch {
+          return askOutput(
+            "Codehouse could not check this commit for secrets, so it asks you before it runs.",
+          )
+        }
+        if (found.length) {
+          const reason = secretReason(found)
+          await deps.audit.record({
+            session: deps.sessionId,
+            event: "floor_deny",
+            channel: "host",
+            tool: input.tool_name,
+            toolUseId: input.tool_use_id,
+            cwd,
+            input: toolInput,
+            verdict: {
+              outcome: "deny",
+              ruleId: SECRET_IN_COMMIT_RULE,
+              reason,
+              risk: 100,
+              decidedBy: "floor",
+              policyHash: policy?.hash ?? "none",
+            },
+            latencyMs: 0,
+          })
+          return denyOutput(`${reason} (rule ${SECRET_IN_COMMIT_RULE})`)
+        }
       }
       // The call passed the floor. If it is an edit, take a checkpoint at the start of a burst of edits.
       await deps.checkpoints?.noteEdit(deps.sessionId, cwd, input.tool_name)
