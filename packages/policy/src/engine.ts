@@ -196,6 +196,8 @@ export class PolicyEngine {
       sessionKind: ctx.sessionKind ?? "code",
       projectName,
       ...(call.toolName === "WebFetch" && typeof input.url === "string" ? { url: input.url } : {}),
+      cwdKey: realKey(ctx.cwd),
+      now: ctx.now ?? Date.now(),
     }
 
     // Deny rules, per call and per segment. Deny wins.
@@ -368,6 +370,9 @@ interface MatchEnv {
   projectName?: string
   /** The address a WebFetch reads (B31). */
   url?: string
+  /** C-013: the folder the call is made in (a real-path key), and the moment it is decided. */
+  cwdKey: string
+  now: number
 }
 
 /**
@@ -453,6 +458,9 @@ function matchRemember(rule: Rule, env: MatchEnv): RuleMatch | null {
   const { f } = env
   if (!rule.tools?.includes(f.tool)) return null
   if (rule.projects && !(env.projectName !== undefined && rule.projects.includes(env.projectName))) return null
+  // C-013: an expired grant, or one made for another folder, does not apply: the call asks as it would without it.
+  if (rule.notAfter !== undefined && env.now > rule.notAfter) return null
+  if (rule.withinKey !== undefined && !isInside(env.cwdKey, rule.withinKey)) return null
   if (rule.urlHosts) return env.url !== undefined && onSites(env.url, rule.urlHosts) ? { call: true, segs: new Set() } : null
   const segs = new Set<number>()
   let call = false

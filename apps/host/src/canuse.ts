@@ -4,6 +4,8 @@ import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sd
 import {
   checkRemember,
   appendRemember,
+  DEFAULT_GRANT_DAYS,
+  type GrantLimits,
   evaluateFloor,
   type Policy,
   type PolicyEngine,
@@ -12,6 +14,8 @@ import {
 import { canonicalize, type Effects, type Verdict } from "@gatehouse/shared"
 import type { Broker, Resolution } from "./broker.js"
 import { effectsOf, UNKNOWN_EFFECTS } from "./effects.js"
+import type { GrantUses } from "./grant-uses.js"
+import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { HostAudit } from "./hostaudit.js"
@@ -48,6 +52,8 @@ export interface CanUseDeps {
   notifyAutoApproved?: (toolName: string, project: string) => void
   /** Each tool call's verdict, for the line under it in the transcript. A person's answer comes as its audit record. */
   onDecision?: (toolUseId: string, verdict: Verdict) => void
+  /** C-013: counts the uses of remembered rules with a limit. Absent: no limits are counted (tests). */
+  grants?: GrantUses
   /** G20: works out what a call would delete or throw away. Absent: effects.ts, in the session's folder. */
   effects?: (toolName: string, input: Record<string, unknown>) => Promise<Effects | undefined>
   log: (line: string) => void
@@ -188,6 +194,13 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       const verdict = withProvenance(judged, toolName, input, deps.provenance)
       if (!early) deps.onDecision?.(toolUseID, verdict)
       if (verdict.outcome === "allow") {
+        // C-013: a remembered rule that has used its allowed number of calls asks instead.
+        if (deps.grants?.spent(verdict, toolUseID))
+          return await escalate(deps, toolName, input, options, {
+            ...verdict,
+            outcome: "escalate",
+            reason: deps.grants.reason(verdict.ruleId),
+          })
         // G20: the judge never allows by itself what cannot be undone; your own rules still do.
         if (verdict.decidedBy === "judge") {
           const effects = await effectsFor(deps, toolName, input)
@@ -415,7 +428,7 @@ async function escalate(
   }
 
   if (resolution.outcome === "allow" && resolution.remember && resolution.channel === "desktop") {
-    await rememberRule(deps, toolName, finalInput)
+    await rememberRule(deps, toolName, finalInput, resolution.rememberFor)
   }
   return result
 }
@@ -458,10 +471,27 @@ async function recheckEdited(
   return verdict.outcome === "deny" ? verdict : undefined
 }
 
+/**
+ * C-013: a new grant's limits. Unless you chose otherwise: 30 days, in this session's folder, any number of uses.
+ */
+export function grantLimitsFor(
+  rememberFor: RememberFor | undefined,
+  cwd: string,
+  now = Date.now(),
+): GrantLimits {
+  const days = rememberFor?.days === undefined ? DEFAULT_GRANT_DAYS : rememberFor.days
+  return {
+    ...(days !== null ? { expiresAt: new Date(now + days * 86_400_000).toISOString() } : {}),
+    ...(rememberFor?.anywhere ? {} : { scope: cwd }),
+    ...(rememberFor?.maxUses !== undefined ? { maxUses: rememberFor.maxUses } : {}),
+  }
+}
+
 async function rememberRule(
   deps: CanUseDeps,
   toolName: string,
   input: Record<string, unknown>,
+  rememberFor?: RememberFor,
 ): Promise<void> {
   if (!deps.localRulesPath) return
   try {
@@ -481,7 +511,12 @@ async function rememberRule(
       deps.log(`remember refused: ${check.reason}`)
       return
     }
-    const { id, added } = await appendRemember(deps.localRulesPath, check.candidate)
+    const { id, added } = await appendRemember(
+      deps.localRulesPath,
+      check.candidate,
+      undefined,
+      grantLimitsFor(rememberFor, deps.cwd),
+    )
     deps.log(`remember rule ${added ? "added" : "already present"}: ${id}`)
   } catch (e) {
     deps.log(`remember failed (${(e as Error).message})`)

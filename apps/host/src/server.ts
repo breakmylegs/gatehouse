@@ -594,6 +594,7 @@ export class HostServer {
             ...(cmd.message !== undefined ? { message: cmd.message } : {}),
             ...(cmd.updatedInput !== undefined ? { updatedInput: cmd.updatedInput } : {}),
             ...(cmd.remember ? { remember: true } : {}),
+            ...(cmd.remember && cmd.rememberFor ? { rememberFor: cmd.rememberFor } : {}),
           },
           "desktop",
         )

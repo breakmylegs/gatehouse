@@ -31,6 +31,17 @@ export const ResourceLevel = z.enum(RESOURCE_LEVELS)
 export type ResourceLevel = z.infer<typeof ResourceLevel>
 const Message = z.string().max(500)
 
+/**
+ * C-013: a remembered rule's limits, chosen on the card. days: how long it lasts (null: until you remove it);
+ * anywhere: every folder rather than this session's; maxUses: how many calls it may allow.
+ */
+export const RememberFor = z.object({
+  days: z.number().int().min(1).max(365).nullable().optional(),
+  anywhere: z.boolean().optional(),
+  maxUses: z.number().int().min(1).max(10_000).optional(),
+})
+export type RememberFor = z.infer<typeof RememberFor>
+
 export const ClientCommand = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_session"),
@@ -132,6 +143,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     message: Message.optional(),
     updatedInput: z.record(z.string(), z.unknown()).optional(),
     remember: z.boolean().optional(),
+    /** C-013: how the remembered rule is limited. Absent: 30 days, in the session's folder, any number of uses. */
+    rememberFor: RememberFor.optional(),
   }),
   z.object({ type: z.literal("deny"), requestId: Id, message: Message.optional() }),
   z.object({

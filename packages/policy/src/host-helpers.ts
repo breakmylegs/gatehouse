@@ -8,7 +8,8 @@ import { checkFloor, type FloorHit } from "./floor.js"
 import { checkRememberFile } from "./schema.js"
 import type { PwshWorker } from "./pwsh.js"
 import { findProjectRoot } from "./paths.js"
-import type { EvalContext, Policy, RememberEntry, ToolCall } from "./types.js"
+import type { EvalContext, GrantLimits, Policy, RememberEntry, ToolCall } from "./types.js"
+import { grantLimitsPath } from "./loader.js"
 
 /**
  * The floor alone, for the Host's PreToolUse hook. The hook is the only place that sees every call (Claude
@@ -166,10 +167,29 @@ function entryKey(e: Pick<RememberEntry, "tool" | "command" | "path" | "host" | 
  * re-validates the result before it replaces the old file, and returns the id of a rule that already
  * says the same thing rather than adding a duplicate.
  */
+/** C-013: how long a new grant lasts unless the person chooses otherwise. */
+export const DEFAULT_GRANT_DAYS = 30
+
+/** Writes one grant's limits into rules.local.meta.json (by id), keeping everything else in the file. */
+async function writeGrantLimits(localPath: string, id: string, limits: GrantLimits | undefined): Promise<void> {
+  const file = grantLimitsPath(localPath)
+  let kept: Record<string, unknown> = {}
+  try {
+    kept = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+  } catch {
+    // none yet
+  }
+  const grants = { ...((kept.grants as Record<string, GrantLimits> | undefined) ?? {}) }
+  if (limits) grants[id] = limits
+  else delete grants[id]
+  await writeFileAtomic(file, JSON.stringify({ ...kept, version: 1, grants }, null, 2) + "\n")
+}
+
 export async function appendRemember(
   localPath: string,
   candidate: RememberCandidate,
   now: () => Date = () => new Date(),
+  limits?: GrantLimits,
 ): Promise<{ id: string; added: boolean }> {
   let entries: RememberEntry[] = []
   if (fs.existsSync(localPath)) {
@@ -184,6 +204,8 @@ export async function appendRemember(
   const next = { version: 1 as const, remember: [...entries, entry] }
   if (!checkRememberFile(next).ok) throw new Error("The new remember rule is not valid")
   fs.mkdirSync(path.dirname(localPath), { recursive: true })
+  // The limits first: if writing them fails, no rule is added without them.
+  if (limits) await writeGrantLimits(localPath, id, limits)
   await writeFileAtomic(localPath, stringifyYaml(next))
   return { id: `remember-${id}`, added: true }
 }
@@ -205,5 +227,6 @@ export async function removeRemember(localPath: string, id: string): Promise<{ r
   const kept = checked.value.remember.filter((e) => e.id !== bare)
   if (kept.length === checked.value.remember.length) return { removed: false }
   await writeFileAtomic(localPath, stringifyYaml({ version: 1 as const, remember: kept }))
+  await writeGrantLimits(localPath, bare, undefined).catch(() => undefined)
   return { removed: true }
 }

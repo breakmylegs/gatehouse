@@ -11,6 +11,7 @@ import { evaluateFloor, type Policy, type PwshWorker } from "@gatehouse/policy"
 import type { Verdict } from "@gatehouse/shared"
 import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
+import type { GrantUses } from "./grant-uses.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -86,6 +87,8 @@ export interface SessionHookDeps {
   audit: HostAudit
   kill: () => boolean
   checkpoints?: CheckpointManager
+  /** C-013: counts the uses of remembered rules that have a limit. */
+  grants?: GrantUses
   /** toolUseIDs that went through canUseTool, so PostToolUse can tell which calls Claude Code approved itself. */
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
@@ -223,6 +226,9 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
+        // C-013: a remembered rule that has used its allowed number of calls asks instead.
+        if (deps.grants?.spent(verdict, input.tool_use_id))
+          return askOutput(deps.grants.reason(verdict.ruleId))
         if (
           verdict.outcome === "escalate" &&
           (verdict.risk >= ASK_FROM_RISK ||

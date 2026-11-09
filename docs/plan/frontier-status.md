@@ -24,6 +24,12 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | G37 | Debugger | todo | | Debug adapters (debugpy, netcoredbg, js-debug); DAP only, never CDP |
 | G40 | Public hosts and sharing | todo | | Host CLIs with their own sign-in; zip without secrets |
 
+## Owner requests during the build
+
+| Id | Title | Status | Branch | Note |
+|---|---|---|---|---|
+| O21 | Session details panel, like Claude Code's (owner, 9 Nov, two screenshots) | todo | | Next after C-013. Environment (computer, working folder, repository), Context with the usage breakdown, Connectors, Changes (+/-), and running background tasks with how long each has run. No hover hints (shown inline). |
+
 ## Prerequisites (C-backlog)
 
 | Id | Title | Before | Status | Branch | Phase | Note |
@@ -31,7 +37,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-001 | Memory-aware test sharding by file | Wave 1 | built | slice/C-001-test-shards | BUILD_REPORT "Frontier C-001" | Three runs under 70% load owed |
 | C-002 | Gate refuses --skip-tests | Wave 1 | built | slice/C-002-skip-tests-override | BUILD_REPORT "Frontier C-002" | Signed per-version override, audited |
 | C-004 | Memory governor | Wave 1 | todo | | | Job objects exist (D10); no governor |
-| C-013 | Grant lifetimes | Wave 1 | todo | | | G29 gave last used and stale marking; no expiry or worktree scope |
+| C-013 | Grant lifetimes | Wave 1 | built | slice/C-013-grant-lifetimes | BUILD_REPORT "Frontier C-013" | Expiry (30 days by default), folder scope, use limits; a sidecar file so older versions still read the rules |
 | C-010 | Audit-backed session timeline | Wave 2 | todo | | | Walkthrough (G31) and audit by session exist |
 | C-011 | Signed timeline export | Wave 2 | todo | | | Audit bundle (G30) exists, not signed |
 | C-012 | Policy dry run | Wave 2 | todo | | | policy:replay exists |

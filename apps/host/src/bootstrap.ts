@@ -74,6 +74,7 @@ import { APPROVER_TIMEOUT_MS, ApproverClient } from "./approver-client.js"
 import { ApproverProcess, freePort, generateToken } from "./approver-process.js"
 import { Broker } from "./broker.js"
 import { CheckpointManager } from "./checkpoints.js"
+import { GrantUses } from "./grant-uses.js"
 import { createCompanionSdkServer } from "./companion-server.js"
 import { lookAtPage } from "./page-look.js"
 import { readAbout, type AboutDeps } from "./about-session.js"
@@ -218,6 +219,8 @@ export function createHost(opts: HostOptions = {}): Host {
     policy: () => store.current,
     log,
   })
+  // C-013: how often each remembered rule with a use limit has allowed a call.
+  const grants = new GrantUses(path.join(gatehouseDataDir(env), "grant-uses.json"), () => store.current)
 
   // The Approver: spawned with a fresh token, or one that already exists (tests).
   let approverProcess: ApproverProcess | undefined
@@ -408,6 +411,7 @@ export function createHost(opts: HostOptions = {}): Host {
     kill,
     usage,
     checkpoints,
+    grants,
     account,
     // Owner, 9 Nov: a bypass that ran out pauses its session at once, not at the next look.
     limitCheck: () => limitPauser.check(),

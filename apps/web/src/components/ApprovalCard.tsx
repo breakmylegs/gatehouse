@@ -76,6 +76,10 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [confirmStop, setConfirmStop] = useState(false)
   const connected = useStore((s) => s.conn === "open")
   const [remember, setRemember] = useState<RememberPreview>()
+  // C-013: how long a remembered rule lasts, where, and how many times; 30 days in this folder unless you choose.
+  const [lasts, setLasts] = useState("30")
+  const [where, setWhere] = useState("here")
+  const [uses, setUses] = useState("")
   const command = useMemo(
     () => commandText(req.toolName, view.rawInput),
     [req.toolName, view.rawInput],
@@ -438,12 +442,52 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 <>
                   <p className="m-0">This will add exactly one rule to your local policy:</p>
                   <pre className="cmd">{remember.preview}</pre>
+                  <div className="flex flex-wrap gap-3">
+                    <label className="grid gap-1">
+                      <span>Lasts</span>
+                      <select value={lasts} onChange={(e) => setLasts(e.target.value)}>
+                        <option value="1">1 day</option>
+                        <option value="7">7 days</option>
+                        <option value="30">30 days (recommended)</option>
+                        <option value="90">90 days</option>
+                        <option value="never">Until you remove it</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span>Where</span>
+                      <select value={where} onChange={(e) => setWhere(e.target.value)}>
+                        <option value="here">This folder only (recommended)</option>
+                        <option value="anywhere">Any folder</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span>Uses</span>
+                      <select value={uses} onChange={(e) => setUses(e.target.value)}>
+                        <option value="">No limit</option>
+                        <option value="1">Once more</option>
+                        <option value="10">10 times</option>
+                        <option value="100">100 times</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p className="m-0 text-[13px] text-mut">
+                    When it ends, or it has been used up, Codehouse asks you again.
+                  </p>
                   <div className="flex gap-2">
                     <button
                       className="btn btn-primary"
                       disabled={busy}
                       onClick={() =>
-                        void run({ type: "approve", requestId: req.id, remember: true })
+                        void run({
+                          type: "approve",
+                          requestId: req.id,
+                          remember: true,
+                          rememberFor: {
+                            days: lasts === "never" ? null : Number(lasts),
+                            ...(where === "anywhere" ? { anywhere: true } : {}),
+                            ...(uses ? { maxUses: Number(uses) } : {}),
+                          },
+                        })
                       }
                     >
                       Allow once and remember

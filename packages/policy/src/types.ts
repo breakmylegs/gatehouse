@@ -45,6 +45,12 @@ export interface Rule {
   urlHosts?: string[]
   /** Internal, remember rules only (B31): the projects it applies in, by folder name, lower case. Absent: every one. */
   projects?: string[]
+  /** Internal, remember rules only (C-013): it no longer applies after this moment (ms since the epoch). */
+  notAfter?: number
+  /** Internal, remember rules only (C-013): it applies only to calls made in this folder or below (a real-path key). */
+  withinKey?: string
+  /** Internal, remember rules only (C-013): the most times it may allow before it asks again (the Host counts). */
+  maxUses?: number
   /** Internal, remember rules only: exact absolute path keys. */
   paths?: string[]
 }
@@ -158,6 +164,19 @@ export interface EvalContext {
   sessionKind?: SessionKind
   /** Defaults to the git root of cwd. */
   projectRoot?: string
+  /** The moment the call is decided at, for grant expiry (C-013). Absent: now. */
+  now?: number
+}
+
+/**
+ * C-013: how long a remember rule lasts, where it applies and how often, kept beside rules.local.yaml in
+ * rules.local.meta.json (by rule id), so an older version, which reads only rules.local.yaml, is not stopped by it.
+ */
+export interface GrantLimits {
+  expiresAt?: string
+  /** The folder it was made in; it applies there and below. */
+  scope?: string
+  maxUses?: number
 }
 
 export type RuleSection = "floor" | "deny" | "escalate" | "allow"

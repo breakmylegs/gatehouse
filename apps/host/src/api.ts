@@ -1,3 +1,5 @@
+import { RememberFor } from "@gatehouse/shared/ws-protocol"
+import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
 import { registerFilesRoutes } from "./files-api.js"
@@ -1568,6 +1570,7 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const b = req.body as {
       candidate?: { tool?: unknown; command?: unknown; path?: unknown }
       cwd?: unknown
+      rememberFor?: unknown
     } | null
     const c = b?.candidate
     if (
@@ -1593,7 +1596,14 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
       ctx.pwsh,
     )
     if (!check.ok) return bad(reply, 422, check.reason)
-    const r = await appendRemember(localPath, check.candidate)
+    // C-013: like one remembered from a request, it lasts 30 days and only in that folder unless asked otherwise.
+    const rememberFor = RememberFor.safeParse(b?.rememberFor)
+    const r = await appendRemember(
+      localPath,
+      check.candidate,
+      undefined,
+      grantLimitsFor(rememberFor.success ? rememberFor.data : undefined, cwd),
+    )
     ctx.store.load()
     await ctx.audit.record({
       session: "desktop",

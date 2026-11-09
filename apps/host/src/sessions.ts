@@ -21,6 +21,7 @@ import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
 import { createCanUseTool } from "./canuse.js"
 import type { CheckpointManager } from "./checkpoints.js"
+import type { GrantUses } from "./grant-uses.js"
 import {
   createEventHook,
   createFloorHook,
@@ -362,6 +363,8 @@ export interface SessionDeps {
   kill: HostKillSwitch
   usage: UsageStore
   checkpoints: CheckpointManager
+  /** C-013: counts the uses of remembered rules that have a limit. */
+  grants?: GrantUses
   account: AccountMonitor
   /** Owner, 9 Nov: one look at the limits now, so a bypass that has run out pauses the session at once. */
   limitCheck?: () => Promise<void>
@@ -797,6 +800,7 @@ export class Session extends EventEmitter<SessionEvents> {
       audit: d.audit,
       kill: () => d.kill.isEngaged(),
       checkpoints: d.checkpoints,
+      ...(d.grants ? { grants: d.grants } : {}),
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,
@@ -835,6 +839,7 @@ export class Session extends EventEmitter<SessionEvents> {
       engine: d.engine,
       pwsh: d.pwsh,
       checkpoints: d.checkpoints,
+      ...(d.grants ? { grants: d.grants } : {}),
       ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
       decided: this.#decided,
       verdicts: this.#verdicts,

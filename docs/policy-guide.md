@@ -192,6 +192,20 @@ remember:
 - Verdicts from a remember rule use the rule id `remember-<id>`.
 - Remember rules are checked after the floor and deny rules, so they cannot cover a floor or deny category. They are checked before escalate rules, which is how they can allow `npm install lodash`. They cannot suppress the built-in escalations in section 3.
 
+### Lifetimes, scope and uses (C-013)
+
+Each rule remembered from now on carries limits, kept beside it in `policy/rules.local.meta.json` so that an older Codehouse still reads `rules.local.yaml` as before:
+
+```json
+{ "version": 1, "grants": { "npm-lodash": { "expiresAt": "2026-12-09T12:00:00.000Z", "scope": "C:/dev/app", "maxUses": 10 } } }
+```
+
+- `expiresAt`: after this time the rule no longer allows, and the call asks as it would without it. By default 30 days after it was remembered; you may choose 1, 7, 30 or 90 days, or until you remove it.
+- `scope`: the rule allows only in this folder and below it (compared after resolving links and 8.3 names). By default the session's folder; you may choose any folder.
+- `maxUses`: how many calls it may allow. The Host counts each tool call once, in `%LOCALAPPDATA%\Gatehouse\grant-uses.json`; when none are left, the call asks with the reason "has allowed its N uses". No limit by default.
+- Fail closed: an expiry that cannot be read counts as passed, a scope that is not a string matches no folder, a use limit that is not a positive whole number allows none, and a counts file that cannot be read counts every limited rule as used up.
+- Rules remembered before C-013 have no limits and keep working as they did. Removing a rule removes its limits.
+
 ## 8. Redaction
 
 `redact()` and `redactString()` remove tokens, keys, Authorization headers, JWTs, connection strings, credentials in URLs, private key blocks and `key=value` secrets, plus any terms in the user's list (client names, internal host names). Strings under keys that look secret (`password`, `token`, `api_key` and so on) are replaced whole. Numbers are left alone. It never mutates its input. It is applied before anything is written to the audit log or sent to the relay.
