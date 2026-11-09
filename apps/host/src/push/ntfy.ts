@@ -55,12 +55,44 @@ export interface NtfyStatus {
   oldStyle?: boolean
   /** How it listens: a live stream, or asking every few seconds where the server holds streams back. */
   mode?: "stream" | "poll"
+  /** The server answered 429 (too many requests), so Codehouse waits until then before it listens again. */
+  slowedUntil?: string
 }
 
-/** How long the live stream may take to begin before Codehouse asks instead, and how often it asks then. */
+/**
+ * How long the live stream may take to begin before Codehouse asks instead, and how often it asks then. A user's
+ * report (9 Nov): "Listening failed: ntfy answered 429". ntfy's default limit is a burst of 60 requests, then one
+ * every 5 seconds, and notifications and test messages count too, so asking every 3 seconds ran out after about
+ * seven minutes. Every 10 seconds stays well inside it.
+ */
 export const STREAM_WAIT_MS = 15_000
-export const POLL_EVERY_MS = 3_000
+export const POLL_EVERY_MS = 10_000
 const POLL_TIMEOUT_MS = 20_000
+/** After a 429 with no Retry-After, how long Codehouse waits, and the longest it waits for one that has it. */
+export const SLOW_DOWN_MS = 60_000
+const SLOW_DOWN_MAX_MS = 15 * 60_000
+/** The longest it waits between two asks once the server has asked it to slow down. */
+const POLL_EVERY_MAX_MS = 60_000
+
+/** A 429: how long the server asked Codehouse to wait (Retry-After, in seconds or as a date), within limits. */
+export function slowDownFor(res: Response, now: number, fallbackMs = SLOW_DOWN_MS): number {
+  const raw = res.headers.get("retry-after")?.trim()
+  let ms: number | undefined
+  if (raw && /^\d+$/.test(raw)) ms = Number(raw) * 1000
+  else if (raw && !Number.isNaN(Date.parse(raw))) ms = Date.parse(raw) - now
+  if (ms === undefined || !Number.isFinite(ms)) return fallbackMs
+  return Math.min(Math.max(ms, 5_000), SLOW_DOWN_MAX_MS)
+}
+
+/** What sending says when the server is limiting how often this computer may post. */
+const SENDING_LIMITED =
+  "ntfy answered 429: it limits how often one computer may send (on ntfy.sh, a burst of 60 and then one every 5 seconds). Wait a minute and it works again"
+
+class SlowDown extends Error {
+  constructor(readonly waitMs: number) {
+    super("ntfy answered 429")
+  }
+}
 
 export interface NtfyDeps {
   broker: Broker
@@ -78,9 +110,10 @@ export interface NtfyDeps {
   onChange?: () => void
   /** The token or password for a server that needs a sign-in, from its sealed store. */
   secret?: () => Promise<string | undefined>
-  /** Tests only: STREAM_WAIT_MS and POLL_EVERY_MS. */
+  /** Tests only: STREAM_WAIT_MS, POLL_EVERY_MS and SLOW_DOWN_MS. */
   streamWaitMs?: number
   pollEveryMs?: number
+  slowDownMs?: number
 }
 
 /**
@@ -191,6 +224,8 @@ export class NtfyChannel {
   #onCreated = (v: PendingView) => void this.notify(v)
   #onResolved = ({ id }: { id: string }) => this.#codes.forget(id)
   #running = false
+  /** The last 429: which server, and until when it asked Codehouse to wait. */
+  #slowed: { server: string; until: number } | undefined
 
   constructor(deps: NtfyDeps) {
     this.#d = deps
@@ -319,7 +354,8 @@ export class NtfyChannel {
           actions,
         }),
       })
-      if (!res.ok) throw new Error(`ntfy answered ${res.status}`)
+      if (!res.ok)
+        throw new Error(res.status === 429 ? SENDING_LIMITED : `ntfy answered ${res.status}`)
       this.#status = { ...this.#status, sent: this.#status.sent + 1, lastError: undefined }
     } catch (e) {
       this.#status = { ...this.#status, lastError: `Sending failed: ${(e as Error).message}` }
@@ -374,7 +410,9 @@ export class NtfyChannel {
           error:
             res.status === 401 || res.status === 403
               ? `ntfy refused the sign-in (${res.status}): check the token, or the user name and password, and that this user may write to the topic`
-              : `ntfy answered ${res.status}`,
+              : res.status === 429
+                ? SENDING_LIMITED
+                : `ntfy answered ${res.status}`,
         }
       // ntfy answers with the message it stored, so Codehouse can say it arrived there.
       const got = (await res.json().catch(() => ({}))) as { id?: unknown; time?: unknown }
@@ -417,15 +455,32 @@ export class NtfyChannel {
    * answers never sent the stream's first bytes, so Codehouse waited forever and never listened. If the stream has not
    * begun within STREAM_WAIT_MS, it asks (poll=1) instead, which such proxies pass at once.
    */
+  /** Waits until the server's 429 wait is over, or this loop is no longer the current one. */
+  async #waitOutSlowDown(server: string, current: () => boolean): Promise<void> {
+    // The wall clock, not the test clock: this is a real wait.
+    while (current() && this.#slowed?.server === server && this.#slowed.until > Date.now()) {
+      await new Promise((r) => setTimeout(r, Math.min(this.#slowed!.until - Date.now(), 1000)))
+    }
+    if (current() && this.#status.slowedUntil) {
+      const { slowedUntil: _done, ...rest } = this.#status
+      this.#status = rest
+      this.#d.onChange?.()
+    }
+  }
+
   async #listen(generation: number): Promise<void> {
     let pause = 1000
     const since = { id: String(Math.floor((this.#d.now ?? Date.now)() / 1000)) }
     let polling = false
+    let pollEvery = this.#d.pollEveryMs ?? POLL_EVERY_MS
     // Only the current loop may run, change the status or reconnect; an older one just ends.
     const current = () => this.#running && generation === this.#generation
     while (current()) {
       const s = this.#d.settings()
       if (!s?.enabled) break
+      // Saving the settings starts a new loop at once: it still keeps to a wait the server asked for.
+      await this.#waitOutSlowDown(s.server, current)
+      if (!current()) break
       const abort = new AbortController()
       this.#abort = abort
       const base = `${s.server.replace(/\/$/, "")}/${s.replyTopic}/json`
@@ -449,6 +504,10 @@ export class NtfyChannel {
         } finally {
           if (!polling) clearTimeout(timer)
         }
+        if (res.status === 429)
+          throw new SlowDown(
+            slowDownFor(res, Date.now(), this.#d.slowDownMs ?? SLOW_DOWN_MS),
+          )
         if (!res.ok || (!polling && !res.body))
           throw new Error(
             res.status === 401 || res.status === 403
@@ -466,7 +525,7 @@ export class NtfyChannel {
           for (const line of text.split("\n")) this.#line(line, since)
           this.#listening(true, undefined, "poll")
           pause = 1000
-          await new Promise((r) => setTimeout(r, this.#d.pollEveryMs ?? POLL_EVERY_MS))
+          await new Promise((r) => setTimeout(r, pollEvery))
           continue
         }
         this.#listening(true, undefined, "stream")
@@ -486,6 +545,21 @@ export class NtfyChannel {
         }
       } catch (e) {
         if (!current()) break
+        if (e instanceof SlowDown) {
+          // Not a failure: the server limits how often this computer may ask. Wait as long as it says, then ask
+          // half as often, so it does not happen again.
+          const until = new Date(Date.now() + e.waitMs).toISOString()
+          if (polling) pollEvery = Math.min(pollEvery * 2, POLL_EVERY_MAX_MS)
+          this.#d.log(
+            `ntfy: the server asked Codehouse to slow down (429), so it listens again in ${Math.round(e.waitMs / 1000)} seconds`,
+          )
+          this.#listening(false, undefined)
+          this.#status = { ...this.#status, lastError: undefined, slowedUntil: until }
+          this.#slowed = { server: s.server, until: Date.parse(until) }
+          this.#d.onChange?.()
+          await this.#waitOutSlowDown(s.server, current)
+          continue
+        }
         if (waitedTooLong && !polling) {
           // The stream never began: the server, or a proxy in front of it, holds it back. Ask instead.
           polling = true

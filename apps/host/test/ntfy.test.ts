@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
 import { redactString } from "@gatehouse/policy"
 import { Broker } from "../src/broker.js"
-import { NtfyChannel, randomTopic, type NtfySettings } from "../src/push/ntfy.js"
+import {
+  NtfyChannel,
+  POLL_EVERY_MS,
+  randomTopic,
+  SLOW_DOWN_MS,
+  slowDownFor,
+  type NtfySettings,
+} from "../src/push/ntfy.js"
 
 const verdict = (risk: number) => ({
   outcome: "escalate" as const,
@@ -256,6 +263,66 @@ describe("ntfy push", () => {
     expect(channel.status()).toMatchObject({ listening: true, mode: "poll" })
     expect(channel.status().lastError).toBeUndefined()
     channel.stop()
+  })
+
+  it("waits as the server asks after a 429, says so without calling it a failure, and a save keeps to the wait", async () => {
+    const t = setup()
+    const asked: number[] = []
+    let limited = true
+    const channel = new NtfyChannel({
+      broker: t.broker,
+      settings: () => t.settings,
+      redact: (x) => x,
+      expiryMs: () => 60_000,
+      onRefused: () => undefined,
+      log: () => undefined,
+      streamWaitMs: 50,
+      pollEveryMs: 20,
+      slowDownMs: 1000,
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        if (!String(url).includes("poll=1"))
+          // The live stream never begins, so it asks instead.
+          return new Promise<Response>((_resolve, reject) =>
+            (init?.signal as AbortSignal).addEventListener("abort", () =>
+              reject(new DOMException("This operation was aborted", "AbortError")),
+            ),
+          )
+        asked.push(Date.now())
+        return limited
+          ? new Response('{"code":42901,"http":429}', { status: 429 })
+          : new Response("", { status: 200 })
+      }) as typeof fetch,
+    })
+    channel.start()
+    await vi.waitFor(() => expect(channel.status().slowedUntil).toBeDefined(), { timeout: 3000 })
+    expect(channel.status().lastError).toBeUndefined()
+    // What saving the settings does: the new loop does not ask again before the wait is over.
+    const before = asked.length
+    channel.stop()
+    channel.start()
+    await new Promise((r) => setTimeout(r, 300))
+    expect(asked.length).toBe(before)
+    limited = false
+    await vi.waitFor(() => expect(channel.status()).toMatchObject({ listening: true, mode: "poll" }), {
+      timeout: 3000,
+    })
+    expect(channel.status().slowedUntil).toBeUndefined()
+    expect(asked.at(-1)! - asked[before - 1]!).toBeGreaterThanOrEqual(900)
+    channel.stop()
+  })
+
+  it("reads Retry-After in seconds or as a date, within limits", () => {
+    const at = (h?: string) =>
+      slowDownFor(new Response(null, { status: 429, headers: h ? { "retry-after": h } : {} }), 0)
+    expect(at()).toBe(SLOW_DOWN_MS)
+    expect(at("30")).toBe(30_000)
+    expect(at("0")).toBe(5_000)
+    expect(at("99999")).toBe(15 * 60_000)
+    expect(at(new Date(120_000).toUTCString())).toBe(120_000)
+  })
+
+  it("asks no more often than ntfy's default limit allows (one request every 5 seconds)", () => {
+    expect(POLL_EVERY_MS).toBeGreaterThanOrEqual(10_000)
   })
 })
 
