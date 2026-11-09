@@ -36,6 +36,8 @@ export type PhoneAction =
   /** G32 (owner 30 Oct): a message to an open session, and Interrupt, from the passkey phone app only. */
   | { type: "prompt"; sessionId: string; text: string }
   | { type: "interrupt"; sessionId: string }
+  /** G32: starts a routine you allowed for the phone, by its id; never a folder or free instructions. */
+  | { type: "start"; templateId: string }
 
 export type Accepted = {
   ok: true
@@ -96,10 +98,18 @@ async function verify(i: VerifyInput): Promise<Accepted | Rejected> {
     if (e.requestId !== undefined) return no("A kill envelope must not name a request")
     if (life > MAX_KILL_LIFE_MS) return no("A kill envelope lives too long")
     action = { type: "kill" }
+  } else if (e.type === "start") {
+    // G32: like a message, signed over the whole envelope with a fresh nonce and a short life; it names only a routine.
+    if (e.requestId !== undefined || e.sessionId !== undefined || e.text !== undefined)
+      return no("A start names only the routine to start")
+    if (life > MAX_KILL_LIFE_MS) return no("A start lives too long")
+    if (!e.templateId) return no("The envelope names no routine")
+    action = { type: "start", templateId: e.templateId }
   } else if (e.type === "prompt" || e.type === "interrupt") {
     // G32: like the kill switch, a fresh nonce from the phone, a short life, and the passkey over the whole envelope,
     // which names the session and holds the words, so neither can be changed on the way.
     if (e.requestId !== undefined) return no("A message to a session must not name a request")
+    if (e.templateId !== undefined) return no("A message to a session must not name a routine")
     if (life > MAX_KILL_LIFE_MS) return no("A message to a session lives too long")
     if (!e.sessionId) return no("The envelope names no session")
     if (e.type === "prompt") {

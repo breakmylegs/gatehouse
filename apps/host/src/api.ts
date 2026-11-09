@@ -1131,6 +1131,7 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
         days: r.days,
         extreme: r.extreme === true,
         worktree: r.worktree === true,
+        phone: r.phone === true,
         enabled: r.enabled,
       })
       return { routine: r }

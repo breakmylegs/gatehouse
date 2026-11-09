@@ -13,6 +13,7 @@ interface Routine {
   days: string[]
   extreme?: boolean
   worktree?: boolean
+  phone?: boolean
   enabled: boolean
   lastRun?: string
   /** Absent: on a schedule. */
@@ -148,6 +149,7 @@ export function RoutinesPanel() {
     days: WEEKDAYS,
     extreme: false,
     worktree: false,
+    phone: false,
     starts: "schedule" as Starts,
   })
   const load = async () => {
@@ -201,6 +203,7 @@ export function RoutinesPanel() {
                   {startsText(x)}, {x.folder}
                   {x.extreme ? ", Extreme approval" : ""}
                   {x.worktree ? ", in a new worktree" : ""}
+                  {x.phone ? ", can be started from the phone" : ""}
                   {x.lastRun ? `, last ran ${x.lastRun}` : ""}
                 </span>
               </span>
@@ -315,6 +318,14 @@ export function RoutinesPanel() {
               onChange={(e) => setDraft({ ...draft, worktree: e.target.checked })}
             />
             In a new worktree each time
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={draft.phone}
+              onChange={(e) => setDraft({ ...draft, phone: e.target.checked })}
+            />
+            Can be started from the phone
           </label>
           <button className="btn btn-primary" disabled={!draft.name.trim() || !draft.prompt.trim()}>
             Add the routine

@@ -198,7 +198,7 @@ async function onlyPending() {
 }
 const rejects = () => stack.records().filter((r) => r.event === "phone_decision_rejected")
 // G32: what the phone's signed messages and Interrupts reached.
-const sent: Array<{ id: string; text?: string; interrupt?: boolean }> = []
+const sent: Array<{ id: string; text?: string; interrupt?: boolean; start?: boolean }> = []
 
 beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-e2e-"))
@@ -231,6 +231,8 @@ beforeAll(async () => {
       has: (id) => id === "open-1",
       prompt: (id, text) => void sent.push({ id, text }),
       interrupt: async (id) => void sent.push({ id, interrupt: true }),
+      canStart: (id) => id === "allowed-routine",
+      start: async (id) => void sent.push({ id, start: true }),
     },
   })
   phone = await FakePhone.create()
@@ -529,6 +531,30 @@ describe("a message and Interrupt from the phone (G32)", () => {
     expect(rejects().at(-1)?.verdict.reason).toMatch(/kill switch/)
     await stack.kill.rearm("desktop")
     expect(sent).toEqual([])
+  })
+})
+
+describe("starting a routine from the phone (G32, B35's safe variant)", () => {
+  const start = (templateId: string) =>
+    newEnvelope({
+      type: "start",
+      deviceId: phone.phoneId,
+      now: Date.now(),
+      ttlMs: 60_000,
+      templateId,
+    })
+
+  it("starts only a routine allowed for the phone, recorded first", async () => {
+    sent.length = 0
+    await phone.post(undefined, start("allowed-routine"), COMMAND_AAD)
+    await until(() => sent.length === 1)
+    expect(sent[0]).toEqual({ id: "allowed-routine", start: true })
+    expect(stack.records().some((r) => r.event === "phone_start")).toBe(true)
+    const before = rejects().length
+    await phone.post(undefined, start("any-other"), COMMAND_AAD)
+    await until(() => rejects().length > before)
+    expect(rejects().at(-1)?.verdict.reason).toMatch(/may not be started from the phone/)
+    expect(sent).toHaveLength(1)
   })
 })
 

@@ -65,6 +65,17 @@ describe("the sessions the phone sees", () => {
     expect(snap.sessions).toHaveLength(MAX_PHONE_SESSIONS)
     expect(snap.sessions[0]!.id).toBe("s19")
     expect(snap.sessions[0]!.latest).toBe("")
+    expect(snap).not.toHaveProperty("templates")
+  })
+
+  it("lists the routines allowed for the phone by name only, redacted", async () => {
+    const snap = await buildPhoneSessions({
+      list: () => [],
+      messages: async () => [],
+      redact: (t) => t.replace("acme", "[redacted]"),
+      templates: () => [{ id: "r1", name: "Nightly acme triage" }],
+    })
+    expect(snap.templates).toEqual([{ id: "r1", name: "Nightly [redacted] triage" }])
   })
 })
 

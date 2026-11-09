@@ -12,6 +12,7 @@ import {
   loadSessions,
   register,
   sendToSession,
+  startTemplate,
   unlock,
   type PendingItem,
   type Session,
@@ -776,76 +777,119 @@ function SessionsScreen({
       </p>
     )
   if (!data) return <p className="m-0 p-5 text-mut">Loading…</p>
+  const starts = data.templates?.length ? (
+    <section aria-label="Start" className="grid gap-2 px-4 pt-4">
+      <h2 className="m-0 text-[17px] font-semibold">Start</h2>
+      {data.templates.map((t) => (
+        <button
+          key={t.id}
+          className="btn justify-self-start"
+          disabled={busy}
+          aria-label={`Start ${t.name} with Face ID`}
+          onClick={async () => {
+            setBusy(true)
+            setSaid(undefined)
+            try {
+              await startTemplate(session, device, t.id)
+              setSaid(`${t.name} starts once your computer checks the signature.`)
+            } catch (e) {
+              setSaid(friendly(e))
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {t.name}
+        </button>
+      ))}
+      {said && !open && data.sessions.length ? (
+        <p role="status" className="m-0 text-[15px]">
+          {said}
+        </p>
+      ) : null}
+    </section>
+  ) : null
   if (!data.sessions.length)
     return (
-      <p className="m-0 p-5 text-mut">
-        No sessions to show yet. They appear here a moment after your computer shares them.
-      </p>
+      <>
+        {starts}
+        {said ? (
+          <p role="status" className="m-0 px-4 pt-2 text-[15px]">
+            {said}
+          </p>
+        ) : null}
+        <p className="m-0 p-5 text-mut">
+          No sessions to show yet. They appear here a moment after your computer shares them.
+        </p>
+      </>
     )
   return (
-    <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
-      {data.sessions.map((s) => (
-        <li key={s.id} className="panel grid gap-1.5 p-4">
-          <button
-            className="grid gap-1 border-0 bg-transparent p-0 text-left"
-            aria-expanded={open === s.id}
-            onClick={() => setOpen(open === s.id ? undefined : s.id)}
-          >
-            <span className="font-semibold">{s.title ?? s.project}</span>
-            <span className="text-[15px] text-mut">
-              {STATE_WORDS[s.state] ?? s.state}
-              {s.waiting
-                ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you`
-                : ""}
-            </span>
-          </button>
-          {open === s.id ? (
-            <>
-              {s.latest ? (
-                <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
-                  {s.latest}
-                </pre>
-              ) : (
-                <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
-              )}
-              <label className="grid gap-1">
-                <span className="font-semibold">Message to this session</span>
-                <textarea
-                  className="field"
-                  rows={3}
-                  maxLength={4000}
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  className="btn btn-primary"
-                  disabled={busy || !message.trim()}
-                  onClick={() => void send({ sessionId: s.id, text: message })}
-                >
-                  {busy ? "Waiting for Face ID…" : "Send with Face ID"}
-                </button>
-                {s.state === "running" || s.state === "waiting" ? (
+    <>
+      {starts}
+      <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
+        {data.sessions.map((s) => (
+          <li key={s.id} className="panel grid gap-1.5 p-4">
+            <button
+              className="grid gap-1 border-0 bg-transparent p-0 text-left"
+              aria-expanded={open === s.id}
+              onClick={() => setOpen(open === s.id ? undefined : s.id)}
+            >
+              <span className="font-semibold">{s.title ?? s.project}</span>
+              <span className="text-[15px] text-mut">
+                {STATE_WORDS[s.state] ?? s.state}
+                {s.waiting
+                  ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you`
+                  : ""}
+              </span>
+            </button>
+            {open === s.id ? (
+              <>
+                {s.latest ? (
+                  <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
+                    {s.latest}
+                  </pre>
+                ) : (
+                  <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
+                )}
+                <label className="grid gap-1">
+                  <span className="font-semibold">Message to this session</span>
+                  <textarea
+                    className="field"
+                    rows={3}
+                    maxLength={4000}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
                   <button
-                    className="btn"
-                    disabled={busy}
-                    onClick={() => void send({ sessionId: s.id, interrupt: true })}
+                    className="btn btn-primary"
+                    disabled={busy || !message.trim()}
+                    onClick={() => void send({ sessionId: s.id, text: message })}
                   >
-                    Interrupt…
+                    {busy ? "Waiting for Face ID…" : "Send with Face ID"}
                   </button>
+                  {s.state === "running" || s.state === "waiting" ? (
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => void send({ sessionId: s.id, interrupt: true })}
+                    >
+                      Interrupt…
+                    </button>
+                  ) : null}
+                </div>
+                {said ? (
+                  <p role="status" className="m-0 text-[15px]">
+                    {said}
+                  </p>
                 ) : null}
-              </div>
-              {said ? (
-                <p role="status" className="m-0 text-[15px]">
-                  {said}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 

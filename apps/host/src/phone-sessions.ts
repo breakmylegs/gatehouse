@@ -19,6 +19,8 @@ export interface PhoneSessionsDeps {
   list: () => SessionInfo[]
   messages: (sdkSessionId: string, cwd: string) => Promise<Message[]>
   redact: (text: string) => string
+  /** G32: the routines you allowed to be started from the phone, by name. */
+  templates?: () => Array<{ id: string; name: string }>
   now?: () => Date
 }
 
@@ -44,7 +46,12 @@ export async function buildPhoneSessions(d: PhoneSessionsDeps): Promise<PhoneSes
       }
     }),
   )
-  return { at: (d.now ?? (() => new Date()))().toISOString(), sessions }
+  const templates = (d.templates?.() ?? []).map((t) => ({ id: t.id, name: d.redact(t.name) }))
+  return {
+    at: (d.now ?? (() => new Date()))().toISOString(),
+    sessions,
+    ...(templates.length ? { templates } : {}),
+  }
 }
 
 /**

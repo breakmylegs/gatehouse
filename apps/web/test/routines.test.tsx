@@ -90,6 +90,7 @@ describe("routines in Settings", () => {
         days: ["mon", "tue", "wed", "thu", "fri"],
         extreme: false,
         worktree: false,
+        phone: false,
         enabled: true,
       }),
     )

@@ -20,6 +20,9 @@ vi.mock("../src/core", () => ({
   sendToSession: vi.fn(async (_s: unknown, _d: unknown, what: unknown) => {
     state.answers.push({ session: what })
   }),
+  startTemplate: vi.fn(async (_s: unknown, _d: unknown, id: string) => {
+    state.answers.push({ start: id })
+  }),
   loadSessions: vi.fn(async () => ({
     at: "2026-11-09T10:00:00Z",
     sessions: [
@@ -33,6 +36,7 @@ vi.mock("../src/core", () => ({
       },
       { id: "s2", project: "shop", state: "idle", waiting: 0, latest: "" },
     ],
+    templates: [{ id: "r1", name: "Nightly triage" }],
   })),
   answer: vi.fn(async (_s: unknown, _d: unknown, item: { relayId: string }, what: unknown) => {
     if (state.answerError) throw new Error(state.answerError)
@@ -327,6 +331,18 @@ describe("the list and a request", () => {
     expect(list.textContent).toContain("Needs you, 1 request waits for you")
     await userEvent.click(screen.getByRole("button", { name: /Add the basket/ }))
     expect(list.textContent).toContain("Claude: Done, with tests.")
+  })
+
+  it("starts a routine allowed for the phone, by name, signed on the phone (G32)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Start Nightly triage with Face ID" }),
+    )
+    await waitFor(() => expect(state.answers).toEqual([{ start: "r1" }]))
+    expect(
+      await screen.findByText(/starts once your computer checks the signature/),
+    ).toBeInTheDocument()
   })
 
   it("sends a session a message, and Interrupt, each signed on the phone (G32)", async () => {

@@ -583,6 +583,24 @@ export function createHost(opts: HostOptions = {}): Host {
       interrupt: async (id) => {
         await manager.get(id)?.interrupt()
       },
+      // G32 (B35's safe variant): only a routine you allowed for the phone, started the way the routine starts.
+      canStart: (id) => routines.list().some((r) => r.id === id && r.phone === true),
+      start: async (id) => {
+        const r = routines.list().find((x) => x.id === id && x.phone === true)
+        if (!r) throw new Error("no such routine")
+        const session = await manager.start(routineSessionOptions(r))
+        session.prompt(r.prompt)
+        const branch = session.info().worktree?.branch
+        await routines
+          .noteRun({
+            routineId: r.id,
+            name: r.name,
+            sessionId: session.id,
+            at: new Date().toISOString(),
+            ...(branch ? { branch } : {}),
+          })
+          .catch(() => undefined)
+      },
     },
   })
   phoneHolder.svc = phone
@@ -809,6 +827,11 @@ export function createHost(opts: HostOptions = {}): Host {
         list: () => manager.list(),
         messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
         redact: (t) => redactString(t, { terms: config.redactTerms }),
+        templates: () =>
+          routines
+            .list()
+            .filter((r) => r.phone === true)
+            .map((r) => ({ id: r.id, name: r.name })),
       }),
     share: (s) => phone.shareSessions(s),
     wanted: () => phoneStore.relay() !== undefined && phoneStore.phones().length > 0,

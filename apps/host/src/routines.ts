@@ -31,6 +31,8 @@ export interface Routine {
   trigger?: Trigger
   /** G23: each run works in a new git worktree of its folder, so it never touches your checkout. */
   worktree?: boolean
+  /** G32: it may be started from the paired phone, by its name only, signed with the passkey. */
+  phone?: boolean
   /** The local day ("YYYY-MM-DD") it last ran, so it runs once a day at most. */
   lastRun?: string
 }
@@ -75,6 +77,7 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
       days: [],
       ...(r.extreme ? { extreme: true } : {}),
       ...(r.worktree === true ? { worktree: true } : {}),
+      ...(r.phone === true ? { phone: true } : {}),
       enabled: r.enabled !== false,
       trigger: { kind },
     }
@@ -92,6 +95,7 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
     days,
     ...(r.extreme ? { extreme: true } : {}),
     ...(r.worktree === true ? { worktree: true } : {}),
+    ...(r.phone === true ? { phone: true } : {}),
     enabled: r.enabled !== false,
   }
 }

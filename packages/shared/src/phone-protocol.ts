@@ -32,6 +32,8 @@ export interface PhoneSessions {
     /** The latest of what was said, oldest first, as "You:" and "Claude:" lines. */
     latest: string
   }>
+  /** G32: the routines you allowed to be started from the phone, by name only (B35's safe variant). */
+  templates?: Array<{ id: string; name: string }>
 }
 
 export interface OpenedRequest {
@@ -103,12 +105,14 @@ export function newEnvelope(o: {
   answers?: Record<string, string>
   sessionId?: string
   text?: string
+  templateId?: string
 }): Envelope {
   return {
     v: 1,
     type: o.type,
     ...(o.requestId !== undefined ? { requestId: o.requestId } : {}),
     ...(o.sessionId !== undefined ? { sessionId: o.sessionId } : {}),
+    ...(o.templateId !== undefined ? { templateId: o.templateId } : {}),
     ...(o.text !== undefined ? { text: o.text } : {}),
     nonce: o.nonce ?? b64u(globalThis.crypto.getRandomValues(new Uint8Array(24))),
     ...(o.decision !== undefined ? { decision: o.decision } : {}),

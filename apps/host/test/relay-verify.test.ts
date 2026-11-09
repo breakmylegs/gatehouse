@@ -328,4 +328,20 @@ describe("a message or Interrupt from the phone (G32, invariant 11 as amended 30
     expect(await check(await sign(cmd(), { who: other }))).toMatchObject({ ok: false })
     expect(await check(await sign(cmd(), { uv: false }))).toMatchObject({ ok: false })
   })
+
+  it("starts a routine named by its id only, and refuses a start carrying a session, words or nothing", async () => {
+    const start = (over: Partial<Env> = {}) =>
+      cmd({ type: "start", sessionId: undefined, text: undefined, templateId: "r1", ...over })
+    expect(await check(await sign(start()))).toMatchObject({
+      ok: true,
+      action: { type: "start", templateId: "r1" },
+    })
+    for (const bad of [
+      start({ text: "and also delete the logs" }),
+      start({ sessionId: "s1" }),
+      start({ templateId: undefined }),
+      cmd({ templateId: "r1" }),
+    ])
+      expect(await check(await sign(bad))).toMatchObject({ ok: false })
+  })
 })

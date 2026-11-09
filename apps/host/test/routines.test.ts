@@ -77,8 +77,9 @@ describe("a routine", () => {
   it("keeps its runs for the review inbox, newest first and the latest 50, and runs in a worktree when asked (G23)", async () => {
     const file = path.join(dir, "runs.json")
     const store = new RoutineStore(file)
-    const saved = await store.put({ ...morning, worktree: true })
-    expect(saved.worktree).toBe(true)
+    const saved = await store.put({ ...morning, worktree: true, phone: true })
+    expect(saved).toMatchObject({ worktree: true, phone: true })
+    expect(checkRoutine({ ...morning, phone: "yes" as never })).not.toHaveProperty("phone")
     expect(checkRoutine({ ...morning, worktree: "yes" as never })).not.toHaveProperty("worktree")
     for (let i = 0; i < 52; i++)
       await store.noteRun({

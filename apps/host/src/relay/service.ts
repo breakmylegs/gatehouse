@@ -71,6 +71,9 @@ export interface PhoneServiceDeps {
     has: (id: string) => boolean
     prompt: (id: string, text: string) => void
     interrupt: (id: string) => Promise<void>
+    /** Whether a routine may be started from the phone, and starting it (resolves when its session has started). */
+    canStart?: (templateId: string) => boolean
+    start?: (templateId: string) => Promise<void>
   }
 }
 
@@ -552,6 +555,10 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
       await this.#command(a, phone.name, phone.id)
       return
     }
+    if (a.type === "start") {
+      await this.#start(a.templateId, phone.name, phone.id)
+      return
+    }
     const r =
       a.type === "decision"
         ? this.#d.broker.resolve(
@@ -615,6 +622,46 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
       return await this.#reject("It could not be recorded, so it was not sent", { phoneId })
     if (a.type === "prompt") s.prompt(a.sessionId, a.text)
     else await s.interrupt(a.sessionId)
+  }
+
+  /**
+   * G32 (B35's safe variant): starts a routine you allowed for the phone, through the normal start (every check a
+   * session you start goes through), recorded first. Refused while the kill switch is on, and for any routine not
+   * allowed for the phone.
+   */
+  async #start(templateId: string, phoneName: string, phoneId: string): Promise<void> {
+    const s = this.#d.sessions
+    if (!s?.start || !s.canStart)
+      return await this.#reject("Nothing can be started from the phone here", { phoneId })
+    if (this.#d.kill.isEngaged())
+      return await this.#reject("The kill switch is on, so nothing was started", { phoneId })
+    if (!s.canStart(templateId))
+      return await this.#reject("That routine may not be started from the phone", { phoneId })
+    const recorded = await this.#d.audit.record({
+      session: "phone",
+      event: "phone_start",
+      channel: "phone",
+      tool: "routines",
+      input: { phone: phoneId, routine: templateId },
+      verdict: {
+        outcome: "allow",
+        ruleId: "phone-start",
+        reason: `You started a routine from ${phoneName}, signed with its passkey.`,
+        risk: 0,
+        decidedBy: "human-phone",
+        policyHash: "n/a",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded)
+      return await this.#reject("It could not be recorded, so it did not start", { phoneId })
+    try {
+      await s.start(templateId)
+    } catch (e) {
+      await this.#reject(`The routine did not start: ${(e as Error).message.slice(0, 120)}`, {
+        phoneId,
+      })
+    }
   }
 
   /** For tests: handle one decision as if it had arrived from the Relay. */

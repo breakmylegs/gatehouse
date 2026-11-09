@@ -386,6 +386,26 @@ export async function sendToSession(
   await call("POST", "/api/phone/envelopes", { sealed }, session.token)
 }
 
+/**
+ * G32 (B35's safe variant): starts one of the routines you allowed for the phone on the computer, by its id only,
+ * signed with Face ID. The folder and the instructions stay on the computer.
+ */
+export async function startTemplate(
+  session: Session,
+  device: DeviceInfo,
+  templateId: string,
+): Promise<void> {
+  const envelope = newEnvelope({
+    type: "start",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    templateId,
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
 export async function enableNotifications(session: Session): Promise<void> {
   const sub = await subscribePush()
   await call("PUT", "/api/phone/push-subscription", { subscription: sub }, session.token)
