@@ -3,13 +3,24 @@ import { randomBytes } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import type { FastifyInstance, FastifyReply } from "fastify"
+import { secretGlobs } from "@gatehouse/policy"
+import { createCheckpoint, writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
+import {
+  applyReplace,
+  previewReplace,
+  readerFor,
+  SearchError,
+  searchFiles,
+  type SearchOptions,
+} from "./file-search.js"
 
 /**
  * Files for the workspace: list a session's folder, read a file, preview a page, and reveal a file in Explorer.
  * Everything stays inside the session's own folder (real paths, so a junction cannot lead out), except a file the
  * session itself wrote or edited elsewhere, which can be read, copied out or shown in Explorer (owner, 4 Nov). Anything
- * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. Nothing here writes a file.
+ * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. The one thing here that
+ * writes is Replace (G35): your own change, shown first, after a checkpoint, recorded, and never in a blocked file.
  */
 
 const MAX_TEXT = 1024 * 1024
@@ -191,6 +202,106 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const v = await ctx.engine.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd })
     return v.outcome === "deny" ? v.reason : undefined
   }
+
+  // G35: search the session's files, and replace with the changed lines shown first.
+  const searchOf = (b: Record<string, unknown>): SearchOptions => ({
+    pattern: typeof b.pattern === "string" ? b.pattern : typeof b.q === "string" ? b.q : "",
+    regex: b.regex === true || b.regex === "1",
+    caseSensitive: b.caseSensitive === true || b.case === "1",
+  })
+  const readIn = (root: string) => readerFor(root, insideRoot, (abs) => blocked(abs, root))
+  app.get("/api/files/search", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    try {
+      return await searchFiles(real(root), searchOf(q))
+    } catch (e) {
+      return bad(reply, e instanceof SearchError ? 422 : 500, (e as Error).message)
+    }
+  })
+  app.post("/api/files/replace/preview", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const paths = Array.isArray(b.paths)
+      ? b.paths.filter((p): p is string => typeof p === "string")
+      : []
+    const replacement = typeof b.replacement === "string" ? b.replacement : ""
+    try {
+      return await previewReplace(paths, searchOf(b), replacement, readIn(real(root)))
+    } catch (e) {
+      return bad(reply, e instanceof SearchError ? 422 : 500, (e as Error).message)
+    }
+  })
+  app.post("/api/files/replace", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const shown = (Array.isArray(b.files) ? b.files : []).filter(
+      (f): f is { path: string; hash: string } =>
+        typeof (f as { path?: unknown })?.path === "string" &&
+        typeof (f as { hash?: unknown })?.hash === "string",
+    )
+    if (!shown.length) return bad(reply, 422, "Look at what would change before replacing.")
+    const replacement = typeof b.replacement === "string" ? b.replacement : ""
+    const o = searchOf(b)
+    const policy = ctx.store.current
+    if (!policy)
+      return bad(
+        reply,
+        503,
+        "No policy is loaded, so secrets could not be kept out of the undo point.",
+      )
+    // A checkpoint first, so Undo in Changes puts every file back; without one, nothing is changed.
+    let ref: string
+    try {
+      ref = (
+        await createCheckpoint({
+          cwd: root,
+          sessionId: String(b.session),
+          label: `before replacing in ${shown.length === 1 ? "1 file" : `${shown.length} files`}`,
+          excludeGlobs: secretGlobs(policy),
+        })
+      ).ref
+    } catch {
+      return bad(
+        reply,
+        409,
+        "Replace needs the folder to be in git, so the change can be undone. Nothing was changed.",
+      )
+    }
+    const recorded = await ctx.audit.record({
+      session: String(b.session),
+      event: "files_replaced",
+      channel: "desktop",
+      tool: "replace",
+      cwd: root,
+      input: {
+        files: shown.length,
+        patternChars: o.pattern.length,
+        regex: o.regex === true,
+        checkpoint: ref,
+      },
+      verdict: {
+        outcome: "allow",
+        ruleId: "files-replaced",
+        reason:
+          "You replaced text across files from the desktop, after the changes were shown. A checkpoint was saved first.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: policy.hash,
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so nothing was changed.")
+    try {
+      const done = await applyReplace(shown, o, replacement, readIn(real(root)), writeFileAtomic)
+      return { ...done, checkpoint: ref }
+    } catch (e) {
+      return bad(reply, e instanceof SearchError ? 422 : 500, (e as Error).message)
+    }
+  })
 
   // F15 (backlog): files in the session's folder whose name or path holds what you typed after @, for the prompt box.
   app.get("/api/files/find", async (req, reply) => {

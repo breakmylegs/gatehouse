@@ -62,6 +62,7 @@ import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
 import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
 import { Walkthrough } from "../components/Walkthrough"
+import { SearchPane } from "../components/SearchPane"
 import { PictureViewer } from "../components/PictureViewer"
 import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
@@ -258,11 +259,13 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
   ended: "Ended",
 }
 
-type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources" | "memory"
+type Side =
+  "plan" | "files" | "search" | "changes" | "terminal" | "artifacts" | "sources" | "memory"
 /** Each side panel's icon from the Codehouse pack. */
 const SIDE_ICON: Record<Side, IconName> = {
   plan: "plan",
   files: "files",
+  search: "search",
   changes: "changes",
   terminal: "terminal",
   artifacts: "artifacts",
@@ -272,6 +275,7 @@ const SIDE_ICON: Record<Side, IconName> = {
 const SIDE_LABEL: Record<Side, string> = {
   plan: "Plan",
   files: "Files",
+  search: "Search",
   changes: "Changes",
   terminal: "Terminal",
   artifacts: "Artifacts",
@@ -698,7 +702,7 @@ function SessionPane({
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
-            {(["plan", "files", "changes", "terminal"] as const).map((t) => (
+            {(["plan", "files", "search", "changes", "terminal"] as const).map((t) => (
               <button
                 key={t}
                 ref={(el) => {
@@ -926,6 +930,8 @@ function SessionPane({
               <TerminalPane sessionId={session.id} cwd={session.cwd} />
             ) : side === "changes" ? (
               <ChangesPane sessionId={session.id} cwd={session.cwd} />
+            ) : side === "search" ? (
+              <SearchPane sessionId={session.id} onOpen={setOpened} />
             ) : side === "files" ? (
               <FilesPanel
                 sessionId={session.id}

@@ -207,7 +207,8 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 - **Pop out into its own window**, in the same menu, moves a session into a window of its own, which you can put on another screen; closing that window puts it back beside the others.
 - Its name opens a menu: show another session here, open one beside it, rename it, pin it to the top of the sidebar, export it as Markdown, close the pane, stop, close the session, or archive it (it stops and leaves the sidebar; Earlier sessions keeps it).
 - Each message shows the time it arrived, and the date when it was not today.
-- **Plan**, **Files**, **Changes**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
+- **Search** looks through the session's files for words or a regular expression (**Match case** if you want it), skipping what git ignores; a result opens its file. **Replace…** shows every line it would change, file by file, before anything changes; **Replace in these files** then changes only files still as shown, after a checkpoint, so **Undo** in Changes puts them back. Secrets files are never changed, and a folder that is not in git cannot be replaced in, since it could not be undone.
+- **Plan**, **Files**, **Search**, **Changes**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
 
 **Under the prompt box**
 
