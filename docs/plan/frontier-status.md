@@ -28,7 +28,10 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 | Id | Title | Status | Branch | Note |
 |---|---|---|---|---|
-| O21 | Session details panel, like Claude Code's (owner, 9 Nov, two screenshots) | todo | | Next after C-013. Environment (computer, working folder, repository), Context with the usage breakdown, Connectors, Changes (+/-), and running background tasks with how long each has run. No hover hints (shown inline). |
+| O21 | Session details panel, like Claude Code's (owner, 9 Nov, two screenshots) | built | slice/O21-session-details | BUILD_REPORT "O21" | Details in each pane's side rail: Environment, Context with its parts, Connectors (names and states only), Changes (+/-), background tasks with how long each has run. No hover hints. |
+| O22 | Limits in Settings always hold; a bypass per session with a time, a spending limit or both (owner, 9 Nov) | built | fix/plan-limit-extra | BUILD_REPORT "Fix, limits in Settings always hold" | Released in 2.0.148 |
+| O23 | Extreme approval asked about a plain rmdir (owner, 9 Nov) | built | fix/rmdir-empty-only | BUILD_REPORT "Fix, Extreme approval asked about an rmdir" | |
+| O24 | ntfy 429 while listening (a user's report, 9 Nov) | built | fix/ntfy-429 | BUILD_REPORT "Fix, ntfy 429 while listening" | Released in 2.0.147 |
 
 ## Prerequisites (C-backlog)
 
