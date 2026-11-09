@@ -11,6 +11,7 @@ import {
   loadPending,
   loadSessions,
   register,
+  sendToSession,
   unlock,
   type PendingItem,
   type Session,
@@ -182,7 +183,7 @@ export function App() {
   if (route.name === "sessions")
     return (
       <Frame title="Sessions" back={() => setRoute({ name: "home" })}>
-        <SessionsScreen session={session} keys={keys} />
+        <SessionsScreen session={session} keys={keys} device={device} />
       </Frame>
     )
 
@@ -717,13 +718,42 @@ const STATE_WORDS: Record<string, string> = {
 }
 
 /**
- * G32 (O18, owner 30 Oct), first part: the sessions open on your computer and the latest of what was said in each,
- * sent end to end encrypted and opened here with this phone's key. Read only: deciding still happens on the requests.
+ * G32 (O18, owner 30 Oct): the sessions open on your computer and the latest of what was said in each, sent end to end
+ * encrypted and opened here with this phone's key. A message to a session, and Interrupt, are each signed with Face ID
+ * and checked and recorded on the computer before they reach the session.
  */
-function SessionsScreen({ session, keys }: { session: Session; keys: KeyMaterial | undefined }) {
+function SessionsScreen({
+  session,
+  keys,
+  device,
+}: {
+  session: Session
+  keys: KeyMaterial | undefined
+  device: DeviceInfo
+}) {
   const [data, setData] = useState<PhoneSessions>()
   const [error, setError] = useState<string>()
   const [open, setOpen] = useState<string>()
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string>()
+  async function send(what: Parameters<typeof sendToSession>[2]) {
+    setBusy(true)
+    setSaid(undefined)
+    try {
+      await sendToSession(session, device, what)
+      setSaid(
+        "interrupt" in what
+          ? "Sent. The session stops once your computer checks the signature."
+          : "Sent. It reaches the session once your computer checks the signature.",
+      )
+      if (!("interrupt" in what)) setMessage("")
+    } catch (e) {
+      setSaid(friendly(e))
+    } finally {
+      setBusy(false)
+    }
+  }
   useEffect(() => {
     if (!keys) return
     let gone = false
@@ -770,13 +800,48 @@ function SessionsScreen({ session, keys }: { session: Session; keys: KeyMaterial
             </span>
           </button>
           {open === s.id ? (
-            s.latest ? (
-              <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
-                {s.latest}
-              </pre>
-            ) : (
-              <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
-            )
+            <>
+              {s.latest ? (
+                <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
+                  {s.latest}
+                </pre>
+              ) : (
+                <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
+              )}
+              <label className="grid gap-1">
+                <span className="font-semibold">Message to this session</span>
+                <textarea
+                  className="field"
+                  rows={3}
+                  maxLength={4000}
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className="btn btn-primary"
+                  disabled={busy || !message.trim()}
+                  onClick={() => void send({ sessionId: s.id, text: message })}
+                >
+                  {busy ? "Waiting for Face ID…" : "Send with Face ID"}
+                </button>
+                {s.state === "running" || s.state === "waiting" ? (
+                  <button
+                    className="btn"
+                    disabled={busy}
+                    onClick={() => void send({ sessionId: s.id, interrupt: true })}
+                  >
+                    Interrupt…
+                  </button>
+                ) : null}
+              </div>
+              {said ? (
+                <p role="status" className="m-0 text-[15px]">
+                  {said}
+                </p>
+              ) : null}
+            </>
           ) : null}
         </li>
       ))}

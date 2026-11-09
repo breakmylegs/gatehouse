@@ -4,7 +4,12 @@ import { verifyRegistrationResponse, type RegistrationResponseJSON } from "@simp
 import { phonePayload } from "@gatehouse/shared"
 import type { EscalationRequest } from "@gatehouse/shared"
 import { b64u, fingerprint, importPublicKey, openJson, sealJson } from "@gatehouse/shared/e2e"
-import { PAIRING_ALPHABET, PairingStatus, SignedDecision } from "@gatehouse/shared/relay-protocol"
+import {
+  COMMAND_AAD,
+  PAIRING_ALPHABET,
+  PairingStatus,
+  SignedDecision,
+} from "@gatehouse/shared/relay-protocol"
 import { SESSIONS_AAD, type PhoneSessions } from "@gatehouse/shared/phone-protocol"
 import type { Broker, PhoneChannel } from "../broker.js"
 import type { HostAudit } from "../hostaudit.js"
@@ -58,6 +63,15 @@ export interface PhoneServiceDeps {
   log: (line: string) => void
   now?: () => number
   fetchImpl?: typeof fetch
+  /**
+   * G32: the open sessions a signed phone message or Interrupt may reach. Absent: the phone can only decide. A session
+   * not open, or not shown to the phone (an evaluation), is refused.
+   */
+  sessions?: {
+    has: (id: string) => boolean
+    prompt: (id: string, text: string) => void
+    interrupt: (id: string) => Promise<void>
+  }
 }
 
 /** What a lock-screen notification may say if the user allowed details. Short, from the redacted copy. */
@@ -488,7 +502,12 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     let signed: SignedDecision
     try {
       const host = await this.#d.store.hostKey()
-      const opened = await openJson(d.sealed, host.privateKey, d.requestId ?? "kill")
+      // A decision is sealed to its request; the kill switch and (G32) a message to a session to their own labels.
+      const opened = d.requestId
+        ? await openJson(d.sealed, host.privateKey, d.requestId)
+        : await openJson(d.sealed, host.privateKey, "kill").catch(() =>
+            openJson(d.sealed, host.privateKey, COMMAND_AAD),
+          )
       const parsed = SignedDecision.safeParse(opened)
       if (!parsed.success)
         return await this.#reject("The decision was not in the expected shape", {
@@ -529,6 +548,10 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
       await this.#d.kill.engage("phone", `Kill switch from ${phone.name}`)
       return
     }
+    if (a.type === "prompt" || a.type === "interrupt") {
+      await this.#command(a, phone.name, phone.id)
+      return
+    }
     const r =
       a.type === "decision"
         ? this.#d.broker.resolve(
@@ -547,6 +570,51 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
         requestId: a.requestId,
       })
     else this.#pending.delete(a.requestId)
+  }
+
+  /**
+   * G32 (invariant 11 as amended 30 Oct): a verified, signed message or Interrupt from the phone reaches its session,
+   * recorded first (never the words, only how long). Refused while the kill switch is on, and for a session that is not
+   * open here.
+   */
+  async #command(
+    a:
+      | { type: "prompt"; sessionId: string; text: string }
+      | { type: "interrupt"; sessionId: string },
+    phoneName: string,
+    phoneId: string,
+  ): Promise<void> {
+    const s = this.#d.sessions
+    if (!s) return await this.#reject("Sessions cannot be reached from the phone here", { phoneId })
+    if (this.#d.kill.isEngaged())
+      return await this.#reject("The kill switch is on, so nothing was sent to the session", {
+        phoneId,
+      })
+    if (!s.has(a.sessionId))
+      return await this.#reject("That session is not open on the computer", { phoneId })
+    const recorded = await this.#d.audit.record({
+      session: a.sessionId,
+      event: a.type === "prompt" ? "phone_prompt" : "phone_interrupt",
+      channel: "phone",
+      tool: "session",
+      input: { phone: phoneId, ...(a.type === "prompt" ? { chars: a.text.length } : {}) },
+      verdict: {
+        outcome: "allow",
+        ruleId: a.type === "prompt" ? "phone-prompt" : "phone-interrupt",
+        reason:
+          a.type === "prompt"
+            ? `You sent this session a message from ${phoneName}, signed with its passkey.`
+            : `You interrupted this session from ${phoneName}, signed with its passkey.`,
+        risk: 0,
+        decidedBy: "human-phone",
+        policyHash: "n/a",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded)
+      return await this.#reject("It could not be recorded, so it was not sent", { phoneId })
+    if (a.type === "prompt") s.prompt(a.sessionId, a.text)
+    else await s.interrupt(a.sessionId)
   }
 
   /** For tests: handle one decision as if it had arrived from the Relay. */

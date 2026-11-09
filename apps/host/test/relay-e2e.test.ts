@@ -17,6 +17,7 @@ import {
   type Envelope,
   type OpenedRequest,
 } from "@gatehouse/shared/phone-protocol"
+import { COMMAND_AAD } from "@gatehouse/shared/relay-protocol"
 import { FakeAuthenticator } from "../../../packages/shared/test/support/fake-authenticator.js"
 import { Store } from "../../relay/src/db.js"
 import type { PushMessage, PushSender } from "../../relay/src/push.js"
@@ -196,6 +197,8 @@ async function onlyPending() {
   return l[0]!
 }
 const rejects = () => stack.records().filter((r) => r.event === "phone_decision_rejected")
+// G32: what the phone's signed messages and Interrupts reached.
+const sent: Array<{ id: string; text?: string; interrupt?: boolean }> = []
 
 beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-e2e-"))
@@ -224,6 +227,11 @@ beforeAll(async () => {
     kill: stack.kill,
     audit: stack.audit,
     log: () => undefined,
+    sessions: {
+      has: (id) => id === "open-1",
+      prompt: (id, text) => void sent.push({ id, text }),
+      interrupt: async (id) => void sent.push({ id, interrupt: true }),
+    },
   })
   phone = await FakePhone.create()
 }, 120_000)
@@ -477,6 +485,50 @@ describe("kill switch from the phone", () => {
     await until(() => rejects().length > before)
     expect(rejects().at(-1)?.verdict.reason).toMatch(/already used/)
     expect(stack.kill.isEngaged()).toBe(false)
+  })
+})
+
+describe("a message and Interrupt from the phone (G32)", () => {
+  const command = (over: Partial<Parameters<typeof newEnvelope>[0]>) =>
+    newEnvelope({
+      type: "prompt",
+      deviceId: phone.phoneId,
+      now: Date.now(),
+      ttlMs: 60_000,
+      sessionId: "open-1",
+      text: "Run the tests again",
+      ...over,
+    })
+
+  it("reaches an open session once signed, recorded first, never with the words in the record", async () => {
+    sent.length = 0
+    await phone.post(undefined, command({}), COMMAND_AAD)
+    await until(() => sent.length === 1)
+    expect(sent[0]).toEqual({ id: "open-1", text: "Run the tests again" })
+    const rec = stack
+      .records()
+      .filter((r) => r.event === "phone_prompt")
+      .at(-1)
+    expect(rec?.verdict).toMatchObject({ decidedBy: "human-phone", ruleId: "phone-prompt" })
+    expect(JSON.stringify(rec)).not.toContain("Run the tests again")
+    await phone.post(undefined, command({ type: "interrupt", text: undefined }), COMMAND_AAD)
+    await until(() => sent.length === 2)
+    expect(sent[1]).toEqual({ id: "open-1", interrupt: true })
+  })
+
+  it("refuses a session that is not open, and anything while the kill switch is on", async () => {
+    sent.length = 0
+    let before = rejects().length
+    await phone.post(undefined, command({ sessionId: "closed-9" }), COMMAND_AAD)
+    await until(() => rejects().length > before)
+    expect(rejects().at(-1)?.verdict.reason).toMatch(/not open/)
+    await stack.kill.engage("desktop", "test")
+    before = rejects().length
+    await phone.post(undefined, command({}), COMMAND_AAD)
+    await until(() => rejects().length > before)
+    expect(rejects().at(-1)?.verdict.reason).toMatch(/kill switch/)
+    await stack.kill.rearm("desktop")
+    expect(sent).toEqual([])
   })
 })
 

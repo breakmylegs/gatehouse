@@ -264,3 +264,68 @@ describe("invariant 8: a phone decision is accepted only when every check holds"
     expect(await check({ envelope: baseEnv(), assertion: {} })).toMatchObject({ ok: false })
   })
 })
+
+describe("a message or Interrupt from the phone (G32, invariant 11 as amended 30 Oct)", () => {
+  const cmd = (over: Partial<Env> = {}): Env => ({
+    v: 1,
+    type: "prompt",
+    sessionId: "s1",
+    text: "Run the tests again",
+    nonce: "fresh-phone-nonce-1",
+    deviceId: "phone-1",
+    issuedAt: iso(NOW - 1000),
+    expiresAt: iso(NOW + 60_000),
+    ...over,
+  })
+
+  it("accepts a signed message and a signed Interrupt for a named session", async () => {
+    expect(await check(await sign(cmd()))).toMatchObject({
+      ok: true,
+      action: { type: "prompt", sessionId: "s1", text: "Run the tests again" },
+    })
+    expect(
+      await check(await sign(cmd({ type: "interrupt", text: undefined, nonce: "fresh-2" }))),
+    ).toMatchObject({ ok: true, action: { type: "interrupt", sessionId: "s1" } })
+  })
+
+  it("refuses a message changed after signing, a replay, a long life, or one naming a request", async () => {
+    const signed = await sign(cmd())
+    const changed = { ...signed, envelope: { ...signed.envelope, text: "delete everything" } }
+    expect(await check(changed)).toMatchObject({ ok: false })
+    const moved = { ...signed, envelope: { ...signed.envelope, sessionId: "s2" } }
+    expect(await check(moved)).toMatchObject({ ok: false })
+    expect(await check(signed, { used: new Set(["fresh-phone-nonce-1"]) })).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/already used/),
+    })
+    expect(await check(await sign(cmd({ expiresAt: iso(NOW + 10 * 60_000) })))).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/lives too long/),
+    })
+    expect(await check(await sign(cmd({ requestId: "req-1" })))).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/must not name a request/),
+    })
+  })
+
+  it("refuses a message with no session or no words, and an Interrupt carrying words", async () => {
+    expect(await check(await sign(cmd({ sessionId: undefined })))).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/names no session/),
+    })
+    expect(await check(await sign(cmd({ text: "   " })))).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/empty/),
+    })
+    expect(await check(await sign(cmd({ type: "interrupt" })))).toMatchObject({
+      ok: false,
+      reason: expect.stringMatching(/carries no message/),
+    })
+  })
+
+  it("refuses one signed by another passkey, or without user verification", async () => {
+    const other = await FakeAuthenticator.create()
+    expect(await check(await sign(cmd(), { who: other }))).toMatchObject({ ok: false })
+    expect(await check(await sign(cmd(), { uv: false }))).toMatchObject({ ok: false })
+  })
+})

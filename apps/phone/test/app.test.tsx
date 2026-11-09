@@ -17,6 +17,9 @@ vi.mock("../src/core", () => ({
   isIos: () => true,
   unlock: vi.fn(async () => ({ token: "t", expiresAt: Date.now() + 600_000 })),
   loadPending: vi.fn(async () => state.items),
+  sendToSession: vi.fn(async (_s: unknown, _d: unknown, what: unknown) => {
+    state.answers.push({ session: what })
+  }),
   loadSessions: vi.fn(async () => ({
     at: "2026-11-09T10:00:00Z",
     sessions: [
@@ -324,8 +327,27 @@ describe("the list and a request", () => {
     expect(list.textContent).toContain("Needs you, 1 request waits for you")
     await userEvent.click(screen.getByRole("button", { name: /Add the basket/ }))
     expect(list.textContent).toContain("Claude: Done, with tests.")
-    // Nothing on this screen can change a session.
-    expect(screen.queryByRole("textbox")).toBeNull()
+  })
+
+  it("sends a session a message, and Interrupt, each signed on the phone (G32)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    await userEvent.click(await screen.findByRole("button", { name: /Add the basket/ }))
+    const send = screen.getByRole("button", { name: "Send with Face ID" })
+    expect(send).toBeDisabled()
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Message to this session" }),
+      "Run the tests",
+    )
+    await userEvent.click(send)
+    await waitFor(() =>
+      expect(state.answers).toEqual([{ session: { sessionId: "s1", text: "Run the tests" } }]),
+    )
+    expect(await screen.findByText(/once your computer checks the signature/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Interrupt…" }))
+    await waitFor(() =>
+      expect(state.answers.at(-1)).toEqual({ session: { sessionId: "s1", interrupt: true } }),
+    )
   })
 
   it("opens a request straight from a notification link", async () => {

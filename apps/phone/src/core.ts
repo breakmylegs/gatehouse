@@ -15,6 +15,7 @@ import {
   type OpenedRequest,
   type PhoneSessions,
 } from "@gatehouse/shared/phone-protocol"
+import { COMMAND_AAD, PHONE_PROMPT_MAX } from "@gatehouse/shared/relay-protocol"
 import { storage, type DeviceInfo, type KeyMaterial } from "./storage"
 
 /** Everything the phone does that is not drawing. Kept free of React so it can be tested and read on its own. */
@@ -358,6 +359,30 @@ export async function kill(session: Session, device: DeviceInfo): Promise<void> 
     ttlMs: ttl.kill,
   })
   const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, "kill")
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
+/**
+ * G32 (invariant 11 as amended 30 Oct): a message to an open session, or Interrupt, signed with this phone's passkey
+ * (Face ID) over the whole envelope and sealed to the computer's key, so the Relay sees neither the session nor the
+ * words. Codehouse checks the signature, records it, and only then sends it on.
+ */
+export async function sendToSession(
+  session: Session,
+  device: DeviceInfo,
+  what: { sessionId: string; text: string } | { sessionId: string; interrupt: true },
+): Promise<void> {
+  const text = "text" in what ? what.text.trim().slice(0, PHONE_PROMPT_MAX) : undefined
+  if (text !== undefined && !text) throw new Error("Write a message first.")
+  const envelope = newEnvelope({
+    type: text !== undefined ? "prompt" : "interrupt",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    sessionId: what.sessionId,
+    ...(text !== undefined ? { text } : {}),
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
   await call("POST", "/api/phone/envelopes", { sealed }, session.token)
 }
 

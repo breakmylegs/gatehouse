@@ -101,11 +101,15 @@ export function newEnvelope(o: {
   decision?: "allow" | "deny"
   message?: string
   answers?: Record<string, string>
+  sessionId?: string
+  text?: string
 }): Envelope {
   return {
     v: 1,
     type: o.type,
     ...(o.requestId !== undefined ? { requestId: o.requestId } : {}),
+    ...(o.sessionId !== undefined ? { sessionId: o.sessionId } : {}),
+    ...(o.text !== undefined ? { text: o.text } : {}),
     nonce: o.nonce ?? b64u(globalThis.crypto.getRandomValues(new Uint8Array(24))),
     ...(o.decision !== undefined ? { decision: o.decision } : {}),
     ...(o.message?.trim() ? { message: o.message.trim().slice(0, 500) } : {}),

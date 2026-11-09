@@ -113,12 +113,21 @@ export const SessionLogin = z.object({
   assertion: z.record(z.string(), z.unknown()),
 })
 
+/** G32: the longest message the phone may send to a session. */
+export const PHONE_PROMPT_MAX = 4000
+
+/** G32: the additional data a prompt or interrupt from the phone is sealed with (a request's id seals a decision). */
+export const COMMAND_AAD = "command"
+
 /** What a phone decision looks like once the Host has opened the sealed payload. */
 export const SignedDecision = z.object({
   envelope: z.object({
     v: z.literal(1),
-    type: z.enum(["decision", "answer", "kill"]),
+    /** G32 (owner 30 Oct): prompt and interrupt reach an open session; signed like a decision, never tied to one. */
+    type: z.enum(["decision", "answer", "kill", "prompt", "interrupt"]),
     requestId: z.string().optional(),
+    sessionId: z.string().min(1).max(100).optional(),
+    text: z.string().min(1).max(PHONE_PROMPT_MAX).optional(),
     nonce: z.string().min(8).max(200),
     decision: z.enum(["allow", "deny"]).optional(),
     message: z.string().max(500).optional(),

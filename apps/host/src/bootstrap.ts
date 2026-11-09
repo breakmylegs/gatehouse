@@ -567,7 +567,24 @@ export function createHost(opts: HostOptions = {}): Host {
   }
   const sealer = (): Protector => sealerFor({ given: opts.phoneProtector, helper })
   const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
-  const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
+  const phone = new PhoneService({
+    store: phoneStore,
+    broker,
+    kill,
+    audit,
+    log,
+    // G32: a signed message or Interrupt from the phone reaches only a session open here, as the phone was shown it.
+    sessions: {
+      has: (id) => {
+        const i = manager.get(id)?.info()
+        return i !== undefined && i.state !== "ended" && !i.evaluation
+      },
+      prompt: (id, text) => manager.get(id)?.prompt(text),
+      interrupt: async (id) => {
+        await manager.get(id)?.interrupt()
+      },
+    },
+  })
   phoneHolder.svc = phone
   // Push through ntfy: outbound only. Refused answers are recorded; good ones are recorded by the decision itself.
   // A server that needs a sign-in has its token or password sealed as Slack's tokens are (owner, 4 Nov).

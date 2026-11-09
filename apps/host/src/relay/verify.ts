@@ -33,6 +33,9 @@ export type PhoneAction =
   | { type: "decision"; requestId: string; decision: "allow" | "deny"; message?: string }
   | { type: "answers"; requestId: string; answers: Record<string, string> }
   | { type: "kill" }
+  /** G32 (owner 30 Oct): a message to an open session, and Interrupt, from the passkey phone app only. */
+  | { type: "prompt"; sessionId: string; text: string }
+  | { type: "interrupt"; sessionId: string }
 
 export type Accepted = {
   ok: true
@@ -93,6 +96,20 @@ async function verify(i: VerifyInput): Promise<Accepted | Rejected> {
     if (e.requestId !== undefined) return no("A kill envelope must not name a request")
     if (life > MAX_KILL_LIFE_MS) return no("A kill envelope lives too long")
     action = { type: "kill" }
+  } else if (e.type === "prompt" || e.type === "interrupt") {
+    // G32: like the kill switch, a fresh nonce from the phone, a short life, and the passkey over the whole envelope,
+    // which names the session and holds the words, so neither can be changed on the way.
+    if (e.requestId !== undefined) return no("A message to a session must not name a request")
+    if (life > MAX_KILL_LIFE_MS) return no("A message to a session lives too long")
+    if (!e.sessionId) return no("The envelope names no session")
+    if (e.type === "prompt") {
+      const text = e.text?.trim()
+      if (!text) return no("The message is empty")
+      action = { type: "prompt", sessionId: e.sessionId, text }
+    } else {
+      if (e.text !== undefined) return no("An interrupt carries no message")
+      action = { type: "interrupt", sessionId: e.sessionId }
+    }
   } else {
     if (life > MAX_DECISION_LIFE_MS) return no("The envelope lives too long")
     if (!e.requestId) return no("The envelope names no request")
