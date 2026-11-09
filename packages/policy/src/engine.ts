@@ -3,6 +3,13 @@ import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
 import { hiddenCharacters } from "./hidden.js"
+import {
+  fileFindings,
+  INTEGRITY_PATTERNS,
+  INTEGRITY_RISK,
+  integrityRuleId,
+  shellFindings,
+} from "./test-integrity.js"
 import { compileGlobs, matchAnyWildcard } from "./match.js"
 import { findProjectRoot, isInside, realKey, relativeTo, type ResolvedPath } from "./paths.js"
 import type { PwshWorker } from "./pwsh.js"
@@ -74,6 +81,11 @@ export const BUILTIN_RULES: readonly BuiltInRule[] = [
     reason: "The command uses an encoded, dynamic or piped-to-shell form.",
     risk: 90,
   },
+  ...INTEGRITY_PATTERNS.map((p) => ({
+    ruleId: integrityRuleId(p),
+    reason: "The change weakens the project's tests, so it needs your approval (test-integrity).",
+    risk: INTEGRITY_RISK,
+  })),
 ]
 
 interface Effective {
@@ -242,6 +254,12 @@ export class PolicyEngine {
     const hidden = hiddenCharacters(call)
     if (hidden.length)
       escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
+    // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
+    const integrity = f.isShell
+      ? shellFindings(f.segments, f.targets)
+      : fileFindings(call.toolName, input, f.targets[0]?.abs)
+    for (const x of integrity)
+      escalations.push({ ruleId: integrityRuleId(x.pattern), reason: x.reason, risk: INTEGRITY_RISK })
     // Flags the floor did not choose to deny still escalate.
     if (fl.encodedCommand || fl.invokeExpression || fl.dynamicInvocation || fl.evalDynamic || fl.pipeToShell) {
       escalations.push({

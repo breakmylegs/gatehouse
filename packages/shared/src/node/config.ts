@@ -297,6 +297,17 @@ function build(loose: boolean) {
      * C-004: from this commit charge (a share of what RAM and the page file can hold) Codehouse starts no new session,
      * chat or page look. Absent: 85%. Older versions keep it unused.
      */
+    /**
+     * D-001: projects strict about their tests, by folder name, or all of them. Strict, Extreme approval waits for a
+     * person on a change that weakens the tests; otherwise it approves it and the session says so. Absent: none.
+     */
+    testIntegrity: z
+      .object({
+        strictAll: z.boolean().optional(),
+        strictProjects: z.array(z.string().max(120)).max(200).optional(),
+      })
+      .passthrough()
+      .optional(),
     memoryGovernor: z
       .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
       .passthrough()

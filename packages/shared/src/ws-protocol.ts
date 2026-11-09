@@ -325,6 +325,8 @@ export const SessionInfo = z.object({
     .optional(),
   /** C-004: suspended to free memory; Start again brings it back on the same conversation. Absent from older Hosts. */
   suspended: z.boolean().optional(),
+  /** D-001: how many weakenings of the tests Extreme approval approved in this session. Absent from older Hosts. */
+  testsWeakened: z.number().int().min(0).optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
   resources: ResourceLevel.optional(),
   /** Which signed-in account it runs on. Absent for the main one. */

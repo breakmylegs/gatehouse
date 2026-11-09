@@ -189,6 +189,19 @@ export class KillSwitchEngagedError extends Error {
 }
 
 /** Owner, 9 Nov: a message to a session a limit paused; going on needs a bypass for this session. */
+/**
+ * D-001: whether a project is strict about its tests, so Extreme approval waits for a person on a weakening. By name,
+ * the folder's, as policy overlays are; or every project.
+ */
+export function strictAboutTests(
+  s: { strictAll?: boolean; strictProjects?: string[] } | undefined,
+  project: string,
+): boolean {
+  if (s?.strictAll === true) return true
+  const p = project.trim().toLowerCase()
+  return (s?.strictProjects ?? []).some((n) => typeof n === "string" && n.trim().toLowerCase() === p)
+}
+
 export class LimitPausedError extends Error {
   constructor(reason?: "spend") {
     super(
@@ -239,6 +252,8 @@ export interface SessionInfo {
   backgroundTasks?: Array<{ id: string; description: string; startedAt: string }>
   /** C-004: suspended to free memory; Start again brings it back on the same conversation. */
   suspended?: boolean
+  /** D-001: how many weakenings of the tests Extreme approval approved in this session. */
+  testsWeakened?: number
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn?: CarryOnStatus
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
@@ -293,6 +308,7 @@ export interface SessionEvents {
         | "queue_empty"
         | "stuck"
         | "bypass_ended"
+        | "tests_weakened"
       data: Record<string, unknown>
     },
   ]
@@ -552,6 +568,8 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   #bypass: { since: number; until?: number; maxUsd?: number; costAtStart: number } | undefined
   #bypassTimer: NodeJS.Timeout | undefined
+  /** D-001: weakenings of the tests Extreme approval approved in this session, which it says. */
+  #testsWeakened = 0
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -671,6 +689,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
+      ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
       ...(this.#bypass
         ? {
             bypass: {
@@ -864,6 +883,13 @@ export class Session extends EventEmitter<SessionEvents> {
       verdicts: this.#verdicts,
       extreme: () => this.#extreme,
       mode: () => this.#mode,
+      // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
+      strictTests: () => strictAboutTests(d.config().testIntegrity, this.project),
+      onTestsWeakened: (pattern, reason) => {
+        this.#testsWeakened++
+        this.emit("event", { type: "tests_weakened", data: { pattern, reason } })
+        this.emit("state", this.info())
+      },
       ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
       onDecision: this.#tellDecision,
       provenance: this.#provenance,

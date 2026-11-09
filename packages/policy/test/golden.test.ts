@@ -37,6 +37,8 @@ interface Case {
   load?: "reject"
   err?: string
   note?: string
+  /** D-001: a file put in the workspace first (its path under ${WS}), for a Write compared with the file as it is. */
+  file?: { path: string; content: string }
 }
 
 interface Loaded {
@@ -166,6 +168,17 @@ async function runCase(c: Case): Promise<{ outcome?: string; ruleId?: string; lo
       }
     })
   }
+  if (c.file) {
+    const at = subst(c.file.path)
+    fs.mkdirSync(path.dirname(at), { recursive: true })
+    fs.writeFileSync(at, c.file.content)
+    try {
+      const v = await shared.engine.evaluate(call, ctx)
+      return { outcome: v.outcome, ruleId: v.ruleId }
+    } finally {
+      fs.rmSync(at, { force: true })
+    }
+  }
   const v = await shared.engine.evaluate(call, ctx)
   return { outcome: v.outcome, ruleId: v.ruleId }
 }
@@ -196,6 +209,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "12-overlays": 14,
   "13-remember": 12,
   "14-hidden-unicode": 8,
+  "15-test-integrity": 40,
 }
 
 for (const { category, cases } of corpus) {

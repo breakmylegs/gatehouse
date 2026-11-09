@@ -1,3 +1,4 @@
+import { INTEGRITY_PREFIX } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
@@ -46,6 +47,10 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /** D-001: this project is strict about its tests, so Extreme approval does not approve a weakening. */
+  strictTests?: () => boolean
+  /** D-001: Extreme approval approved a weakening of the tests, which the session then says (pattern, reason). */
+  onTestsWeakened?: (pattern: string, reason: string) => void
   /** The session's permission mode now: in Plan mode no file is changed until the plan is approved. */
   mode?: () => string
   /** Tells the phone that a request was approved by Extreme approval mode. Never given the input. */
@@ -220,10 +225,44 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)
       }
       const effects = await effectsFor(deps, toolName, input)
+      // D-001: a change that weakens the tests is recorded, with its pattern, before anything is decided.
+      const weakens = verdict.ruleId.startsWith(INTEGRITY_PREFIX)
+      if (weakens) {
+        const written = await deps.audit.record({
+          session: deps.sessionId,
+          event: "test_integrity_escalated",
+          channel: "host",
+          tool: toolName,
+          toolUseId: toolUseID,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { pattern: verdict.ruleId.slice(INTEGRITY_PREFIX.length), reason: verdict.reason },
+          verdict,
+          latencyMs: 0,
+        })
+        if (!written)
+          return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+      }
+      if (deps.extreme?.() === true && weakens && deps.strictTests?.()) {
+        // D-001, strict for this project: a weakening waits for a person even in Extreme approval.
+        return await escalate(
+          deps,
+          toolName,
+          input,
+          options,
+          { ...verdict, reason: `${verdict.reason} ${STRICT_TESTS_ASKS}` },
+          effects,
+        )
+      }
       if (deps.extreme?.() === true) {
         const cannotUndo = effects !== undefined && !effects.reversible
-        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId) && !cannotUndo)
-          return await extremeApprove(deps, toolName, input, toolUseID, verdict)
+        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId) && !cannotUndo) {
+          const approved = await extremeApprove(deps, toolName, input, toolUseID, verdict)
+          // D-001, the default: approved and flagged, so the session says its tests were weakened.
+          if (weakens && approved.behavior === "allow")
+            deps.onTestsWeakened?.(verdict.ruleId.slice(INTEGRITY_PREFIX.length), verdict.reason)
+          return approved
+        }
         // Say why on the card: you chose Extreme approval and would otherwise expect no question.
         return await escalate(
           deps,
@@ -272,6 +311,10 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   "parse-error",
   "kill-switch",
 ])
+
+/** D-001: added to the reason when a project is strict about its tests and Extreme approval meets a weakening. */
+export const STRICT_TESTS_ASKS =
+  "This project is strict about its tests (Settings, Sessions, Test integrity), so this waits for you even in Extreme approval."
 
 /** Added to the reason when Extreme approval meets one of NEVER_AUTO_APPROVED. */
 export const EXTREME_CANNOT_APPROVE =

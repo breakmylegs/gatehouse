@@ -134,6 +134,15 @@ export function SessionDetails({
               <dd className="m-0">{session.model}</dd>
             </>
           ) : null}
+          {session.testsWeakened ? (
+            <>
+              <dt className="text-mut">Tests</dt>
+              <dd className="m-0 font-semibold text-warn">
+                weakened {session.testsWeakened === 1 ? "once" : `${session.testsWeakened} times`}, approved by
+                Extreme approval: done-claims are not verified
+              </dd>
+            </>
+          ) : null}
           {cost !== undefined ? (
             <>
               <dt className="text-mut">Spend</dt>

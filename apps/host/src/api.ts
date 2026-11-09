@@ -1505,6 +1505,7 @@ const LIVE_SETTINGS = [
   "telemetry",
   "spendCapUsd",
   "memoryGovernor",
+  "testIntegrity",
   "outputStyle",
   "worktreeLocation",
   "pullRequests",

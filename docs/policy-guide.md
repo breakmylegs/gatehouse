@@ -206,6 +206,24 @@ Each rule remembered from now on carries limits, kept beside it in `policy/rules
 - Fail closed: an expiry that cannot be read counts as passed, a scope that is not a string matches no folder, a use limit that is not a positive whole number allows none, and a counts file that cannot be read counts every limited rule as used up.
 - Rules remembered before C-013 have no limits and keep working as they did. Removing a rule removes its limits.
 
+### The test integrity pack (D-001)
+
+Built into the engine, beside the hidden-character check, and like it no rule or remembered rule can let it through. It looks at Write, Edit and MultiEdit to a test file or test config, and at shell commands, and escalates at High risk (70, so Auto and Accept edits ask too) with a reason naming what weakens the tests. The rule id is `test-integrity-<pattern>`:
+
+| Pattern | What it catches |
+|---|---|
+| `assertion-removed` | Fewer assertions than before: `expect(`, `assert`, `self.assert*`, `Should`, `Assert.*`. A Write is compared with the file as it is. |
+| `skip-added` | A skip or only marker added: `.skip`, `.only`, `.todo`, `xit`, `xdescribe`, `fit`, `[Ignore]`, `[Skip]`, `Skip = "..."`, `@pytest.mark.skip`/`skipif`/`xfail`, `@unittest.skip`, `pytest.skip(`, Pester `-Skip`. |
+| `expected-changed` | An assertion kept with the same shape but a different expected value (strings and numbers compared). |
+| `test-deleted` | A test file deleted (`rm`, `del`, `Remove-Item`, `git rm`) or written empty. |
+| `coverage-lowered` | A coverage threshold lowered or taken out in test config (`lines`, `branches`, `functions`, `statements`, `fail_under`, `threshold`, `minimum`). |
+| `failure-hidden` | `|| true`, `|| exit 0`, `--passWithNoTests`, `continue-on-error: true` or `--no-verify` added to a test file or config, a test run made to pass whatever happens, or a commit or push with `--no-verify`. |
+| `shell-edit` | A test file changed from the shell (`sed -i`, `perl -i`, a redirect, `Set-Content` and the like), where the guard cannot see what changes. |
+
+Test files are found by convention: a `test`, `tests`, `spec` or `__tests__` folder; `*.test.*` and `*.spec.*`; `test_*.py`, `*_test.py` and `conftest.py`; `*Test.cs` and `*Tests.cs`; `*.Tests.ps1`; `*_test.go`. Test config: the vitest, jest, karma, playwright and cypress configs, `.mocharc`, `pytest.ini`, `tox.ini`, `.coveragerc`, `setup.cfg`, `pyproject.toml`, `codecov.yml`, `.nycrc`, `*.runsettings`, `PesterConfiguration.psd1`, workflow files and `package.json`.
+
+In Extreme approval the Host decides what happens to such an escalation per project (Settings, Sessions, Test integrity): by default it is approved and the session says its tests were weakened; a strict project waits for a person. Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
+
 ## 8. Redaction
 
 `redact()` and `redactString()` remove tokens, keys, Authorization headers, JWTs, connection strings, credentials in URLs, private key blocks and `key=value` secrets, plus any terms in the user's list (client names, internal host names). Strings under keys that look secret (`password`, `token`, `api_key` and so on) are replaced whole. Numbers are left alone. It never mutates its input. It is applied before anything is written to the audit log or sent to the relay.

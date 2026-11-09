@@ -60,6 +60,7 @@ interface Config {
   maxSessions?: number
   spendCapUsd?: number
   memoryGovernor?: { percent: number; off?: boolean }
+  testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
@@ -121,6 +122,9 @@ interface Values {
   plResume: boolean
   /** C-004: a percentage, or "off". */
   memPoint: string
+  /** D-001: every project strict about its tests, or these, one to a line. */
+  tiAll: boolean
+  tiProjects: string
   effortCap: string
   maxSessions: string
   spendCap: string
@@ -177,6 +181,8 @@ function valuesOf(d: SettingsData): Values {
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     plResume: c.planLimitPause?.noAutoResume !== true,
     memPoint: c.memoryGovernor?.off ? "off" : String(c.memoryGovernor?.percent ?? 85),
+    tiAll: c.testIntegrity?.strictAll === true,
+    tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
@@ -264,6 +270,18 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   if (v.spendCap) body.spendCapUsd = Number(v.spendCap)
   else delete body.spendCapUsd
   // C-004: absent is 85%, so the default is not written; a percentage is kept beside off for an older reader.
+  // D-001: absent is no project strict, so nothing is written until one is.
+  const strictProjects = v.tiProjects
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  if (!v.tiAll && !strictProjects.length && !d.saved.testIntegrity) delete body.testIntegrity
+  else
+    body.testIntegrity = {
+      ...(d.saved.testIntegrity ?? {}),
+      strictAll: v.tiAll,
+      strictProjects,
+    }
   if (v.memPoint === "85" && !d.saved.memoryGovernor) delete body.memoryGovernor
   else
     body.memoryGovernor = {
@@ -350,6 +368,8 @@ export const DEFAULT_VALUES: Values = {
   plPause: "95",
   plResume: true,
   memPoint: "85",
+  tiAll: false,
+  tiProjects: "",
   effortCap: "",
   maxSessions: "",
   spendCap: "",
@@ -621,6 +641,7 @@ export function Settings() {
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
+  const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
@@ -1097,6 +1118,35 @@ export function Settings() {
                     </option>
                   ))}
                 </select>
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Test integrity" gap="gap-2" changed={tiChanged}>
+              <p className="m-0 text-[13px] text-mut">
+                A change that weakens a project's tests (an assertion taken out, a skip added, an
+                expected value changed, a test file deleted, a coverage threshold lowered, or a flag
+                that hides a failure) always comes to you, except in Extreme approval. There, by
+                default, it is approved and the session says the tests were weakened. A strict
+                project waits for you instead.
+              </p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.tiAll}
+                  onChange={(e) => change({ tiAll: e.target.checked }, "Test integrity")}
+                />
+                Every project is strict
+              </label>
+              <Field
+                label="Strict projects, one folder name to a line"
+                help="The project's folder name, as in its policy overlay. Not case sensitive."
+              >
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.tiProjects}
+                  disabled={v.tiAll}
+                  onChange={(e) => change({ tiProjects: e.target.value }, "Test integrity")}
+                />
               </Field>
             </Group>
 

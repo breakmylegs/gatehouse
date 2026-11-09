@@ -795,6 +795,9 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       if (data.reason === "spend")
         return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
+    case "tests_weakened":
+      // D-001: Extreme approval approved a change that weakens the tests; the session says so.
+      return `Tests weakened, approved by Extreme approval: ${str(data.reason) ?? "a change weakens the tests"} Claims that the work is done are not verified while this stands.`
     case "bypass_ended":
       return data.why === "time"
         ? "The time you gave the bypass ran out, so the limits in Settings apply to this session again."
