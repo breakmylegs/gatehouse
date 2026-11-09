@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import type { FastifyInstance, FastifyReply } from "fastify"
@@ -19,8 +19,9 @@ import {
  * Files for the workspace: list a session's folder, read a file, preview a page, and reveal a file in Explorer.
  * Everything stays inside the session's own folder (real paths, so a junction cannot lead out), except a file the
  * session itself wrote or edited elsewhere, which can be read, copied out or shown in Explorer (owner, 4 Nov). Anything
- * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. The one thing here that
- * writes is Replace (G35): your own change, shown first, after a checkpoint, recorded, and never in a blocked file.
+ * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. The two things here that
+ * write are your own: Replace (G35), shown first, after a checkpoint; and Save (G33), only over the version you
+ * opened. Both are recorded and never touch a blocked file.
  */
 
 const MAX_TEXT = 1024 * 1024
@@ -44,6 +45,8 @@ const TYPES: Record<string, string> = {
   ".md": "text/plain; charset=utf-8",
   ".woff2": "font/woff2",
 }
+
+const sha256 = (b: Buffer) => createHash("sha256").update(b).digest("hex")
 
 const bad = (reply: FastifyReply, status: number, error: string) =>
   reply.code(status).header("cache-control", "no-store").send({ error })
@@ -373,7 +376,61 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const text = buf.toString("utf8")
     if (buf.includes(0) || text.includes(String.fromCharCode(0xfffd)))
       return { kind: "binary", size: st.size }
-    return { kind: "text", text, size: st.size, truncated: st.size > MAX_TEXT }
+    return {
+      kind: "text",
+      text,
+      size: st.size,
+      truncated: st.size > MAX_TEXT,
+      // G33: what the file was when shown, so a save can tell if it changed outside since.
+      hash: sha256(fs.readFileSync(where.abs)),
+    }
+  })
+
+  // G33: your own edit to a file in the session's folder, saved only if the file is still as it was when you opened
+  // it, never to a file the floor blocks, never past 1 MB, and recorded (where and how big, never the text).
+  app.post("/api/files/save", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    if (typeof b.text !== "string" || typeof b.hash !== "string")
+      return bad(reply, 422, "Say what to save, and which version you edited.")
+    if (Buffer.byteLength(b.text) > MAX_TEXT)
+      return bad(reply, 413, "Files over 1 MB are not edited here.")
+    const where = insideRoot(root, typeof b.path === "string" ? b.path : "")
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    if (!fs.statSync(where.abs).isFile()) return bad(reply, 400, "That is not a file.")
+    const why =
+      (await blocked(where.abs, root)) ??
+      (await ctx.engine
+        .evaluate({ toolName: "Edit", input: { file_path: where.abs } }, { cwd: root })
+        .then((v) => (v.outcome === "deny" && v.decidedBy === "floor" ? v.reason : undefined)))
+    if (why) return bad(reply, 403, `That file is blocked by the policy: ${why}`)
+    if (sha256(fs.readFileSync(where.abs)) !== b.hash)
+      return bad(
+        reply,
+        409,
+        "The file changed outside since you opened it, so it was not saved. Copy your text, then reload it.",
+      )
+    const recorded = await ctx.audit.record({
+      session: String(b.session),
+      event: "file_saved",
+      channel: "desktop",
+      tool: "Edit",
+      cwd: root,
+      input: { path: where.abs, bytes: Buffer.byteLength(b.text) },
+      verdict: {
+        outcome: "allow",
+        ruleId: "file-saved",
+        reason: "You edited and saved a file in the session's folder from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so it was not saved.")
+    await writeFileAtomic(where.abs, b.text)
+    return { saved: true, hash: sha256(Buffer.from(b.text, "utf8")) }
   })
 
   app.post("/api/files/preview", async (req, reply) => {

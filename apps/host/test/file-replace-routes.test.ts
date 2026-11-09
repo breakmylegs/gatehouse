@@ -96,6 +96,37 @@ describe("search and replace across files", { timeout: 120_000 }, () => {
     expect(recorded.filter((e) => e === "files_replaced")).toHaveLength(2)
   })
 
+  it("saves your edit only over the version you opened, never to a secrets file, and records it (G33)", async () => {
+    const read = async (p: string) =>
+      (
+        await app.inject({
+          method: "GET",
+          url: `/api/files/read?session=s1&path=${encodeURIComponent(p)}`,
+        })
+      ).json() as { kind: string; text: string; hash: string }
+    const opened = await read("src/basket.ts")
+    const save = (text: string, hash = opened.hash, p = "src/basket.ts") =>
+      post("/api/files/save", { session: "s1", path: p, text, hash })
+    // Changed outside after you opened it: not saved.
+    fs.writeFileSync(path.join(ws, "src", "basket.ts"), "export const changed = 1\n")
+    expect((await save("mine\n")).statusCode).toBe(409)
+    expect(fs.readFileSync(path.join(ws, "src", "basket.ts"), "utf8")).toBe(
+      "export const changed = 1\n",
+    )
+    const again = await read("src/basket.ts")
+    audited = false
+    expect((await save("mine\n", again.hash)).statusCode).toBe(503)
+    audited = true
+    const r = await save("mine\n", again.hash)
+    expect(r.json()).toMatchObject({ saved: true })
+    expect(fs.readFileSync(path.join(ws, "src", "basket.ts"), "utf8")).toBe("mine\n")
+    expect(recorded).toContain("file_saved")
+    // A secrets file is never shown, and never saved; nor is a file out of the folder.
+    expect((await save("X=2\n", "any", ".env")).statusCode).toBe(403)
+    expect(fs.readFileSync(path.join(ws, ".env"), "utf8")).toBe("BASKET_KEY=1\n")
+    expect((await save("x", "any", "../plain/notes.txt")).statusCode).toBe(403)
+  })
+
   it("refuses to replace in a folder that is not in git, since it could not be undone", async () => {
     const body = { session: "s2", pattern: "basket", replacement: "cart" }
     const preview = (
