@@ -7,8 +7,10 @@
 //   tsx scripts/release.ts ship [--skip-tests]   npm run release: the whole release from this computer. The commit
 //                                                must be pushed. The gate on what changed since the last release
 //                                                (scripts/gate.mjs), package and its check, installer, sign, then
-//                                                gh release create with Codehouse-Setup.exe first. --skip-tests when the
-//                                                gate has just passed on exactly this commit.
+//                                                gh release create with Codehouse-Setup.exe first. --skip-tests only
+//                                                with the owner's signed override for this version (C-002), recorded
+//                                                in the audit log.
+//   tsx scripts/release.ts allow-skip-tests <why> the owner's step, at a console: a signed override for this version
 //
 // GitHub Actions are switched off for this repository (the owner's account has few minutes), so releases are made
 // here. The signing key is the Ed25519 private key (PEM): CODEHOUSE_RELEASE_KEY holds it, or CODEHOUSE_RELEASE_KEY_FILE names
@@ -34,6 +36,16 @@ import {
   type LegacyRoute,
 } from "../apps/host/src/update/publish.js"
 import { writeZip } from "../apps/host/src/update/zip.js"
+import { RELEASE_KEYS } from "../apps/host/src/update/manifest.js"
+import { redact } from "@gatehouse/policy"
+import { AuditWriter } from "@gatehouse/shared/audit"
+import { auditDir } from "@gatehouse/shared/node"
+import {
+  checkSkipOverride,
+  makeSkipOverride,
+  overridePath,
+  readSkipOverride,
+} from "./skip-tests-override.js"
 import {
   CHANGELOG_FILE,
   parseChangelog,
@@ -265,6 +277,33 @@ if (cmd === "version") {
   }
   const node = process.execPath
   const tsx = path.join(root, "node_modules", "tsx", "dist", "cli.mjs")
+  // C-002: skipping the tests needs the owner's signed override for exactly this version, recorded before going on.
+  if (process.argv.includes("--skip-tests")) {
+    const r = checkSkipOverride(readSkipOverride(), v.version, RELEASE_KEYS)
+    if (!r.ok)
+      throw new Error(
+        `--skip-tests needs the owner's signed override for ${v.version}: ${r.reason} The owner makes one with: npx tsx scripts/release.ts allow-skip-tests "<why>"`,
+      )
+    const writer = new AuditWriter({ dir: auditDir(), redact: (x) => redact(x, { terms: [] }) })
+    await writer.append({
+      session: "release",
+      event: "release_skip_tests",
+      channel: "desktop",
+      tool: "release",
+      cwd: root,
+      input: { version: v.version, reason: r.override.reason, expiresAt: r.override.expiresAt },
+      verdict: {
+        outcome: "allow",
+        ruleId: "release-skip-tests",
+        reason: "A release skipped its tests under the owner's signed override for this version.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    console.log(`[release] tests skipped under the owner's override: ${r.override.reason}`)
+  }
   // The gate checks what this release changes: everything since the last release, or everything when there is none.
   if (!process.argv.includes("--skip-tests")) {
     let last: string | undefined
@@ -343,9 +382,25 @@ if (cmd === "version") {
   console.log(
     `[release] Codehouse ${v.version} is out: https://github.com/${REPO}/releases/tag/v${v.version}`,
   )
+} else if (cmd === "allow-skip-tests") {
+  // C-002: the owner's own step, typed at a console: it refuses to run without one, so no script can make it.
+  if (!process.stdin.isTTY)
+    throw new Error("This is the owner's step: run it yourself at a console.")
+  const reason = process.argv.slice(3).join(" ").trim()
+  const v = currentVersion()
+  const typed = await new Promise<string>((resolve) => {
+    process.stdout.write(`Type the version (${v.version}) to let its release skip the tests: `)
+    process.stdin.once("data", (d) => resolve(String(d).trim()))
+  })
+  process.stdin.pause()
+  if (typed !== v.version) throw new Error("That is not the version, so no override was made.")
+  const o = makeSkipOverride(releaseKey(), v.version, reason)
+  fs.mkdirSync(path.dirname(overridePath()), { recursive: true })
+  fs.writeFileSync(overridePath(), JSON.stringify(o, null, 2) + "\n")
+  console.log(`[release] ${v.version} may skip its tests until ${o.expiresAt}.`)
 } else {
   console.log(
-    "Usage: tsx scripts/release.ts version | stamp <dir> | publish <dir> <out> | ship [--skip-tests]",
+    "Usage: tsx scripts/release.ts version | stamp <dir> | publish <dir> <out> | ship [--skip-tests] | allow-skip-tests <why>",
   )
   process.exit(2)
 }

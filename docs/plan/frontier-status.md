@@ -29,7 +29,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | Id | Title | Before | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|---|
 | C-001 | Memory-aware test sharding by file | Wave 1 | todo | | | |
-| C-002 | Gate refuses --skip-tests | Wave 1 | todo | | | |
+| C-002 | Gate refuses --skip-tests | Wave 1 | built | slice/C-002-skip-tests-override | BUILD_REPORT "Frontier C-002" | Signed per-version override, audited |
 | C-004 | Memory governor | Wave 1 | todo | | | Job objects exist (D10); no governor |
 | C-013 | Grant lifetimes | Wave 1 | todo | | | G29 gave last used and stale marking; no expiry or worktree scope |
 | C-010 | Audit-backed session timeline | Wave 2 | todo | | | Walkthrough (G31) and audit by session exist |
