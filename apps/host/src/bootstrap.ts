@@ -4,7 +4,7 @@ import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel, NtfySecretStore } from "./push/ntfy.js"
 import { ExtraSpendToday, LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
-import { RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
+import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
@@ -1180,12 +1180,19 @@ export function createHost(opts: HostOptions = {}): Host {
           latencyMs: 0,
         })
         if (!recorded) throw new Error("it could not be recorded, so it did not start")
-        const session = await manager.start({
-          cwd: r.folder,
-          mode: "default",
-          ...(r.extreme ? { extreme: true } : {}),
-        })
+        const session = await manager.start(routineSessionOptions(r))
         session.prompt(r.prompt)
+        // G23: kept for the review inbox in Settings; a run that cannot be noted still runs.
+        const branch = session.info().worktree?.branch
+        await routines
+          .noteRun({
+            routineId: r.id,
+            name: r.name,
+            sessionId: session.id,
+            at: new Date().toISOString(),
+            ...(branch ? { branch } : {}),
+          })
+          .catch((e: Error) => log(`routine run not noted: ${e.message}`))
         return session.id
       }
       new RoutineScheduler({ store: routines, log, start: runRoutine }).start()

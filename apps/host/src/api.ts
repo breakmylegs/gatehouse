@@ -1112,6 +1112,8 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
       latencyMs: 0,
     })
   app.get("/api/routines", async () => ({ routines: routines.list() }))
+  // G23: the review inbox: each run's session, newest first. The screen adds its state, changes and cost.
+  app.get("/api/routines/runs", async () => ({ runs: routines.runs() }))
   app.put("/api/routines", async (req, reply) => {
     try {
       const r = await routines.put((req.body ?? {}) as Partial<Routine>)
@@ -1121,6 +1123,7 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
         time: r.time,
         days: r.days,
         extreme: r.extreme === true,
+        worktree: r.worktree === true,
         enabled: r.enabled,
       })
       return { routine: r }
