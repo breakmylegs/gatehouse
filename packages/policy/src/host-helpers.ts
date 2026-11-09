@@ -36,6 +36,9 @@ export function secretGlobs(policy: Policy): string[] {
     .flatMap((r) => r.pathGlobs ?? [])
 }
 
+/** Risk 85 and over: Severe, never remembered (U4), never allowed from a push channel (invariant 8). */
+export const SEVERE_RISK = 85
+
 export interface RememberCandidate {
   tool: string
   command?: string
@@ -98,6 +101,10 @@ export async function checkRemember(
   }
   if (STRUCTURAL.has(verdict.ruleId)) {
     return { ok: false, reason: `Rule ${verdict.ruleId} is built in and a remember rule cannot lift it.` }
+  }
+  // U4: a Severe request is decided by you every time; it never becomes a rule.
+  if (verdict.risk >= SEVERE_RISK) {
+    return { ok: false, reason: "A Severe request (risk 85 and over) is never remembered: each one is yours to decide." }
   }
 
   if (SHELL_TOOLS.has(call.toolName)) {

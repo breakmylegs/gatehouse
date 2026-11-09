@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -276,6 +276,30 @@ describe("the list and a request", () => {
     expect(effects.textContent).toContain("Deletes 1 file")
     expect(effects.textContent).toContain("notes.txt")
     expect(effects.textContent).toContain("Cannot be undone")
+  })
+
+  it("allows a Severe request only by holding, then Face ID; a tap does nothing (U4)", async () => {
+    state.items = [opened({}, { verdict: { ...opened().opened.payload.verdict, risk: 90 } })]
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: /Run shell command/ }))
+    await userEvent.click(screen.getByRole("button", { name: "Allow once…" }))
+    const hold = screen.getByRole("button", { name: "Hold to allow with Face ID" })
+    fireEvent.click(hold)
+    expect(await screen.findByText(/press and hold for a moment/)).toBeInTheDocument()
+    expect(state.answers).toEqual([])
+    const now = vi.spyOn(Date, "now")
+    // Half a second is not long enough.
+    now.mockReturnValue(1_000_000)
+    fireEvent.pointerDown(hold)
+    now.mockReturnValue(1_000_500)
+    fireEvent.click(hold)
+    expect(state.answers).toEqual([])
+    now.mockReturnValue(1_000_000)
+    fireEvent.pointerDown(hold)
+    now.mockReturnValue(1_001_600)
+    fireEvent.click(hold)
+    now.mockRestore()
+    await waitFor(() => expect(state.answers).toEqual([{ id: "r1", what: { decision: "allow" } }]))
   })
 
   it("opens a request straight from a notification link", async () => {

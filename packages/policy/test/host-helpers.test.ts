@@ -90,7 +90,7 @@ describe("checkRemember", () => {
     ["a web page over plain http", { toolName: "WebFetch", input: { url: "http://example.com" } }, /https/],
     ["an address with a password in it", { toolName: "WebFetch", input: { url: "https://u:p@example.com/" } }, /password/],
     ["an mcp tool", { toolName: "mcp__github__create_issue", input: {} }, /cannot be remembered/],
-    ["a UNC path", { toolName: "Read", input: { file_path: "//srv/share/x" } }, /local path|UNC|single/],
+    ["a UNC path", { toolName: "Read", input: { file_path: "//srv/share/x" } }, /local path|UNC|single|Severe/],
     ["malformed input", { toolName: "Bash", input: {} }, /shape/],
   ]
   for (const [name, call, why] of refused) {
@@ -112,6 +112,21 @@ describe("checkRemember", () => {
 
   it("has nothing to offer without a policy", async () => {
     expect((await checkRemember(engine, undefined, bash("npm install x"), ctx())).ok).toBe(false)
+  })
+
+  it("never remembers a Severe request, which is yours to decide each time (U4)", async () => {
+    const severe = {
+      evaluate: async () => ({
+        outcome: "escalate" as const,
+        ruleId: "no-rule",
+        reason: "r",
+        risk: 85,
+        decidedBy: "rules" as const,
+        policyHash: "h",
+      }),
+    } as unknown as typeof engine
+    const r = await checkRemember(severe, policy, bash("npm install lodash"), ctx(), pwsh)
+    expect(r).toMatchObject({ ok: false, reason: expect.stringMatching(/Severe/) })
   })
 })
 

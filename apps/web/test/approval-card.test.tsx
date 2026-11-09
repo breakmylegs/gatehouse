@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ApprovalCard } from "../src/components/ApprovalCard"
@@ -66,6 +66,12 @@ function view(
   }
 }
 
+/** U4: at High risk Allow waits a second after the request appears. */
+const allowReady = () =>
+  waitFor(() => expect(screen.getByRole("button", { name: /^Allow once/ })).toBeEnabled(), {
+    timeout: 3000,
+  })
+
 beforeEach(() => {
   useStore.setState({ conn: "open" })
   sent.length = 0
@@ -108,6 +114,42 @@ describe("ApprovalCard", () => {
     expect(effects.textContent).toContain("Cannot be undone")
   })
 
+  it("waits a second before Allow works at High risk, so a stray click or keypress allows nothing (U4)", async () => {
+    render(<ApprovalCard view={view()} />)
+    const allowButton = screen.getByRole("button", { name: /^Allow once/ })
+    expect(allowButton).toBeDisabled()
+    fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
+    expect(sent).toEqual([])
+    await allowReady()
+    // Low risk has no wait.
+    cleanup()
+    render(
+      <ApprovalCard
+        view={view({ verdict: { ...view().request.verdict, risk: 20, segments: [] } })}
+      />,
+    )
+    expect(screen.getByRole("button", { name: /^Allow once/ })).toBeEnabled()
+  })
+
+  it("asks you to type allow before a Severe request is allowed, by button or keys (U4)", async () => {
+    render(<ApprovalCard view={view({ verdict: { ...view().request.verdict, risk: 92 } })} />)
+    await allowReady()
+    fireEvent.click(screen.getByRole("button", { name: /^Allow once/ }))
+    fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
+    expect(sent).toEqual([])
+    const form = screen.getByRole("form", { name: "Confirm a Severe request" })
+    const box = within(form).getByRole("textbox")
+    const confirm = within(form).getByRole("button", { name: "Allow once" })
+    fireEvent.change(box, { target: { value: "yes" } })
+    expect(confirm).toBeDisabled()
+    // Ctrl+Enter inside the box allows nothing either.
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
+    expect(sent).toEqual([])
+    fireEvent.change(box, { target: { value: " Allow " } })
+    fireEvent.click(confirm)
+    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1" }]))
+  })
+
   it("has no effects row for a call that deletes nothing", () => {
     render(<ApprovalCard view={view()} />)
     expect(screen.queryByLabelText("What it would delete or throw away")).toBeNull()
@@ -135,6 +177,7 @@ describe("ApprovalCard", () => {
     fireEvent.keyDown(screen.getByLabelText("Prompt"), { key: "Enter", ctrlKey: true })
     fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true })
     expect(sent).toEqual([])
+    await allowReady()
     fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
     await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1" }]))
   })
@@ -252,6 +295,7 @@ describe("ApprovalCard", () => {
       error: { code: "x", message: "The edited input is denied by rule secrets." },
     })
     render(<ApprovalCard view={view()} />)
+    await allowReady()
     await userEvent.click(screen.getByRole("button", { name: /Allow once/ }))
     expect((await screen.findByRole("alert")).textContent).toMatch(/denied by rule secrets/)
   })
@@ -344,6 +388,7 @@ describe("ApprovalCard", () => {
   it("says what the Host said, or that it was not connected, when a send fails", async () => {
     reply = () => ({ ok: false, error: { code: "disconnected", message: "x" } })
     render(<ApprovalCard view={view()} />)
+    await allowReady()
     await userEvent.click(screen.getByRole("button", { name: /Allow once/ }))
     expect((await screen.findByRole("alert")).textContent).toMatch(/nothing was sent/)
   })

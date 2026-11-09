@@ -641,13 +641,20 @@ function Detail({
         ) : confirmAllow ? (
           <div role="group" aria-label="Confirm allow" className="grid gap-2">
             <p className="m-0 font-semibold">Allow this once?</p>
-            <button
-              className="btn btn-strong"
-              disabled={busy}
-              onClick={() => void send({ decision: "allow", ...(message ? { message } : {}) })}
-            >
-              {busy ? "Waiting for Face ID…" : "Allow with Face ID"}
-            </button>
+            {o.payload.verdict.risk >= SEVERE_RISK ? (
+              <HoldToAllow
+                busy={busy}
+                onAllow={() => void send({ decision: "allow", ...(message ? { message } : {}) })}
+              />
+            ) : (
+              <button
+                className="btn btn-strong"
+                disabled={busy}
+                onClick={() => void send({ decision: "allow", ...(message ? { message } : {}) })}
+              >
+                {busy ? "Waiting for Face ID…" : "Allow with Face ID"}
+              </button>
+            )}
             <button
               className="btn"
               disabled={busy}
@@ -682,6 +689,58 @@ function Detail({
         )}
       </div>
     </div>
+  )
+}
+
+/** U4: Severe, from risk 85; on the phone its Allow is held, not tapped. */
+const SEVERE_RISK = 85
+const HOLD_MS = 1500
+
+/**
+ * U4 (C2, decided 9 Nov): a Severe request is allowed on the phone by pressing and holding for a moment, then letting
+ * go, and then Face ID. A tap does nothing. The answer is sent from the release itself, which is what lets Face ID
+ * ask: Safari only asks for a passkey from a person's own gesture.
+ */
+function HoldToAllow({ busy, onAllow }: { busy: boolean; onAllow: () => void }) {
+  const since = useRef<number | undefined>(undefined)
+  const [holding, setHolding] = useState(false)
+  const [short, setShort] = useState(false)
+  return (
+    <>
+      <button
+        className="btn btn-strong hold-to-allow"
+        disabled={busy}
+        data-holding={holding ? "" : undefined}
+        onPointerDown={() => {
+          since.current = Date.now()
+          setHolding(true)
+          setShort(false)
+        }}
+        onPointerCancel={() => {
+          since.current = undefined
+          setHolding(false)
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+        onClick={() => {
+          const held = since.current !== undefined && Date.now() - since.current >= HOLD_MS
+          since.current = undefined
+          setHolding(false)
+          if (held) onAllow()
+          else setShort(true)
+        }}
+      >
+        {busy
+          ? "Waiting for Face ID…"
+          : holding
+            ? "Keep holding, then let go"
+            : "Hold to allow with Face ID"}
+      </button>
+      {short ? (
+        <p role="status" className="m-0 text-[15px]">
+          This is Severe: press and hold for a moment, then let go.
+        </p>
+      ) : null}
+    </>
   )
 }
 

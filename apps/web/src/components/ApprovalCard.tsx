@@ -31,6 +31,11 @@ const PHONE_TEXT: Record<PendingView["phone"], string> = {
   expired: "Phone: expired",
 }
 
+/** U4: the risk bands that slow Allow down: High waits a moment, Severe asks you to type "allow". */
+export const HIGH_RISK = 70
+export const SEVERE_RISK = 85
+export const HIGH_DELAY_MS = 1000
+
 /** G20: what a call would delete or throw away, in words: "Deletes 12 files" or "Throws away work in 3 files". */
 export function effectsWords(e: {
   kind: "delete" | "discard"
@@ -76,6 +81,14 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     [req.toolName, view.rawInput],
   )
   const [edited, setEdited] = useState(command)
+  // U4 (C2, decided 9 Nov): gestures in proportion to risk. High waits a second before Allow can be used, so a request
+  // that appears under your cursor or hands is not allowed by the click or keys meant for something else; Severe asks
+  // you to type "allow" first, which a keyboard, a mouse and a screen reader can all do.
+  const high = req.kind === "permission" && req.verdict.risk >= HIGH_RISK
+  const severe = req.kind === "permission" && req.verdict.risk >= SEVERE_RISK
+  const [ready, setReady] = useState(!high)
+  const [confirming, setConfirming] = useState<"allow" | "edited">()
+  const [typed, setTyped] = useState("")
 
   useEffect(() => {
     setPanel("none")
@@ -85,7 +98,16 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     setConfirmStop(false)
     setRemember(undefined)
     setEdited(command)
+    setConfirming(undefined)
+    setTyped("")
   }, [req.id, command])
+
+  useEffect(() => {
+    if (!high) return setReady(true)
+    setReady(false)
+    const t = setTimeout(() => setReady(true), HIGH_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [req.id, high])
 
   const segments = (req.verdict.segments ?? [])
     .filter((s) => s.outcome !== "allow")
@@ -110,9 +132,22 @@ export function ApprovalCard({ view }: { view: PendingView }) {
 
   const deny = (msg?: string) =>
     run({ type: "deny", requestId: req.id, ...(msg?.trim() ? { message: msg.trim() } : {}) })
-  const allow = () => run({ type: "approve", requestId: req.id })
+  const allowNow = () => run({ type: "approve", requestId: req.id })
+  /** Allow, once it may be used: a Severe request asks you to type "allow" first. */
+  const allow = async () => {
+    if (!ready) return false
+    if (severe) {
+      setConfirming("allow")
+      return false
+    }
+    return allowNow()
+  }
 
   async function allowEdited() {
+    if (severe && confirming !== "edited") {
+      setConfirming("edited")
+      return
+    }
     let updatedInput: Record<string, unknown>
     if (isShell(req.toolName)) {
       updatedInput = { ...view.rawInput, command: edited }
@@ -510,15 +545,70 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </button>
             <button
               className={clsx("btn pass-allow", view.defaultToNo ? "btn-strong" : "btn-primary")}
-              disabled={busy || !connected}
+              disabled={busy || !connected || !ready}
               onClick={() => void allow()}
               aria-keyshortcuts="Control+Enter"
             >
-              {req.kind === "plan" ? "Approve plan" : "Allow once"}{" "}
+              {req.kind === "plan" ? "Approve plan" : severe ? "Allow once…" : "Allow once"}{" "}
               <kbd aria-hidden="true">Ctrl Enter</kbd>
             </button>
           </div>
         )}
+        {confirming && !resolved ? (
+          <form
+            className="grid gap-2 border-t border-line pt-3"
+            aria-label="Confirm a Severe request"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (typed.trim().toLowerCase() !== "allow") return
+              const what = confirming
+              setConfirming(undefined)
+              setTyped("")
+              void (what === "edited" ? allowEdited() : allowNow())
+            }}
+          >
+            <label className="grid gap-1">
+              <span className="font-semibold">
+                This is Severe (risk {req.verdict.risk}). Type allow to confirm.
+              </span>
+              <input
+                className="field w-48"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                onKeyDown={(e) => {
+                  // Inside the box Escape closes it, and Ctrl+Enter never allows on its own.
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setConfirming(undefined)
+                    setTyped("")
+                  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) e.stopPropagation()
+                }}
+              />
+            </label>
+            <span className="flex gap-2">
+              <button
+                className="btn btn-strong"
+                disabled={busy || !connected || typed.trim().toLowerCase() !== "allow"}
+              >
+                {confirming === "edited" ? "Allow with my edit" : "Allow once"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setConfirming(undefined)
+                  setTyped("")
+                }}
+              >
+                Cancel
+              </button>
+            </span>
+          </form>
+        ) : null}
       </aside>
     </article>
   )

@@ -22,6 +22,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 - A row lit in yellow is new: you have not looked at it yet. It stops being lit once you open it.
 - Each row shows the session code (for example AT 830), the project, what Claude wants to do and the risk.
 - A permission request has **Deny** and **Allow once** on its row, so you can decide it without opening it. A Severe one (risk 85 and over) has **Read it first** instead of Allow once, which opens it, so it is never allowed without its command in front of you. Open any to read everything first, or to answer a question or a plan.
+- On the card, **Allow once** for a High request (risk 70 and over) works a second after the request appears, so a click or keys meant for something else allow nothing. A Severe one asks you to type **allow** first, and on your phone it is pressed and held, then let go, before Face ID. A Severe request can never be remembered as a rule.
 - **Sessions that need you**, below the requests, lists a session stopped by an error, a run of Extreme approval that stopped before its queue was empty, and a turn that may be stuck, each with **Open**. It goes as soon as the session moves on. Your phone is told of the same things as notifications.
 
 **Deciding**
