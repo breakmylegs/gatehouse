@@ -86,6 +86,33 @@ describe("ApprovalCard", () => {
     expect(screen.getByText(/Phone notified/)).toBeInTheDocument()
   })
 
+  it("shows what a call would delete and whether it can be undone (G20)", () => {
+    render(
+      <ApprovalCard
+        view={view({
+          input: { command: "rm -rf build" },
+          effects: {
+            kind: "delete",
+            count: 23,
+            paths: ["build/a.js", "build/b.js"],
+            more: false,
+            reversible: false,
+            undo: "Cannot be undone: 23 files are not committed in git as they are.",
+          },
+        })}
+      />,
+    )
+    const effects = screen.getByLabelText("What it would delete or throw away")
+    expect(effects.textContent).toContain("Deletes 23 files")
+    expect(effects.textContent).toContain("build/a.js, build/b.js, and more")
+    expect(effects.textContent).toContain("Cannot be undone")
+  })
+
+  it("has no effects row for a call that deletes nothing", () => {
+    render(<ApprovalCard view={view()} />)
+    expect(screen.queryByLabelText("What it would delete or throw away")).toBeNull()
+  })
+
   it("never starts with focus on Allow, and Deny is one click", async () => {
     render(<ApprovalCard view={view()} />)
     expect(screen.getByRole("button", { name: /Allow once/ })).not.toHaveFocus()

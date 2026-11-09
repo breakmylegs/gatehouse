@@ -9,8 +9,9 @@ import {
   type PolicyEngine,
   type PwshWorker,
 } from "@gatehouse/policy"
-import { canonicalize, type Verdict } from "@gatehouse/shared"
+import { canonicalize, type Effects, type Verdict } from "@gatehouse/shared"
 import type { Broker, Resolution } from "./broker.js"
+import { effectsOf, UNKNOWN_EFFECTS } from "./effects.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { HostAudit } from "./hostaudit.js"
@@ -47,6 +48,8 @@ export interface CanUseDeps {
   notifyAutoApproved?: (toolName: string, project: string) => void
   /** Each tool call's verdict, for the line under it in the transcript. A person's answer comes as its audit record. */
   onDecision?: (toolUseId: string, verdict: Verdict) => void
+  /** G20: works out what a call would delete or throw away. Absent: effects.ts, in the session's folder. */
+  effects?: (toolName: string, input: Record<string, unknown>) => Promise<Effects | undefined>
   log: (line: string) => void
 }
 
@@ -184,20 +187,44 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       // B32: the hook already applied it to an early verdict; applying it again changes nothing.
       const verdict = withProvenance(judged, toolName, input, deps.provenance)
       if (!early) deps.onDecision?.(toolUseID, verdict)
-      if (verdict.outcome === "allow") return allow(input, toolUseID)
+      if (verdict.outcome === "allow") {
+        // G20: the judge never allows by itself what cannot be undone; your own rules still do.
+        if (verdict.decidedBy === "judge") {
+          const effects = await effectsFor(deps, toolName, input)
+          if (effects && !effects.reversible)
+            return await escalate(
+              deps,
+              toolName,
+              input,
+              options,
+              { ...verdict, outcome: "escalate", reason: `${verdict.reason} ${CANNOT_UNDO_ASKS}` },
+              effects,
+            )
+        }
+        return allow(input, toolUseID)
+      }
       if (verdict.outcome === "deny") {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)
       }
+      const effects = await effectsFor(deps, toolName, input)
       if (deps.extreme?.() === true) {
-        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId))
+        const cannotUndo = effects !== undefined && !effects.reversible
+        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId) && !cannotUndo)
           return await extremeApprove(deps, toolName, input, toolUseID, verdict)
         // Say why on the card: you chose Extreme approval and would otherwise expect no question.
-        return await escalate(deps, toolName, input, options, {
-          ...verdict,
-          reason: `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
-        })
+        return await escalate(
+          deps,
+          toolName,
+          input,
+          options,
+          {
+            ...verdict,
+            reason: `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
+          },
+          effects,
+        )
       }
-      return await escalate(deps, toolName, input, options, verdict)
+      return await escalate(deps, toolName, input, options, verdict, effects)
     } catch (e) {
       // Invariant 1: a failure in here is a denial, never an allow.
       deps.log(`canUseTool failed (${(e as Error).name}), the call was denied`)
@@ -236,6 +263,26 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
 /** Added to the reason when Extreme approval meets one of NEVER_AUTO_APPROVED. */
 export const EXTREME_CANNOT_APPROVE =
   "Extreme approval only approves requests Codehouse could check, so this one waits for you."
+
+/** G20: added to the reason when Extreme approval or the judge meets a call that cannot be undone. */
+export const CANNOT_UNDO_ASKS =
+  "It cannot be undone, so it is never approved without you, even in Extreme approval."
+
+/**
+ * G20: what the call would delete or throw away. A failure working it out counts as cannot be undone for a shell
+ * command (fail closed), and as nothing for any other tool, which deletes nothing this way.
+ */
+async function effectsFor(
+  deps: CanUseDeps,
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<Effects | undefined> {
+  try {
+    return await (deps.effects ?? ((t, i) => effectsOf(t, i, deps.cwd)))(toolName, input)
+  } catch {
+    return toolName === "Bash" || toolName === "PowerShell" ? UNKNOWN_EFFECTS : undefined
+  }
+}
 
 /**
  * Extreme approval mode: an escalation is approved without asking. It is audited first (an allow that cannot be
@@ -287,6 +334,7 @@ async function escalate(
   input: Record<string, unknown>,
   options: Options,
   verdict: Verdict,
+  effects?: Effects,
 ): Promise<PermissionResult> {
   const toolUseID = options.toolUseID
   await deps.checkpoints?.beforeEscalation(deps.sessionId, deps.cwd, label(toolName, input))
@@ -299,6 +347,7 @@ async function escalate(
     cwd: deps.cwd,
     project: deps.project,
     verdict,
+    ...(effects ? { effects } : {}),
     signal: options.signal,
     defaultToNo: options.defaultToNo === true || verdict.risk >= 70,
   })

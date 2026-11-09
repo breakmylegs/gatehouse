@@ -26,6 +26,20 @@ export const Verdict = z.object({
 })
 export type Verdict = z.infer<typeof Verdict>
 
+/**
+ * G20: what a call would delete or throw away, and whether git can bring it back (apps/host/src/effects.ts). On a
+ * request only where there is something to say.
+ */
+export const Effects = z.object({
+  kind: z.enum(["delete", "discard"]),
+  count: z.number().int().min(0),
+  paths: z.array(z.string()).max(20),
+  more: z.boolean(),
+  reversible: z.boolean(),
+  undo: z.string(),
+})
+export type Effects = z.infer<typeof Effects>
+
 export const EscalationRequest = z.object({
   id: z.string(), // UUIDv7
   nonce: z.string(), // 32 random bytes, base64url
@@ -37,6 +51,8 @@ export const EscalationRequest = z.object({
   cwd: z.string(),
   project: z.string(),
   verdict: Verdict,
+  /** G20: absent when the call deletes and discards nothing. */
+  effects: Effects.optional(),
   createdAt: z.string(),
   expiresAt: z.string(),
   payloadHash: z.string(), // SHA-256 of the canonical plaintext payload sent to the phone

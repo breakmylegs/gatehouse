@@ -3,6 +3,7 @@ import {
   computePayloadHash,
   newNonce,
   uuidv7,
+  type Effects,
   type EscalationRequest,
   type Verdict,
 } from "@gatehouse/shared"
@@ -55,6 +56,8 @@ export interface BrokerRequestSpec {
   cwd: string
   project: string
   verdict: Verdict
+  /** G20: what the call would delete or throw away, shown on the desktop and the phone. */
+  effects?: Effects
   /** The SDK's abort signal for this call. */
   signal?: AbortSignal
   /** The ask must not be approvable by a stray keystroke. */
@@ -164,6 +167,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
       cwd: this.#opts.redact(spec.cwd),
       project: this.#opts.redact(spec.project),
       verdict: this.#opts.redact(spec.verdict),
+      ...(spec.effects ? { effects: this.#opts.redact(spec.effects) } : {}),
       createdAt: created.toISOString(),
       expiresAt: expiresAt.toISOString(),
     }

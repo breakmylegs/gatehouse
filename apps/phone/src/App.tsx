@@ -566,6 +566,30 @@ function Detail({
         <dl className="m-0 grid grid-cols-[72px_1fr] gap-x-3 gap-y-1">
           <dt className="text-mut">Where</dt>
           <dd className="m-0 mono text-[15px] [overflow-wrap:anywhere]">{o.payload.cwd}</dd>
+          {o.payload.effects ? (
+            <>
+              <dt className="text-mut">Effects</dt>
+              <dd className="m-0 grid gap-0.5" aria-label="What it would delete or throw away">
+                <span className={o.payload.effects.reversible ? undefined : "font-semibold"}>
+                  {o.payload.effects.kind === "discard"
+                    ? `Throws away work not committed in ${o.payload.effects.count}${o.payload.effects.more ? " or more" : ""} files`
+                    : `Deletes ${o.payload.effects.count}${o.payload.effects.more ? " or more" : ""} ${o.payload.effects.count === 1 && !o.payload.effects.more ? "file" : "files"}`}
+                </span>
+                {o.payload.effects.paths.length ? (
+                  <span className="mono text-[14px] [overflow-wrap:anywhere]">
+                    {o.payload.effects.paths.join(", ")}
+                    {o.payload.effects.more ||
+                    o.payload.effects.count > o.payload.effects.paths.length
+                      ? ", and more"
+                      : ""}
+                  </span>
+                ) : null}
+                <span className={o.payload.effects.reversible ? "text-mut" : "text-sev"}>
+                  {o.payload.effects.undo}
+                </span>
+              </dd>
+            </>
+          ) : null}
           <dt className="text-mut">Rule</dt>
           <dd className="m-0 mono text-[15px]">{o.payload.verdict.ruleId}</dd>
           <dt className="text-mut">Why</dt>

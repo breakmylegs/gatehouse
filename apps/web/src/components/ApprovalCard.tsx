@@ -31,6 +31,17 @@ const PHONE_TEXT: Record<PendingView["phone"], string> = {
   expired: "Phone: expired",
 }
 
+/** G20: what a call would delete or throw away, in words: "Deletes 12 files" or "Throws away work in 3 files". */
+export function effectsWords(e: {
+  kind: "delete" | "discard"
+  count: number
+  more: boolean
+}): string {
+  const files = `${e.count}${e.more ? " or more" : ""} ${e.count === 1 && !e.more ? "file" : "files"}`
+  if (e.kind === "discard") return `Throws away work not committed in ${files}`
+  return e.count === 0 && !e.more ? "Deletes nothing that is there now" : `Deletes ${files}`
+}
+
 /** The file or folder an edit-style tool acts on, shown under Where. */
 function targetPath(raw: Record<string, unknown>): string | undefined {
   for (const k of ["file_path", "notebook_path", "path"]) {
@@ -298,6 +309,27 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 <span className="block">Target: {targetPath(view.rawInput)}</span>
               ) : null}
             </dd>
+            {req.effects ? (
+              <>
+                <dt className="text-mut">Effects</dt>
+                <dd className="m-0 grid gap-0.5" aria-label="What it would delete or throw away">
+                  <span className={req.effects.reversible ? undefined : "font-semibold"}>
+                    {effectsWords(req.effects)}
+                  </span>
+                  {req.effects.paths.length ? (
+                    <span className="mono text-[12.5px] [overflow-wrap:anywhere]">
+                      {req.effects.paths.join(", ")}
+                      {req.effects.more || req.effects.count > req.effects.paths.length
+                        ? ", and more"
+                        : ""}
+                    </span>
+                  ) : null}
+                  <span className={req.effects.reversible ? "text-mut" : "text-sev"}>
+                    {req.effects.undo}
+                  </span>
+                </dd>
+              </>
+            ) : null}
             <dt className="text-mut">Why</dt>
             <dd className="m-0">{req.verdict.reason}</dd>
             <dt className="text-mut">Status</dt>

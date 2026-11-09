@@ -27,6 +27,8 @@ export function phonePayload(req: Omit<EscalationRequest, "payloadHash">) {
       risk: req.verdict.risk,
       segments: req.verdict.segments,
     },
+    // G20: only when there is something to say, so a request without effects hashes as it always did.
+    ...(req.effects ? { effects: req.effects } : {}),
     createdAt: req.createdAt,
     expiresAt: req.expiresAt,
   }

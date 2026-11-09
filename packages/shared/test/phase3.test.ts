@@ -86,6 +86,22 @@ describe("escalation request helpers", () => {
     expect(computePayloadHash({ ...req, expiresAt: "2026-10-26T10:11:00.000Z" })).not.toBe(hash)
   })
 
+  it("covers what a call would delete when there is something to say, and nothing otherwise (G20)", () => {
+    const effects = {
+      kind: "delete" as const,
+      count: 1,
+      paths: ["a.txt"],
+      more: false,
+      reversible: false,
+      undo: "Cannot be undone.",
+    }
+    expect(phonePayload(req)).not.toHaveProperty("effects")
+    expect(phonePayload({ ...req, effects }).effects).toEqual(effects)
+    const hash = computePayloadHash({ ...req, effects })
+    expect(hash).not.toBe(computePayloadHash(req))
+    expect(computePayloadHash({ ...req, effects: { ...effects, reversible: true } })).not.toBe(hash)
+  })
+
   it("leaves out the session and tool use ids and the policy hash from what the phone sees", () => {
     const keys = Object.keys(phonePayload(req)).sort()
     expect(keys).toEqual([

@@ -254,6 +254,30 @@ describe("the list and a request", () => {
     expect(await screen.findByText(/no longer waiting/)).toBeInTheDocument()
   })
 
+  it("shows what a call would delete and whether it can be undone, as the desktop does (G20)", async () => {
+    state.items = [
+      opened(
+        {},
+        {
+          effects: {
+            kind: "delete",
+            count: 1,
+            paths: ["notes.txt"],
+            more: false,
+            reversible: false,
+            undo: "Cannot be undone: 1 file is not committed in git as it is.",
+          },
+        },
+      ),
+    ]
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: /Run shell command/ }))
+    const effects = screen.getByLabelText("What it would delete or throw away")
+    expect(effects.textContent).toContain("Deletes 1 file")
+    expect(effects.textContent).toContain("notes.txt")
+    expect(effects.textContent).toContain("Cannot be undone")
+  })
+
   it("opens a request straight from a notification link", async () => {
     state.items = [opened()]
     history.replaceState(null, "", "/#/r/r1")

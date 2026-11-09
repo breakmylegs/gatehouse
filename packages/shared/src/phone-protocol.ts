@@ -29,6 +29,15 @@ export interface OpenedRequest {
       risk: number
       segments?: Array<{ text: string; ruleId: string; outcome: string }>
     }
+    /** G20: what the call would delete or throw away, when it would. */
+    effects?: {
+      kind: "delete" | "discard"
+      count: number
+      paths: string[]
+      more: boolean
+      reversible: boolean
+      undo: string
+    }
     createdAt: string
     expiresAt: string
   }
