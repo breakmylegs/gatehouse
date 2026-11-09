@@ -16,6 +16,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:shards": "node scripts/test-shards.mjs",
     "policy:replay": "npm run replay -w @gatehouse/policy --",
     "audit:verify": "tsx packages/shared/src/audit/verify-cli.ts",
     "approver": "npm run start -w @gatehouse/approver",

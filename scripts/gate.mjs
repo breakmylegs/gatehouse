@@ -91,7 +91,7 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   const secs = Math.round((Date.now() - started) / 1000)
   const summary = out
     .split(/\r?\n/)
-    .filter((l) => /Test Files|Tests\s|FAIL|error TS|✖|problems?\)/.test(l))
+    .filter((l) => /Test Files|Tests\s|FAIL|error TS|✖|problems?\)|\[shards\] (passed|retry)/.test(l))
     .slice(0, 25)
   for (const l of summary) console.log(`  ${l.trim()}`)
   say(`  ${r.status === 0 ? "passed" : "FAILED"} in ${secs}s`)
@@ -190,10 +190,11 @@ if (fullReason) {
       )
         failures.push(`typecheck ${w}`)
   if (run("lint: everything", node, [bin("eslint/bin/eslint.js"), "."]) !== 0) failures.push("lint")
+  // C-001: one file per process, as many at once as free memory allows, each failure retried once and logged.
   if (
-    run("tests: all", node, [bin("vitest/vitest.mjs"), "run", "--maxWorkers=2"], {
-      retryFlaky: true,
-    }) !== 0
+    run("tests: all, one file at a time by free memory", node, [
+      path.join(root, "scripts", "test-shards.mjs"),
+    ]) !== 0
   )
     failures.push("tests")
 } else {
