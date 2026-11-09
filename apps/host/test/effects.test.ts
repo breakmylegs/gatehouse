@@ -100,6 +100,10 @@ describe("what a call would delete", { timeout: 60_000 }, () => {
     expect(
       await effectsOf("PowerShell", { command: "rmdir -Recurse $env:TEMP/x" }, repo),
     ).toMatchObject({ reversible: false })
+    // PowerShell's rmdir with no options still deletes: Remove-Item removes a file it is pointed at.
+    expect(await effectsOf("PowerShell", { command: "rmdir $env:TEMP/x" }, repo)).toMatchObject({
+      reversible: false,
+    })
     // And rmdir beside rm is still a delete for rm's part.
     expect(await bash("rmdir a && rm -rf $HOME/x")).toMatchObject({ reversible: false })
   })
