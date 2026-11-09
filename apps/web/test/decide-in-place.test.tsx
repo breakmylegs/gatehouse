@@ -143,6 +143,31 @@ describe("Allow once and Deny on the queue", () => {
   })
 })
 
+describe("one inbox (U2)", () => {
+  it("lists the sessions that need you below the requests, and Open goes to the session", () => {
+    useStore.setState({
+      sessions: {
+        s1: { ...session, state: "idle", pendingApprovals: 0 },
+        s2: {
+          ...session,
+          id: "s2",
+          project: "atlas",
+          state: "error",
+          error: "Claude Code stopped",
+          pendingApprovals: 0,
+        },
+      },
+      route: "approvals",
+    })
+    render(<Approvals />)
+    const list = screen.getByRole("list", { name: "Sessions that need you" })
+    expect(within(list).getAllByRole("listitem")).toHaveLength(1)
+    expect(list.textContent).toContain("atlas: Stopped with an error: Claude Code stopped")
+    fireEvent.click(within(list).getByRole("button", { name: "Open atlas" }))
+    expect(useStore.getState()).toMatchObject({ route: "workspace", selectedSession: "s2" })
+  })
+})
+
 describe("deciding in the session's own workspace", () => {
   it("shows the request above the prompt box and allows it there", () => {
     useStore.setState({ pending: { a: view("a") } })

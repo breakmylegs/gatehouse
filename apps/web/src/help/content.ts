@@ -22,6 +22,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 - A row lit in yellow is new: you have not looked at it yet. It stops being lit once you open it.
 - Each row shows the session code (for example AT 830), the project, what Claude wants to do and the risk.
 - A permission request has **Deny** and **Allow once** on its row, so you can decide it without opening it. A Severe one (risk 85 and over) has **Read it first** instead of Allow once, which opens it, so it is never allowed without its command in front of you. Open any to read everything first, or to answer a question or a plan.
+- **Sessions that need you**, below the requests, lists a session stopped by an error, a run of Extreme approval that stopped before its queue was empty, and a turn that may be stuck, each with **Open**. It goes as soon as the session moves on. Your phone is told of the same things as notifications.
 
 **Deciding**
 
