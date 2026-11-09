@@ -278,7 +278,13 @@ describe("ApprovalCard", () => {
     expect(await screen.findByText("Allow Bash to run exactly: npm test")).toBeInTheDocument()
     expect(sent.at(-1)).toEqual({ type: "remember_preview", requestId: "req-1" })
     await userEvent.click(screen.getByRole("button", { name: "Allow once and remember" }))
-    expect(sent.at(-1)).toEqual({ type: "approve", requestId: "req-1", remember: true })
+    // C-013: unless you choose otherwise, it lasts 30 days and holds in this folder only.
+    expect(sent.at(-1)).toEqual({
+      type: "approve",
+      requestId: "req-1",
+      remember: true,
+      rememberFor: { days: 30 },
+    })
   })
 
   it("explains when nothing can be remembered", async () => {

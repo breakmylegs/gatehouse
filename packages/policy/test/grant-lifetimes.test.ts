@@ -75,11 +75,13 @@ describe("grant lifetimes (C-013)", () => {
     expect(readGrantLimits(local)).toEqual({})
   })
 
-  it("reads a rules.local.yaml with a field a newer version added, rather than refusing it", () => {
+  it("keeps the limits beside rules.local.yaml, which still refuses a field it does not know", () => {
+    // A field that might widen a rule (golden 13-remember) is refused, so the limits never go in the rule itself:
+    // an older version reads the rules file as it always did.
     const file = {
       version: 1,
-      remember: [{ id: "r1", tool: "Bash", command: "npm install lodash", someNewField: true }],
+      remember: [{ id: "r1", tool: "Bash", command: "npm install lodash", expiresAt: "2026-12-01" }],
     }
-    expect(checkRememberFile(file).ok).toBe(true)
+    expect(checkRememberFile(file).ok).toBe(false)
   })
 })

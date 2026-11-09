@@ -112,8 +112,7 @@ export const rememberFileSchema = {
       type: "array",
       items: {
         type: "object",
-        // C-013: a field a newer version adds is kept, not refused, so a rolled-back copy still reads the file.
-        additionalProperties: true,
+        additionalProperties: false,
         required: ["id", "tool"],
         properties: {
           id: { type: "string", pattern: "^[a-z0-9][a-z0-9-]*$" },
