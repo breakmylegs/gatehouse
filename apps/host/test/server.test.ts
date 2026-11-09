@@ -330,7 +330,9 @@ function connect(
         send(command) {
           const cmdId = `c${++n}`
           ws.send(JSON.stringify({ cmdId, command }))
-          return client.waitFor("reply", (e) => e.cmdId === cmdId)
+          // Checkpoints and undo run git, which is slow when the machine is busy: a reply may take up to two
+          // minutes; each test's own limit still stops a real hang.
+          return client.waitFor("reply", (e) => e.cmdId === cmdId, 120_000)
         },
         waitFor(type, pred = () => true, ms = 40_000) {
           const found = events.find((e) => e.type === type && pred(e as never))
