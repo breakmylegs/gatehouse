@@ -17,6 +17,20 @@ vi.mock("../src/core", () => ({
   isIos: () => true,
   unlock: vi.fn(async () => ({ token: "t", expiresAt: Date.now() + 600_000 })),
   loadPending: vi.fn(async () => state.items),
+  loadSessions: vi.fn(async () => ({
+    at: "2026-11-09T10:00:00Z",
+    sessions: [
+      {
+        id: "s1",
+        project: "atlas",
+        title: "Add the basket",
+        state: "waiting",
+        waiting: 1,
+        latest: "You: add a basket\nClaude: Done, with tests.",
+      },
+      { id: "s2", project: "shop", state: "idle", waiting: 0, latest: "" },
+    ],
+  })),
   answer: vi.fn(async (_s: unknown, _d: unknown, item: { relayId: string }, what: unknown) => {
     if (state.answerError) throw new Error(state.answerError)
     state.answers.push({ id: item.relayId, what })
@@ -300,6 +314,18 @@ describe("the list and a request", () => {
     fireEvent.click(hold)
     now.mockRestore()
     await waitFor(() => expect(state.answers).toEqual([{ id: "r1", what: { decision: "allow" } }]))
+  })
+
+  it("shows the sessions on the computer and the latest of what was said, read only (G32)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    const list = await screen.findByRole("list", { name: "Sessions" })
+    expect(list.textContent).toContain("Add the basket")
+    expect(list.textContent).toContain("Needs you, 1 request waits for you")
+    await userEvent.click(screen.getByRole("button", { name: /Add the basket/ }))
+    expect(list.textContent).toContain("Claude: Done, with tests.")
+    // Nothing on this screen can change a session.
+    expect(screen.queryByRole("textbox")).toBeNull()
   })
 
   it("opens a request straight from a notification link", async () => {

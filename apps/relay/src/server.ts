@@ -13,6 +13,7 @@ import {
   CreatePairing,
   DeviceNotify,
   DeviceRequest,
+  DeviceSessions,
   EnrolRequest,
   PAIRING_CODE,
   PAIRING_TTL_MS,
@@ -78,6 +79,8 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
   const events = new EventEmitter()
   events.setMaxListeners(100)
   const limit = opts.anonymousLimit ?? 30
+  // G32: each phone's latest sealed sessions snapshot, by phone id. Ciphertext only, never written to disk.
+  const snapshots = new Map<string, { sealed: unknown; at: number }>()
 
   const app = Fastify({ logger: false, bodyLimit: 64 * 1024, trustProxy })
 
@@ -138,7 +141,9 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
       req.device = dev
     } else if (
       url.startsWith("/api/phone/") &&
-      !/^\/api\/phone\/(pairing-info|pairings\/|session)/.test(url)
+      // Only the pairing and the sign-in itself go without a phone session, matched exactly, so a new path that
+      // merely starts the same way (such as /api/phone/sessions) can never slip out of the check.
+      !/^\/api\/phone\/(pairing-info(\?|$)|pairings\/|session(\/challenge)?(\?|$))/.test(url)
     ) {
       const phoneId = bearer ? store.sessionPhone(bearer, now()) : undefined
       const phone = phoneId ? store.phoneById(phoneId) : undefined
@@ -243,11 +248,13 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
       ? { ok: true }
       : fail(reply, 404, "not found")
   })
-  app.delete("/api/device/phones/:id", async (req, reply) =>
-    store.deletePhone(req.device!.id, (req.params as { id: string }).id)
-      ? { ok: true }
-      : fail(reply, 404, "not found"),
-  )
+  app.delete("/api/device/phones/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    if (!store.deletePhone(req.device!.id, id)) return fail(reply, 404, "not found")
+    // A revoked phone's sessions snapshot goes with it.
+    snapshots.delete(id)
+    return { ok: true }
+  })
 
   async function pushTo(
     phone: PhoneRow,
@@ -328,6 +335,16 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
     return store.resolveRequest(req.device!.id, (req.params as { id: string }).id, summary, now())
       ? { ok: true }
       : fail(reply, 404, "not found")
+  })
+
+  // G32: the latest sealed sessions snapshot for each phone, in memory only.
+  app.put("/api/device/sessions", async (req, reply) => {
+    const b = DeviceSessions.safeParse(req.body)
+    if (!b.success) return fail(reply, 400, "bad request")
+    const phone = store.phoneById(b.data.phoneId)
+    if (!phone || phone.device_id !== req.device!.id) return fail(reply, 404, "no such phone")
+    snapshots.set(phone.id, { sealed: b.data.sealed, at: now() })
+    return { ok: true }
   })
 
   app.post("/api/device/notify", async (req, reply) => {
@@ -494,6 +511,12 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
     )
     events.emit(`envelope:${req.phone!.device_id}`)
     return { ok: true }
+  })
+
+  app.get("/api/phone/sessions", async (req, reply) => {
+    const s = snapshots.get(req.phone!.id)
+    if (!s) return fail(reply, 404, "not found")
+    return { sealed: s.sealed, at: new Date(s.at).toISOString() }
   })
 
   app.put("/api/phone/push-subscription", async (req, reply) => {

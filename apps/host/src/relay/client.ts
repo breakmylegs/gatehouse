@@ -129,6 +129,10 @@ export class RelayClient {
   markResolved(id: string, summary: string) {
     return this.#call<{ ok: true }>("POST", `/api/device/requests/${id}/resolved`, { summary })
   }
+  /** G32: the sessions snapshot for one phone, sealed to its key, replacing the last. */
+  putSessions(phoneId: string, sealed: Sealed) {
+    return this.#call<{ ok: true }>("PUT", "/api/device/sessions", { phoneId, sealed })
+  }
   notify(phoneId: string, kind: "stop" | "idle" | "notify" | "info", sealed: Sealed) {
     return this.#call<{ ok: true }>("POST", "/api/device/notify", { phoneId, kind, sealed })
   }

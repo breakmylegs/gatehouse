@@ -5,6 +5,7 @@ import { phonePayload } from "@gatehouse/shared"
 import type { EscalationRequest } from "@gatehouse/shared"
 import { b64u, fingerprint, importPublicKey, openJson, sealJson } from "@gatehouse/shared/e2e"
 import { PAIRING_ALPHABET, PairingStatus, SignedDecision } from "@gatehouse/shared/relay-protocol"
+import { SESSIONS_AAD, type PhoneSessions } from "@gatehouse/shared/phone-protocol"
 import type { Broker, PhoneChannel } from "../broker.js"
 import type { HostAudit } from "../hostaudit.js"
 import type { HostKillSwitch } from "../kill.js"
@@ -437,6 +438,26 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
         )
       } catch (e) {
         this.#d.log(`notification not sent: ${(e as Error).message}`)
+      }
+    }
+  }
+
+  /**
+   * G32 (O18, owner 30 Oct): the sessions, as the phone may see them, sealed to each paired phone's own key, so the
+   * Relay holds only ciphertext (invariant 9). The snapshot is redacted by the caller before it gets here (12).
+   */
+  async shareSessions(snapshot: PhoneSessions): Promise<void> {
+    const phones = this.#d.store.phones()
+    if (!this.#d.store.relay() || phones.length === 0) return
+    const client = await this.#authed()
+    for (const phone of phones) {
+      try {
+        await client.putSessions(
+          phone.id,
+          await sealJson(snapshot, await importPublicKey(phone.ecdhPublicKey), SESSIONS_AAD),
+        )
+      } catch (e) {
+        this.#d.log(`sessions not shared with ${phone.name}: ${(e as Error).message}`)
       }
     }
   }

@@ -4,13 +4,16 @@ import {
   exportPublicKey,
   fingerprint,
   generateKeyPair,
+  openJson,
   type Sealed,
 } from "@gatehouse/shared/e2e"
 import {
   newEnvelope,
   openRequest,
+  SESSIONS_AAD,
   signAndSeal,
   type OpenedRequest,
+  type PhoneSessions,
 } from "@gatehouse/shared/phone-protocol"
 import { storage, type DeviceInfo, type KeyMaterial } from "./storage"
 
@@ -269,6 +272,28 @@ export async function loadPending(session: Session, keys: KeyMaterial): Promise<
     }
   }
   return out
+}
+
+/**
+ * G32: the sessions Codehouse shared with this phone, opened with the phone's own key. None yet (the computer has not
+ * sent them, or the Relay restarted a moment ago) is an empty list, not an error.
+ */
+export async function loadSessions(session: Session, keys: KeyMaterial): Promise<PhoneSessions> {
+  let got: { sealed: Sealed; at: string }
+  try {
+    got = await call<{ sealed: Sealed; at: string }>(
+      "GET",
+      "/api/phone/sessions",
+      undefined,
+      session.token,
+    )
+  } catch (e) {
+    if (e instanceof RelayError && e.status === 404) return { at: "", sessions: [] }
+    throw e
+  }
+  const opened = await openJson<PhoneSessions>(got.sealed, keys.privateKey, SESSIONS_AAD)
+  if (!opened || !Array.isArray(opened.sessions)) throw new Error("The sessions could not be read.")
+  return opened
 }
 
 // ---- answering ----

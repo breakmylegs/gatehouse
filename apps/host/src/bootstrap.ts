@@ -7,6 +7,7 @@ import { Telemetry } from "./telemetry.js"
 import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
 import { BoardStore } from "./board.js"
+import { buildPhoneSessions, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -780,7 +781,24 @@ export function createHost(opts: HostOptions = {}): Host {
       void phone
         .notify("stop", { title: "Session finished", body: "", project })
         .catch(() => undefined)
+    // G32: what was said changed, so the phone's view of it is shared again soon.
+    if (type === "stop" || type === "queue_empty") phoneSessions.poke()
   })
+  // G32 (O18, owner 30 Oct): the sessions on the phone, read only, redacted and sealed to each phone; only while one
+  // is paired.
+  const phoneSessions = new PhoneSessionsSharer({
+    build: () =>
+      buildPhoneSessions({
+        list: () => manager.list(),
+        messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+      }),
+    share: (s) => phone.shareSessions(s),
+    wanted: () => phoneStore.relay() !== undefined && phoneStore.phones().length > 0,
+    log,
+  })
+  manager.on("session", () => phoneSessions.poke())
+  phoneSessions.start()
 
   const health = (): Health => {
     const acct = account.last()

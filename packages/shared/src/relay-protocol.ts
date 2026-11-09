@@ -86,6 +86,15 @@ export const DeviceRequest = z.object({
   pushSealed: SealedSchema.optional(),
 })
 
+/**
+ * G32 (O18): the Host's sessions as the phone may see them, sealed to the phone's key, replaced each time. The Relay
+ * keeps only the latest, in memory: ciphertext it cannot read, gone when it restarts, sent again by the Host.
+ */
+export const DeviceSessions = z.object({
+  phoneId: z.string().min(1).max(100),
+  sealed: SealedSchema,
+})
+
 export const DeviceNotify = z.object({
   phoneId: z.string().min(1).max(100),
   sealed: SealedSchema,

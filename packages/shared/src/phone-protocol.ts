@@ -13,6 +13,27 @@ export async function envelopeChallenge(envelope: Envelope): Promise<string> {
   return b64u(await sha256(canonicalize(envelope)))
 }
 
+/** G32: the additional data a sessions snapshot is sealed with, so it cannot pass for anything else. */
+export const SESSIONS_AAD = "sessions"
+
+/**
+ * G32 (O18, owner 30 Oct): the sessions as the phone may see them. Redacted on the Host before sealing; the latest
+ * of what was said in each is a short excerpt, never files.
+ */
+export interface PhoneSessions {
+  at: string
+  sessions: Array<{
+    id: string
+    project: string
+    title?: string
+    state: string
+    /** Requests waiting on you in it. */
+    waiting: number
+    /** The latest of what was said, oldest first, as "You:" and "Claude:" lines. */
+    latest: string
+  }>
+}
+
 export interface OpenedRequest {
   payload: {
     id: string

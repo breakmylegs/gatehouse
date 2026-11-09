@@ -9,14 +9,17 @@ import {
   isStandalone,
   kill,
   loadPending,
+  loadSessions,
   register,
   unlock,
   type PendingItem,
   type Session,
 } from "./core"
+import type { PhoneSessions } from "@gatehouse/shared/phone-protocol"
 import { storage, type DeviceInfo, type KeyMaterial, type Settings } from "./storage"
 
-type Route = { name: "home" } | { name: "detail"; id: string } | { name: "settings" }
+type Route =
+  { name: "home" } | { name: "detail"; id: string } | { name: "settings" } | { name: "sessions" }
 
 const bandOf = (r: number) => (r >= 85 ? "Severe" : r >= 70 ? "High" : r >= 40 ? "Moderate" : "Low")
 /** The Stitch risk shapes, as on the desktop: a diamond, a triangle, a hexagon and a solid square. */
@@ -176,6 +179,13 @@ export function App() {
       </Frame>
     )
 
+  if (route.name === "sessions")
+    return (
+      <Frame title="Sessions" back={() => setRoute({ name: "home" })}>
+        <SessionsScreen session={session} keys={keys} />
+      </Frame>
+    )
+
   if (route.name === "detail") {
     const item = items.find((i) => i.relayId === route.id)
     return (
@@ -211,9 +221,14 @@ export function App() {
     <Frame
       title="Waiting on you"
       action={
-        <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "settings" })}>
-          Settings
-        </button>
+        <span className="flex gap-2">
+          <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "sessions" })}>
+            Sessions
+          </button>
+          <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "settings" })}>
+            Settings
+          </button>
+        </span>
       }
     >
       <div className="grid gap-4 p-4">
@@ -689,6 +704,83 @@ function Detail({
         )}
       </div>
     </div>
+  )
+}
+
+const STATE_WORDS: Record<string, string> = {
+  starting: "Starting",
+  idle: "Ready",
+  running: "Working",
+  waiting: "Needs you",
+  error: "Stopped with an error",
+  paused: "Paused",
+}
+
+/**
+ * G32 (O18, owner 30 Oct), first part: the sessions open on your computer and the latest of what was said in each,
+ * sent end to end encrypted and opened here with this phone's key. Read only: deciding still happens on the requests.
+ */
+function SessionsScreen({ session, keys }: { session: Session; keys: KeyMaterial | undefined }) {
+  const [data, setData] = useState<PhoneSessions>()
+  const [error, setError] = useState<string>()
+  const [open, setOpen] = useState<string>()
+  useEffect(() => {
+    if (!keys) return
+    let gone = false
+    const load = () =>
+      loadSessions(session, keys).then(
+        (d) => !gone && (setData(d), setError(undefined)),
+        (e: unknown) => !gone && setError(friendly(e)),
+      )
+    void load()
+    const t = setInterval(() => void load(), 15_000)
+    return () => {
+      gone = true
+      clearInterval(t)
+    }
+  }, [session, keys])
+  if (error)
+    return (
+      <p role="alert" className="m-0 p-5 font-semibold text-sev">
+        {error}
+      </p>
+    )
+  if (!data) return <p className="m-0 p-5 text-mut">Loading…</p>
+  if (!data.sessions.length)
+    return (
+      <p className="m-0 p-5 text-mut">
+        No sessions to show yet. They appear here a moment after your computer shares them.
+      </p>
+    )
+  return (
+    <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
+      {data.sessions.map((s) => (
+        <li key={s.id} className="panel grid gap-1.5 p-4">
+          <button
+            className="grid gap-1 border-0 bg-transparent p-0 text-left"
+            aria-expanded={open === s.id}
+            onClick={() => setOpen(open === s.id ? undefined : s.id)}
+          >
+            <span className="font-semibold">{s.title ?? s.project}</span>
+            <span className="text-[15px] text-mut">
+              {STATE_WORDS[s.state] ?? s.state}
+              {s.waiting
+                ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you`
+                : ""}
+            </span>
+          </button>
+          {open === s.id ? (
+            s.latest ? (
+              <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
+                {s.latest}
+              </pre>
+            ) : (
+              <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
+            )
+          ) : null}
+        </li>
+      ))}
+    </ul>
   )
 }
 
