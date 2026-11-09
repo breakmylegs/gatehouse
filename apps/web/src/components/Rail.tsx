@@ -50,6 +50,7 @@ const STATE_MARK: Record<string, { text: string; className: string; icon: IconNa
 const PAGE_ICON: Partial<Record<Route, IconName>> = {
   approvals: "needs-you",
   sessions: "code",
+  board: "plan",
   usage: "usage",
   projects: "projects",
   memory: "memory",

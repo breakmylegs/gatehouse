@@ -39,6 +39,7 @@ const Marketplace = lazy(() =>
 const Home = lazy(() => import("./surfaces/Home").then((m) => ({ default: m.Home })))
 const Doctor = lazy(() => import("./surfaces/Doctor").then((m) => ({ default: m.Doctor })))
 const Prompts = lazy(() => import("./surfaces/Prompts").then((m) => ({ default: m.Prompts })))
+const Board = lazy(() => import("./surfaces/Board").then((m) => ({ default: m.Board })))
 const Projects = lazy(() => import("./surfaces/Projects").then((m) => ({ default: m.Projects })))
 const Dashboard = lazy(() => import("./surfaces/Dashboard").then((m) => ({ default: m.Dashboard })))
 
@@ -231,6 +232,7 @@ export function App() {
                   {route === "marketplace" && <Marketplace />}
                   {route === "doctor" && <Doctor />}
                   {route === "home" && <Home />}
+                  {route === "board" && <Board />}
                   {route === "imported" && <ImportedChat />}
                 </Suspense>
               </main>

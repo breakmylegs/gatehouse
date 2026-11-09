@@ -19,6 +19,7 @@ import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
 import { registerContinueRoutes, type ContinueDeps } from "./chat/continue-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
+import { registerBoardRoutes, type BoardStore, type Card } from "./board.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
 import { readItModels } from "./providers/it-models.js"
@@ -101,6 +102,8 @@ export interface AdminContext {
   memory?: MemoryStore
   /** B34: routines, sessions that start themselves on a schedule. */
   routines?: RoutineStore
+  /** G24: the task board, and how a card's session starts. */
+  board?: { store: BoardStore; start: (card: Card) => Promise<string> }
   /** What chats show in a sandbox. */
   artifacts?: ArtifactStore
   /** Your saved prompts (W1-14). */
@@ -586,6 +589,8 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerEvalRoutes(app, ctx)
   registerDoctorRoutes(app, ctx)
   registerWorktreeRoutes(app, ctx)
+  if (ctx.board)
+    registerBoardRoutes(app, { board: ctx.board.store, audit: ctx.audit, start: ctx.board.start })
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)

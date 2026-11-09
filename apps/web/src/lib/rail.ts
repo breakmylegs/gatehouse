@@ -215,6 +215,7 @@ export function railOrder(
 export const RAIL_PAGES: Array<{ route: Route; label: string }> = [
   { route: "approvals", label: "Approvals" },
   { route: "sessions", label: "All sessions" },
+  { route: "board", label: "Board" },
   { route: "usage", label: "Usage" },
   { route: "projects", label: "Projects" },
   { route: "memory", label: "Memory" },

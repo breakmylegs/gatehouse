@@ -52,6 +52,8 @@ export type Route =
   | "marketplace"
   | "doctor"
   | "home"
+  /** G24: the task board. */
+  | "board"
   /** CH-05: an imported claude.ai chat, read only. */
   | "imported"
 
@@ -132,6 +134,8 @@ export interface State {
   openImported: (id: string) => void
   /** B22: chats started side by side with the same message, and when, until you keep one. */
   compare?: { ids: string[]; at: number }
+  /** G31: an audit record to open when the Audit page next shows, by its number. */
+  auditOpen?: number
   theme: "light" | "dark"
   /** No choice of yours is kept, so the window follows the Windows theme as it changes. */
   themeFollows: boolean
@@ -214,6 +218,7 @@ const KEPT_ROUTES: Route[] = [
   "marketplace",
   "doctor",
   "home",
+  "board",
 ]
 /** Sessions side by side at most (owner, 1 Nov: "Up to 4 shown at once"); four sit two by two. */
 export const MAX_PANES = 4

@@ -6,6 +6,7 @@ import { ExtraSpendToday, LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
 import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
+import { BoardStore } from "./board.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -318,6 +319,7 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
+  const board = new BoardStore(path.join(gatehouseDataDir(env), "board.json"))
   // What chats remember: redacted before it is written, with the same word list as everything else.
   const memory = new MemoryStore(path.join(gatehouseDataDir(env), "memory"), (t) =>
     redact(t, { terms: config.redactTerms }),
@@ -965,6 +967,15 @@ export function createHost(opts: HostOptions = {}): Host {
       projects,
       memory,
       routines,
+      // G24: a card moved to Running starts a normal session in its folder, with its prompt.
+      board: {
+        store: board,
+        start: async (card) => {
+          const session = await manager.start({ cwd: card.folder, mode: "default" })
+          session.prompt(card.prompt)
+          return session.id
+        },
+      },
       artifacts,
       prompts,
       marketplace,

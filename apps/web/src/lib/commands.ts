@@ -43,7 +43,8 @@ export const PAGES: Array<{ route: Route; label: string; keywords?: string }> = 
   { route: "dashboard", label: "Dashboard", keywords: "overview today" },
   { route: "approvals", label: "Approvals", keywords: "needs you waiting requests" },
   { route: "sessions", label: "New session", keywords: "start earlier resume" },
-  { route: "sessions", label: "All sessions", keywords: "list board earlier resume" },
+  { route: "sessions", label: "All sessions", keywords: "list earlier resume" },
+  { route: "board", label: "Board", keywords: "task board cards kanban columns" },
   {
     route: "chat",
     label: "Ask about code",
