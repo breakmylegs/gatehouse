@@ -136,6 +136,8 @@ describe("a chat", () => {
       "Artifacts",
       "Sources",
       "Memory",
+      // O21: its details, as every session has.
+      "Details",
     ])
     expect(screen.queryByRole("combobox", { name: /^Mode$/ })).toBeNull()
     expect(screen.getByText(/never changes files/)).toBeTruthy()
