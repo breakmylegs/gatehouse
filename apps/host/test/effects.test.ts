@@ -91,6 +91,19 @@ describe("what a call would delete", { timeout: 60_000 }, () => {
     expect(await bash("git clean -fd")).toMatchObject({ kind: "discard", paths: ["scratch.txt"] })
   })
 
+  it("takes the shell's rmdir, which removes only empty folders, as losing nothing, even of a path it cannot read", async () => {
+    // Owner, 9 Nov: Extreme approval asked about this, as a delete it could not undo.
+    expect(await bash('mkdir -p data/ae && rmdir "$TEMP/ae" 2>/dev/null; ls data/ae')).toBeUndefined()
+    expect(await bash("rmdir -p --ignore-fail-on-non-empty a/b/c")).toBeUndefined()
+    // An option it does not know, and PowerShell's rmdir (Remove-Item), are deletes like any other.
+    expect(await bash("rmdir --force $HOME/x")).toMatchObject({ reversible: false })
+    expect(
+      await effectsOf("PowerShell", { command: "rmdir -Recurse $env:TEMP/x" }, repo),
+    ).toMatchObject({ reversible: false })
+    // And rmdir beside rm is still a delete for rm's part.
+    expect(await bash("rmdir a && rm -rf $HOME/x")).toMatchObject({ reversible: false })
+  })
+
   it("leaves alone a command that deletes and discards nothing", async () => {
     expect(await bash("git status && ls -la")).toBeUndefined()
     expect(await bash("git restore --staged src/a.ts")).toBeUndefined()

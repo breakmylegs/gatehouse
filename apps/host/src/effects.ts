@@ -84,10 +84,24 @@ const UNREADABLE = /[$%`~]|\*\*|[{}[\]]/
 
 const DELETERS = new Set(["rm", "rmdir", "unlink", "del", "erase", "rd", "remove-item", "ri"])
 
+/**
+ * Options of the shell's own rmdir that keep it to empty folders (owner, 9 Nov: Extreme approval asked about
+ * `rmdir "$TEMP/ae"`, taking it for a delete it could not undo). Any other option, or rmdir in PowerShell (an alias of
+ * Remove-Item, which removes whole folders), is a delete like any other.
+ */
+const EMPTY_ONLY_RMDIR = /^(-p|-v|-pv|-vp|--parents|--verbose|--ignore-fail-on-non-empty)$/
+
 /** The paths a delete command names (options left out), or undefined when it is not a delete. */
-function deleteTargets(words: string[]): string[] | undefined {
+function deleteTargets(words: string[], toolName: string): string[] | undefined {
   const name = (words[0] ?? "").toLowerCase().replace(/\.exe$/, "")
   if (!DELETERS.has(name)) return undefined
+  // The shell's rmdir removes only empty folders: it can lose no file, so there is nothing to undo.
+  if (
+    toolName === "Bash" &&
+    name === "rmdir" &&
+    words.slice(1).every((w) => !w.startsWith("-") || EMPTY_ONLY_RMDIR.test(w))
+  )
+    return []
   const out: string[] = []
   for (let i = 1; i < words.length; i++) {
     const w = words[i]!
@@ -250,7 +264,7 @@ export async function effectsOf(
   const targets: string[] = []
   const discards: Array<NonNullable<ReturnType<typeof gitDiscard>>> = []
   for (const words of commandsOf(command)) {
-    const t = deleteTargets(words)
+    const t = deleteTargets(words, toolName)
     if (t) targets.push(...t)
     const d = gitDiscard(words)
     if (d) discards.push(d)
