@@ -149,6 +149,10 @@ export function Sessions() {
   // B10: a session in a new worktree of the folder's repository, from a branch, tag or commit you name.
   const [inWorktree, setInWorktree] = useState(false)
   const [base, setBase] = useState("")
+  // G25: best of several runs of one prompt, each in its own worktree, compared side by side.
+  const [runs, setRuns] = useState(1)
+  const [runPrompt, setRunPrompt] = useState("")
+  const several = !fresh && inWorktree && runs > 1
 
   const sorted = [...sessions].sort(
     (a, b) => STATE[a.state].rank - STATE[b.state].rank || b.createdAt.localeCompare(a.createdAt),
@@ -163,11 +167,51 @@ export function Sessions() {
     else if (r.data?.path) setCwd(r.data.path)
   }
 
+  /** G25: the runs, each in a worktree of its own, the same prompt to each, opened side by side to compare. */
+  async function startRuns() {
+    const ids: string[] = []
+    const at = Date.now()
+    for (let i = 0; i < runs; i++) {
+      const r = await send(
+        {
+          type: "create_session",
+          cwd: cwd.trim(),
+          worktree: base.trim() ? { base: base.trim() } : {},
+          ...(model ? { model } : {}),
+          ...(effort ? { effort } : {}),
+          ...wireOf(mode),
+          ...accountForNew(),
+        },
+        START_WAIT_MS,
+      )
+      if (!r.ok) {
+        setBusy(false)
+        for (const id of ids) void send({ type: "close_session", sessionId: id })
+        setError(
+          `Run ${i + 1} did not start, so the others were closed: ${r.error?.message ?? "no reason given"}. Their worktrees are under Worktrees below.`,
+        )
+        return
+      }
+      ids.push((r.data as { sessionId: string }).sessionId)
+    }
+    setBusy(false)
+    const s = useStore.getState()
+    for (const id of ids) {
+      s.addUserText(id, runPrompt.trim())
+      void send({ type: "prompt", sessionId: id, text: runPrompt.trim() })
+    }
+    useStore.setState({ panes: ids, selectedSession: ids[0], compare: { ids, at } })
+    toast(`${runs} runs started, each in its own worktree. Keep the best when they are done.`)
+    setRunPrompt("")
+    setRoute("workspace")
+  }
+
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setStartedAt(Date.now())
     setError(undefined)
+    if (several) return void (await startRuns())
     const r = await send(
       {
         type: "create_session",
@@ -286,7 +330,13 @@ export function Sessions() {
               ))}
             </select>
           </label>
-          {fresh ? null : <StartButton busy={busy} ready={Boolean(cwd.trim())} label="Start" />}
+          {fresh ? null : (
+            <StartButton
+              busy={busy}
+              ready={Boolean(cwd.trim()) && (!several || Boolean(runPrompt.trim()))}
+              label={several ? `Start ${runs} runs` : "Start"}
+            />
+          )}
         </div>
         {fresh ? (
           <div className="grid gap-2">
@@ -352,6 +402,37 @@ export function Sessions() {
                   placeholder="the current commit"
                   spellCheck={false}
                   onChange={(e) => setBase(e.target.value)}
+                />
+              </label>
+            ) : null}
+            {inWorktree ? (
+              <label className="flex items-center gap-2">
+                Runs
+                <select
+                  className="field w-20"
+                  value={runs}
+                  onChange={(e) => setRuns(Number(e.target.value))}
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {several ? (
+              <label className="grid w-full gap-1">
+                <span>
+                  What every run is asked to do (each works in its own worktree; compare them and
+                  keep the best)
+                </span>
+                <textarea
+                  className="field"
+                  rows={3}
+                  required
+                  value={runPrompt}
+                  onChange={(e) => setRunPrompt(e.target.value)}
                 />
               </label>
             ) : null}

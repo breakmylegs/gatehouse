@@ -4,8 +4,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { forwardRef } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { CompareBar } from "../src/components/CompareBar"
+import { api } from "../src/lib/api"
 import { send, useStore } from "../src/store"
 import { NewChat } from "../src/surfaces/NewChat"
+import { Sessions } from "../src/surfaces/Sessions"
 
 let n = 0
 vi.mock("sonner", () => ({
@@ -36,7 +38,23 @@ const sent = () =>
 beforeEach(() => {
   n = 0
   vi.mocked(send).mockClear()
-  useStore.setState({ compare: undefined, panes: [], route: "chat", sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never }, transcripts: {} })
+  useStore.setState({
+    compare: undefined,
+    panes: [],
+    route: "chat",
+    sessions: {
+      code1: {
+        id: "code1",
+        cwd: "C:/dev/shop",
+        project: "shop",
+        mode: "default",
+        state: "idle",
+        pendingApprovals: 0,
+        createdAt: "2026-11-06T09:00:00Z",
+      } as never,
+    },
+    transcripts: {},
+  })
 })
 afterEach(cleanup)
 
@@ -105,5 +123,102 @@ describe("comparing answers", () => {
       { type: "close_session", sessionId: "c1" },
     ])
     expect(useStore.getState().panes).toEqual(["c2"])
+  })
+})
+
+describe("best of several runs, each in its own worktree (G25)", () => {
+  it("starts each run in a worktree with the same prompt, and opens them side by side", async () => {
+    render(<Sessions />)
+    fireEvent.change(screen.getByRole("textbox", { name: /^Folder/ }), {
+      target: { value: "C:\\dev\\shop" },
+    })
+    fireEvent.click(screen.getByRole("checkbox", { name: /Work in a new worktree/ }))
+    fireEvent.change(screen.getByRole("combobox", { name: "Runs" }), { target: { value: "3" } })
+    const start = screen.getByRole("button", { name: "Start 3 runs" })
+    expect(start).toBeDisabled()
+    fireEvent.change(screen.getByRole("textbox", { name: /What every run is asked to do/ }), {
+      target: { value: "Add a basket" },
+    })
+    fireEvent.click(start)
+    await waitFor(() => expect(useStore.getState().route).toBe("workspace"))
+    const made = sent().filter((c) => c.type === "create_session")
+    expect(made).toHaveLength(3)
+    for (const m of made) expect(m).toMatchObject({ cwd: "C:\\dev\\shop", worktree: {} })
+    expect(
+      sent()
+        .filter((c) => c.type === "prompt")
+        .map((c) => c.text),
+    ).toEqual(["Add a basket", "Add a basket", "Add a basket"])
+    expect(useStore.getState()).toMatchObject({
+      panes: ["c1", "c2", "c3"],
+      compare: { ids: ["c1", "c2", "c3"] },
+    })
+  })
+
+  it("shows each run's changes, tests and calls that asked, and keeping one removes the others' worktrees after you say yes", async () => {
+    const run = (id: string) => ({
+      id,
+      cwd: `C:/dev/shop.worktrees/${id}`,
+      project: "shop",
+      kind: "code" as const,
+      mode: "default" as const,
+      state: "idle" as const,
+      pendingApprovals: 0,
+      createdAt: "2026-11-09T09:00:00Z",
+      worktree: { branch: `codehouse/${id}`, repo: "C:/dev/shop" },
+    })
+    vi.mocked(send).mockImplementation(async (c: { type: string }) =>
+      c.type === "changes"
+        ? {
+            ok: true,
+            data: {
+              files: [
+                { added: 10, removed: 2 },
+                { added: 3, removed: 0 },
+              ],
+            },
+          }
+        : { ok: true },
+    )
+    useStore.setState({
+      sessions: { r1: run("r1"), r2: run("r2") },
+      compare: { ids: ["r1", "r2"], at: Date.now() },
+      transcripts: {
+        r1: {
+          items: [{ id: "a", kind: "tool", toolUseId: "t1", name: "Bash", input: {} }],
+          todos: [],
+          seq: 1,
+          testsFailing: false,
+        },
+      } as never,
+      decisions: {
+        t1: {
+          outcome: "allow",
+          decidedBy: "human-desktop",
+          ruleId: "x",
+          reason: "",
+          risk: 50,
+          at: 1,
+        },
+      },
+      panes: ["r1", "r2"],
+    })
+    render(<CompareBar sessionId="r1" />)
+    const bar = screen.getByRole("group", { name: "Comparing 2 runs" })
+    await waitFor(() => expect(bar.textContent).toContain("2 files +13 -2"), { timeout: 4000 })
+    expect(bar.textContent).toContain("tests passing")
+    expect(bar.textContent).toContain("1 call asked or stopped")
+    fireEvent.click(screen.getByRole("button", { name: "Keep this one" }))
+    expect(sent().some((c) => c.type === "compare_chosen")).toBe(false)
+    fireEvent.click(screen.getByRole("button", { name: "Keep this run" }))
+    await waitFor(() => expect(useStore.getState().compare).toBeUndefined())
+    expect(sent().filter((c) => c.type !== "changes")).toEqual([
+      { type: "compare_chosen", kept: "r1", others: ["r2"] },
+      { type: "close_session", sessionId: "r2" },
+    ])
+    expect(vi.mocked(api)).toHaveBeenCalledWith("POST", "/api/worktrees/remove", {
+      path: "C:/dev/shop.worktrees/r2",
+      force: true,
+    })
   })
 })

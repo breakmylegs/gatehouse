@@ -17,6 +17,7 @@ import {
   secretsEqual,
 } from "../src/server-guard.js"
 import { HostServer, type HostApp } from "../src/server.js"
+import { Worktrees } from "../src/worktrees.js"
 import { buildStack, type Stack } from "./stack.js"
 
 const TOKEN = "u".repeat(20) + "-ui-session-token-" + "z".repeat(10)
@@ -718,6 +719,39 @@ describe("commands over the WebSocket", () => {
     })
     await c.send({ type: "close_session", sessionId })
   })
+
+  it("records which of several runs in worktrees you kept, by session and branch (G25)", async () => {
+    const wts = new Worktrees(path.join(s.repo, "..", "g25-data"))
+    s.deps.worktrees = wts
+    try {
+      // Started directly: making a worktree can take longer than a reply waits on a busy machine.
+      const run = async () => (await s.manager.start({ cwd: s.repo, worktree: {} })).id
+      const a = await run()
+      const b = await run()
+      expect(await c.send({ type: "compare_chosen", kept: a, others: [b] })).toMatchObject({
+        ok: true,
+      })
+      const rec = s
+        .records()
+        .filter((r) => r.event === "compare_chosen")
+        .at(-1) as unknown as { inputJson: string }
+      const branch = (id: string) => s.manager.get(id)?.info().worktree?.branch
+      expect(JSON.parse(rec.inputJson)).toMatchObject({
+        kept: { session: a, branch: branch(a) },
+        others: [{ session: b, branch: branch(b) }],
+      })
+      // Coding sessions in the same folder, not each in a worktree, are not runs to choose between.
+      const p = (await s.manager.start({ cwd: s.repo })).id
+      const q = (await s.manager.start({ cwd: s.repo })).id
+      expect(await c.send({ type: "compare_chosen", kept: p, others: [q] })).toMatchObject({
+        ok: false,
+      })
+      for (const id of [a, b, p, q]) await c.send({ type: "close_session", sessionId: id })
+      for (const w of wts.records()) await wts.remove(w.path, { force: true })
+    } finally {
+      delete s.deps.worktrees
+    }
+  }, 300_000)
 
   it("records which of the chats compared side by side you kept, by session and model, and only for chats (B22)", async () => {
     const chat = async (model: string) =>

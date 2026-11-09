@@ -724,23 +724,34 @@ export class HostServer {
       }
       case "compare_chosen": {
         // B22: which answer you kept, by session and model, never what was said. The screen closes the rest.
+        // G25: or which of several runs of one prompt, each in its own worktree, by session and branch.
         const all = [cmd.kept, ...cmd.others].map((id) => a.manager.get(id)?.info())
-        if (all.some((s) => !s || s.kind !== "chat"))
-          throw new Error("Only chats started side by side can be compared.")
+        const runs = all.every((s) => s && s.kind !== "chat" && s.worktree)
+        if (!runs && all.some((s) => !s || s.kind !== "chat"))
+          throw new Error(
+            "Only chats started side by side, or runs each in its own worktree, can be compared.",
+          )
         const model = (s: (typeof all)[number]) => s?.model ?? "default"
+        const which = (s: (typeof all)[number]) => ({
+          session: s?.id,
+          model: model(s),
+          ...(runs ? { branch: s?.worktree?.branch } : {}),
+        })
         await this.#opts.app.audit.record({
           session: cmd.kept,
           event: "compare_chosen",
           channel: "desktop",
           tool: "compare",
           input: {
-            kept: { session: cmd.kept, model: model(all[0]) },
-            others: all.slice(1).map((s) => ({ session: s?.id, model: model(s) })),
+            kept: which(all[0]),
+            others: all.slice(1).map(which),
           },
           verdict: {
             outcome: "allow",
             ruleId: "compare-chosen",
-            reason: "You kept one of several answers compared side by side.",
+            reason: runs
+              ? "You kept one of several runs of the same prompt, each in its own worktree."
+              : "You kept one of several answers compared side by side.",
             risk: 0,
             decidedBy: "human-desktop",
             policyHash: "",
