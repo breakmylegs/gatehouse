@@ -57,6 +57,11 @@ Every phase must keep these true. Write an automated test for every invariant th
 
     Owner decision, 2 Nov (updates never break): "We cant have a breaking change ever that means people cant follow the in app upgrade." Every installed copy must be able to update in the app to the newest version, in several steps if need be. The update's repository, its file names (`update.json`, `update.sig`) and its product id (`gatehouse`) never change with a rename. Copies released before these existed are served by update routes, whose release files must carry their earlier product id and program names (the one place an earlier name may appear); the routes are kept out of the repository (`release-channels.local.json`, ignored by git, or beside the release key), and the release refuses to publish without them. See `docs/packaging.md`, "Updates never break".
 
+## Owner decisions on what is built (9 Nov)
+
+- **No IT requests.** "I am never going to ask IT." Where Codehouse could use an existing service (a package registry, OSV, a language server, a debug adapter, a speech server, a proxy, a public host), it is built with a connector to a self-hosted or online copy of that service. A connector is off until the owner switches it on and names the server, and any lookup it makes can only tighten a decision (escalate or deny), never allow. AI services still go through a runtime or gateway on 127.0.0.1 (invariant 6, ADR 0010).
+- **Frontier build.** The current programme is `docs/plan/frontier-build-prompt.md` (D-001 to D-100 with C prerequisites). Its status is `docs/plan/frontier-status.md`; read it first after a compaction or restart. Decisions taken under it that only make Codehouse stricter are listed there and in BUILD_REPORT for the owner to confirm.
+
 ## Commands
 
 | Command | Purpose |
