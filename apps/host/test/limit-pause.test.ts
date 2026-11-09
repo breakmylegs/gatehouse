@@ -42,6 +42,10 @@ function target(id: string, account = "main") {
       t.paused = undefined
       return true
     },
+    async endBypass(why, spent) {
+      calls.push(`bypass ended ${why} ${spent}`)
+      t.bypass = undefined
+    },
   }
   return t
 }
@@ -176,25 +180,101 @@ describe("pausing at the plan limit", () => {
   })
 })
 
-describe("extra usage and Start now (owner, 5 Nov)", () => {
+describe("extra usage and the bypass (owner, 5 and 9 Nov)", () => {
   const withExtra = (percent: number, used: number, limit = 4000): PlanUsage => ({
     ...usage(percent),
     extra: { used, limit, currency: "USD", percent: Math.round((100 * used) / limit) },
   })
 
-  it("carries on into extra usage while some is left, and pauses only when it runs out", async () => {
+  it("pauses at the point you set even with extra usage left (owner, 9 Nov)", async () => {
+    // "I had the limit set to 85% and the app kept going past it anyway": extra usage was on, with plenty left.
     const a = target("a")
-    const s = setup([a], { main: withExtra(100, 7.65) })
-    await s.pauser.check()
+    const pauser = new LimitPauser({
+      sessions: () => [a],
+      planUsage: async () => withExtra(86, 57.89),
+      now: () => Date.parse("2026-10-31T10:00:00Z"),
+      pauseAt: () => 85,
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(a.calls).toEqual([`pause 86 ${RESET}`])
+    // And it is not started again while the limit stays over the point.
+    await pauser.check()
+    expect(a.calls).toEqual([`pause 86 ${RESET}`])
+    // Start now asks this first: it says why the session would pause again at once.
+    expect(await pauser.over("main")).toMatch(/86%, over the 85%/)
+  })
+
+  it("leaves a bypassed session alone until its time runs out, then pauses it in the same look", async () => {
+    const a = target("a")
+    let clock = Date.parse("2026-11-09T12:00:00")
+    a.bypass = { since: clock, until: clock + 3_600_000, spentUsd: 0 }
+    const pauser = new LimitPauser({
+      sessions: () => [a],
+      planUsage: async () => usage(100),
+      now: () => clock,
+      pauseAt: () => 85,
+      spendToday: () => 92,
+      spendCap: () => 50,
+      log: () => undefined,
+    })
+    await pauser.check()
     expect(a.calls).toEqual([])
-    // One the plan limit paused before starts again, since the work can carry on.
-    a.paused = { percent: 100, wasRunning: true, until: RESET }
-    await s.pauser.check()
+    clock += 3_600_000
+    await pauser.check()
+    expect(a.calls[0]).toBe("bypass ended time 0")
+    expect(a.paused?.reason).toBe("spend")
+  })
+
+  it("ends a bypass at the most it may spend, counting the session's own spending or the account's extra usage, whichever is more", async () => {
+    const clock = Date.parse("2026-11-09T12:00:00")
+    // The session's own spending.
+    const a = target("a")
+    a.bypass = { since: clock, maxUsd: 10, spentUsd: 4 }
+    let used = 100
+    const pauser = new LimitPauser({
+      sessions: () => [a],
+      planUsage: async () => withExtra(90, used),
+      now: () => clock,
+      pauseAt: () => 85,
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(a.calls).toEqual([])
+    a.bypass.spentUsd = 10
+    await pauser.check()
+    expect(a.calls).toEqual(["bypass ended spend 10", `pause 90 ${RESET}`])
+    // The account's extra usage since the bypass began, when that is more.
+    const b = target("b")
+    b.bypass = { since: clock + 1, maxUsd: 10, spentUsd: 1 }
+    const other = new LimitPauser({
+      sessions: () => [b],
+      planUsage: async () => withExtra(90, used),
+      now: () => clock,
+      pauseAt: () => 85,
+      log: () => undefined,
+    })
+    await other.check()
+    used = 109
+    await other.check()
+    expect(b.calls).toEqual([])
+    used = 110
+    await other.check()
+    expect(b.calls).toEqual(["bypass ended spend 10", `pause 90 ${RESET}`])
+  })
+
+  it("starts a session a limit paused when you bypass it, and a bypass with no limit pauses nothing more", async () => {
+    const a = target("a")
+    a.paused = { percent: 90, wasRunning: true, until: RESET }
+    a.bypass = { since: 1, maxUsd: 5, spentUsd: 0 }
+    const pauser = new LimitPauser({
+      sessions: () => [a],
+      planUsage: async () => usage(99),
+      now: () => Date.parse("2026-11-09T12:00:00"),
+      log: () => undefined,
+    })
+    await pauser.check()
     expect(a.calls).toEqual(["resume"])
-    s.answers.main = withExtra(100, 4000)
-    s.clock.now += 10 * 60_000
-    await s.pauser.check()
-    expect(a.calls.at(-1)).toBe(`pause 100 ${RESET}`)
   })
 
   it("counts extra usage spent today towards the cap, never the API price of work inside the plan (owner, 6 Nov)", async () => {
@@ -245,25 +325,6 @@ describe("extra usage and Start now (owner, 5 Nov)", () => {
     }
   })
 
-  it("leaves a session you started alone, over the cap and at the plan limit, until its hold ends", async () => {
-    const a = target("a")
-    let clock = Date.parse("2026-11-05T09:00:00")
-    a.protectionOffUntil = clock + 3_600_000
-    const pauser = new LimitPauser({
-      sessions: () => [a],
-      planUsage: async () => usage(100),
-      now: () => clock,
-      spendToday: () => 92,
-      spendCap: () => 50,
-      log: () => undefined,
-    })
-    await pauser.check()
-    await pauser.check()
-    expect(a.calls).toEqual([])
-    clock += 3_600_000
-    await pauser.check()
-    expect(a.paused?.reason).toBe("spend")
-  })
 })
 
 describe("starting paused sessions again", () => {

@@ -6,6 +6,7 @@ import { LimitPauser } from "../src/limit-pause.js"
 import type { PlanUsage } from "../src/plan-usage.js"
 import { OpenSessionsStore } from "../src/open-sessions.js"
 import { buildStack, type Stack } from "./stack.js"
+import { LimitPausedError } from "../src/sessions.js"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import fs from "node:fs"
 import os from "node:os"
@@ -97,28 +98,29 @@ describe("pausing a session", () => {
     })
   })
 
-  it("is ended by your own message, which is you starting it again", async () => {
+  it("is not ended by your own message: going past a limit takes a bypass (owner, 9 Nov)", async () => {
     s.sdk.turn = async (api) => api.say("done")
     const session = await s.manager.start({ cwd: s.repo })
     await session.pause(95)
-    session.prompt("go on, I know")
-    await vi.waitFor(() => expect(session.info().paused).toBeUndefined())
-    await vi.waitFor(() => expect(records(session.id, "limit_resume")).toHaveLength(1))
-    expect(s.sdk.queries.at(-1)?.prompts).toEqual(["go on, I know"])
+    expect(() => session.prompt("go on, I know")).toThrow(LimitPausedError)
+    expect(session.info().paused).toBeDefined()
+    expect(s.sdk.queries.at(-1)?.prompts).toEqual([])
+    expect(records(session.id, "limit_resume")).toHaveLength(0)
   })
 
-  it("started by you, holds until the pause would have ended, so the next look does not pause it again", async () => {
+  it("started by you, holds nothing: the next look pauses it again while the limit is over", async () => {
     s.sdk.turn = async (api) => api.say("done")
     const session = await s.manager.start({ cwd: s.repo })
-    const midnight = new Date(Date.now() + 3_600_000).toISOString()
-    await session.pause(120, midnight, "spend")
+    await session.pause(97, RESET)
     await session.resume("you")
-    expect(session.protectionOffUntil).toBe(Date.parse(midnight))
-    // The limit starting it again holds nothing.
-    const other = await s.manager.start({ cwd: s.repo })
-    await other.pause(95, midnight)
-    await other.resume("limit-reset")
-    expect(other.protectionOffUntil).toBeUndefined()
+    expect(session.info().bypass).toBeUndefined()
+    const pauser = new LimitPauser({
+      sessions: () => [session],
+      planUsage: async () => limit(97),
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(session.info().paused).toMatchObject({ percent: 97 })
   })
 
   it("stays paused while the kill switch is engaged, and starts again after", async () => {
@@ -220,8 +222,8 @@ describe("a pause across a restart", () => {
   })
 })
 
-describe("limit protection off for a while (owner, 5 Nov)", () => {
-  it("lets a paused session carry on, keeps the limits from pausing it, and comes back on by itself", async () => {
+describe("bypassing the limits for one session (owner, 9 Nov)", () => {
+  it("lets a paused session carry on for the time you give, then the limit pauses it again", async () => {
     s.sdk.turn = async (api) => api.say("ok")
     const session = await s.manager.start({ cwd: s.repo })
     await session.pause(96, RESET)
@@ -232,48 +234,87 @@ describe("limit protection off for a while (owner, 5 Nov)", () => {
       now: () => now,
       log: () => undefined,
     })
-    await session.setLimitProtection(60)
+    await session.setBypass({ minutes: 60 })
     expect(session.info().paused).toBeUndefined()
-    const until = Date.parse(session.info().protectionOffUntil!)
+    const until = Date.parse(session.info().bypass!.until!)
     expect(until - Date.now()).toBeGreaterThan(59 * 60_000)
     expect(until - Date.now()).toBeLessThanOrEqual(60 * 60_000)
-    // The limit is over the pause point, but protection is off: nothing pauses it.
+    // The limit is over the pause point, but the bypass runs: nothing pauses it.
     await pauser.check()
     expect(session.info().paused).toBeUndefined()
-    // An hour later it is on again by itself, and the limit pauses it.
+    // An hour later the bypass has run out, and the same look pauses it.
     now = until + 1
-    vi.spyOn(Date, "now").mockReturnValue(until + 1)
-    try {
-      await pauser.check()
-      expect(session.info().paused).toMatchObject({ percent: 97 })
-      expect(session.info().protectionOffUntil).toBeUndefined()
-    } finally {
-      vi.restoreAllMocks()
-    }
-    expect(records(session.id, "limit_protection")[0]?.verdict).toMatchObject({
-      ruleId: "limit-protection",
+    await pauser.check()
+    expect(session.info().paused).toMatchObject({ percent: 97 })
+    expect(session.info().bypass).toBeUndefined()
+    expect(records(session.id, "limit_bypass")[0]?.verdict).toMatchObject({
+      ruleId: "limit-bypass",
       decidedBy: "human-desktop",
+    })
+    expect(records(session.id, "limit_bypass_end")[0]?.verdict).toMatchObject({
+      ruleId: "limit-bypass",
+      decidedBy: "rules",
     })
   })
 
-  it("is on again at once when you turn it back on, and never off for more than a day", async () => {
-    s.sdk.turn = async (api) => api.say("ok")
-    const session = await s.manager.start({ cwd: s.repo })
-    await session.setLimitProtection(10_000)
-    expect(Date.parse(session.info().protectionOffUntil!) - Date.now()).toBeLessThanOrEqual(
-      24 * 60 * 60_000,
-    )
-    await session.setLimitProtection(null)
-    expect(session.info().protectionOffUntil).toBeUndefined()
+  it("ends at the most it may spend, and stops Extreme approval carrying on past it", async () => {
+    s.sdk.turn = async (api, text) => api.say(text === CARRY_ON_PROMPT ? "more work" : "working")
+    s.sdk.costPerTurn = 0.6
+    const session = await s.manager.start({ cwd: s.repo, extreme: true })
     const pauser = new LimitPauser({
       sessions: () => [session],
       planUsage: async () => limit(97),
       log: () => undefined,
     })
-    await pauser.check()
+    s.hooks.limitCheck = () => pauser.check()
+    try {
+      await session.setBypass({ maxUsd: 1 })
+      session.prompt("work")
+      await vi.waitFor(() => expect(session.info().paused).toBeDefined(), { timeout: 5000 })
+      expect(session.info().bypass).toBeUndefined()
+      // It ran only until its spending reached $1: two turns at $0.60, never a third.
+      expect(s.sdk.queries.at(-1)?.prompts).toHaveLength(2)
+      expect(records(session.id, "limit_bypass_end")[0]?.inputJson).toContain('"by":"spend"')
+    } finally {
+      s.hooks.limitCheck = undefined
+      s.sdk.costPerTurn = 0.01
+    }
+  })
+
+  it("needs a time or a most it may spend, never lasts over a day, and ends at once when you end it", async () => {
+    s.sdk.turn = async (api) => api.say("ok")
+    const session = await s.manager.start({ cwd: s.repo })
+    await expect(session.setBypass({})).rejects.toThrow(/time, a most it may spend, or both/)
+    expect(session.info().bypass).toBeUndefined()
+    await session.setBypass({ minutes: 10_000, maxUsd: 5 })
+    expect(Date.parse(session.info().bypass!.until!) - Date.now()).toBeLessThanOrEqual(
+      24 * 60 * 60_000,
+    )
+    expect(session.info().bypass).toMatchObject({ maxUsd: 5, spentUsd: 0 })
+    const pauser = new LimitPauser({
+      sessions: () => [session],
+      planUsage: async () => limit(97),
+      log: () => undefined,
+    })
+    s.hooks.limitCheck = () => pauser.check()
+    try {
+      await session.setBypass(null)
+    } finally {
+      s.hooks.limitCheck = undefined
+    }
+    expect(session.info().bypass).toBeUndefined()
     expect(session.info().paused).toMatchObject({ percent: 97 })
-    expect(
-      records(session.id, "limit_protection").map((r) => (r as { inputJson?: string }).inputJson),
-    ).toEqual([expect.stringContaining("offMinutes"), expect.stringContaining("on")])
+  })
+
+  it("is refused when it cannot be recorded", async () => {
+    s.sdk.turn = async (api) => api.say("ok")
+    const session = await s.manager.start({ cwd: s.repo })
+    const spy = vi.spyOn(s.audit, "record").mockResolvedValue(false)
+    try {
+      await expect(session.setBypass({ minutes: 30 })).rejects.toThrow(/could not be recorded/)
+    } finally {
+      spy.mockRestore()
+    }
+    expect(session.info().bypass).toBeUndefined()
   })
 })

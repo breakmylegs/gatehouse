@@ -409,6 +409,8 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     checkpoints,
     account,
+    // Owner, 9 Nov: a bypass that ran out pauses its session at once, not at the next look.
+    limitCheck: () => limitPauser.check(),
     // Ask about code: how a linked code session stands and the latest of what was said in it, redacted.
     aboutSaid: (about) => readAbout(about, aboutDeps()),
     companion: ({ sessionId, cwd, kind, chatProject, about }) => ({
@@ -966,6 +968,7 @@ export function createHost(opts: HostOptions = {}): Host {
     checkpoints,
     usage,
     account,
+    limits: limitPauser,
     audit,
     engine,
     policy: () => store.current,

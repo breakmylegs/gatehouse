@@ -53,6 +53,8 @@ export interface HostApp {
   checkpoints: CheckpointManager
   usage: UsageStore
   account: AccountMonitor
+  /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
+  limits?: { over(account: string): Promise<string | undefined> }
   /** Starts Anthropic's own sign-in. Absent in tests that do not need it. */
   signIn?: SignInFlow
   /** The accounts signed in beside the main one. */
@@ -537,12 +539,31 @@ export class HostServer {
       case "stop_session":
         await this.#session(cmd.sessionId).stop()
         return undefined
-      case "resume_session":
-        // A session Codehouse paused at the plan limit, started again by you before the limit resets.
-        await this.#session(cmd.sessionId).resume("you")
+      case "resume_session": {
+        // A session a limit paused, started again by you. Owner, 9 Nov: only once no limit in Settings would pause it
+        // again; past a limit it takes a bypass, with a time or a most it may spend.
+        const s = this.#session(cmd.sessionId)
+        const over = await a.limits?.over(s.account)
+        if (over)
+          throw new Error(`${over} Bypass the limits for this session, with a time or a most it may spend, to keep going.`)
+        await s.resume("you")
         return undefined
+      }
       case "set_limit_protection":
-        await this.#session(cmd.sessionId).setLimitProtection(cmd.offMinutes)
+        // The earlier form, from before 9 Nov: a time only.
+        await this.#session(cmd.sessionId).setBypass(
+          cmd.offMinutes === null ? null : { minutes: cmd.offMinutes },
+        )
+        return undefined
+      case "set_limit_bypass":
+        await this.#session(cmd.sessionId).setBypass(
+          cmd.end
+            ? null
+            : {
+                ...(cmd.minutes !== undefined ? { minutes: cmd.minutes } : {}),
+                ...(cmd.maxUsd !== undefined ? { maxUsd: cmd.maxUsd } : {}),
+              },
+        )
         return undefined
       case "set_resources":
         await this.#session(cmd.sessionId).setResources(cmd.level)

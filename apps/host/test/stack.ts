@@ -31,6 +31,8 @@ export interface StackOptions {
 }
 
 export interface Stack {
+  /** What a session calls for one look at the limits (owner, 9 Nov); a test sets it. */
+  hooks: { limitCheck?: () => Promise<void> }
   sdk: FakeSdk
   repo: string
   dir: string
@@ -157,7 +159,11 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     probeOptions: () => ({}) as never,
     managedDetected: async () => false,
   })
+  const hooks: Stack["hooks"] = {}
   const deps: SessionDeps = {
+    limitCheck: async () => {
+      await hooks.limitCheck?.()
+    },
     queryFn: sdk.queryFn,
     config: () => config,
     policy: () => store.current,
@@ -196,6 +202,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     )
 
   return {
+    hooks,
     sdk,
     repo,
     dir,

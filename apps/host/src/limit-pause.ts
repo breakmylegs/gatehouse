@@ -17,18 +17,38 @@ export const CHECK_EVERY_MS = 60_000
 /** After starting an account's sessions again, how long before the same limit may pause them once more. */
 const QUIET_AFTER_RESUME_MS = 120_000
 
+/**
+ * Owner, 9 Nov: "if a limit is set in the settings for the percentage use and extra spend ... the platform honors this
+ * unless a user specifically bypasses it for a specific session. The bypass must offer the user a timer ... or give them
+ * a maximum additional spend for the session. The user can set one or both. Once either of the limits is reached the
+ * session stops again until the user configures another bypass."
+ */
+export interface LimitBypass {
+  /** When you set it (epoch ms). */
+  since: number
+  /** When it ends (epoch ms), if you gave it a time. */
+  until?: number
+  /** The most it may spend while it lasts, in US dollars, if you gave it one. */
+  maxUsd?: number
+  /** What the session itself reports it used since you set it. */
+  spentUsd: number
+}
+
+/** The most a bypass may last, and the most it may spend. */
+export const BYPASS_MAX_MINUTES = 24 * 60
+export const BYPASS_MAX_USD = 1000
+
 /** What the pauser needs of a session. */
 export interface PauseTarget {
   id: string
   account: string
   paused?: SessionInfo["paused"]
-  /**
-   * Owner, 5 Nov: limit protection turned off for this session until then (epoch ms). Neither the plan limit nor the
-   * spending cap pauses it meanwhile; after it, both apply again by themselves.
-   */
-  protectionOffUntil?: number
+  /** Your bypass of the limits for this session, while it lasts. Neither limit pauses it meanwhile. */
+  bypass?: LimitBypass
   pause(percent: number, until?: string, reason?: "spend"): Promise<void>
   resume(by: "limit-reset"): Promise<boolean>
+  /** The bypass ran out: its time, or its spending. */
+  endBypass(why: "time" | "spend", spentUsd: number): Promise<void>
 }
 
 export interface LimitPauserDeps {
@@ -127,12 +147,6 @@ export function fiveHour(
   return l ? { percent: l.percent, ...(l.resetsAt ? { resetsAt: l.resetsAt } : {}) } : undefined
 }
 
-/** Whether the organisation allows extra usage beyond the plan and some of it is left. */
-export function extraLeft(u: PlanUsage | undefined): boolean {
-  const x = u?.extra
-  return x !== undefined && x.limit > 0 && x.used < x.limit
-}
-
 /**
  * Pauses an account's sessions at the pause point and starts them again at the reset. When the limit cannot be read
  * it does nothing: a pause needs a number, and an unknown one never pauses or resumes by itself, except that the
@@ -141,6 +155,8 @@ export function extraLeft(u: PlanUsage | undefined): boolean {
 export class LimitPauser {
   readonly #d: LimitPauserDeps
   readonly #quiet = new Map<string, number>()
+  /** Each bypass's account extra usage when it was first seen, by session and when it was set. */
+  readonly #extraAtBypass = new Map<string, number>()
   #timer: NodeJS.Timeout | undefined
   #busy: Promise<void> | undefined
 
@@ -159,6 +175,24 @@ export class LimitPauser {
     this.#timer = undefined
   }
 
+  /**
+   * Whether a limit in Settings would pause this account's sessions now: the spending cap reached, or the plan's
+   * 5-hour limit at or over the pause point. Undefined when nothing would; a reason when something would.
+   */
+  async over(account: string): Promise<string | undefined> {
+    const usage = await this.#d.planUsage(account, true)
+    const cap = this.#d.spendCap?.()
+    let spent = this.#d.spendToday?.() ?? 0
+    if (usage?.extra && this.#d.extraToday) spent += this.#d.extraToday(account, usage.extra.used)
+    if (cap !== undefined && spent >= cap)
+      return "Today's spending has reached the most Settings allows a day."
+    const at = this.#d.pauseAt ? this.#d.pauseAt() : PAUSE_AT_PERCENT
+    const limit = fiveHour(usage)
+    if (at !== undefined && limit && limit.percent >= at)
+      return `The plan's 5-hour limit is at ${Math.round(limit.percent)}%, over the ${at}% set in Settings.`
+    return undefined
+  }
+
   /** One look at every account with a session open. Looks do not overlap. */
   check(): Promise<void> {
     this.#busy ??= this.#check()
@@ -169,30 +203,68 @@ export class LimitPauser {
     return this.#busy
   }
 
+  /**
+   * How much a bypass has spent: what the session reports since you set it, or the account's extra usage since then,
+   * whichever is more, so it never stops later than it should.
+   */
+  bypassSpent(s: PauseTarget, usage: PlanUsage | undefined): number {
+    const b = s.bypass
+    if (!b) return 0
+    const key = `${s.id}:${b.since}`
+    let extra = 0
+    if (usage?.extra) {
+      const start = this.#extraAtBypass.get(key)
+      if (start === undefined) this.#extraAtBypass.set(key, usage.extra.used)
+      else extra = Math.max(0, usage.extra.used - start)
+    }
+    return Math.max(b.spentUsd, extra)
+  }
+
   async #check(): Promise<void> {
     const now = (this.#d.now ?? Date.now)()
-    // Owner, 5 Nov: a session with its protection turned off is left alone until the time it was turned off for, and
-    // one a limit had paused carries on. When that time passes it is looked at again like any other.
-    const unprotected = (s: PauseTarget) =>
-      s.protectionOffUntil !== undefined && now < s.protectionOffUntil
-    for (const s of this.#d.sessions())
-      if (unprotected(s) && s.paused)
-        await s
-          .resume("limit-reset")
-          .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
-    const sessions = () => this.#d.sessions().filter((s) => !unprotected(s))
-    const byAccount = new Map<string, PauseTarget[]>()
-    for (const s of sessions()) byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
     const usageOf = new Map<string, PlanUsage | undefined>()
-    for (const [account, list] of byAccount)
-      // Fresh when something is paused for the plan limit, so the reset is seen as soon as it happens.
+    const accounts = new Map<string, PauseTarget[]>()
+    for (const s of this.#d.sessions()) accounts.set(s.account, [...(accounts.get(s.account) ?? []), s])
+    for (const [account, list] of accounts)
+      // Fresh when something is paused for the plan limit, so the reset is seen as soon as it happens, or when a
+      // bypass is counting its spending.
       usageOf.set(
         account,
         await this.#d.planUsage(
           account,
-          list.some((s) => s.paused && s.paused.reason !== "spend"),
+          list.some((s) => (s.paused && s.paused.reason !== "spend") || s.bypass?.maxUsd !== undefined),
         ),
       )
+    // Owner, 9 Nov: a bypass lasts until its time or its spending runs out, whichever comes first; then the limits in
+    // Settings apply to the session again, in this same look.
+    const live = new Set<string>()
+    for (const s of this.#d.sessions()) {
+      const b = s.bypass
+      if (!b) continue
+      const spent = this.bypassSpent(s, usageOf.get(s.account))
+      const why =
+        b.until !== undefined && now >= b.until
+          ? "time"
+          : b.maxUsd !== undefined && spent >= b.maxUsd
+            ? "spend"
+            : undefined
+      if (why)
+        await s
+          .endBypass(why, spent)
+          .catch((e: Error) => this.#d.log(`session ${s.id}: the bypass could not end: ${e.message}`))
+      else live.add(`${s.id}:${b.since}`)
+    }
+    for (const key of this.#extraAtBypass.keys()) if (!live.has(key)) this.#extraAtBypass.delete(key)
+    // A session with a bypass running is left alone, and one a limit had paused carries on.
+    const bypassed = (s: PauseTarget) => s.bypass !== undefined
+    for (const s of this.#d.sessions())
+      if (bypassed(s) && s.paused)
+        await s
+          .resume("limit-reset")
+          .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
+    const sessions = () => this.#d.sessions().filter((s) => !bypassed(s))
+    const byAccount = new Map<string, PauseTarget[]>()
+    for (const s of sessions()) byAccount.set(s.account, [...(byAccount.get(s.account) ?? []), s])
     // B20: what was really spent today, against the cap in Settings: pay-as-you-go sessions and extra usage.
     const cap = this.#d.spendCap?.()
     let spent = this.#d.spendToday?.() ?? 0
@@ -222,9 +294,9 @@ export class LimitPauser {
       }
       const paused = list.filter((s) => s.paused && s.paused.reason !== "spend")
       const usage = usageOf.get(account)
-      // Owner, 5 Nov: with extra usage on and room left, the plan limit stops nothing: work carries on into extra
-      // usage, as Claude Code does. Only extra usage running out (or the spending cap) pauses.
-      const limit = extraLeft(usage) ? { percent: 0 } : fiveHour(usage)
+      // Owner, 9 Nov: the pause point holds whether or not extra usage is left ("I had the limit set to 85% and the
+      // app kept going past it anyway"). Going past it is a bypass for one session, with a time or spending limit.
+      const limit = fiveHour(usage)
       // B26: off, a paused session waits for you to start it, even after the reset. Pausing goes on as before.
       const resumeByItself = !this.#d.autoResume || this.#d.autoResume()
       for (const s of resumeByItself ? paused : []) {

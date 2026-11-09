@@ -620,8 +620,14 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     })
     if (!recorded)
       return await this.#reject("It could not be recorded, so it was not sent", { phoneId })
-    if (a.type === "prompt") s.prompt(a.sessionId, a.text)
-    else await s.interrupt(a.sessionId)
+    if (a.type === "prompt") {
+      // Owner, 9 Nov: a session a limit paused is not started by a message; the phone is told why.
+      try {
+        s.prompt(a.sessionId, a.text)
+      } catch (e) {
+        return await this.#reject((e as Error).message, { phoneId })
+      }
+    } else await s.interrupt(a.sessionId)
   }
 
   /**

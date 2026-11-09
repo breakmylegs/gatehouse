@@ -1,3 +1,4 @@
+import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
 import crypto from "node:crypto"
 import os from "node:os"
@@ -185,6 +186,17 @@ export class KillSwitchEngagedError extends Error {
   }
 }
 
+/** Owner, 9 Nov: a message to a session a limit paused; going on needs a bypass for this session. */
+export class LimitPausedError extends Error {
+  constructor(reason?: "spend") {
+    super(
+      reason === "spend"
+        ? "This session is paused: today's spending reached the most Settings allows a day. Bypass the limits for this session, with a time or a most it may spend, to keep going."
+        : "This session is paused at the plan limit set in Settings. Bypass the limits for this session, with a time or a most it may spend, to keep going.",
+    )
+  }
+}
+
 export type SessionState = "starting" | "idle" | "running" | "waiting" | "error" | "ended"
 
 export interface SessionInfo {
@@ -249,8 +261,8 @@ export interface SessionInfo {
   forkOf?: { conversation: string; message: string }
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
-  /** Owner, 5 Nov: limit protection is off for this session until then. */
-  protectionOffUntil?: string
+  /** Owner, 9 Nov: your bypass of the limits for this session, while it lasts. */
+  bypass?: { since: string; until?: string; maxUsd?: number; spentUsd: number }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
   paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" }
 }
@@ -274,6 +286,7 @@ export interface SessionEvents {
         | "load"
         | "queue_empty"
         | "stuck"
+        | "bypass_ended"
       data: Record<string, unknown>
     },
   ]
@@ -289,8 +302,6 @@ export interface SessionEvents {
  */
 export const START_TIMEOUT_MS = 300_000
 
-/** A pause with no end time: how long Start now holds before a limit may pause the session again (a plan window). */
-export const HOLD_MS = 5 * 3_600_000
 
 export interface SessionDeps {
   queryFn: QueryFn
@@ -352,6 +363,8 @@ export interface SessionDeps {
   usage: UsageStore
   checkpoints: CheckpointManager
   account: AccountMonitor
+  /** Owner, 9 Nov: one look at the limits now, so a bypass that has run out pauses the session at once. */
+  limitCheck?: () => Promise<void>
   /** Builds the in-process Companion for a session. */
   companion: (s: {
     sessionId: string
@@ -520,8 +533,12 @@ export class Session extends EventEmitter<SessionEvents> {
   #compactAfterTurn = false
   /** Paused at the plan limit: nothing carries on by itself until it starts again. */
   #paused: SessionInfo["paused"]
-  /** Owner, 5 Nov: started again by you, so no limit pauses it again until this (epoch ms). */
-  #protectionOffUntil: number | undefined
+  /**
+   * Owner, 9 Nov: your bypass of the limits for this session, with a time, a spending limit or both. Kept only while
+   * the Host runs: after a restart the limits in Settings apply again.
+   */
+  #bypass: { since: number; until?: number; maxUsd?: number; costAtStart: number } | undefined
+  #bypassTimer: NodeJS.Timeout | undefined
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -632,8 +649,17 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
-      ...(this.#protectionOffUntil !== undefined && this.#protectionOffUntil > Date.now()
-        ? { protectionOffUntil: new Date(this.#protectionOffUntil).toISOString() }
+      ...(this.#bypass
+        ? {
+            bypass: {
+              since: new Date(this.#bypass.since).toISOString(),
+              ...(this.#bypass.until !== undefined
+                ? { until: new Date(this.#bypass.until).toISOString() }
+                : {}),
+              ...(this.#bypass.maxUsd !== undefined ? { maxUsd: this.#bypass.maxUsd } : {}),
+              spentUsd: this.bypass?.spentUsd ?? 0,
+            },
+          }
         : {}),
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
@@ -1129,12 +1155,12 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
   prompt(text: string): void {
+    // Owner, 9 Nov: the limits in Settings hold. A message does not go past them; a bypass for this session does.
+    if (this.#paused) throw new LimitPausedError(this.#paused.reason)
     this.#syncKnowledge()
     this.#send(text)
     this.emit("prompted", text)
     this.#carry.started(this.#lastCost)
-    // Your own message is you starting it again; the pause is over.
-    if (this.#paused) void this.#endPause("you")
   }
 
   #send(text: string): void {
@@ -1171,9 +1197,16 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#paused
   }
 
-  /** Until when no limit pauses this session again, because you started it while paused. */
-  get protectionOffUntil(): number | undefined {
-    return this.#protectionOffUntil
+  /** Your bypass of the limits, while it lasts, with what the session reports it used since you set it. */
+  get bypass(): LimitBypass | undefined {
+    const b = this.#bypass
+    if (!b) return undefined
+    return {
+      since: b.since,
+      ...(b.until !== undefined ? { until: b.until } : {}),
+      ...(b.maxUsd !== undefined ? { maxUsd: b.maxUsd } : {}),
+      spentUsd: Math.max(0, this.#lastCost - b.costAtStart),
+    }
   }
 
   /** Names a warm chat from the first message it is given, as a chat started then would be named. */
@@ -1255,6 +1288,12 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   async #afterTurn(m: Record<string, unknown>): Promise<void> {
     if (this.#paused) return
+    // Owner, 9 Nov: with a bypass running, the limits are looked at before carrying on, so one whose spending ran out
+    // in that turn pauses now rather than at the next look.
+    if (this.#bypass && this.#deps.limitCheck) {
+      await this.#deps.limitCheck().catch(() => undefined)
+      if (this.#paused) return
+    }
     const step = this.#carry.next({
       text: typeof m.result === "string" ? m.result : "",
       isError: m.is_error === true || String(m.subtype ?? "").startsWith("error"),
@@ -1376,41 +1415,110 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
-   * Owner, 5 Nov: limit protection off for this session for a while you choose (at most a day), or on again. Off,
-   * neither the plan's 5-hour limit nor the spending cap pauses it, and one they had paused carries on; when the time
-   * is up both apply again by themselves. Each change is audited.
+   * Owner, 9 Nov: you bypass the limits in Settings for this session, for so many minutes, up to so much spending, or
+   * both, whichever runs out first; or end the bypass (null). While it lasts neither the plan's 5-hour limit nor the
+   * most spending a day pauses this session, and one they had paused carries on. When it runs out, the limits apply
+   * again at once and pause it if they are still over; going on again needs a new bypass. Recorded before it applies:
+   * a bypass that cannot be recorded is refused.
    */
-  async setLimitProtection(offMinutes: number | null): Promise<void> {
-    let until: number | undefined
-    if (offMinutes !== null) {
-      const minutes = Math.min(Math.max(Math.round(offMinutes), 1), 24 * 60)
-      if (this.#paused) await this.resume("you")
-      until = Date.now() + minutes * 60_000
+  async setBypass(b: { minutes?: number; maxUsd?: number } | null): Promise<void> {
+    if (b === null) {
+      if (!this.#bypass) return
+      await this.#recordBypass("limit_bypass_end", { by: "you" }, "You ended the bypass of the limits for this session.")
+      this.#clearBypass()
+      this.emit("state", this.info())
+      await this.#deps.limitCheck?.().catch(() => undefined)
+      return
     }
-    this.#protectionOffUntil = until
-    await this.#auditLimit(
-      "limit_protection",
-      "limit-protection",
-      until !== undefined ? { offMinutes, until: new Date(until).toISOString() } : { on: true },
-      until !== undefined
-        ? "You turned limit protection off for this session for a while: the plan limit and the spending cap do not pause it until then."
-        : "You turned limit protection back on for this session.",
-      "human-desktop",
+    const minutes =
+      b.minutes !== undefined && Number.isFinite(b.minutes)
+        ? Math.min(Math.max(Math.round(b.minutes), 1), BYPASS_MAX_MINUTES)
+        : undefined
+    const maxUsd =
+      b.maxUsd !== undefined && Number.isFinite(b.maxUsd) && b.maxUsd > 0
+        ? Math.min(Math.round(b.maxUsd * 100) / 100, BYPASS_MAX_USD)
+        : undefined
+    if (minutes === undefined && maxUsd === undefined)
+      throw new Error("Give the bypass a time, a most it may spend, or both.")
+    const since = Date.now()
+    const until = minutes !== undefined ? since + minutes * 60_000 : undefined
+    await this.#recordBypass(
+      "limit_bypass",
+      {
+        ...(minutes !== undefined ? { minutes, until: new Date(until!).toISOString() } : {}),
+        ...(maxUsd !== undefined ? { maxUsd } : {}),
+      },
+      `You bypassed the limits in Settings for this session${minutes !== undefined ? ` for ${minutes} minutes` : ""}${minutes !== undefined && maxUsd !== undefined ? " or" : ""}${maxUsd !== undefined ? ` up to ${maxUsd.toFixed(2)} of spending` : ""}, whichever comes first.`,
     )
+    this.#clearBypass()
+    this.#bypass = {
+      since,
+      ...(until !== undefined ? { until } : {}),
+      ...(maxUsd !== undefined ? { maxUsd } : {}),
+      costAtStart: this.#lastCost,
+    }
+    if (until !== undefined) {
+      // A look at the limits the moment the time runs out, not up to a minute later.
+      this.#bypassTimer = setTimeout(() => void this.#deps.limitCheck?.(), until - since + 50)
+      this.#bypassTimer.unref()
+    }
+    if (this.#paused) await this.resume("you")
     this.emit("state", this.info())
+  }
+
+  /** The bypass ran out (the limit pauser): its time, or its spending. The limits apply again from this look. */
+  async endBypass(why: "time" | "spend", spentUsd: number): Promise<void> {
+    const b = this.#bypass
+    if (!b) return
+    this.#clearBypass()
+    await this.#auditLimit(
+      "limit_bypass_end",
+      "limit-bypass",
+      { by: why, spentUsd: Math.round(spentUsd * 100) / 100, ...(b.maxUsd !== undefined ? { maxUsd: b.maxUsd } : {}) },
+      why === "time"
+        ? "The time you gave the bypass of the limits ran out, so the limits in Settings apply to this session again."
+        : "The bypass of the limits reached the most you allowed it to spend, so the limits in Settings apply to this session again.",
+      "rules",
+    )
+    this.emit("event", { type: "bypass_ended", data: { why, spentUsd } })
+    this.emit("state", this.info())
+  }
+
+  #clearBypass(): void {
+    clearTimeout(this.#bypassTimer)
+    this.#bypassTimer = undefined
+    this.#bypass = undefined
+  }
+
+  /** Your bypass, in the audit log before it applies; refused when it cannot be recorded. */
+  async #recordBypass(event: string, input: Record<string, unknown>, reason: string): Promise<void> {
+    const written = await this.#deps.audit
+      .record({
+        session: this.id,
+        event,
+        channel: "desktop",
+        tool: "session",
+        cwd: this.cwd,
+        project: this.project,
+        input,
+        verdict: {
+          outcome: "allow",
+          ruleId: "limit-bypass",
+          reason,
+          risk: 0,
+          decidedBy: "human-desktop",
+          policyHash: this.#deps.policy()?.hash ?? "",
+        },
+        latencyMs: 0,
+      })
+      .catch(() => false)
+    if (!written) throw new Error("The bypass could not be recorded in the audit log, so it was not set.")
   }
 
   async #endPause(by: "you" | "limit-reset"): Promise<void> {
     if (!this.#paused) return
     const p = this.#paused
     this.#paused = undefined
-    // Owner, 5 Nov: Start now ran a few messages and the next look paused it again. Started by you, it carries on
-    // until that pause would have ended anyway (midnight for the spending cap, the reset for the plan limit).
-    if (by === "you") {
-      const until = p.until ? Date.parse(p.until) : NaN
-      this.#protectionOffUntil =
-        Number.isFinite(until) && until > Date.now() ? until : Date.now() + HOLD_MS
-    }
     await this.#auditLimit(
       "limit_resume",
       "limit-resume",

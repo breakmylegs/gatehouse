@@ -329,6 +329,7 @@ function SessionPane({
   }
   const [renaming, setRenaming] = useState(false)
   const [goalOpen, setGoalOpen] = useState(false)
+  const [bypassOpen, setBypassOpen] = useState(false)
   // G31: the evidence for this session's work, above its transcript.
   const [walkthrough, setWalkthrough] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
@@ -521,18 +522,10 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
-    // Owner, 5 Nov: limit protection off for this session for a while; it comes back on by itself.
-    ...(protectedUntil(session)
-      ? [
-          {
-            label: "Turn limit protection back on",
-            onSelect: () => setProtection(session.id, null),
-          },
-        ]
-      : PROTECTION_HOURS.map((h) => ({
-          label: `Limit protection off for ${h === 1 ? "1 hour" : `${h} hours`}`,
-          onSelect: () => setProtection(session.id, h * 60),
-        }))),
+    // Owner, 9 Nov: past the limits in Settings only by a bypass for this session, with a time or a most it may spend.
+    session.bypass
+      ? { label: "End the limit bypass", onSelect: () => void setBypass(session.id, null) }
+      : { label: "Bypass the limits...", onSelect: () => setBypassOpen(true) },
     // B25: carry on until a check passes, while Extreme approval carries on.
     ...(chat
       ? []
@@ -959,8 +952,11 @@ function SessionPane({
         {session.state === "error" ? <StoppedLine session={session} /> : null}
         {session.state === "starting" ? <ComingBack session={session} /> : null}
         {session.paused ? <PausedLine session={session} paused={session.paused} /> : null}
-        {!session.paused && protectedUntil(session) ? (
-          <ProtectionOffLine session={session} />
+        {!session.paused && session.bypass ? <BypassLine session={session} /> : null}
+        {!session.paused && !session.bypass && bypassOpen ? (
+          <div className="pane-stopped">
+            <BypassForm session={session} onClose={() => setBypassOpen(false)} />
+          </div>
         ) : null}
         {session.forkOf ? (
           // CH-07: carried on from an imported claude.ai chat, and not synced back.
@@ -1434,58 +1430,139 @@ function StoppedLine({ session }: { session: SessionInfo }) {
   )
 }
 
-/**
- * A session Codehouse paused at the plan's 5-hour limit (owner, 31 Oct): why, when it starts again by itself, and a
- * way to start it now.
- */
-/** Owner, 5 Nov: how long limit protection may be off for, in hours. At most a day; then it is on again by itself. */
-export const PROTECTION_HOURS = [1, 3, 8, 24] as const
+/** Owner, 9 Nov: how long a bypass of the limits may last, in minutes, and how much it may spend, in dollars. */
+export const BYPASS_MINUTES = [30, 60, 180, 480, 1440] as const
+export const BYPASS_USD = [5, 10, 25, 50, 100] as const
 
-/** When limit protection comes back on for this session, if it is off now. */
-export function protectedUntil(session: SessionInfo): string | undefined {
-  const until = session.protectionOffUntil
-  return until && Date.parse(until) > Date.now() ? until : undefined
-}
+const minutesLabel = (m: number) =>
+  m < 60 ? `${m} minutes` : m === 60 ? "1 hour" : `${m / 60} hours`
 
-function setProtection(sessionId: string, offMinutes: number | null): void {
-  void send({ type: "set_limit_protection", sessionId, offMinutes }).then((r) => {
-    if (!r.ok) toast.error(r.error?.message ?? "Limit protection could not be changed")
+function setBypass(
+  sessionId: string,
+  b: { minutes?: number; maxUsd?: number } | null,
+): Promise<boolean> {
+  return send(
+    b === null
+      ? { type: "set_limit_bypass", sessionId, end: true }
+      : { type: "set_limit_bypass", sessionId, ...b },
+  ).then((r) => {
+    if (!r.ok) toast.error(r.error?.message ?? "The bypass could not be changed")
     else
-      toast(
-        offMinutes === null
-          ? "Limit protection is on again"
-          : "Limit protection is off for a while",
-        {
-          id: "protection",
-        },
-      )
+      toast(b === null ? "The limits in Settings apply to this session again" : "Bypass set", {
+        id: "bypass",
+      })
+    return r.ok
   })
 }
 
 /**
- * Limit protection off for this session (owner, 5 Nov): neither the plan's 5-hour limit nor the spending cap pauses it
- * until the time shown, and then both apply again by themselves.
+ * Owner, 9 Nov: going past the limits in Settings, for this session only, with a time, a most it may spend, or both.
+ * Whichever runs out first ends it, and the session pauses again until you set another.
  */
-function ProtectionOffLine({ session }: { session: SessionInfo }) {
-  const until = protectedUntil(session)!
+function BypassForm({ session, onClose }: { session: SessionInfo; onClose?: () => void }) {
+  const [minutes, setMinutes] = useState("")
+  const [usd, setUsd] = useState("")
+  const [busy, setBusy] = useState(false)
+  const maxUsd = usd.trim() ? Number(usd) : undefined
+  const usdBad = maxUsd !== undefined && !(Number.isFinite(maxUsd) && maxUsd > 0 && maxUsd <= 1000)
+  const ready = (minutes !== "" || maxUsd !== undefined) && !usdBad
+  return (
+    <div className="grid gap-1.5" role="group" aria-label="Bypass the limits for this session">
+      <span className="text-[13px]">
+        Keep going past the limits in Settings, for this session only. Give it a time, a most it
+        may spend, or both; when either runs out it pauses again.
+      </span>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-0.5 text-[13px]">
+          <span>For</span>
+          <select
+            className="field !min-h-7 !py-0"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+          >
+            <option value="">No time limit</option>
+            {BYPASS_MINUTES.map((m) => (
+              <option key={m} value={m}>
+                {minutesLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-0.5 text-[13px]">
+          <span>Spending at most, in $</span>
+          <input
+            className="field !min-h-7 w-28 !py-0"
+            inputMode="decimal"
+            list={`bypass-usd-${session.id}`}
+            placeholder="No limit"
+            value={usd}
+            aria-invalid={usdBad || undefined}
+            onChange={(e) => setUsd(e.target.value)}
+          />
+          <datalist id={`bypass-usd-${session.id}`}>
+            {BYPASS_USD.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        </label>
+        <button
+          type="button"
+          className="btn btn-primary !min-h-7"
+          disabled={!ready || busy}
+          onClick={() => {
+            setBusy(true)
+            void setBypass(session.id, {
+              ...(minutes ? { minutes: Number(minutes) } : {}),
+              ...(maxUsd !== undefined ? { maxUsd } : {}),
+            }).then((ok) => {
+              setBusy(false)
+              if (ok) onClose?.()
+            })
+          }}
+        >
+          {busy ? "Setting" : "Keep going"}
+        </button>
+        {onClose ? (
+          <button type="button" className="btn !min-h-7" onClick={onClose}>
+            Cancel
+          </button>
+        ) : null}
+      </div>
+      {usdBad ? (
+        <span className="text-[13px] text-sev">Give an amount above $0 and at most $1,000.</span>
+      ) : !ready ? (
+        <span className="text-[12.5px] text-mut">Choose a time, an amount, or both.</span>
+      ) : null}
+    </div>
+  )
+}
+
+/** A bypass running: how long it has left and what it may still spend, and a way to end it now. */
+function BypassLine({ session }: { session: SessionInfo }) {
+  const b = session.bypass!
+  const parts = [
+    b.until ? `until ${clock(b.until) || "later today"}` : "",
+    b.maxUsd !== undefined
+      ? `up to $${b.maxUsd.toFixed(2)} of spending ($${b.spentUsd.toFixed(2)} so far)`
+      : "",
+  ].filter(Boolean)
   return (
     <div role="status" className="pane-stopped">
       <span>
-        <strong>Limit protection off</strong> until {clock(until) || "later today"}: the plan's
-        5-hour limit and the spending cap do not pause this session until then. It comes back on by
-        itself.
+        <strong>Limits bypassed</strong> for this session {parts.join(" or ")}, whichever comes
+        first. Then the limits in Settings apply again and it pauses if they are still over.
       </span>
-      <button
-        type="button"
-        className="btn !min-h-7"
-        onClick={() => setProtection(session.id, null)}
-      >
-        Turn back on
+      <button type="button" className="btn !min-h-7" onClick={() => void setBypass(session.id, null)}>
+        End the bypass
       </button>
     </div>
   )
 }
 
+/**
+ * A session Codehouse paused at a limit in Settings (owner, 31 Oct; 9 Nov): why, when it starts again by itself, Start
+ * now for once the limit is no longer over, and a bypass to keep going past it.
+ */
 function PausedLine({
   session,
   paused,
@@ -1495,7 +1572,7 @@ function PausedLine({
 }) {
   const [busy, setBusy] = useState(false)
   return (
-    <div role="status" className="pane-stopped">
+    <div role="status" className="pane-stopped flex-wrap">
       {paused.reason === "spend" ? (
         // B20: today's spending over every session reached the cap in Settings.
         <span>
@@ -1527,22 +1604,7 @@ function PausedLine({
       >
         {busy ? "Starting" : "Start now"}
       </button>
-      <label className="flex items-center gap-1 text-[13px]">
-        <span>Or keep going for</span>
-        <select
-          className="field !min-h-7 !py-0"
-          aria-label="Turn limit protection off for"
-          value=""
-          onChange={(e) => e.target.value && setProtection(session.id, Number(e.target.value) * 60)}
-        >
-          <option value="">choose…</option>
-          {PROTECTION_HOURS.map((h) => (
-            <option key={h} value={h}>
-              {h === 1 ? "1 hour" : `${h} hours`}
-            </option>
-          ))}
-        </select>
-      </label>
+      <BypassForm session={session} />
       {/* B21: or carry a chat on now with a model you allow, no looser with your words than Claude. */}
       <FallbackButton session={session} />
     </div>

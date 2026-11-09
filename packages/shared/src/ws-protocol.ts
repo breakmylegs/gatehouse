@@ -101,6 +101,17 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     offMinutes: z.number().int().min(1).max(1440).nullable(),
   }),
+  /**
+   * Owner, 9 Nov: bypass the limits in Settings for this session for so many minutes, up to so much spending, or both
+   * (whichever runs out first), or end the bypass with neither. Desktop only.
+   */
+  z.object({
+    type: z.literal("set_limit_bypass"),
+    sessionId: Id,
+    minutes: z.number().int().min(1).max(1440).optional(),
+    maxUsd: z.number().positive().max(1000).optional(),
+    end: z.boolean().optional(),
+  }),
   /** How much of this computer a session may use: Low, Medium or High. */
   z.object({
     type: z.literal("set_resources"),
@@ -324,8 +335,18 @@ export const SessionInfo = z.object({
   historyUntil: z.string().max(100).optional(),
   /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */
   worktree: z.object({ branch: z.string(), repo: z.string() }).optional(),
-  /** Owner, 5 Nov: neither the plan limit nor the spending cap pauses it until then; after it, both apply again. */
-  protectionOffUntil: z.string().optional(),
+  /**
+   * Owner, 9 Nov: your bypass of the limits in Settings for this session, while it lasts: until when, the most it may
+   * spend, and what it has spent so far. When either runs out the limits apply again.
+   */
+  bypass: z
+    .object({
+      since: z.string(),
+      until: z.string().optional(),
+      maxUsd: z.number().optional(),
+      spentUsd: z.number(),
+    })
+    .optional(),
   /** CH-07: carried on here from an imported claude.ai chat, at this message of it. Not synced back. */
   forkOf: z.object({ conversation: z.string(), message: z.string() }).optional(),
   /**
