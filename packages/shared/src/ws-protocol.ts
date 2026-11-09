@@ -82,6 +82,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     worktree: z.object({ base: z.string().max(100).optional() }).optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
+  /** C-004: how committed this computer's memory is, the point in Settings, and the idle sessions that could be suspended. */
+  z.object({ type: z.literal("memory_status") }),
+  /** C-004: suspends an idle session to free memory; Start again brings it back. */
+  z.object({ type: z.literal("suspend_session"), sessionId: Id }),
   /** New chat or the quick prompt is open: have a chat ready for the first message (the warm chat). */
   z.object({ type: z.literal("warm_chat") }),
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
@@ -319,6 +323,8 @@ export const SessionInfo = z.object({
   backgroundTasks: z
     .array(z.object({ id: z.string(), description: z.string(), startedAt: z.string() }))
     .optional(),
+  /** C-004: suspended to free memory; Start again brings it back on the same conversation. Absent from older Hosts. */
+  suspended: z.boolean().optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
   resources: ResourceLevel.optional(),
   /** Which signed-in account it runs on. Absent for the main one. */

@@ -59,6 +59,7 @@ interface Config {
   effortCap?: string
   maxSessions?: number
   spendCapUsd?: number
+  memoryGovernor?: { percent: number; off?: boolean }
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
@@ -118,6 +119,8 @@ interface Values {
   ecTurns: string
   plPause: string
   plResume: boolean
+  /** C-004: a percentage, or "off". */
+  memPoint: string
   effortCap: string
   maxSessions: string
   spendCap: string
@@ -173,6 +176,7 @@ function valuesOf(d: SettingsData): Values {
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     plResume: c.planLimitPause?.noAutoResume !== true,
+    memPoint: c.memoryGovernor?.off ? "off" : String(c.memoryGovernor?.percent ?? 85),
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
@@ -259,6 +263,14 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.maxSessions
   if (v.spendCap) body.spendCapUsd = Number(v.spendCap)
   else delete body.spendCapUsd
+  // C-004: absent is 85%, so the default is not written; a percentage is kept beside off for an older reader.
+  if (v.memPoint === "85" && !d.saved.memoryGovernor) delete body.memoryGovernor
+  else
+    body.memoryGovernor = {
+      ...(d.saved.memoryGovernor ?? {}),
+      percent: v.memPoint === "off" ? (d.saved.memoryGovernor?.percent ?? 85) : Number(v.memPoint),
+      ...(v.memPoint === "off" ? { off: true } : { off: undefined }),
+    }
   // A name the Host accepts, or none: half-typed or odd names are not saved.
   if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
   else delete body.outputStyle
@@ -337,6 +349,7 @@ export const DEFAULT_VALUES: Values = {
   ecTurns: "200",
   plPause: "95",
   plResume: true,
+  memPoint: "85",
   effortCap: "",
   maxSessions: "",
   spendCap: "",
@@ -607,6 +620,7 @@ export function Settings() {
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
+  const memChanged = differs(v, ["memPoint"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
@@ -1080,6 +1094,25 @@ export function Settings() {
                   {EFFORTS.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Memory" gap="gap-2" changed={memChanged}>
+              <Field
+                label="Start nothing new when this computer's memory is committed past"
+                help="The commit charge is what Windows has promised to programs, against what memory and the page file can hold; past it programs fail. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on."
+              >
+                <select
+                  className="field"
+                  value={v.memPoint}
+                  onChange={(e) => change({ memPoint: e.target.value }, "Memory")}
+                >
+                  {withCurrent(["75", "80", "85", "90", "95", "off"], v.memPoint).map((n) => (
+                    <option key={n} value={n}>
+                      {n === "off" ? "Never: start whatever is asked" : `${n}%${n === "85" ? " (recommended)" : ""}`}
                     </option>
                   ))}
                 </select>

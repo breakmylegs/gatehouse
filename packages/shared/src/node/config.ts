@@ -293,6 +293,14 @@ function build(loose: boolean) {
     /** B09: the most sessions and chats open at once, 1 to 32. Absent: no limit. Older versions keep it unused. */
     maxSessions: z.number().int().min(1).max(32).optional(),
     effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+    /**
+     * C-004: from this commit charge (a share of what RAM and the page file can hold) Codehouse starts no new session,
+     * chat or page look. Absent: 85%. Older versions keep it unused.
+     */
+    memoryGovernor: z
+      .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
+      .passthrough()
+      .optional(),
     planLimitPause: obj({
       percent: z.number().int().min(50).max(99),
       off: z.boolean().optional(),

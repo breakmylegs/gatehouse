@@ -1,3 +1,4 @@
+import { MemoryCard } from "../components/MemoryCard"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import NumberFlow from "@number-flow/react"
 import { useEffect, useState } from "react"
@@ -146,6 +147,8 @@ export function Sessions() {
   const freshPath = projects ? `${projects.replace(/[\\/]+$/, "")}\\${name}` : ""
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
+  // C-004: refused for want of memory; the card explains and offers idle sessions to suspend.
+  const [shortOfMemory, setShortOfMemory] = useState(false)
   // B10: a session in a new worktree of the folder's repository, from a branch, tag or commit you name.
   const [inWorktree, setInWorktree] = useState(false)
   const [base, setBase] = useState("")
@@ -211,6 +214,7 @@ export function Sessions() {
     setBusy(true)
     setStartedAt(Date.now())
     setError(undefined)
+    setShortOfMemory(false)
     if (several) return void (await startRuns())
     const r = await send(
       {
@@ -233,6 +237,7 @@ export function Sessions() {
           ? "This is taking longer than usual. If the session starts it appears in the list below, and you can open it from there."
           : (r.error?.message ?? "The session did not start"),
       )
+      setShortOfMemory(r.error?.code === "memory")
       return
     }
     const { sessionId: id, info } = r.data as {
@@ -449,7 +454,9 @@ export function Sessions() {
           mode. {BYPASS_NOTE} A missing folder is created.
         </p>
         {busy ? <StartProgress since={startedAt} /> : null}
-        {error ? (
+        {shortOfMemory ? (
+          <MemoryCard />
+        ) : error ? (
           <p role="alert" className="m-0 font-semibold text-sev">
             {error}
           </p>

@@ -1504,6 +1504,7 @@ const LIVE_SETTINGS = [
   "maxSessions",
   "telemetry",
   "spendCapUsd",
+  "memoryGovernor",
   "outputStyle",
   "worktreeLocation",
   "pullRequests",

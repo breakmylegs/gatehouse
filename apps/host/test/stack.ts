@@ -32,7 +32,11 @@ export interface StackOptions {
 
 export interface Stack {
   /** What a session calls for one look at the limits (owner, 9 Nov); a test sets it. */
-  hooks: { limitCheck?: () => Promise<void> }
+  hooks: {
+    limitCheck?: () => Promise<void>
+    /** C-004: the memory governor's check before a new session; a test sets it. */
+    admit?: (what: string, detail?: Record<string, unknown>) => Promise<void>
+  }
   sdk: FakeSdk
   repo: string
   dir: string
@@ -163,6 +167,11 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
   const deps: SessionDeps = {
     limitCheck: async () => {
       await hooks.limitCheck?.()
+    },
+    memory: {
+      admit: async (what, detail) => {
+        await hooks.admit?.(what, detail)
+      },
     },
     queryFn: sdk.queryFn,
     config: () => config,

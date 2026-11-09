@@ -1,4 +1,5 @@
 import { sessionDetails } from "./session-details.js"
+import { MemoryRefusedError, type MemoryGovernor } from "./memory-governor.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import fs from "node:fs"
 import type { SignInFlow } from "./signin.js"
@@ -54,6 +55,8 @@ export interface HostApp {
   checkpoints: CheckpointManager
   usage: UsageStore
   account: AccountMonitor
+  /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
+  memory?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
   limits?: { over(account: string): Promise<string | undefined> }
   /** Starts Anthropic's own sign-in. Absent in tests that do not need it. */
@@ -461,6 +464,38 @@ export class HostServer {
       case "warm_chat":
         a.manager.warmChat()
         return undefined
+      case "memory_status": {
+        const st = (await a.memory?.status()) ?? { over: false }
+        return {
+          ...st,
+          idle: a.manager.idle().map((i) => ({ id: i.id, title: i.title ?? i.project, project: i.project })),
+        }
+      }
+      case "suspend_session": {
+        // Recorded before it applies; refused when it cannot be.
+        const s = this.#session(cmd.sessionId)
+        const written = await a.audit.record({
+          session: s.id,
+          event: "session_suspended",
+          channel: "desktop",
+          tool: "session",
+          cwd: s.cwd,
+          project: s.project,
+          input: { why: "memory" },
+          verdict: {
+            outcome: "allow",
+            ruleId: "memory-governor",
+            reason: "You suspended this idle session to free memory.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!written) throw new CommandError("audit-failure", "It could not be recorded, so it was not suspended")
+        a.terminal?.stop(s.id)
+        return { info: await a.manager.suspend(s.id) }
+      }
       case "close_session":
         a.terminal?.stop(cmd.sessionId)
         // One that could not come back after a restart is only put away.
@@ -862,6 +897,7 @@ function classify(e: unknown): CommandError {
   if (e instanceof KillSwitchEngagedError) return new CommandError("kill-switch", e.message)
   if (e instanceof SessionFolderError) return new CommandError("folder-missing", e.message)
   if (e instanceof SessionLimitError) return new CommandError("session-limit", e.message)
+  if (e instanceof MemoryRefusedError) return new CommandError("memory", e.message)
   if (e instanceof ManagedPolicyError) return new CommandError("managed-policy", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)

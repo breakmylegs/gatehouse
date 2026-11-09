@@ -1,3 +1,4 @@
+import { MemoryCard } from "../components/MemoryCard"
 import { useEffect, useState } from "react"
 import { chatName } from "../lib/chatName"
 import { api } from "../lib/api"
@@ -32,6 +33,8 @@ export function NewChat() {
   const [busy, setBusy] = useState(false)
   const [startedAt, setStartedAt] = useState(0)
   const [error, setError] = useState<string>()
+  // C-004: refused for want of memory; the card explains and offers idle sessions to suspend.
+  const [shortOfMemory, setShortOfMemory] = useState(false)
   // The project it starts in, if any, and the instructions for this chat alone (owner's plan, W1-07).
   const [projects, setProjects] = useState<string[]>([])
   // B17: what each project lets its chats use; a project not in here allows every provider.
@@ -106,6 +109,7 @@ export function NewChat() {
     setBusy(true)
     setStartedAt(Date.now())
     setError(undefined)
+    setShortOfMemory(false)
     if (comparing) return void startCompare(said)
     const r = await send(
       {
@@ -133,6 +137,7 @@ export function NewChat() {
           ? "This is taking longer than usual. If it starts it appears under Questions in the sidebar."
           : (r.error?.message ?? "The chat did not start"),
       )
+      setShortOfMemory(r.error?.code === "memory")
       return
     }
     const id = (r.data as { sessionId: string }).sessionId
@@ -383,7 +388,9 @@ export function NewChat() {
           </p>
         ) : null}
         {busy ? <StartProgress since={startedAt} chat /> : null}
-        {error ? (
+        {shortOfMemory ? (
+          <MemoryCard />
+        ) : error ? (
           <p role="alert" className="m-0 font-semibold text-sev">
             {error}
           </p>

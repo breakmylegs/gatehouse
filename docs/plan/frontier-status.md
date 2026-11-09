@@ -39,7 +39,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 |---|---|---|---|---|---|---|
 | C-001 | Memory-aware test sharding by file | Wave 1 | built | slice/C-001-test-shards | BUILD_REPORT "Frontier C-001" | Three runs under 70% load owed |
 | C-002 | Gate refuses --skip-tests | Wave 1 | built | slice/C-002-skip-tests-override | BUILD_REPORT "Frontier C-002" | Signed per-version override, audited |
-| C-004 | Memory governor | Wave 1 | todo | | | Job objects exist (D10); no governor |
+| C-004 | Memory governor | Wave 1 | built | slice/C-004-memory-governor | BUILD_REPORT "Frontier C-004" | 85% commit by default; new sessions, chats and page looks refused with a card; idle sessions offered for suspension |
 | C-013 | Grant lifetimes | Wave 1 | built | slice/C-013-grant-lifetimes | BUILD_REPORT "Frontier C-013" | Expiry (30 days by default), folder scope, use limits; a sidecar file so older versions still read the rules |
 | C-010 | Audit-backed session timeline | Wave 2 | todo | | | Walkthrough (G31) and audit by session exist |
 | C-011 | Signed timeline export | Wave 2 | todo | | | Audit bundle (G30) exists, not signed |

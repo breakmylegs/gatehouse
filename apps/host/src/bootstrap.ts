@@ -1,3 +1,4 @@
+import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
@@ -348,7 +349,16 @@ export function createHost(opts: HostOptions = {}): Host {
   const artifacts = new ArtifactStore(path.join(gatehouseDataDir(env), "artifacts"), (t) =>
     redact(t, { terms: config.redactTerms }),
   )
+  // C-004: above the commit charge in Settings, nothing heavy of Codehouse's own starts. Read through the helper, found
+  // when first needed (below); a reading it cannot have refuses nothing.
+  const memory = new MemoryGovernor({
+    read: helperReader(() => helper()),
+    point: () => memoryPoint(config.memoryGovernor),
+    audit,
+    log,
+  })
   const deps: SessionDeps = {
+    memory,
     queryFn,
     worktrees,
     sessionMeta: (id) => sessionMeta.get(id),
@@ -462,11 +472,13 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(kind !== "chat" && config.browserTools === true
           ? {
               pages: {
-                look: (url: string) =>
-                  lookAtPage(url, {
+                look: async (url: string) => {
+                  await memory.admit("page look", { sessionId })
+                  return await lookAtPage(url, {
                     edge: () => findEdge(),
                     redact: (t) => redactString(t, { terms: config.redactTerms }),
-                  }),
+                  })
+                },
               },
             }
           : {}),
@@ -973,6 +985,7 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     account,
     limits: limitPauser,
+    memory,
     audit,
     engine,
     policy: () => store.current,

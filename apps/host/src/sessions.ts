@@ -1,3 +1,4 @@
+import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
 import crypto from "node:crypto"
@@ -315,6 +316,8 @@ export interface SessionDeps {
   }
   /** B37: why IT's signed policy could not be checked, if it could not; then no session starts. */
   managedPolicyProblem?: () => string | undefined
+  /** C-004: refuses a new session or chat while this computer's memory is committed over the point in Settings. */
+  memory?: { admit(what: HeavyJob, detail?: Record<string, unknown>): Promise<void> }
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
   resumeSettings?: (sdkSessionId: string) => {
     model?: string
@@ -423,6 +426,8 @@ export interface StartSessionOptions {
     crashed?: boolean
     /** It was paused at the plan limit when Codehouse closed: it comes back still paused, until the limit resets. */
     paused?: NonNullable<SessionInfo["paused"]>
+    /** C-004: you started again a session suspended to free memory, so the memory governor is asked first. */
+    wake?: boolean
   }
   /** How much of this computer it may use; High (no limits) when not given. */
   resources?: ResourceLevel
@@ -1879,6 +1884,13 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         ...opts,
       }
     }
+    // C-004: nothing new starts while memory is committed over the point in Settings; one coming back after a restart
+    // or a force stop was open before and takes back what it had.
+    if (!opts.restore || opts.restore.wake)
+      await this.#deps.memory?.admit(
+        opts.restore?.wake ? "session started again" : opts.kind === "chat" ? "chat" : "session",
+        opts.restore ? { sessionId: opts.restore.id } : { cwd: opts.cwd },
+      )
     const config = this.#deps.config()
     // B09: the most open at once, over every account and both kinds. A session coming back after a restart is not
     // counted against it: it was open before.
@@ -2256,6 +2268,47 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     await Promise.allSettled([...this.#sessions.values()].map((s) => s.stop("kill-switch")))
   }
 
+  /** C-004: the sessions that could be suspended to free memory: open, idle, nothing in the background or waiting. */
+  idle(): SessionInfo[] {
+    return [...this.#sessions.values()]
+      .filter((s) => s.live && this.#warm?.session !== s)
+      .map((s) => s.info())
+      .filter(
+        (i) =>
+          i.state === "idle" && !i.background?.length && i.pendingApprovals === 0 && !i.evaluation,
+      )
+  }
+
+  /**
+   * C-004: suspends an idle session to free memory. Its Claude Code process ends; the session stays listed, and
+   * Start again brings it back on the same conversation under the same id (asking the memory governor first). Only
+   * an idle one: nothing running, in the background or waiting for you.
+   */
+  async suspend(id: string): Promise<SessionInfo> {
+    const s = this.#sessions.get(id)
+    if (!s) throw new Error("That session is not open")
+    if (!this.idle().some((i) => i.id === id))
+      throw new Error("Only a session that is idle, with nothing in the background or waiting, can be suspended.")
+    const opts = s.restartOptions()
+    const before = s.info()
+    await s.close()
+    this.#sessions.delete(id)
+    const info: SessionInfo = {
+      ...before,
+      state: "error",
+      suspended: true,
+      error:
+        "Suspended to free memory. Start again brings it back on the same conversation, when memory allows.",
+    }
+    delete info.background
+    this.#coming.set(id, {
+      info,
+      opts: { ...opts, restore: { id, createdAt: s.createdAt, wasRunning: false, wake: true } },
+    })
+    this.emit("session", info)
+    return info
+  }
+
   /**
    * Ends a session's Claude Code process at once, for a session that does not stop when asked, and starts it again
    * on the same conversation under the same id, so its pane and transcript stay.
@@ -2264,12 +2317,17 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     const s = this.#sessions.get(id)
     const c = this.#coming.get(id)
     if (!s && c?.info.state === "error" && c.opts.restore) {
-      // One that could not come back: Start again tries once more, without carrying on by itself.
+      // One that could not come back: Start again tries once more, without carrying on by itself. A suspended one
+      // asks the memory governor first (C-004), and stays suspended if it is refused.
+      if (c.info.suspended) {
+        await this.#deps.memory?.admit("session started again", { sessionId: id })
+      }
       const info: SessionInfo = { ...c.info, state: "starting" }
       delete info.error
+      delete info.suspended
       this.#coming.set(id, { ...c, info })
       this.emit("session", info)
-      return await this.start({ ...c.opts, restore: { ...c.opts.restore, forced: true } })
+      return await this.start({ ...c.opts, restore: { ...c.opts.restore, forced: true, wake: false } })
     }
     if (!s) throw new Error("That session is not open")
     const again = s.restartOptions()
