@@ -208,7 +208,8 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 - Its name opens a menu: show another session here, open one beside it, rename it, pin it to the top of the sidebar, export it as Markdown, close the pane, stop, close the session, or archive it (it stops and leaves the sidebar; Earlier sessions keeps it).
 - Each message shows the time it arrived, and the date when it was not today.
 - **Search** looks through the session's files for words or a regular expression (**Match case** if you want it), skipping what git ignores; a result opens its file. **Replace…** shows every line it would change, file by file, before anything changes; **Replace in these files** then changes only files still as shown, after a checkpoint, so **Undo** in Changes puts them back. Secrets files are never changed, and a folder that is not in git cannot be replaced in, since it could not be undone.
-- **Plan**, **Files**, **Search**, **Changes**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
+- **Git** shows the session's repository as git sees it. **History** is the commit graph (up to 10,000 commits). **Stage** lists each change not yet staged, and those staged, with **Stage** or **Unstage** for one change at a time; only git's index changes, never your files. **Conflicts** lists files a merge left in conflict: **Open** shows one in the viewer to edit, and **Mark resolved** works once no conflict markers are left in it. **Blame** shows who last changed each line of a file. Nothing here commits, pushes or merges, and each change to the index is recorded.
+- **Plan**, **Files**, **Search**, **Changes**, **Git**, **Terminal** and **Browser** open those panels beside the transcript. Choose the button again, Close or Esc to put one away. A chat has none of them.
 
 **Under the prompt box**
 

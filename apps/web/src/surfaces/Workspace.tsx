@@ -63,6 +63,7 @@ import { MoreLines, shownLines } from "../components/MoreLines"
 import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
 import { Walkthrough } from "../components/Walkthrough"
 import { SearchPane } from "../components/SearchPane"
+import { GitPane } from "../components/GitPane"
 import { PictureViewer } from "../components/PictureViewer"
 import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
@@ -260,13 +261,14 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
 }
 
 type Side =
-  "plan" | "files" | "search" | "changes" | "terminal" | "artifacts" | "sources" | "memory"
+  "plan" | "files" | "search" | "changes" | "git" | "terminal" | "artifacts" | "sources" | "memory"
 /** Each side panel's icon from the Codehouse pack. */
 const SIDE_ICON: Record<Side, IconName> = {
   plan: "plan",
   files: "files",
   search: "search",
   changes: "changes",
+  git: "checkpoint",
   terminal: "terminal",
   artifacts: "artifacts",
   sources: "sources",
@@ -277,6 +279,7 @@ const SIDE_LABEL: Record<Side, string> = {
   files: "Files",
   search: "Search",
   changes: "Changes",
+  git: "Git",
   terminal: "Terminal",
   artifacts: "Artifacts",
   sources: "Sources",
@@ -702,7 +705,7 @@ function SessionPane({
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
-            {(["plan", "files", "search", "changes", "terminal"] as const).map((t) => (
+            {(["plan", "files", "search", "changes", "git", "terminal"] as const).map((t) => (
               <button
                 key={t}
                 ref={(el) => {
@@ -932,6 +935,8 @@ function SessionPane({
               <ChangesPane sessionId={session.id} cwd={session.cwd} />
             ) : side === "search" ? (
               <SearchPane sessionId={session.id} onOpen={setOpened} />
+            ) : side === "git" ? (
+              <GitPane sessionId={session.id} onOpen={setOpened} />
             ) : side === "files" ? (
               <FilesPanel
                 sessionId={session.id}

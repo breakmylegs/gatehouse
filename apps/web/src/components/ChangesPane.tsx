@@ -227,7 +227,6 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
             <button
               type="button"
               className="btn"
-              title="Claude reviews these changes and lists what it finds, for you to fix or dismiss one by one"
               onClick={() => {
                 composeIn(sessionId, REVIEW_PROMPT)
                 toast("A review request is in the prompt box. Send it when ready.", {

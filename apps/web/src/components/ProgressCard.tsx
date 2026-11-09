@@ -68,10 +68,7 @@ export function StepList({ todos, limit }: { todos: Todo[]; limit?: number }) {
             <span className="text-[12px] font-semibold">Ticked while the tests were failing</span>
           ) : null}
           {t.commits?.length ? (
-            <span
-              className="mono ml-auto shrink-0 text-[12px] text-mut"
-              title="Commits made during this step"
-            >
+            <span className="mono ml-auto shrink-0 text-[12px] text-mut">
               <span className="sr-only">Commits: </span>
               {t.commits.join(", ")}
             </span>

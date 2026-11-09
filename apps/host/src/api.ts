@@ -20,6 +20,7 @@ import { registerContinueRoutes, type ContinueDeps } from "./chat/continue-api.j
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import { registerBoardRoutes, type BoardStore, type Card } from "./board.js"
+import { registerGitPanelRoutes } from "./git-panel.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
 import { readItModels } from "./providers/it-models.js"
@@ -591,6 +592,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerWorktreeRoutes(app, ctx)
   if (ctx.board)
     registerBoardRoutes(app, { board: ctx.board.store, audit: ctx.audit, start: ctx.board.start })
+  registerGitPanelRoutes(app, ctx)
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
