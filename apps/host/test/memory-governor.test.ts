@@ -20,12 +20,13 @@ const at = (percent: number): MemoryReading => ({
   physAvail: 2 * GB,
 })
 
-function governor(reading: () => MemoryReading | undefined, point: number | undefined = 85) {
+/** point null: the governor is off. */
+function governor(reading: () => MemoryReading | undefined, point: number | null = 85) {
   const records: Array<Record<string, unknown>> = []
   let clock = 0
   const g = new MemoryGovernor({
     read: async () => reading(),
-    point: () => point,
+    point: () => point ?? undefined,
     audit: {
       record: async (r) => {
         records.push(r as unknown as Record<string, unknown>)
@@ -55,7 +56,7 @@ describe("the memory governor (C-004)", () => {
 
   it("lets things start below the point, when off, and when memory cannot be read", async () => {
     await expect(governor(() => at(84)).g.admit("chat")).resolves.toBeUndefined()
-    await expect(governor(() => at(99), undefined).g.admit("chat")).resolves.toBeUndefined()
+    await expect(governor(() => at(99), null).g.admit("chat")).resolves.toBeUndefined()
     await expect(governor(() => undefined).g.admit("chat")).resolves.toBeUndefined()
     expect([memoryPoint(undefined), memoryPoint({ percent: 70 }), memoryPoint({ percent: 30 })]).toEqual([
       85, 70, 85,

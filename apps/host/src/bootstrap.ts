@@ -351,14 +351,14 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   // C-004: above the commit charge in Settings, nothing heavy of Codehouse's own starts. Read through the helper, found
   // when first needed (below); a reading it cannot have refuses nothing.
-  const memory = new MemoryGovernor({
+  const governor = new MemoryGovernor({
     read: helperReader(() => helper()),
     point: () => memoryPoint(config.memoryGovernor),
     audit,
     log,
   })
   const deps: SessionDeps = {
-    memory,
+    governor,
     queryFn,
     worktrees,
     sessionMeta: (id) => sessionMeta.get(id),
@@ -473,7 +473,7 @@ export function createHost(opts: HostOptions = {}): Host {
           ? {
               pages: {
                 look: async (url: string) => {
-                  await memory.admit("page look", { sessionId })
+                  await governor.admit("page look", { sessionId })
                   return await lookAtPage(url, {
                     edge: () => findEdge(),
                     redact: (t) => redactString(t, { terms: config.redactTerms }),
@@ -985,7 +985,7 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     account,
     limits: limitPauser,
-    memory,
+    governor,
     audit,
     engine,
     policy: () => store.current,

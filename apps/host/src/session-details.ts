@@ -34,12 +34,10 @@ function git(cwd: string, args: string[]): Promise<string> {
 export async function repoOf(cwd: string): Promise<SessionDetails["repo"]> {
   try {
     const top = path.resolve(await git(cwd, ["rev-parse", "--show-toplevel"]))
-    const branch = await git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]).catch(() => "")
-    return {
-      name: path.basename(top),
-      top,
-      ...(branch && branch !== "HEAD" ? { branch } : {}),
-    }
+    // symbolic-ref, not rev-parse: it names the branch of a repository with no commits yet, and gives nothing when
+    // HEAD is detached.
+    const branch = await git(cwd, ["symbolic-ref", "--short", "-q", "HEAD"]).catch(() => "")
+    return { name: path.basename(top), top, ...(branch ? { branch } : {}) }
   } catch {
     return undefined
   }

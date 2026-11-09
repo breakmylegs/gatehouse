@@ -235,6 +235,10 @@ export interface SessionInfo {
   restarted?: { wasRunning: boolean; forced?: boolean; crashed?: boolean }
   /** What is still working in the background after the turn ended, by description. */
   background?: string[]
+  /** O21: the same work with when each began. */
+  backgroundTasks?: Array<{ id: string; description: string; startedAt: string }>
+  /** C-004: suspended to free memory; Start again brings it back on the same conversation. */
+  suspended?: boolean
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn?: CarryOnStatus
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
@@ -317,7 +321,7 @@ export interface SessionDeps {
   /** B37: why IT's signed policy could not be checked, if it could not; then no session starts. */
   managedPolicyProblem?: () => string | undefined
   /** C-004: refuses a new session or chat while this computer's memory is committed over the point in Settings. */
-  memory?: { admit(what: HeavyJob, detail?: Record<string, unknown>): Promise<void> }
+  governor?: { admit(what: HeavyJob, detail?: Record<string, unknown>): Promise<void> }
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
   resumeSettings?: (sdkSessionId: string) => {
     model?: string
@@ -1887,7 +1891,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     // C-004: nothing new starts while memory is committed over the point in Settings; one coming back after a restart
     // or a force stop was open before and takes back what it had.
     if (!opts.restore || opts.restore.wake)
-      await this.#deps.memory?.admit(
+      await this.#deps.governor?.admit(
         opts.restore?.wake ? "session started again" : opts.kind === "chat" ? "chat" : "session",
         opts.restore ? { sessionId: opts.restore.id } : { cwd: opts.cwd },
       )
@@ -2301,6 +2305,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         "Suspended to free memory. Start again brings it back on the same conversation, when memory allows.",
     }
     delete info.background
+    delete info.backgroundTasks
     this.#coming.set(id, {
       info,
       opts: { ...opts, restore: { id, createdAt: s.createdAt, wasRunning: false, wake: true } },
@@ -2320,7 +2325,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       // One that could not come back: Start again tries once more, without carrying on by itself. A suspended one
       // asks the memory governor first (C-004), and stays suspended if it is refused.
       if (c.info.suspended) {
-        await this.#deps.memory?.admit("session started again", { sessionId: id })
+        await this.#deps.governor?.admit("session started again", { sessionId: id })
       }
       const info: SessionInfo = { ...c.info, state: "starting" }
       delete info.error

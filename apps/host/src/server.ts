@@ -56,7 +56,7 @@ export interface HostApp {
   usage: UsageStore
   account: AccountMonitor
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
-  memory?: Pick<MemoryGovernor, "status">
+  governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
   limits?: { over(account: string): Promise<string | undefined> }
   /** Starts Anthropic's own sign-in. Absent in tests that do not need it. */
@@ -465,7 +465,7 @@ export class HostServer {
         a.manager.warmChat()
         return undefined
       case "memory_status": {
-        const st = (await a.memory?.status()) ?? { over: false }
+        const st = (await a.governor?.status()) ?? { over: false }
         return {
           ...st,
           idle: a.manager.idle().map((i) => ({ id: i.id, title: i.title ?? i.project, project: i.project })),

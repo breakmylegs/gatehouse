@@ -168,7 +168,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     limitCheck: async () => {
       await hooks.limitCheck?.()
     },
-    memory: {
+    governor: {
       admit: async (what, detail) => {
         await hooks.admit?.(what, detail)
       },

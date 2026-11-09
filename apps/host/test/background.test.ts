@@ -73,7 +73,9 @@ describe("work in the background", () => {
     await new Promise((r) => setTimeout(r, 20))
     // The list arrives again with a new task: the one still running keeps its time; the new one gets its own.
     s.sdk.queries.at(-1)?.emit(tasks({ id: "t2", what: "Sweep billing" }, { id: "t3", what: "Lint" }))
-    await vi.waitFor(() => expect(session.info().backgroundTasks).toHaveLength(2))
+    await vi.waitFor(() =>
+      expect(session.info().backgroundTasks?.map((t) => t.id)).toEqual(["t2", "t3"]),
+    )
     const next = session.info().backgroundTasks!
     expect(Date.parse(next[0]!.startedAt)).toBe(began)
     expect(Date.parse(next[1]!.startedAt)).toBeGreaterThan(began)
