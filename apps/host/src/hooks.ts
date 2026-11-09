@@ -200,6 +200,8 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       }
       // The call passed the floor. If it is an edit, take a checkpoint at the start of a burst of edits.
       await deps.checkpoints?.noteEdit(deps.sessionId, cwd, input.tool_name)
+      // G27: and if it is a command that would delete files or throw work away, an undo point before it runs.
+      await deps.checkpoints?.beforeEffects(deps.sessionId, cwd, input.tool_name, toolInput)
       const mode = deps.mode?.() ?? "default"
       if (deps.approver && SELF_APPROVING_MODES.has(mode) && !NOT_JUDGED.has(input.tool_name)) {
         const judged = await deps.approver.evaluate(

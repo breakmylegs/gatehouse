@@ -66,6 +66,7 @@ import {
   writeFileAtomic,
   type GatehouseConfig,
   managedPolicyDir,
+  useShadowCheckpoints,
 } from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
 import { Accounts, type AccountEntry } from "./accounts.js"
@@ -210,6 +211,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const approverTimeout = (): number =>
     store.current?.rules.defaults?.judge?.enabled === true ? 35_000 : APPROVER_TIMEOUT_MS
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
+  // G27: undo points for a folder outside git, kept in Codehouse's data folder, never in the folder itself.
+  useShadowCheckpoints(path.join(gatehouseDataDir(env), "undo"))
   const checkpoints = new CheckpointManager({
     config: () => config,
     policy: () => store.current,
