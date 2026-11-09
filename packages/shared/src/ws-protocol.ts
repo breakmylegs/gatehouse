@@ -255,6 +255,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("search_history"), query: z.string().min(2).max(200) }),
   /** How full a session's context is. */
   z.object({ type: z.literal("context_usage"), sessionId: Id }),
+  /** O21: the computer, repository and branch, and the connectors of a session, for its details panel. */
+  z.object({ type: z.literal("session_details"), sessionId: Id }),
   /** Summarise the older conversation: now between turns, or straight after the running one. */
   z.object({ type: z.literal("compact"), sessionId: Id }),
   z.object({ type: z.literal("refresh_account"), account: z.string().max(20).optional() }),
@@ -313,6 +315,10 @@ export const SessionInfo = z.object({
     .optional(),
   /** What is still working in the background after the turn ended (subagents, shell commands), by description. */
   background: z.array(z.string()).optional(),
+  /** O21: the same work with when each began, for how long it has run. Absent from older Hosts. */
+  backgroundTasks: z
+    .array(z.object({ id: z.string(), description: z.string(), startedAt: z.string() }))
+    .optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
   resources: ResourceLevel.optional(),
   /** Which signed-in account it runs on. Absent for the main one. */

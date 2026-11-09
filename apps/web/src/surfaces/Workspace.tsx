@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { SessionDetails } from "../components/SessionDetails"
 import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
@@ -261,7 +262,16 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
 }
 
 type Side =
-  "plan" | "files" | "search" | "changes" | "git" | "terminal" | "artifacts" | "sources" | "memory"
+  | "plan"
+  | "files"
+  | "search"
+  | "changes"
+  | "git"
+  | "terminal"
+  | "artifacts"
+  | "sources"
+  | "memory"
+  | "details"
 /** Each side panel's icon from the Codehouse pack. */
 const SIDE_ICON: Record<Side, IconName> = {
   plan: "plan",
@@ -273,6 +283,7 @@ const SIDE_ICON: Record<Side, IconName> = {
   artifacts: "artifacts",
   sources: "sources",
   memory: "memory",
+  details: "usage",
 }
 const SIDE_LABEL: Record<Side, string> = {
   plan: "Plan",
@@ -284,6 +295,7 @@ const SIDE_LABEL: Record<Side, string> = {
   artifacts: "Artifacts",
   sources: "Sources",
   memory: "Memory",
+  details: "Details",
 }
 
 function SessionPane({
@@ -605,6 +617,7 @@ function SessionPane({
       data-viewer={opened ? "" : undefined}
       aria-label={`Session ${session.project}`}
     >
+      {/* O21: what this session runs on, its context, connectors, changes and background work. */}
       <header className="pane-head">
         <SessionCode session={session} className="!text-[16px]" />
         {/* Never narrower than the name and its state: the side panel buttons wrap below instead. */}
@@ -695,6 +708,19 @@ function SessionPane({
               <Icon name="memory" size={14} />
               Memory
             </button>
+            <button
+              ref={(el) => {
+                tools.current.details = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === "details"}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide("details")}
+            >
+              <Icon name="usage" size={14} />
+              Details
+            </button>
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
@@ -725,6 +751,19 @@ function SessionPane({
               }
             >
               Browser
+            </button>
+            <button
+              ref={(el) => {
+                tools.current.details = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === "details"}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide("details")}
+            >
+              <Icon name="usage" size={14} />
+              Details
             </button>
           </span>
         )}
@@ -916,7 +955,13 @@ function SessionPane({
               side === "terminal" ? "overflow-hidden" : "overflow-auto",
             )}
           >
-            {side === "artifacts" ? (
+            {side === "details" ? (
+              <SessionDetails
+                session={session}
+                chat={chat}
+                onOpenChanges={chat ? undefined : () => toggleSide("changes")}
+              />
+            ) : side === "artifacts" ? (
               <ArtifactsPane sessionId={session.id} refresh={artifactSaves} />
             ) : side === "sources" ? (
               <SourcesPane items={transcript.items} />

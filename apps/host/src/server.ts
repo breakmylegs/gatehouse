@@ -1,3 +1,4 @@
+import { sessionDetails } from "./session-details.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import fs from "node:fs"
 import type { SignInFlow } from "./signin.js"
@@ -790,6 +791,10 @@ export class HostServer {
         return await this.#history().search(cmd.query)
       case "context_usage":
         return await this.#session(cmd.sessionId).contextUsage()
+      case "session_details": {
+        const s = this.#session(cmd.sessionId)
+        return await sessionDetails(s.cwd, () => s.mcpStatus())
+      }
       case "compact":
         this.#session(cmd.sessionId).compact()
         return undefined

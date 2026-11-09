@@ -527,7 +527,8 @@ export class Session extends EventEmitter<SessionEvents> {
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
-  readonly #background = new Map<string, string>()
+  /** O21: each task's description and when it began, for how long it has run. */
+  readonly #background = new Map<string, { description: string; startedAt: number }>()
   /** Extreme approval's run of automatic turns since your last message. */
   readonly #carry = new CarryOn(() => carryOnLimits(this.#deps.config().extremeCarryOn))
   /** The session's total cost after its last turn, so a run counts only what it spends. */
@@ -645,7 +646,16 @@ export class Session extends EventEmitter<SessionEvents> {
             },
           }
         : {}),
-      ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
+      ...(this.#background.size
+        ? {
+            background: [...this.#background.values()].map((b) => b.description),
+            backgroundTasks: [...this.#background].map(([id, b]) => ({
+              id,
+              description: b.description,
+              startedAt: new Date(b.startedAt).toISOString(),
+            })),
+          }
+        : {}),
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#goal ? { goal: this.#goal } : {}),
@@ -1123,10 +1133,15 @@ export class Session extends EventEmitter<SessionEvents> {
   #noteBackground(m: Record<string, unknown>): void {
     const sub = m.subtype as string
     if (sub === "background_tasks_changed" && Array.isArray(m.tasks)) {
+      // A task still running keeps the time it began (O21: how long each has run).
+      const before = new Map(this.#background)
       this.#background.clear()
       for (const t of m.tasks as Array<Record<string, unknown>>)
         if (typeof t.task_id === "string" && t.ambient !== true)
-          this.#background.set(t.task_id, typeof t.description === "string" ? t.description : "")
+          this.#background.set(t.task_id, {
+            description: typeof t.description === "string" ? t.description : "",
+            startedAt: before.get(t.task_id)?.startedAt ?? Date.now(),
+          })
       this.emit("state", this.info())
     } else if (
       sub === "task_notification" &&
@@ -1244,6 +1259,12 @@ export class Session extends EventEmitter<SessionEvents> {
     // The first answer can come before Claude Code has fetched the numbers (probe, 31 Oct).
     await new Promise((r) => setTimeout(r, PLAN_RETRY_MS))
     return planLimits(await read({ skipBehaviors: true }))
+  }
+
+  /** O21: the session's MCP servers as Claude Code reports them (used only for names, states and kinds). */
+  async mcpStatus(): Promise<unknown> {
+    const q = this.#q as unknown as { mcpServerStatus?: () => Promise<unknown> } | undefined
+    return q?.mcpServerStatus ? await q.mcpServerStatus() : []
   }
 
   /** How full the conversation is, from the last response and local estimates (no extra token counting). */
