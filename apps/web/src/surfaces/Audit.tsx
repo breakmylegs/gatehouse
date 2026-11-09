@@ -117,6 +117,18 @@ export function Audit() {
     void check()
   }, [])
 
+  // G31: a record asked for elsewhere (a session's walkthrough) opens here, read by its number.
+  const auditOpen = useStore((s) => s.auditOpen)
+  useEffect(() => {
+    if (auditOpen === undefined) return
+    useStore.setState({ auditOpen: undefined })
+    void api<{ records: Rec[] }>("GET", `/api/audit?before=${auditOpen + 1}&limit=1`).then((r) => {
+      const rec = r.ok ? r.data?.records.find((x) => x.seq === auditOpen) : undefined
+      if (rec) setSelected(rec)
+      else setError(`Record ${auditOpen} could not be read.`)
+    })
+  }, [auditOpen])
+
   // New records stream in at the top only while no filter is applied, so the list never lies about its filter.
   const unfiltered = !Object.values(applied).some((v) => v.trim())
   const merged = useMemo(() => {

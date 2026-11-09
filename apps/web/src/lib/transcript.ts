@@ -79,7 +79,7 @@ export interface Todo {
 const TASK_STATUS = ["pending", "in_progress", "completed"]
 
 /** A command that runs a project's tests (G17), so a step ticked after it failed can say so. */
-const TEST_RUN =
+export const TEST_RUN =
   /\b(?:npm(?:\.cmd)?\s+(?:run\s+)?(?:test|gate)|npx\s+vitest|vitest|jest|pytest|go\s+test|cargo\s+test|dotnet\s+test|mvn\s+test|gradle\s+test)\b/i
 const GIT_COMMIT = /\bgit\b[^\n|;&]*\bcommit\b/
 /** The hash git prints after a commit: "[main 1a2b3c4] the message". */

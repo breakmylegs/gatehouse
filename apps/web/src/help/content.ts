@@ -140,6 +140,16 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - **Use** one from **+** beside any prompt box, under **Saved prompts**. It goes into the prompt box for you to read and send.
 - **Make it a skill in** a running session's project writes it as a Claude Code skill in that project's skills folder, so Claude can use it there by name. An existing skill is never overwritten, and each one made is in the audit log.`,
   },
+  board: {
+    id: "board",
+    title: "Board",
+    body: `Cards for work across your sessions, in four columns: **To do**, **Running**, **Review** and **Done**. Codehouse keeps the board, so it is there after a restart.
+
+- **Add a card** with a title, and a folder and a prompt if it is to run. It goes to To do.
+- **Moving a card to Running** starts a session for it in its folder, sent its prompt, through every check a session you start goes through, and recorded in the audit log. A card that already has a session keeps it. **Open** goes to its session.
+- **Drag** a card to another column. With the keyboard: press **Space** on a card to pick it up, **Left** and **Right** to choose a column, **Up** and **Down** for its place, **Space** to drop it, or **Esc** to put it back. Each step is read out, and nothing moves until you drop it, so passing a card through Running starts nothing.
+- **Remove** takes a card off the board; its session, if it has one, carries on.`,
+  },
   imported: {
     id: "imported",
     title: "Chats from claude.ai",
@@ -217,6 +227,8 @@ While a turn runs, a line above the composer says what Claude is doing and for h
 **Side by side**
 
 Open beside, in a session's name menu or its ... button in the sidebar, shows another session next to it; up to four fit, two by two when there are four. The pane you last clicked or typed in has focus, marked by a line along its top: choosing a session in the sidebar that is not on screen shows it in that pane, and one already on screen just takes focus. Each has its own transcript, files and composer. Close this pane removes one. When a pane is narrow, Plan and Files open over it, and an open file takes the transcript's place until you close it.
+
+**Walkthrough...** in the same menu shows the evidence for a coding session's work in one place: its plan, with the commits made for each step; the files it changed; every test run and whether it passed; and the decisions that were not your rules allowing by themselves (yours, Extreme approval's, and every call stopped), each with its audit record, which **Open record** shows on the Audit page. **Copy** gives it all as Markdown, for a pull request or a report.
 
 **Fork** in the same menu starts a copy of the conversation beside it, in the same folder, and each carries on on its own (once Claude has finished what it is doing). **Hand off a side task...** starts a new session for something that came up: say what it should do, and choose In a new worktree to keep it off this session's files. Both keep the session's mode, approval, model, effort and account.
 

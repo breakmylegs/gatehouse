@@ -61,6 +61,7 @@ import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
 import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
+import { Walkthrough } from "../components/Walkthrough"
 import { PictureViewer } from "../components/PictureViewer"
 import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
@@ -321,6 +322,8 @@ function SessionPane({
   }
   const [renaming, setRenaming] = useState(false)
   const [goalOpen, setGoalOpen] = useState(false)
+  // G31: the evidence for this session's work, above its transcript.
+  const [walkthrough, setWalkthrough] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -552,6 +555,7 @@ function SessionPane({
           ...(session.sdkSessionId ? { sdkSessionId: session.sdkSessionId } : {}),
         }),
     },
+    ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
     { kind: "separator" },
     {
       label: "Larger text",
@@ -725,6 +729,11 @@ function SessionPane({
           </span>
         )}
       </header>
+      {walkthrough ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Walkthrough sessionId={session.id} onClose={() => setWalkthrough(false)} />
+        </div>
+      ) : null}
       {goalOpen ? (
         <GoalDialog
           current={session.goal}
