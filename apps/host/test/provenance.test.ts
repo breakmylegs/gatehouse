@@ -71,7 +71,9 @@ describe("a session that read a page", () => {
         expect(
           Object.values(s.broker.list()).some((v) => v.request.verdict.ruleId === TAINT_RULE),
         ).toBe(true),
-      { timeout: 15_000 },
+      // A checkpoint is taken before the request reaches the broker; with git slow to start (about 2 s a command on
+      // this laptop on 10 Nov), that alone took 16 s.
+      { timeout: 60_000 },
     )
-  })
+  }, 90_000)
 })
