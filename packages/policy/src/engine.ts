@@ -239,7 +239,7 @@ export class PolicyEngine {
     }
     if (!added.length) return []
     const known = knownDependencies(dirs)
-    const found: Array<DependencyFinding | Candidate> = admit(added, known, new Set(policy.approvedDependencies ?? []))
+    const found = admit(added, known, new Set(policy.approvedDependencies ?? []))
     if (found.some((d) => d.outcome === "deny")) return found
     const fresh = added.filter((d) => !known.has(dependencyKey(d)))
     const allowed = policy.managedLicences ?? this.#licences() ?? DEFAULT_LICENCES

@@ -29,7 +29,7 @@ describe("approval lineage on commits (D-030)", () => {
   it("notes a commit with the audit record written for it, which names the commit and verifies against the chain", async () => {
     const r = repo()
     const auditDir = path.join(dir, "audit")
-    const audit = new HostAudit(new AuditWriter({ dir: auditDir }), () => undefined)
+    const audit = new HostAudit(new AuditWriter({ dir: auditDir, redact: (v) => v }), () => undefined)
     await audit.record({
       session: "s1",
       event: "human_decision",

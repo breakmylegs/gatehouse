@@ -249,11 +249,13 @@ async function recordInstructionsChanged(
 }
 
 export class LimitPausedError extends Error {
-  constructor(reason?: "spend" | "risk") {
+  constructor(reason?: "spend" | "risk" | "heartbeat") {
     super(
       reason === "risk"
         ? "This session is paused: its risk budget is spent. Start it again from its pane when you have looked at what it did."
-        : reason === "spend"
+        : reason === "heartbeat"
+          ? "This session is paused: nothing was heard from you within its dead-man time. Start it again from its pane when you have looked at what it did."
+          : reason === "spend"
           ? "This session is paused: today's spending reached the most Settings allows a day. Bypass the limits for this session, with a time or a most it may spend, to keep going."
           : "This session is paused at the plan limit set in Settings. Bypass the limits for this session, with a time or a most it may spend, to keep going.",
     )
@@ -341,7 +343,7 @@ export interface SessionInfo {
   /** Owner, 9 Nov: your bypass of the limits for this session, while it lasts. */
   bypass?: { since: string; until?: string; maxUsd?: number; spentUsd: number }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
-  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" }
+  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" | "heartbeat" }
 }
 
 export interface SessionEvents {
