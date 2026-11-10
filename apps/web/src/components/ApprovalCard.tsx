@@ -20,6 +20,8 @@ interface RememberPreview {
   ok: boolean
   reason?: string
   preview?: string
+  /** D-015: a whole site, the broadest kind of rule: typed to confirm. */
+  typeToConfirm?: string
 }
 
 type Panel = "none" | "deny" | "edit" | "remember"
@@ -80,6 +82,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [lasts, setLasts] = useState("30")
   const [where, setWhere] = useState("here")
   const [uses, setUses] = useState("")
+  const [typed, setTyped] = useState("")
   const command = useMemo(
     () => commandText(req.toolName, view.rawInput),
     [req.toolName, view.rawInput],
@@ -492,10 +495,28 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                   <p className="m-0 text-[13px] text-mut">
                     When it ends, or it has been used up, Codehouse asks you again.
                   </p>
+                  {remember.typeToConfirm ? (
+                    <label className="grid gap-1 text-[13px]">
+                      <span>
+                        This allows every page of a whole site. Type the site to confirm:{" "}
+                        <strong className="mono">{remember.typeToConfirm}</strong>
+                      </span>
+                      <input
+                        className="field mono"
+                        value={typed}
+                        onChange={(e) => setTyped(e.target.value)}
+                        aria-label={`Type ${remember.typeToConfirm} to confirm`}
+                      />
+                    </label>
+                  ) : null}
                   <div className="flex gap-2">
                     <button
                       className="btn btn-primary"
-                      disabled={busy}
+                      disabled={
+                        busy ||
+                        (remember.typeToConfirm !== undefined &&
+                          typed.trim().toLowerCase() !== remember.typeToConfirm)
+                      }
                       onClick={() =>
                         void run({
                           type: "approve",
@@ -505,6 +526,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                             days: lasts === "never" ? null : Number(lasts),
                             ...(where === "anywhere" ? { anywhere: true } : {}),
                             ...(uses ? { maxUses: Number(uses) } : {}),
+                            ...(remember.typeToConfirm ? { confirmScope: typed.trim() } : {}),
                           },
                         })
                       }

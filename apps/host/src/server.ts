@@ -776,13 +776,18 @@ export class HostServer {
       case "remember_preview": {
         const view = a.broker.get(cmd.requestId)
         if (!view) throw new CommandError("unknown-request", "That request is not waiting any more")
-        return await checkRemember(
+        const check = await checkRemember(
           a.engine,
           a.policy(),
           { toolName: view.request.toolName, input: view.rawInput },
           { cwd: view.request.cwd },
           a.pwsh,
         )
+        if (!check.ok) return check
+        // D-015: refused when what the session read mentions it; a site is to be typed to confirm.
+        const why = a.manager.get(view.request.sessionId)?.untrustedMention(check.candidate)
+        if (why) return { ok: false, reason: why }
+        return { ...check, ...(check.candidate.host ? { typeToConfirm: check.candidate.host } : {}) }
       }
       case "restart":
         if (!a.restart)

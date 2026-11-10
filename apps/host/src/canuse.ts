@@ -48,6 +48,8 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /** D-015: a Remember was refused, and why, for the screen. */
+  onRememberRefused?: (why: string) => void
   /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
   locks?: Pick<TestLocks, "touched">
   lockedCalls?: Map<string, string[]>
@@ -594,6 +596,37 @@ async function rememberRule(
     )
     if (!check.ok) {
       deps.log(`remember refused: ${check.reason}`)
+      return
+    }
+    // D-015: a rule that what the session read from outside, or an untrusted file, mentions is not remembered; nor
+    // a site, the broadest kind, unless you typed it to confirm it.
+    const why =
+      deps.provenance?.mentions(check.candidate, deps.cwd) ??
+      (check.candidate.host && rememberFor?.confirmScope?.trim().toLowerCase() !== check.candidate.host
+        ? `Remembering a whole site needs you to type it to confirm (${check.candidate.host}); it is allowed this once, not remembered.`
+        : undefined)
+    if (why) {
+      await deps.audit
+        .record({
+          session: deps.sessionId,
+          event: "remember_refused_provenance",
+          channel: "host",
+          tool: toolName,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { candidate: check.candidate },
+          verdict: {
+            outcome: "deny",
+            ruleId: "remember-provenance",
+            reason: why,
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: deps.policy()?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+        .catch(() => false)
+      deps.onRememberRefused?.(why)
       return
     }
     const { id, added } = await appendRemember(

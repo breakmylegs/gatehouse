@@ -1,4 +1,13 @@
-import { fromOutside, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
+import {
+  fromOutside,
+  TAINT_RULE,
+  UNTRUSTED_FILES,
+  withProvenance,
+  type Provenance,
+} from "./provenance.js"
+import { compileGlobs } from "@gatehouse/policy"
+
+const untrusted = (globs: readonly string[]) => compileGlobs(globs.map((g) => g.toLowerCase()))
 import {
   makesCommit,
   scanCommit,
@@ -113,6 +122,8 @@ export interface SessionHookDeps {
   onDecision?: (toolUseId: string, verdict: Verdict) => void
   /** B32: what the session read from outside, to catch a command copied from it. */
   provenance?: Provenance
+  /** D-015: the files whose words are not the project's own (globs). Absent: UNTRUSTED_FILES. */
+  untrustedFiles?: () => readonly string[]
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
   /** D-008: what a shell command printed, read for counterexamples. */
@@ -293,6 +304,12 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(input.tool_response)
+      // D-015: a file that is not the project's own words (a README, a dependency's code), read in the session.
+      if (input.hook_event_name === "PostToolUse" && input.tool_name === "Read" && deps.provenance) {
+        const file = asRecord(input.tool_input).file_path
+        if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
+          deps.provenance.addUntrustedFile(input.tool_response)
+      }
       // D-008: a shell command's output, read for a property test's or a fuzz run's counterexample.
       if (deps.onToolOutput && (input.tool_name === "Bash" || input.tool_name === "PowerShell")) {
         const r = input.hook_event_name === "PostToolUse" ? input.tool_response : (input as { error?: unknown }).error

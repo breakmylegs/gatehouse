@@ -308,6 +308,8 @@ function build(loose: boolean) {
       })
       .passthrough()
       .optional(),
+    /** D-015: files whose words are not the project's own (globs); absent: README and Markdown files, dependencies. */
+    untrustedFiles: z.array(z.string().max(260)).max(100).optional(),
     memoryGovernor: z
       .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
       .passthrough()

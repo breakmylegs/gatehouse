@@ -81,6 +81,8 @@ import type { PhoneService } from "./relay/service.js"
  * (loopback Host header, own Origin, per-launch token) applies, and nothing here is reachable from the phone.
  */
 export interface AdminContext {
+  /** D-015: why a rule must not be accepted, from what any open session read; undefined when nothing says so. */
+  untrustedMention?: (rule: { command?: string; path?: string; host?: string }) => string | undefined
   engine: PolicyEngine
   store: PolicyStore
   pwsh: PwshWorker | undefined
@@ -1506,6 +1508,7 @@ const LIVE_SETTINGS = [
   "spendCapUsd",
   "memoryGovernor",
   "testIntegrity",
+  "untrustedFiles",
   "outputStyle",
   "worktreeLocation",
   "pullRequests",
@@ -1598,6 +1601,22 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
       ctx.pwsh,
     )
     if (!check.ok) return bad(reply, 422, check.reason)
+    // D-015: not while what an open session read mentions it.
+    const why = ctx.untrustedMention?.(check.candidate)
+    if (why) {
+      await ctx.audit
+        .record({
+          session: "desktop",
+          event: "remember_refused_provenance",
+          channel: "desktop",
+          tool: "policy",
+          input: { candidate: check.candidate, from: "suggestion" },
+          verdict: { outcome: "deny", ruleId: "remember-provenance", reason: why, risk: 0, decidedBy: "rules", policyHash: ctx.store.current?.hash ?? "" },
+          latencyMs: 0,
+        })
+        .catch(() => false)
+      return bad(reply, 409, why.replace("It is allowed this once, not remembered.", "So it is not added."))
+    }
     // C-013: like one remembered from a request, it lasts 30 days and only in that folder unless asked otherwise.
     const rememberFor = RememberFor.safeParse(b?.rememberFor)
     const r = await appendRemember(

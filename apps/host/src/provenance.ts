@@ -21,8 +21,64 @@ export const fromOutside = (tool: string): boolean =>
 
 const norm = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase()
 
+/**
+ * D-015: files whose words are not the project's own, read in a session: documentation and the code of others. What
+ * they say can be written to talk a person into a broad allow, so a rule they mention is not remembered. Settings,
+ * Sessions can change the list (untrustedFiles).
+ */
+export const UNTRUSTED_FILES: readonly string[] = [
+  "**/readme*",
+  "**/*.md",
+  "**/node_modules/**",
+  "**/vendor/**",
+  "**/third_party/**",
+]
+
+/** A rule about to be remembered: its command, its file, or its site. */
+export interface RuleTerms {
+  command?: string
+  path?: string
+  host?: string
+}
+
 export class Provenance {
   readonly #texts: string[] = []
+  /** D-015: untrusted files read in the session, kept apart: they do not taint commands, only remembering. */
+  readonly #files: string[] = []
+
+  /** D-015: an untrusted file the session read. */
+  addUntrustedFile(result: unknown): void {
+    let text: string
+    try {
+      text = typeof result === "string" ? result : JSON.stringify(result)
+    } catch {
+      return
+    }
+    if (!text) return
+    this.#files.push(norm(text.slice(0, MAX_TEXT)))
+    if (this.#files.length > MAX_TEXTS) this.#files.shift()
+  }
+
+  /**
+   * D-015: why a rule must not be remembered, or undefined: what the session read from outside, or an untrusted file,
+   * mentions its command, its file (by name, or its path from the folder) or its site.
+   */
+  mentions(rule: RuleTerms, cwd: string): string | undefined {
+    const terms: string[] = []
+    if (rule.command && norm(rule.command).length >= 8) terms.push(norm(rule.command))
+    if (rule.host && rule.host.length >= 4) terms.push(rule.host.toLowerCase())
+    if (rule.path) {
+      const p = rule.path.replace(/\\/g, "/")
+      const base = p.split("/").at(-1) ?? ""
+      if (base.length >= 5) terms.push(base.toLowerCase())
+      const c = cwd.replace(/\\/g, "/").toLowerCase()
+      if (p.toLowerCase().startsWith(c + "/")) terms.push(p.slice(c.length + 1).toLowerCase())
+    }
+    const hit = terms.find((t) => [...this.#texts, ...this.#files].some((x) => x.includes(t)))
+    return hit
+      ? `What Claude read in this session from outside, or in a file that is not the project's own words (such as a README), mentions "${hit}", so it may have been written to get this allowed. It is allowed this once, not remembered.`
+      : undefined
+  }
 
   /** Something a session read from outside. The newest are kept. */
   add(result: unknown): void {

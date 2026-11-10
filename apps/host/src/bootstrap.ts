@@ -1062,6 +1062,7 @@ export function createHost(opts: HostOptions = {}): Host {
       audit,
       auditDir: dir,
       loadOptions,
+      untrustedMention: (rule) => manager.liveSessions().map((s) => s.untrustedMention(rule)).find(Boolean),
       env,
       config: () => config,
       log,

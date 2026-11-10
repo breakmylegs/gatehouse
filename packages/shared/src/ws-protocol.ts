@@ -36,6 +36,8 @@ const Message = z.string().max(500)
  * anywhere: every folder rather than this session's; maxUses: how many calls it may allow.
  */
 export const RememberFor = z.object({
+  /** D-015: the site typed to confirm remembering a whole site. */
+  confirmScope: z.string().max(260).optional(),
   days: z.number().int().min(1).max(365).nullable().optional(),
   anywhere: z.boolean().optional(),
   maxUses: z.number().int().min(1).max(10_000).optional(),

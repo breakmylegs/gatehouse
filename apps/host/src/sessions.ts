@@ -1,3 +1,4 @@
+import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
 import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
@@ -329,6 +330,7 @@ export interface SessionEvents {
         | "heldout_result"
         | "counterexample_pinned"
         | "claim_checked"
+        | "remember_refused"
       data: Record<string, unknown>
     },
   ]
@@ -614,6 +616,11 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit("event", { type: "counterexample_pinned", data: { file: r.file, by: r.by } })
     this.emit("state", this.info())
     return r
+  }
+
+  /** D-015: why a rule must not be remembered from this session, or undefined. */
+  untrustedMention(rule: RuleTerms): string | undefined {
+    return this.#provenance.mentions(rule, this.cwd)
   }
 
   dismissCounterexample(id: string): void {
@@ -922,6 +929,7 @@ export class Session extends EventEmitter<SessionEvents> {
           .catch((e: Error) => d.log(`counterexample pin: ${e.message}`))
       },
       // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
+      untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onToolOutput: (_tool, output) => {
         if (this.#pins.noteOutput(output)) this.emit("state", this.info())
       },
@@ -967,6 +975,7 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
       strictTests: () => strictAboutTests(d.config().testIntegrity, this.project),
+      onRememberRefused: (why) => this.emit("event", { type: "remember_refused", data: { why } }),
       onTestsWeakened: (pattern, reason) => {
         this.#testsWeakened++
         this.emit("event", { type: "tests_weakened", data: { pattern, reason } })
