@@ -9,8 +9,8 @@
 - { kind: remember, remember: { version: 1, remember: [{ id: a, tool: Bash, command: "x", glob: "y" }] }, load: reject, err: "additional properties" }
 - { kind: remember, remember: { version: 1, remember: [{ id: a, tool: Grep, path: "C:/x" }] }, load: reject, err: "needs a file tool" }
 - { kind: remember, t: Bash, cmd: "npm install lodash", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: allow, r: remember-npm1 }
-- { kind: remember, t: Bash, cmd: "npm install lodash && npm install evil", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: escalate, r: package-install }
-- { kind: remember, t: Bash, cmd: "npm install lodash2", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: escalate, r: package-install }
+- { kind: remember, t: Bash, cmd: "npm install lodash && npm install evil", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: escalate, r: dependency-new, note: "the remembered part is yours; evil is new (D-053)" }
+- { kind: remember, t: Bash, cmd: "npm install lodash2", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: escalate, r: dependency-new, note: "not what was remembered, and new (D-053)" }
 - { kind: remember, t: Bash, cmd: "cat .env", remember: { version: 1, remember: [{ id: env1, tool: Bash, command: "cat .env" }] }, o: deny, r: secrets-files }
 - { kind: remember, t: Bash, cmd: "git push --force", remember: { version: 1, remember: [{ id: f1, tool: Bash, command: "git push --force" }] }, o: deny, r: destructive-shell }
 - { kind: remember, t: Bash, cmd: "git status $X", remember: { version: 1, remember: [{ id: d1, tool: Bash, command: "git status $X" }] }, o: escalate, r: dynamic-segment }
@@ -21,5 +21,5 @@
 - { kind: remember, t: PowerShell, cmd: "Start-Process notepad", remember: { version: 1, remember: [{ id: sp1, tool: PowerShell, command: "Start-Process notepad" }] }, o: escalate, r: pwsh-start-process }
 - { kind: remember, t: Bash, cmd: "eval ls", remember: { version: 1, remember: [{ id: ev1, tool: Bash, command: "eval ls" }] }, o: escalate, r: bash-eval }
 - { kind: remember, t: Bash, cmd: "echo hi > x", remember: { version: 1, remember: [{ id: w1, tool: Bash, command: "echo hi" }] }, o: escalate, r: shell-redirect-write }
-- { kind: remember, t: Bash, cmd: "NPM install lodash", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: escalate, r: no-rule }
+- { kind: remember, t: Bash, cmd: "NPM install lodash", remember: { version: 1, remember: [{ id: npm1, tool: Bash, command: "npm install lodash" }] }, o: escalate, r: dependency-new, note: "not what was remembered; the package is new (D-053)" }
 - { kind: remember, t: PowerShell, cmd: "NPM INSTALL lodash", remember: { version: 1, remember: [{ id: ps1, tool: PowerShell, command: "npm install lodash" }] }, o: allow, r: remember-ps1 }

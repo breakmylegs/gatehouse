@@ -212,7 +212,9 @@ export function licenceFindings(added: AddedDependency[], dirs: string[], allowe
         outcome: "escalate",
         ruleId: LICENCE_UNKNOWN,
         reason: `It adds ${d.name} (${d.ecosystem}), whose licence Codehouse cannot read on this computer${licence ? ` ("${licence.slice(0, 60)}" is not an SPDX licence)` : ""}. Check its licence before you allow it.`,
-        risk: 74,
+        // Below D-053's dependency-new (72), so a new package's card leads with that and says this too; on its own (a
+        // name the owner approved) it still asks.
+        risk: 70,
         dependency: key,
         ...(licence ? { licence } : {}),
       })

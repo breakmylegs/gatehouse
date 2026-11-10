@@ -32,4 +32,4 @@ cases:
   - { tool: Bash, input: { command: "cargo test --all" }, expect: allow, rule: build-tools-run }
   - { tool: Bash, input: { command: "go vet ./..." }, expect: allow }
   - { tool: Bash, input: { command: "make test" }, expect: allow }
-  - { tool: Bash, input: { command: "cargo install ripgrep" }, expect: escalate, rule: build-tools-fetch }
+  - { tool: Bash, input: { command: "cargo install ripgrep" }, expect: escalate, rule: dependency-new }

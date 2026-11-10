@@ -359,7 +359,21 @@ export class PolicyEngine {
     const hidden = hiddenCharacters(call)
     if (hidden.length)
       escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
-    for (const d of deps) escalations.push(d)
+    // D-053, D-055: an install you remembered was your approval of that dependency, so only what the rest of the call
+    // adds is asked about. A name models are known to invent was refused above, remembered or not.
+    const open =
+      callRemembered !== undefined
+        ? []
+        : f.isShell && segRemembered.size
+          ? this.#dependencies(
+              call,
+              { ...input, command: f.segments.filter((_, i) => !segRemembered.has(i)).map((s) => s.coreText).join(" ; ") },
+              ctx,
+              rootKeyPath,
+              policy,
+            )
+          : deps
+    for (const d of open) escalations.push(d)
     // D-054: a lockfile edited by hand goes to a person, with what in it matters most.
     const change = fileChange(call, input, ctx.cwd)
     const lock = f.isShell

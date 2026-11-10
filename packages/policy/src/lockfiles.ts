@@ -93,7 +93,11 @@ export function lockfileEdit(file: string, before: string, after: string, root: 
   const sources = [
     ...new Set(
       addedLines(before, after)
-        .map((l) => /"?(?:resolved|source|url|tarball|git)"?\s*[:=]\s*"?([^",\s]+)/.exec(l)?.[1] ?? /\b(git\+[^\s",]+|github:[^\s",]+)/.exec(l)?.[1])
+        .map((l) => {
+          // "resolved": "x" (npm), resolved "x" (yarn 1), source = "x" (Cargo, Poetry), resolution: x (pnpm, yarn 2).
+          const m = /"?(?:resolved|source|url|tarball|git)"?\s*[:=]?\s*"([^",\s]+)|"?(?:resolved|source|url|tarball|git)"?\s*[:=]\s*([^",\s]+)/.exec(l)
+          return m?.[1] ?? m?.[2] ?? /\b(git\+[^\s",]+|github:[^\s",]+)/.exec(l)?.[1]
+        })
         .filter((u): u is string => !!u && (/^(git\+|git:|github:|file:|link:)/.test(u) || (/^https?:\/\//.test(u) && !REGISTRIES.test(u)))),
     ),
   ]

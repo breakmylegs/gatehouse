@@ -78,7 +78,9 @@ export function checkCallFloor(call: ToolCall, f: Features, ctx: EvalContext, ru
   return (
     checkFloor(f, ctx, rules) ??
     configTamperFile(call, ctx.cwd, current) ??
-    (f.isShell ? configTamperShell(f.segments, ctx.cwd) : null)
+    (f.isShell
+      ? configTamperShell(f.segments, ctx.cwd, typeof (call.input as { command?: unknown })?.command === "string" ? String((call.input as { command: string }).command) : "")
+      : null)
   )
 }
 

@@ -1,7 +1,7 @@
 version: 1
 id: packages
 title: Install packages without asking
-description: Lets Claude add packages to your project from npm, PyPI, NuGet, crates.io and Go modules. Installing runs code from the internet, including install scripts, so only use it for projects you trust. Installing for the whole computer (npm install -g, winget) and publishing still ask you.
+description: Lets Claude add packages to your project from npm, PyPI, NuGet, crates.io and Go modules. Installing runs code from the internet, including install scripts, so only use it for projects you trust. Installing for the whole computer (npm install -g, winget) and publishing still ask you, and so does a package the project does not use yet, or one whose install scripts would run.
 turnsOff: [package-install, node-dev-ci, python-dev-install, dotnet-dev-package, build-tools-fetch]
 allow:
   - id: packages-install
@@ -38,7 +38,9 @@ escalate:
     risk: 70
     message: "Installs for the whole computer, not only this project."
 cases:
-  - { tool: Bash, input: { command: "npm install react" }, expect: allow, rule: packages-install }
-  - { tool: Bash, input: { command: "pip install requests" }, expect: allow }
-  - { tool: Bash, input: { command: "npm install -g typescript" }, expect: escalate, rule: packages-system }
-  - { tool: Bash, input: { command: "winget install Git.Git" }, expect: escalate, rule: packages-system }
+  - { tool: Bash, input: { command: "pip install -r requirements.txt" }, expect: allow, rule: packages-install }
+  - { tool: Bash, input: { command: "go mod download" }, expect: allow }
+  - { tool: Bash, input: { command: "npm install react" }, expect: escalate, rule: dependency-new }
+  - { tool: Bash, input: { command: "npm install -g typescript" }, expect: escalate }
+  - { tool: Bash, input: { command: "winget install Git.Git" }, expect: escalate, rule: installer-admission }
+  - { tool: Bash, input: { command: "pip install --user -r requirements.txt" }, expect: escalate, rule: packages-system }

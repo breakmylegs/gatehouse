@@ -75,11 +75,18 @@ const SHELL_EDITORS = /^(set-content|add-content|out-file|clear-content|tee|trun
 /** Copy and move write only to their last argument. */
 const COPIERS = /^(cp|mv|copy|move|copy-item|move-item|xcopy|robocopy)$/i
 
-/** A shell command that writes to one of the guarded files or folders. */
-export function configTamperShell(segments: Segment[], cwd: string): FloorHit | null {
+/**
+ * A shell command that writes to one of the guarded files or folders. `command` is the call's own text, for its
+ * redirects ("> f", ">> f", "2>f"), which the segments do not keep.
+ */
+export function configTamperShell(segments: Segment[], cwd: string, command = ""): FloorHit | null {
   const guarded = (a: string) => {
     const p = slash(path.resolve(cwd, a.replace(/^\d?>>?/, "")))
     return WHOLE.some((r) => r.test(p)) || CLAUDE_SETTINGS.test(p) || VSCODE_SETTINGS.test(p)
+  }
+  for (const m of command.matchAll(/(?:^|[^<>&\d])\d?>>?\s*("[^"]+"|'[^']+'|[^\s;&|<>]+)/g)) {
+    const target = m[1]!.replace(/^["']|["']$/g, "")
+    if (target && !/^(\$null|nul|\/dev\/null)$/i.test(target) && guarded(target)) return hit(`it writes to ${target} from the shell`)
   }
   for (const s of segments) {
     const plain = s.args.filter((a) => !a.startsWith("-"))
