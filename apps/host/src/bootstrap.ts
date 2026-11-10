@@ -885,6 +885,13 @@ export function createHost(opts: HostOptions = {}): Host {
             x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty", actionFor(s.id)) : undefined,
           )
           .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
+    } else if (type === "risk_budget_exhausted") {
+      // D-018: the risk budget is spent: the phone and push channels are told.
+      const body = data.extreme
+        ? "Its risk budget is spent, so Extreme approval paused it until you start it again."
+        : "Its risk budget is spent, so it went back to Manual."
+      void phone.notify("notify", { title: "Risk budget spent", body, project }).catch(() => undefined)
+      void ntfy.note("risk budget spent", body, project)
     } else if (type === "carry_on_end" || type === "stuck") {
       // O16: the end of an Extreme run, and a turn that may be stuck, reach your phone too. A run that ended because
       // the queue is empty is told above, and one you stopped needs no telling.

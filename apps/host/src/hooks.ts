@@ -122,6 +122,8 @@ export interface SessionHookDeps {
   onDecision?: (toolUseId: string, verdict: Verdict) => void
   /** B32: what the session read from outside, to catch a command copied from it. */
   provenance?: Provenance
+  /** D-018: a call Claude Code approved by itself, with the verdict the Approver gave it. */
+  onSelfApproved?: (verdict: Verdict) => void
   /** D-015: the files whose words are not the project's own (globs). Absent: UNTRUSTED_FILES. */
   untrustedFiles?: () => readonly string[]
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
@@ -321,6 +323,10 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
         const file = p.file_path ?? p.notebook_path
         if (typeof file === "string" && file) deps.onWritten?.(file)
       }
+      // D-018: a call Claude Code approved by itself (it never reached canUseTool) spends the risk budget.
+      const early = deps.verdicts?.get(input.tool_use_id)
+      if (early && !deps.decided.has(input.tool_use_id) && input.hook_event_name === "PostToolUse")
+        deps.onSelfApproved?.(early)
       deps.verdicts?.delete(input.tool_use_id)
       // D-007: a locked test changed with a person's approval is pinned again as it now is, and that is recorded.
       const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd

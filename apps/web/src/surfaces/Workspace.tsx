@@ -1620,7 +1620,13 @@ function PausedLine({
   const [busy, setBusy] = useState(false)
   return (
     <div role="status" className="pane-stopped flex-wrap">
-      {paused.reason === "spend" ? (
+      {paused.reason === "risk" ? (
+        // D-018: the session's risk budget is spent.
+        <span>
+          <strong>Paused.</strong> This session's risk budget is spent: Extreme approval approved as much
+          as Settings allows without you. Start it again when you have looked; its budget is then full.
+        </span>
+      ) : paused.reason === "spend" ? (
         // B20: today's spending over every session reached the cap in Settings.
         <span>
           <strong>Paused.</strong> Today's extra spending beyond your plan reached the most Settings

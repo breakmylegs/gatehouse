@@ -268,6 +268,8 @@ export interface SessionInfo {
   suspended?: boolean
   /** D-001: how many weakenings of the tests Extreme approval approved in this session. */
   testsWeakened?: number
+  /** D-018: what is left of the session's risk budget; absent when it has none. */
+  riskBudget?: number
   /** D-009: claims that the work is done, as checked, newest last. */
   claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string }>
   /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
@@ -331,6 +333,7 @@ export interface SessionEvents {
         | "counterexample_pinned"
         | "claim_checked"
         | "remember_refused"
+        | "risk_budget_exhausted"
       data: Record<string, unknown>
     },
   ]
@@ -628,6 +631,42 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit("state", this.info())
   }
 
+  /** D-018: what is left of the session's risk budget, or undefined when there is none (the default). */
+  #budget: number | undefined
+
+  /**
+   * D-018, the risk budget (opt-in; Settings, Sessions): an allow given without a person, by Extreme approval or by
+   * Claude Code in Auto or Accept edits, spends 1 point at Moderate risk and 3 at High. At zero a Manual-family session
+   * drops to Manual and an Extreme one pauses until you start it again. Your own message fills it again.
+   */
+  async #spendRisk(risk: number, by: "extreme" | "self-approved"): Promise<void> {
+    if (this.#budget === undefined || this.#budget <= 0) return
+    const cost = risk >= 85 ? 3 : risk >= 70 ? 3 : risk >= 40 ? 1 : 0
+    if (!cost) return
+    this.#budget = Math.max(0, this.#budget - cost)
+    this.emit("state", this.info())
+    if (this.#budget > 0) return
+    const extreme = this.#extreme
+    await this.#auditLimit(
+      "risk_budget_exhausted",
+      "risk-budget",
+      { by, extreme, mode: this.#mode },
+      extreme
+        ? "The session's risk budget is spent, so Extreme approval paused it."
+        : "The session's risk budget is spent, so it went back to Manual: each call now asks you.",
+      "rules",
+    )
+    this.emit("event", { type: "risk_budget_exhausted", data: { extreme, mode: this.#mode } })
+    if (extreme) await this.pause(100, undefined, "risk")
+    else if (this.#mode !== "default" && this.#mode !== "plan") await this.setMode("default")
+  }
+
+  /** D-018: the budget from Settings, filled again (a new session, or your own message). */
+  #fillBudget(): void {
+    const b = this.#deps.config().riskBudget
+    this.#budget = b && !b.off && Number.isInteger(b.points) && b.points > 0 ? b.points : undefined
+  }
+
   /** D-007: calls a person approved that touched locked tests, by toolUseID, so they are pinned again after. */
   readonly #lockedCalls = new Map<string, string[]>()
   #resources: ResourceLevel = "high"
@@ -684,6 +723,8 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#sdkSessionId = opts.resume !== undefined && opts.fork !== true ? opts.resume : undefined
     this.cwd = opts.cwd
     this.project = path.basename(findProjectRoot(opts.cwd))
+    // D-018: the risk budget from Settings, if any.
+    this.#fillBudget()
     this.#mode = opts.mode ?? "default"
     this.#model = opts.localModel ?? opts.model
     // No higher than the cap in Settings (B18); a model on this computer has no effort to set.
@@ -750,6 +791,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
       ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
+      ...(this.#budget !== undefined ? { riskBudget: this.#budget } : {}),
       ...(this.#claims.length ? { claims: this.#claims.map((c) => ({ ...c })) } : {}),
       ...(this.#pins.list().length
         ? {
@@ -930,6 +972,7 @@ export class Session extends EventEmitter<SessionEvents> {
       },
       // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
+      onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
       onToolOutput: (_tool, output) => {
         if (this.#pins.noteOutput(output)) this.emit("state", this.info())
       },
@@ -976,6 +1019,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
       strictTests: () => strictAboutTests(d.config().testIntegrity, this.project),
       onRememberRefused: (why) => this.emit("event", { type: "remember_refused", data: { why } }),
+      onAutoApproved: (verdict) => void this.#spendRisk(verdict.risk, "extreme"),
       onTestsWeakened: (pattern, reason) => {
         this.#testsWeakened++
         this.emit("event", { type: "tests_weakened", data: { pattern, reason } })
@@ -1305,6 +1349,8 @@ export class Session extends EventEmitter<SessionEvents> {
   prompt(text: string): void {
     // Owner, 9 Nov: the limits in Settings hold. A message does not go past them; a bypass for this session does.
     if (this.#paused) throw new LimitPausedError(this.#paused.reason)
+    // D-018: your own message fills the risk budget again.
+    this.#fillBudget()
     this.#syncKnowledge()
     this.#send(text)
     this.emit("prompted", text)
@@ -1602,7 +1648,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
    * when you start it.
    */
-  async pause(percent: number, until?: string, reason?: "spend"): Promise<void> {
+  async pause(percent: number, until?: string, reason?: "spend" | "risk"): Promise<void> {
     if (!this.live || this.#paused) return
     const wasRunning = this.#running || this.#background.size > 0
     this.#paused = {
@@ -1619,9 +1665,11 @@ export class Session extends EventEmitter<SessionEvents> {
         wasRunning,
         ...(until ? { until } : {}),
       },
-      reason === "spend"
-        ? "Today's extra spending beyond the plan reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
-        : `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
+      reason === "risk"
+        ? "The session's risk budget is spent, so Codehouse paused this Extreme session until you start it again."
+        : reason === "spend"
+          ? "Today's extra spending beyond the plan reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
+          : `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
       "rules",
     )
     this.emit("event", {
@@ -1639,6 +1687,11 @@ export class Session extends EventEmitter<SessionEvents> {
   async resume(by: "you" | "limit-reset"): Promise<boolean> {
     const p = this.#paused
     if (!p) return false
+    // D-018: a session its risk budget paused starts again only when you start it, with its budget full.
+    if (p.reason === "risk") {
+      if (by !== "you") return false
+      this.#fillBudget()
+    }
     if (p.wasRunning) {
       // Sent first: if it cannot be (the kill switch), it stays paused and is tried again.
       this.#send(LIMIT_RESUME_PROMPT)

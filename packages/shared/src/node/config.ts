@@ -308,6 +308,14 @@ function build(loose: boolean) {
       })
       .passthrough()
       .optional(),
+    /**
+     * D-018: a risk budget for each session, opt-in: points an allow given without a person spends (Moderate 1, High
+     * 3); at zero Manual-family sessions drop to Manual and Extreme ones pause. Absent: no budget.
+     */
+    riskBudget: z
+      .object({ points: z.number().int().min(1).max(1000), off: z.boolean().optional() })
+      .passthrough()
+      .optional(),
     /** D-015: files whose words are not the project's own (globs); absent: README and Markdown files, dependencies. */
     untrustedFiles: z.array(z.string().max(260)).max(100).optional(),
     memoryGovernor: z

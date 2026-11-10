@@ -48,6 +48,8 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /** D-018: Extreme approval approved an escalation (it spends the risk budget). */
+  onAutoApproved?: (verdict: Verdict) => void
   /** D-015: a Remember was refused, and why, for the screen. */
   onRememberRefused?: (why: string) => void
   /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
@@ -422,6 +424,7 @@ async function extremeApprove(
   }
   try {
     deps.notifyAutoApproved?.(toolName, deps.project)
+    deps.onAutoApproved?.(verdict)
   } catch {
     // A notification problem never changes the decision.
   }

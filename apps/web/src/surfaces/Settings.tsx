@@ -61,6 +61,7 @@ interface Config {
   spendCapUsd?: number
   memoryGovernor?: { percent: number; off?: boolean }
   testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
+  riskBudget?: { points: number; off?: boolean }
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
@@ -124,6 +125,8 @@ interface Values {
   memPoint: string
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
+  /** D-018: points of the risk budget, or "" for none. */
+  rbPoints: string
   tiProjects: string
   effortCap: string
   maxSessions: string
@@ -182,6 +185,7 @@ function valuesOf(d: SettingsData): Values {
     plResume: c.planLimitPause?.noAutoResume !== true,
     memPoint: c.memoryGovernor?.off ? "off" : String(c.memoryGovernor?.percent ?? 85),
     tiAll: c.testIntegrity?.strictAll === true,
+    rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
@@ -270,6 +274,12 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   if (v.spendCap) body.spendCapUsd = Number(v.spendCap)
   else delete body.spendCapUsd
   // C-004: absent is 85%, so the default is not written; a percentage is kept beside off for an older reader.
+  // D-018: absent is no budget; off is kept beside the points for an older reader.
+  if (!v.rbPoints && !d.saved.riskBudget) delete body.riskBudget
+  else
+    body.riskBudget = v.rbPoints
+      ? { ...(d.saved.riskBudget ?? {}), points: Number(v.rbPoints), off: undefined }
+      : { ...(d.saved.riskBudget ?? { points: 10 }), off: true }
   // D-001: absent is no project strict, so nothing is written until one is.
   const strictProjects = v.tiProjects
     .split(/\r?\n/)
@@ -369,6 +379,7 @@ export const DEFAULT_VALUES: Values = {
   plResume: true,
   memPoint: "85",
   tiAll: false,
+  rbPoints: "",
   tiProjects: "",
   effortCap: "",
   maxSessions: "",
@@ -642,6 +653,7 @@ export function Settings() {
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
+  const rbChanged = differs(v, ["rbPoints"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
@@ -1115,6 +1127,25 @@ export function Settings() {
                   {EFFORTS.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Risk budget" gap="gap-2" changed={rbChanged}>
+              <Field
+                label="Points each session may spend on what is approved without you"
+                help="Off unless you set it. An approval given without you (Extreme approval, or Claude Code by itself in Auto or Accept edits) spends 1 point at Moderate risk and 3 at High. When a session has none left, an Extreme session pauses until you start it again, and any other goes back to Manual. Your own message fills it again. Your own approvals spend nothing."
+              >
+                <select
+                  className="field"
+                  value={v.rbPoints}
+                  onChange={(e) => change({ rbPoints: e.target.value }, "Risk budget")}
+                >
+                  {withCurrent(["", "3", "5", "10", "20", "50"], v.rbPoints).map((n) => (
+                    <option key={n} value={n}>
+                      {n === "" ? "No budget (off)" : `${n} points`}
                     </option>
                   ))}
                 </select>

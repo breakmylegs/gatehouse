@@ -136,6 +136,14 @@ export function SessionDetails({
               <dd className="m-0">{session.model}</dd>
             </>
           ) : null}
+          {session.riskBudget !== undefined ? (
+            <>
+              <dt className="text-mut">Risk budget</dt>
+              <dd className={session.riskBudget === 0 ? "m-0 font-semibold text-sev" : "m-0"}>
+                {session.riskBudget} {session.riskBudget === 1 ? "point" : "points"} left until your next message
+              </dd>
+            </>
+          ) : null}
           {session.claims?.length ? (
             <>
               <dt className="text-mut">Claims</dt>

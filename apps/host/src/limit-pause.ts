@@ -45,7 +45,7 @@ export interface PauseTarget {
   paused?: SessionInfo["paused"]
   /** Your bypass of the limits for this session, while it lasts. Neither limit pauses it meanwhile. */
   bypass?: LimitBypass
-  pause(percent: number, until?: string, reason?: "spend"): Promise<void>
+  pause(percent: number, until?: string, reason?: "spend" | "risk"): Promise<void>
   resume(by: "limit-reset"): Promise<boolean>
   /** The bypass ran out: its time, or its spending. */
   endBypass(why: "time" | "spend", spentUsd: number): Promise<void>
@@ -232,7 +232,7 @@ export class LimitPauser {
         account,
         await this.#d.planUsage(
           account,
-          list.some((s) => (s.paused && s.paused.reason !== "spend") || s.bypass?.maxUsd !== undefined),
+          list.some((s) => (s.paused && !s.paused.reason) || s.bypass?.maxUsd !== undefined),
         ),
       )
     // Owner, 9 Nov: a bypass lasts until its time or its spending runs out, whichever comes first; then the limits in
@@ -258,7 +258,7 @@ export class LimitPauser {
     // A session with a bypass running is left alone, and one a limit had paused carries on.
     const bypassed = (s: PauseTarget) => s.bypass !== undefined
     for (const s of this.#d.sessions())
-      if (bypassed(s) && s.paused)
+      if (bypassed(s) && s.paused && s.paused.reason !== "risk")
         await s
           .resume("limit-reset")
           .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
@@ -292,7 +292,7 @@ export class LimitPauser {
           .resume("limit-reset")
           .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))
       }
-      const paused = list.filter((s) => s.paused && s.paused.reason !== "spend")
+      const paused = list.filter((s) => s.paused && !s.paused.reason)
       const usage = usageOf.get(account)
       // Owner, 9 Nov: the pause point holds whether or not extra usage is left ("I had the limit set to 85% and the
       // app kept going past it anyway"). Going past it is a bypass for one session, with a time or spending limit.

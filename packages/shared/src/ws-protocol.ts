@@ -359,6 +359,8 @@ export const SessionInfo = z.object({
       }),
     )
     .optional(),
+  /** D-018: what is left of the session's risk budget; absent when it has none. Absent from older Hosts. */
+  riskBudget: z.number().int().min(0).optional(),
   /** D-009: claims that the work is done, as Codehouse checked them, newest last. Absent from older Hosts. */
   claims: z
     .array(
@@ -433,8 +435,11 @@ export const SessionInfo = z.object({
       percent: z.number(),
       /** A turn was running when it paused, so starting it again carries on where it stopped. */
       wasRunning: z.boolean(),
-      /** B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. */
-      reason: z.enum(["spend"]).optional(),
+      /**
+       * B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. D-018 "risk":
+       * the session's risk budget is spent; it waits for you, and no limit starts it again by itself.
+       */
+      reason: z.enum(["spend", "risk"]).optional(),
     })
     .optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
