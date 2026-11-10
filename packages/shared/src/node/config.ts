@@ -199,6 +199,13 @@ function build(loose: boolean) {
       boundaries: obj({
         claude: Boundary.optional(),
         local: Boundary.optional(),
+        /** C-016: a card for one model, by its id, which says more than its provider's card. */
+        models: z.record(z.string().min(1).max(120), Boundary).optional(),
+        /**
+         * C-016: how old a card's check may be before a send to its model is refused (days). Absent: 180. A provider
+         * or model with no card is not refused (older versions kept none).
+         */
+        maxAgeDays: z.number().int().min(1).max(3650).optional(),
       }).optional(),
     }).optional(),
     /** How long a request stays deliverable to the phone. */

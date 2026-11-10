@@ -36,34 +36,93 @@ export function boundaryLine(b: Boundary | undefined): string {
  * whether there is a zero-retention agreement, and when and where you checked. Saved to the settings file, after it is
  * recorded in the audit log.
  */
+/** C-016: the cards, a card for one model, and how old a card's check may be before a send is refused. */
+export type Boundaries = Partial<Record<BoundaryProvider, Boundary>> & {
+  models?: Record<string, Boundary>
+  maxAgeDays?: number
+}
+
+/** C-016: whether a card is stale: recorded, but undated or checked longer ago than allowed. */
+export function stale(b: Boundary | undefined, maxAgeDays: number, now = new Date()): boolean {
+  if (!b || Object.keys(b).length === 0) return false
+  if (!b.checkedAt) return true
+  const at = Date.parse(`${b.checkedAt}T00:00:00Z`)
+  return !Number.isFinite(at) || Math.floor((now.getTime() - at) / 86_400_000) > maxAgeDays
+}
+
 export function BoundaryCards({
   boundaries,
   onSaved,
 }: {
-  boundaries: Partial<Record<BoundaryProvider, Boundary>> | undefined
+  boundaries: Boundaries | undefined
   onSaved: (view: unknown) => void
 }) {
+  const maxAge = boundaries?.maxAgeDays ?? 180
+  const [age, setAge] = useState(String(maxAge))
+  const [newModel, setNewModel] = useState("")
+  const [adding, setAdding] = useState<string[]>([])
+  const models = [...new Set([...Object.keys(boundaries?.models ?? {}), ...adding])]
+  async function saveAge() {
+    const r = await api("PUT", "/api/providers/boundary-age", { days: Number(age) })
+    if (!r.ok) return void toast.error(r.error ?? "Not saved", { id: "settings" })
+    onSaved(r.data)
+    toast("Saved, and recorded in the audit log", { id: "settings" })
+  }
   return (
     <div className="grid gap-2">
       <span className="font-semibold">Where your words go</span>
       <p className="m-0 text-xs text-mut">
         Record what each provider does with what you send, from its terms or your IT team, so you
-        can choose which a project may use. Codehouse cannot check this itself.
+        can choose which a project may use. Codehouse cannot check this itself. A model can have a
+        card of its own, which says more than its provider's. Once a card is recorded, nothing is
+        sent to its model when the card was checked longer ago than you allow below, or has no date.
       </p>
       {(["claude", "local"] as const).map((p) => (
-        <Card key={p} provider={p} boundary={boundaries?.[p]} onSaved={onSaved} />
+        <Card key={p} provider={p} boundary={boundaries?.[p]} maxAge={maxAge} onSaved={onSaved} />
       ))}
+      {models.map((m) => (
+        <Card key={m} provider="claude" model={m} boundary={boundaries?.models?.[m]} maxAge={maxAge} onSaved={onSaved} />
+      ))}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-sm">
+          <span>A card for one model (its id)</span>
+          <input className="field mono" maxLength={120} placeholder="claude-opus-5-5" value={newModel} onChange={(e) => setNewModel(e.target.value)} />
+        </label>
+        <button
+          type="button"
+          className="btn"
+          disabled={!/^[\w.:/-]{1,120}$/.test(newModel.trim())}
+          onClick={() => {
+            setAdding((a) => [...a, newModel.trim()])
+            setNewModel("")
+          }}
+        >
+          Add a card
+        </button>
+        <label className="grid gap-1 text-sm">
+          <span>Refuse a send when its card was checked more than this many days ago</span>
+          <input className="field" type="number" min={1} max={3650} value={age} onChange={(e) => setAge(e.target.value)} />
+        </label>
+        <button type="button" className="btn" disabled={!(Number(age) >= 1 && Number(age) <= 3650) || Number(age) === maxAge} onClick={() => void saveAge()}>
+          Save
+        </button>
+      </div>
     </div>
   )
 }
 
 function Card({
   provider,
+  model,
   boundary,
+  maxAge,
   onSaved,
 }: {
   provider: BoundaryProvider
+  /** C-016: a card for this one model rather than its provider. */
+  model?: string
   boundary: Boundary | undefined
+  maxAge: number
   onSaved: (view: unknown) => void
 }) {
   const [b, setB] = useState<Boundary>(boundary ?? {})
@@ -75,7 +134,7 @@ function Card({
     })
   async function save() {
     setBusy(true)
-    const r = await api("PUT", "/api/providers/boundary", { provider, boundary: b })
+    const r = await api("PUT", "/api/providers/boundary", { provider, boundary: b, ...(model ? { model } : {}) })
     setBusy(false)
     if (!r.ok) {
       toast.error(r.errors?.[0] ?? r.error ?? "Not saved", { id: "settings" })
@@ -85,10 +144,15 @@ function Card({
     toast("Saved, and recorded in the audit log", { id: "settings" })
   }
   return (
-    <details className="panel p-3" aria-label={`Where your words go: ${NAMES[provider]}`}>
+    <details className="panel p-3" aria-label={`Where your words go: ${model ?? NAMES[provider]}`}>
       <summary className="cursor-pointer">
-        <strong>{NAMES[provider]}</strong>
+        <strong className={model ? "mono" : ""}>{model ?? NAMES[provider]}</strong>
         <span className="block text-xs text-mut">{boundaryLine(boundary)}</span>
+        {stale(boundary, maxAge) ? (
+          <span className="block text-xs font-semibold text-sev">
+            Stale: nothing is sent to {model ?? "this provider"} until you check it again and save a new date.
+          </span>
+        ) : null}
       </summary>
       <div className="mt-3 grid grid-cols-2 gap-2 max-[700px]:grid-cols-1">
         <label className="grid gap-1 text-sm">

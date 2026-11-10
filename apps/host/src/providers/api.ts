@@ -63,25 +63,29 @@ export function registerProviderRoutes(
   app.put("/api/providers/boundary", async (req, reply) => {
     const file = ctx.configFile
     if (!file) return reply.code(404).send({ error: "Settings cannot be saved here." })
-    const b = (req.body ?? {}) as { provider?: unknown; boundary?: unknown }
+    const b = (req.body ?? {}) as { provider?: unknown; boundary?: unknown; model?: unknown }
     if (b.provider !== "claude" && b.provider !== "local")
       return reply.code(422).send({ error: "Say which provider: claude or local." })
+    // C-016: a card for one model, kept under models by its id.
+    const model = typeof b.model === "string" && b.model.trim() ? b.model.trim() : undefined
+    if (model !== undefined && !/^[\w.:/-]{1,120}$/.test(model))
+      return reply.code(422).send({ error: "That is not a model id." })
     const candidate = GatehouseConfig.shape.providers.safeParse({
-      boundaries: { [b.provider]: b.boundary ?? {} },
+      boundaries: model ? { models: { [model]: b.boundary ?? {} } } : { [b.provider]: b.boundary ?? {} },
     })
     if (!candidate.success)
       return reply.code(422).send({
         error: "Those details are not valid.",
         errors: candidate.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
       })
-    const boundary = candidate.data?.boundaries?.[b.provider] ?? {}
+    const boundary = (model ? candidate.data?.boundaries?.models?.[model] : candidate.data?.boundaries?.[b.provider]) ?? {}
     const recorded = await ctx.audit.record({
       session: "desktop",
       event: "provider_boundary_changed",
       channel: "desktop",
       tool: "settings",
       cwd: "",
-      input: { provider: b.provider, ...boundary },
+      input: { provider: b.provider, ...(model ? { model } : {}), ...boundary },
       verdict: {
         outcome: "allow",
         ruleId: "provider-boundary-changed",
@@ -102,10 +106,54 @@ export function registerProviderRoutes(
     }
     const providers = (onDisk.providers as Record<string, unknown> | undefined) ?? {}
     const boundaries = (providers.boundaries as Record<string, unknown> | undefined) ?? {}
+    const models = (boundaries.models as Record<string, unknown> | undefined) ?? {}
     const merged = {
       ...onDisk,
-      providers: { ...providers, boundaries: { ...boundaries, [b.provider]: boundary } },
+      providers: {
+        ...providers,
+        boundaries: model ? { ...boundaries, models: { ...models, [model]: boundary } } : { ...boundaries, [b.provider]: boundary },
+      },
     }
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(merged, null, 2) + "\n")
+    ;(ctx.config() as { providers?: Providers }).providers = merged.providers as Providers
+    return await view()
+  })
+
+  // C-016: how old a card's check may be before a send to its model is refused. Recorded, then saved by adding.
+  app.put("/api/providers/boundary-age", async (req, reply) => {
+    const file = ctx.configFile
+    if (!file) return reply.code(404).send({ error: "Settings cannot be saved here." })
+    const days = (req.body as { days?: unknown } | undefined)?.days
+    if (typeof days !== "number" || !Number.isInteger(days) || days < 1 || days > 3650)
+      return reply.code(422).send({ error: "Give a number of days from 1 to 3650." })
+    const recorded = await ctx.audit.record({
+      session: "desktop",
+      event: "provider_boundary_changed",
+      channel: "desktop",
+      tool: "settings",
+      cwd: "",
+      input: { maxAgeDays: days },
+      verdict: {
+        outcome: "allow",
+        ruleId: "provider-boundary-changed",
+        reason: "How old a card saying where your words go may be was set from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) return reply.code(503).send({ error: "It could not be recorded, so it was not saved." })
+    let onDisk: Record<string, unknown> = {}
+    try {
+      onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+    } catch {
+      // no settings file yet
+    }
+    const providers = (onDisk.providers as Record<string, unknown> | undefined) ?? {}
+    const boundaries = (providers.boundaries as Record<string, unknown> | undefined) ?? {}
+    const merged = { ...onDisk, providers: { ...providers, boundaries: { ...boundaries, maxAgeDays: days } } }
     fs.mkdirSync(path.dirname(file), { recursive: true })
     await writeFileAtomic(file, JSON.stringify(merged, null, 2) + "\n")
     ;(ctx.config() as { providers?: Providers }).providers = merged.providers as Providers

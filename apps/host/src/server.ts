@@ -1,6 +1,7 @@
 import { RubberStamp } from "./rubber-stamp.js"
 import { TestLockError, type TestLocks } from "./test-locks.js"
 import { approveInstructions, InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
+import { BoundaryStaleError, refuseStaleSend, type Boundaries } from "./boundary.js"
 import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
@@ -667,6 +668,13 @@ export class HostServer {
         const s = this.#session(cmd.sessionId)
         // D-059: no turn starts on instructions changed outside Codehouse until you approve the change.
         await s.checkInstructions()
+        // C-016: nor is anything sent to a model whose card saying where your words go is stale. Recorded.
+        try {
+          await refuseStaleSend(s, a.admin?.config().providers?.boundaries as Boundaries | undefined, a.audit)
+        } catch (e) {
+          if (e instanceof BoundaryStaleError) throw new CommandError("boundary-stale", e.message)
+          throw e
+        }
         s.prompt(cmd.text)
         return undefined
       }
