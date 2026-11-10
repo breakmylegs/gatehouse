@@ -82,7 +82,9 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   if (
     retryFlaky &&
     r.status !== 0 &&
-    /Failed to start forks worker|Timeout waiting for worker/.test(out)
+    // 10 Nov: also "Worker exited unexpectedly with exit code 3221225794 during starting state" (0xC0000142, a
+    // process Windows could not start while memory was short).
+    /Failed to start forks worker|Timeout waiting for worker|Worker exited unexpectedly with exit code \d+ during starting state/.test(out)
   ) {
     say("  the test workers did not start (machine busy); running again, one at a time")
     r = once(["--maxWorkers=1"])
