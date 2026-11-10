@@ -145,7 +145,9 @@ describe.skipIf(!csc)("Codehouse-Limits.exe", () => {
 
   it("refuses memory past the cap, to the command and what it starts", () => {
     const grab =
-      "const a=[];try{for(let i=0;i<40;i++)a.push(Buffer.alloc(32*1024*1024,1));console.log('allocated')}catch{console.log('refused')}"
+      // 512 MB: past the 256 MB cap, and small enough to be had without one on a laptop short of memory (10 Nov: 1.28 GB
+      // could not be had with no cap at all, so the test failed on the machine, not the cap).
+      "const a=[];try{for(let i=0;i<16;i++)a.push(Buffer.alloc(32*1024*1024,1));console.log('allocated')}catch{console.log('refused')}"
     const run = (mb: string) =>
       spawnSync(
         exe,
@@ -168,7 +170,7 @@ describe.skipIf(!csc)("Codehouse-Limits.exe", () => {
           windowsHide: true,
         },
       ).stdout.trim()
-    expect(run("400")).toBe("refused")
+    expect(run("256")).toBe("refused")
     expect(run("0")).toBe("allocated")
   })
 })
