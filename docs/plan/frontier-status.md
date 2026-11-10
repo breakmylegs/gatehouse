@@ -70,7 +70,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-018 | Risk budget per session | built | slice/D-018-risk-budget | BUILD_REPORT "Frontier D-018" | Opt-in, off by default; a person's own approvals spend nothing |
 | D-021 | Rubber-stamp detector | built | slice/D-021-rubber-stamp | BUILD_REPORT "Frontier D-021" | Per desktop connection; the deliberate approval checked by the Host too |
 | D-025 | Dead-man timer for Extreme | built | slice/D-025-dead-man | BUILD_REPORT "Frontier D-025" | Opt-in per session, off by default; a new signed phone envelope, heartbeat |
-| D-030 | Approval lineage on commits | todo | | | |
+| D-030 | Approval lineage on commits | built | slice/D-030-commit-lineage | BUILD_REPORT "Frontier D-030" | Evidence-pack hash with D-003 (Wave 2) |
 | D-053 | Dependency admission control | todo | | | Safe variant offline; connectors per conflict 1 |
 | D-054 | Lockfile diff guard | todo | | | |
 | D-055 | Licence policy | todo | | | Safe variant; legal list owed |

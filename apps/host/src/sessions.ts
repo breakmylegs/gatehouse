@@ -1,3 +1,4 @@
+import { noteCommit } from "./lineage.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
 import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
@@ -339,6 +340,7 @@ export interface SessionEvents {
         | "remember_refused"
         | "risk_budget_exhausted"
         | "heartbeat_missed"
+        | "commit_noted"
       data: Record<string, unknown>
     },
   ]
@@ -1028,6 +1030,10 @@ export class Session extends EventEmitter<SessionEvents> {
       // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
+      onCommitted: (cwd) =>
+        void noteCommit({ sessionId: this.id, cwd, project: this.project, audit: d.audit, log: d.log }).then(
+          (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
+        ),
       onToolOutput: (_tool, output) => {
         if (this.#pins.noteOutput(output)) this.emit("state", this.info())
       },

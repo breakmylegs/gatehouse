@@ -128,6 +128,8 @@ export interface SessionHookDeps {
   untrustedFiles?: () => readonly string[]
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
+  /** D-030: the session made a commit, in this folder. */
+  onCommitted?: (cwd: string) => void
   /** D-008: what a shell command printed, read for counterexamples. */
   onToolOutput?: (tool: string, output: string) => void
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
@@ -312,6 +314,9 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
         if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
           deps.provenance.addUntrustedFile(input.tool_response)
       }
+      // D-030: a commit the session made gets a note of its approvals' lineage.
+      if (input.hook_event_name === "PostToolUse" && makesCommit(input.tool_name, asRecord(input.tool_input)))
+        deps.onCommitted?.(typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd)
       // D-008: a shell command's output, read for a property test's or a fuzz run's counterexample.
       if (deps.onToolOutput && (input.tool_name === "Bash" || input.tool_name === "PowerShell")) {
         const r = input.hook_event_name === "PostToolUse" ? input.tool_response : (input as { error?: unknown }).error
