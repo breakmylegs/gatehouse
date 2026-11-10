@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process"
+import { execFile, spawn, type ChildProcess } from "node:child_process"
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk"
 import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
 import { findWindowsHelper, type HelperPlace } from "./win-helper.js"
@@ -137,6 +137,18 @@ export function limiter(exe: string): Limiter {
         ),
       ),
   }
+}
+
+/**
+ * D-002: a command line run through cmd.exe inside its own job at the Medium level, so a held-out run cannot take the
+ * whole computer, and ends with everything it started.
+ */
+export function limitedCommand(exe: string, job: string, command: string, cwd: string): ChildProcess {
+  return spawn(exe, ["--name", job, ...levelArgs("medium"), "--", "cmd.exe", "/d", "/s", "/c", command], {
+    cwd,
+    windowsHide: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  })
 }
 
 /** Codehouse-Limits.exe (packaging/Limits.cs), found or built as every helper is (win-helper.ts). */

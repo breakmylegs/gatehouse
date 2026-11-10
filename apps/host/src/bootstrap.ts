@@ -17,7 +17,9 @@ import { PromptStore } from "./prompts.js"
 import { chatMemoryClient } from "./memory-client.js"
 import { MemoryStore } from "./memory.js"
 import { ProjectStore } from "./projects.js"
-import { findLimitsExe, limiter } from "./limits.js"
+import { findLimitsExe, limitedCommand, limiter } from "./limits.js"
+import { HeldOutChecks } from "./heldout.js"
+import { runHeldOutFor } from "./heldout-session.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
@@ -515,6 +517,20 @@ export function createHost(opts: HostOptions = {}): Host {
     if (exe) deps.limiter = limiter(exe)
   }
   manager = new SessionManager(deps)
+  // D-002: sealed held-out checks, run under a job object where Codehouse-Limits.exe can be had.
+  const limitsExe = findLimitsExe({
+    installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
+    repoRoot: REPO_ROOT,
+    dataDir: gatehouseDataDir(env),
+    log,
+  })
+  const heldOut = new HeldOutChecks({
+    dataDir: gatehouseDataDir(env),
+    sealer: () => sealer(),
+    ...(limitsExe
+      ? { spawnLimited: (command: string, cwd: string) => limitedCommand(limitsExe, `codeh-heldout-${Date.now()}`, command, cwd) }
+      : {}),
+  })
   // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
   const chatStore = new ChatStore({
     file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
@@ -825,6 +841,14 @@ export function createHost(opts: HostOptions = {}): Host {
         })
         .catch(() => undefined)
       void ntfy.note("build queue empty", "Claude has finished its queue.", project)
+      // D-002: when a session says it is done, its project's held-out checks run, if it has any; the counts only
+      // reach it. A failure here is logged without the checks' names or output.
+      const s = manager.get(sessionId)
+      if (s)
+        void heldOut
+          .summary(s.project)
+          .then((x) => (x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty") : undefined))
+          .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
     } else if (type === "carry_on_end" || type === "stuck") {
       // O16: the end of an Extreme run, and a turn that may be stuck, reach your phone too. A run that ended because
       // the queue is empty is told above, and one you stopped needs no telling.
@@ -985,6 +1009,7 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     account,
     limits: limitPauser,
+    heldOut,
     governor,
     audit,
     engine,

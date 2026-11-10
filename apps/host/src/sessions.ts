@@ -309,6 +309,7 @@ export interface SessionEvents {
         | "stuck"
         | "bypass_ended"
         | "tests_weakened"
+        | "heldout_result"
       data: Record<string, unknown>
     },
   ]

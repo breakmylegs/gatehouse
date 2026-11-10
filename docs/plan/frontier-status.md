@@ -61,7 +61,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
 | D-001 | Test integrity guard | built | slice/D-001-test-integrity | BUILD_REPORT "Frontier D-001" | Golden 15-test-integrity (41 cases); High risk so Auto asks; Extreme approve-and-flag by default, strict per project; D-003/D-009 to read the records |
-| D-002 | Sealed held-out checks | todo | | | |
+| D-002 | Sealed held-out checks | built | slice/D-002-sealed-checks | BUILD_REPORT "Frontier D-002" | Built-in floor rule sealed-checks; DPAPI-sealed names and contents; job object; counts only to the session; sealed_no_leak |
 | D-007 | Locked acceptance tests | todo | | | |
 | D-008 | Pinned counterexamples | todo | | | |
 | D-009 | Done-claim verifier | todo | | | |

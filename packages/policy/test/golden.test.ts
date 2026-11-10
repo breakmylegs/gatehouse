@@ -210,6 +210,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "13-remember": 12,
   "14-hidden-unicode": 8,
   "15-test-integrity": 40,
+  "16-sealed-checks": 12,
 }
 
 for (const { category, cases } of corpus) {

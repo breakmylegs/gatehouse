@@ -224,6 +224,10 @@ Test files are found by convention: a `test`, `tests`, `spec` or `__tests__` fol
 
 In Extreme approval the Host decides what happens to such an escalation per project (Settings, Sessions, Test integrity): by default it is approved and the session says its tests were weakened; a strict project waits for a person. Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
 
+### Built-in floor rules (D-002)
+
+One floor rule is built into Codehouse and checked before the rules file's own, so no rules file can leave it out: `sealed-checks` denies every tool any path under `Gatehouse/sealed` or `Gatehouse/heldout-runs`, wherever Codehouse's data folder is, in either slash and any case. That is where the sealed held-out checks are kept and run.
+
 ## 8. Redaction
 
 `redact()` and `redactString()` remove tokens, keys, Authorization headers, JWTs, connection strings, credentials in URLs, private key blocks and `key=value` secrets, plus any terms in the user's list (client names, internal host names). Strings under keys that look secret (`password`, `token`, `api_key` and so on) are replaced whole. Numbers are left alone. It never mutates its input. It is applied before anything is written to the audit log or sent to the relay.

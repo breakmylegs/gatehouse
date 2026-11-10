@@ -1,3 +1,5 @@
+import { HeldOutError, type HeldOutChecks } from "./heldout.js"
+import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
 import { MemoryRefusedError, type MemoryGovernor } from "./memory-governor.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
@@ -55,6 +57,8 @@ export interface HostApp {
   checkpoints: CheckpointManager
   usage: UsageStore
   account: AccountMonitor
+  /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
+  heldOut?: HeldOutChecks
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -464,6 +468,59 @@ export class HostServer {
       case "warm_chat":
         a.manager.warmChat()
         return undefined
+      case "heldout_list": {
+        // The desktop only: this socket is the desktop's, never the phone's or a push channel's.
+        const s = this.#session(cmd.sessionId)
+        const h = a.heldOut
+        if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
+        return { project: s.project, ...(await h.list(s.project)) }
+      }
+      case "heldout_add":
+      case "heldout_remove":
+      case "heldout_command": {
+        const s = this.#session(cmd.sessionId)
+        const h = a.heldOut
+        if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
+        try {
+          if (cmd.type === "heldout_add") await h.add(s.project, cmd.name, cmd.content)
+          else if (cmd.type === "heldout_remove") await h.remove(s.project, cmd.name)
+          else await h.setCommand(s.project, cmd.command)
+        } catch (e) {
+          if (e instanceof HeldOutError) throw new CommandError("invalid", e.message)
+          throw e
+        }
+        // Recorded without the name or the content: that a check was added, removed, or the command changed.
+        await a.audit.record({
+          session: s.id,
+          event: "sealed_check_changed",
+          channel: "desktop",
+          tool: "heldout",
+          cwd: s.cwd,
+          project: s.project,
+          input: { change: cmd.type.slice("heldout_".length) },
+          verdict: {
+            outcome: "allow",
+            ruleId: "heldout-checks",
+            reason: "You changed this project's sealed held-out checks.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        return await h.summary(s.project)
+      }
+      case "heldout_run": {
+        const s = this.#session(cmd.sessionId)
+        const h = a.heldOut
+        if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
+        try {
+          return await runHeldOutFor(s, h, a.audit, "you")
+        } catch (e) {
+          if (e instanceof HeldOutError) throw new CommandError("invalid", e.message)
+          throw e
+        }
+      }
       case "memory_status": {
         const st = (await a.governor?.status()) ?? { over: false }
         return {

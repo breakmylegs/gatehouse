@@ -1,0 +1,16 @@
+# D-002: the sealed held-out checks and the folder they run in are denied at the floor for every tool, wherever the
+# data folder is, in either slash, in any case, and through an environment variable. A rule built into Codehouse, so
+# no rules file can leave it out.
+- { t: Read, p: "C:/Users/someone/AppData/Local/Gatehouse/sealed/myproj/a1b2.sealed", o: deny, r: sealed-checks }
+- { t: Glob, p: "C:/Users/someone/AppData/Local/Gatehouse/sealed", g: "**", o: deny, r: sealed-checks }
+- { t: Grep, p: "C:/Users/someone/AppData/Local/Gatehouse/sealed/myproj", o: deny, r: sealed-checks }
+- { t: Edit, p: "C:/Users/someone/AppData/Local/Gatehouse/sealed/myproj/a1b2.sealed", o: deny, r: sealed-checks }
+- { t: Write, in: { file_path: "C:/Users/someone/AppData/Local/Gatehouse/heldout-runs/r1/test_x.py", content: "x" }, o: deny, r: sealed-checks }
+- { t: Read, p: "C:/Users/someone/AppData/Local/Gatehouse/heldout-runs/r1/hidden.test.ts", o: deny, r: sealed-checks }
+- { t: Bash, cmd: "cat C:/Users/someone/AppData/Local/Gatehouse/sealed/myproj/a1b2.sealed", o: deny, r: sealed-checks }
+- { t: Bash, cmd: "ls /c/Users/someone/AppData/Local/Gatehouse/heldout-runs", o: deny, r: sealed-checks }
+- { t: Bash, cmd: "cat \"$LOCALAPPDATA/Gatehouse/sealed/myproj/index.sealed\"", o: deny, r: sealed-checks, note: "through a variable" }
+- { t: PowerShell, cmd: "Get-Content C:\\Users\\someone\\AppData\\Local\\Gatehouse\\sealed\\myproj\\a1b2.sealed", o: deny, r: sealed-checks }
+- { t: PowerShell, cmd: "Get-ChildItem $env:LOCALAPPDATA\\Gatehouse\\heldout-runs -Recurse", o: deny, r: sealed-checks, note: "through an environment variable" }
+- { t: Grep, in: { pattern: "def test_", path: "C:/Users/someone/AppData/Local/GATEHOUSE/SEALED" }, o: deny, r: sealed-checks, note: "in another case" }
+- { t: Read, p: "${WS}/docs/sealed-notes.md", o: allow, r: read-workspace, note: "a file merely named like it" }

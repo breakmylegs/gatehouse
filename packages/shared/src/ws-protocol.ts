@@ -84,6 +84,18 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   /** C-004: how committed this computer's memory is, the point in Settings, and the idle sessions that could be suspended. */
   z.object({ type: z.literal("memory_status") }),
+  /** D-002: the session's project's sealed held-out checks: how many, the names (desktop only), and changes to them. */
+  z.object({ type: z.literal("heldout_list"), sessionId: Id }),
+  z.object({
+    type: z.literal("heldout_add"),
+    sessionId: Id,
+    name: z.string().min(1).max(120),
+    content: z.string().max(1_000_000),
+  }),
+  z.object({ type: z.literal("heldout_remove"), sessionId: Id, name: z.string().min(1).max(120) }),
+  z.object({ type: z.literal("heldout_command"), sessionId: Id, command: z.string().min(1).max(500) }),
+  /** D-002: runs them now; the counts reach the session, the detail only this desktop. */
+  z.object({ type: z.literal("heldout_run"), sessionId: Id }),
   /** C-004: suspends an idle session to free memory; Start again brings it back. */
   z.object({ type: z.literal("suspend_session"), sessionId: Id }),
   /** New chat or the quick prompt is open: have a chat ready for the first message (the warm chat). */
