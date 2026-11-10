@@ -73,7 +73,7 @@ Your phone gets the same request at the same time if one is paired. The first va
 
 Starting a session starts Claude Code itself. The Start button counts the seconds; the first start after Codehouse is installed or updated can take a minute or more.
 
-In every mode the floor (secrets, destructive commands) is checked first and every decision is audited. Bypass permissions is never offered.
+In every mode the floor (secrets, destructive commands) is checked first and every decision is audited. Bypass permissions is never offered. A session's commit or push that would add or send what looks like a key is refused in every mode, Extreme approval too; the refusal names the file and line, never the key. Take the key out, or commit it yourself in the Terminal if it is not a real one.
 
 **The list**
 

@@ -11,6 +11,7 @@ const untrusted = (globs: readonly string[]) => compileGlobs(globs.map((g) => g.
 import {
   makesCommit,
   scanCommit,
+  makesPush,
   secretReason,
   SECRET_IN_COMMIT_RULE,
   type Found,
@@ -189,14 +190,14 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         })
         return denyOutput(`${hit.reason} (rule ${hit.ruleId})`)
       }
-      // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person.
-      if (deps.scanCommits !== false && makesCommit(input.tool_name, toolInput)) {
+      // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person. D-058: a push too.
+      if (deps.scanCommits !== false && (makesCommit(input.tool_name, toolInput) || makesPush(input.tool_name, toolInput))) {
         let found: Found[]
         try {
           found = await (deps.commitScanner ?? scanCommit)(cwd, String(toolInput.command))
         } catch {
           return askOutput(
-            "Codehouse could not check this commit for secrets, so it asks you before it runs.",
+            "Codehouse could not check this commit or push for secrets, so it asks you before it runs.",
           )
         }
         if (found.length) {

@@ -74,7 +74,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-053 | Dependency admission control | built safe variant | slice/D-053-dependency-admission | BUILD_REPORT "Frontier D-053" | Offline; hallucination list has one documented name, owner to add; registry connector later per conflict 1 |
 | D-054 | Lockfile diff guard | built | slice/D-054-lockfile-guard | BUILD_REPORT "Frontier D-054" | Every hand edit of a lockfile asks; install scripts and off-registry sources named |
 | D-055 | Licence policy | built safe variant | slice/D-055-licences | BUILD_REPORT "Frontier D-055" | Offline: npm's download cache is not read, so a package not installed yet is unknown; Extreme never approves a licence outside the list; legal list owed |
-| D-058 | Secret commit block | todo | | | G22 built a commit-scan floor deny; check against the acceptance |
+| D-058 | Secret commit block | built | slice/D-058-secret-commit | BUILD_REPORT "Frontier D-058" | Extends G22: pushes are read too, findings name the line; golden lines in apps/host/test/golden |
 | D-059 | Instruction integrity pinning | todo | | | |
 | D-060 | Agent-config tamper floor | built | slice/D-060-config-tamper | BUILD_REPORT "Frontier D-060" | Built into the floor; content-aware for Claude and VS Code settings |
 | D-064 | Install-script default deny | todo | | | |
