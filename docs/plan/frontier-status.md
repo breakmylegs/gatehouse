@@ -76,7 +76,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-055 | Licence policy | todo | | | Safe variant; legal list owed |
 | D-058 | Secret commit block | todo | | | G22 built a commit-scan floor deny; check against the acceptance |
 | D-059 | Instruction integrity pinning | todo | | | |
-| D-060 | Agent-config tamper floor | todo | | | |
+| D-060 | Agent-config tamper floor | built | slice/D-060-config-tamper | BUILD_REPORT "Frontier D-060" | Built into the floor; content-aware for Claude and VS Code settings |
 | D-064 | Install-script default deny | todo | | | |
 | D-096 | WinGet and installer admission | built | slice/D-096-installer-admission | BUILD_REPORT "Frontier D-096" | Offline: publisher from the WinGet id, unchecked |
 

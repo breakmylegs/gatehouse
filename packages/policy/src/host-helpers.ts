@@ -4,7 +4,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import { analyse, FILE_TOOLS, SHELL_TOOLS } from "./analyse.js"
 import type { PolicyEngine } from "./engine.js"
-import { checkFloor, type FloorHit } from "./floor.js"
+import { checkCallFloor, type FloorHit } from "./floor.js"
 import { checkRememberFile } from "./schema.js"
 import type { PwshWorker } from "./pwsh.js"
 import { findProjectRoot } from "./paths.js"
@@ -24,7 +24,7 @@ export async function evaluateFloor(
 ): Promise<FloorHit | null> {
   if (!policy) return null
   const features = await analyse(call, ctx, { pwsh })
-  return checkFloor(features, ctx, policy.rules.floor)
+  return checkCallFloor(call, features, ctx, policy.rules.floor)
 }
 
 /**

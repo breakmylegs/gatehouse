@@ -224,6 +224,10 @@ Test files are found by convention: a `test`, `tests`, `spec` or `__tests__` fol
 
 In Extreme approval the Host decides what happens to such an escalation per project (Settings, Sessions, Test integrity): by default it is approved and the session says its tests were weakened; a strict project waits for a person. Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
 
+### Settings that decide what a tool may do (D-060)
+
+Built into the floor, so it applies in every mode and before any rule, a session may not change what an AI tool may do without asking: permissions, hooks, defaultMode and the like in `.claude/settings*.json`; keys with autoApprove, chat.tools or chat.agent in `.vscode/settings.json`; anything in `.cursor` or `.codex`; and anything in Codehouse's data folder (`AppData/Local/Gatehouse`) or the managed folder (`ProgramData/Codehouse`). A Write is compared with the file as it is; one that cannot be read as JSON is denied. Shell writes (redirects, Set-Content and the like, sed -i, a copy or move onto one) are denied too. Other settings in the same files, and reading them, are as before. The rule id is `agent-config-tamper`.
+
 ### Built-in floor rules (D-002)
 
 One floor rule is built into Codehouse and checked before the rules file's own, so no rules file can leave it out: `sealed-checks` denies every tool any path under `Gatehouse/sealed` or `Gatehouse/heldout-runs`, wherever Codehouse's data folder is, in either slash and any case. That is where the sealed held-out checks are kept and run. A second, `test-locks`, does the same for `Gatehouse/locks`, where the pins of locked tests are kept (D-007).

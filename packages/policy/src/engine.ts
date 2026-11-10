@@ -2,7 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
-import { checkFloor } from "./floor.js"
+import { checkCallFloor } from "./floor.js"
 import { admit, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
 import { installerCall } from "./installers.js"
@@ -267,7 +267,7 @@ export class PolicyEngine {
     const f = await analyse(call, ctx, { pwsh: this.#pwsh })
     const hash = policy.hash
 
-    const floor = checkFloor(f, ctx, policy.rules.floor)
+    const floor = checkCallFloor(call, f, ctx, policy.rules.floor)
     if (floor) return this.#verdict("deny", { ...floor, risk: 100 }, hash, "floor")
     // After the floor, before any rule: no rule of yours can send a listed term out to the web.
     const out = sentToWeb(call)
