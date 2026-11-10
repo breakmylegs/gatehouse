@@ -73,7 +73,8 @@ describe("on a real session (D-009)", () => {
 
   it("shows Contradicted when the tests are said to pass after a failing run", async () => {
     exitCode = 1
-    const { session, events } = await turn("All tests pass now.", "npm test 2>&1 | tail -5")
+    // A command the rules allow, so it runs and the turn records it (the part a pipe hides is in checkIn's own test).
+    const { session, events } = await turn("All tests pass now.", "npm test")
     expect(events[0]).toMatchObject({ kind: "tests", outcome: "contradicted", command: "npm test" })
     expect(runs.at(-1)).toMatchObject({ command: "npm test", sessionId: session.id, level: "high" })
     expect(session.info().claims?.at(-1)).toMatchObject({ outcome: "contradicted" })
@@ -82,7 +83,7 @@ describe("on a real session (D-009)", () => {
 
   it("shows Verified when the check passes", async () => {
     exitCode = 0
-    const { events } = await turn("Fixed it, and the tests pass.", "npx vitest run")
+    const { events } = await turn("Fixed it, and the tests pass.", "npm test")
     expect(events.map((e) => e.outcome)).toEqual(["verified", "verified"])
   })
 
