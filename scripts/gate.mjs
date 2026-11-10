@@ -276,32 +276,56 @@ if (fullReason) {
   let ranRelated = new Set()
   if (sources.length) {
     const report = path.join(os.tmpdir(), `codeh-gate-${process.pid}.json`)
-    const code = run(
-      `tests: those that import any of ${sources.length} changed source file${sources.length === 1 ? "" : "s"}`,
-      node,
-      [
-        bin("vitest/vitest.mjs"),
-        "related",
-        "--run",
-        "--passWithNoTests",
-        "--maxWorkers=2",
-        "--reporter=default",
-        "--reporter=json",
-        `--outputFile=${report}`,
-        ...sources,
-      ],
-      { retryFlaky: true },
-    )
-    if (code !== 0) failures.push("related tests")
+    const relatedArgs = (workers) => [
+      bin("vitest/vitest.mjs"),
+      "related",
+      "--run",
+      "--passWithNoTests",
+      `--maxWorkers=${workers}`,
+      "--reporter=default",
+      "--reporter=json",
+      `--outputFile=${report}`,
+      ...sources,
+    ]
+    const label = `tests: those that import any of ${sources.length} changed source file${sources.length === 1 ? "" : "s"}`
+    let code = run(label, node, relatedArgs(2))
+    let j
     try {
-      const j = JSON.parse(fs.readFileSync(report, "utf8"))
+      j = JSON.parse(fs.readFileSync(report, "utf8"))
+      fs.rmSync(report, { force: true })
+    } catch {
+      j = undefined
+    }
+    if (code !== 0 && j) {
+      // 10 Nov: with memory short, workers died part way through files that pass on their own, and a run of the whole
+      // set in one worker died the same way an hour later. The files that did not pass are run again instead, each in
+      // a process of its own, as many at once as free memory allows (C-001); one that fails twice still fails.
+      const again = j.testResults
+        .filter((r) => r.status !== "passed" && r.status !== "skipped")
+        .map((r) => path.relative(root, r.name).split(path.sep).join("/"))
+      if (again.length) {
+        say(`  ${again.length} file${again.length === 1 ? "" : "s"} did not pass; each runs again in a process of its own`)
+        code = run(`tests: ${again.length} again, one file at a time by free memory`, node, [
+          path.join(root, "scripts", "test-shards.mjs"),
+          ...again,
+        ])
+      }
+    } else if (code !== 0) {
+      // No report at all: the workers never started. Once more, one at a time.
+      say("  the test workers did not start (machine busy); running again, one at a time")
+      code = run(label, node, relatedArgs(1))
+      try {
+        j = JSON.parse(fs.readFileSync(report, "utf8"))
+        fs.rmSync(report, { force: true })
+      } catch {
+        j = undefined
+      }
+    }
+    if (code !== 0) failures.push("related tests")
+    if (j)
       ranRelated = new Set(
         j.testResults.map((r) => path.relative(root, r.name).split(path.sep).join("/")),
       )
-      fs.rmSync(report, { force: true })
-    } catch {
-      // no report: run the named ones anyway
-    }
   }
   const rest = [...named].filter((t) => !ranRelated.has(t)).sort()
   if (rest.length) {
