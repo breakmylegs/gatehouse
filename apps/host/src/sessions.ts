@@ -1565,6 +1565,9 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#carry.stopped()
       return
     }
+    // The session may have been closed, paused or stopped by the kill switch while the record was written.
+    const now = this.#state as SessionState
+    if (now === "error" || now === "ended" || this.#paused || this.#deps.kill.isEngaged()) return
     this.emit("event", { type: "carry_on", data })
     this.#send(
       data.restart !== true || this.#extreme
