@@ -1,3 +1,4 @@
+import { TestLockError, type TestLocks } from "./test-locks.js"
 import { HeldOutError, type HeldOutChecks } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
@@ -43,6 +44,7 @@ import {
   OrgGuardError,
   SessionFolderError,
   SessionLimitError,
+  LockedTestsChangedError,
   ManagedPolicyError,
   type SessionManager,
 } from "./sessions.js"
@@ -57,6 +59,8 @@ export interface HostApp {
   checkpoints: CheckpointManager
   usage: UsageStore
   account: AccountMonitor
+  /** D-007: the locked tests. Absent where they cannot be kept (tests). */
+  locks?: TestLocks
   /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
   heldOut?: HeldOutChecks
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
@@ -468,6 +472,59 @@ export class HostServer {
       case "warm_chat":
         a.manager.warmChat()
         return undefined
+      case "locks_state": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.locks) throw new CommandError("unavailable", "Locked tests are not available here")
+        return await a.locks.state(s.cwd)
+      }
+      case "lock_test":
+      case "unlock_test":
+      case "locks_accept": {
+        const l = a.locks
+        if (!l) throw new CommandError("unavailable", "Locked tests are not available here")
+        const s = cmd.type === "locks_accept" ? undefined : this.#session(cmd.sessionId)
+        const cwd = s?.cwd ?? (cmd.type === "locks_accept" ? cmd.cwd : "")
+        let paths: string[]
+        try {
+          if (cmd.type === "lock_test") paths = [await l.lock(cwd, cmd.path)]
+          else if (cmd.type === "unlock_test") {
+            await l.unlock(cwd, cmd.path)
+            paths = [cmd.path]
+          } else {
+            paths = await l.changedOutside(cwd)
+            await l.accept(cwd)
+          }
+        } catch (e) {
+          if (e instanceof TestLockError) throw new CommandError("invalid", e.message)
+          throw e
+        }
+        const event =
+          cmd.type === "lock_test" ? "test_locked" : cmd.type === "unlock_test" ? "test_unlocked" : "test_locks_accepted"
+        const written = await a.audit.record({
+          session: s?.id ?? "desktop",
+          event,
+          channel: "desktop",
+          tool: "locks",
+          cwd,
+          input: { paths },
+          verdict: {
+            outcome: "allow",
+            ruleId: "locked-test",
+            reason:
+              event === "test_locked"
+                ? "You locked a test: a session changes it only with you."
+                : event === "test_unlocked"
+                  ? "You unlocked a test."
+                  : "You accepted locked tests as they now are, after they changed outside Codehouse.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!written) a.log("locks: the change could not be recorded in the audit log")
+        return await l.state(cwd)
+      }
       case "heldout_list": {
         // The desktop only: this socket is the desktop's, never the phone's or a push channel's.
         const s = this.#session(cmd.sessionId)
@@ -955,6 +1012,7 @@ function classify(e: unknown): CommandError {
   if (e instanceof SessionFolderError) return new CommandError("folder-missing", e.message)
   if (e instanceof SessionLimitError) return new CommandError("session-limit", e.message)
   if (e instanceof MemoryRefusedError) return new CommandError("memory", e.message)
+  if (e instanceof LockedTestsChangedError) return new CommandError("locked-tests", e.message)
   if (e instanceof ManagedPolicyError) return new CommandError("managed-policy", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)

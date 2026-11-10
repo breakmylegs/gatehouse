@@ -12,6 +12,7 @@ import type { Verdict } from "@gatehouse/shared"
 import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
+import { lockedReason, type TestLocks } from "./test-locks.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -89,6 +90,9 @@ export interface SessionHookDeps {
   checkpoints?: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
+  /** D-007: the locked tests, and the calls a person approved that touched them. */
+  locks?: Pick<TestLocks, "touched" | "repin">
+  lockedCalls?: Map<string, string[]>
   /** toolUseIDs that went through canUseTool, so PostToolUse can tell which calls Claude Code approved itself. */
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
@@ -206,6 +210,13 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       // G27: and if it is a command that would delete files or throw work away, an undo point before it runs.
       await deps.checkpoints?.beforeEffects(deps.sessionId, cwd, input.tool_name, toolInput)
       const mode = deps.mode?.() ?? "default"
+      // D-007: a call that would change a locked test is asked in these modes too; canUseTool records and decides it.
+      if (SELF_APPROVING_MODES.has(mode) && deps.locks) {
+        const files = await deps.locks
+          .touched(cwd, input.tool_name, toolInput)
+          .catch(() => ["(the locks could not be read)"])
+        if (files.length) return askOutput(lockedReason(files))
+      }
       if (deps.approver && SELF_APPROVING_MODES.has(mode) && !NOT_JUDGED.has(input.tool_name)) {
         const judged = await deps.approver.evaluate(
           { toolName: input.tool_name, input: toolInput },
@@ -286,6 +297,31 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
         if (typeof file === "string" && file) deps.onWritten?.(file)
       }
       deps.verdicts?.delete(input.tool_use_id)
+      // D-007: a locked test changed with a person's approval is pinned again as it now is, and that is recorded.
+      const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
+      const locked = deps.lockedCalls?.get(input.tool_use_id)
+      if (input.hook_event_name === "PostToolUse" && locked && deps.locks) {
+        deps.lockedCalls?.delete(input.tool_use_id)
+        await deps.locks.repin(cwd, locked).catch(() => undefined)
+        await deps.audit.record({
+          session: deps.sessionId,
+          event: "test_lock_repinned",
+          channel: "host",
+          tool: input.tool_name,
+          toolUseId: input.tool_use_id,
+          cwd,
+          input: { files: locked },
+          verdict: {
+            outcome: "allow",
+            ruleId: LOCKED_TEST_RULE,
+            reason: "A locked test was changed with your approval, so it is locked as it now is.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: deps.policy()?.hash ?? "none",
+          },
+          latencyMs: 0,
+        })
+      }
       if (deps.decided.has(input.tool_use_id)) return NO_DECISION
       await deps.audit.record({
         session: deps.sessionId,

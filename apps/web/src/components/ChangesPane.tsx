@@ -176,6 +176,23 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                   >
                     Undo
                   </button>
+                  {/* D-007: lock a test as it now is; a session then changes it only with you. */}
+                  {f.change !== "deleted" ? (
+                    <button
+                      type="button"
+                      className="btn !min-h-7 !px-2 !text-[12.5px]"
+                      disabled={busy}
+                      onClick={() =>
+                        void send({ type: "lock_test", sessionId, path: f.path }).then((r) =>
+                          r.ok
+                            ? toast(`${f.path} is locked: a session changes it only with you`)
+                            : toast.error(r.error?.message ?? "It could not be locked"),
+                        )
+                      }
+                    >
+                      Lock
+                    </button>
+                  ) : null}
                 </div>
                 {open[f.path] ? (
                   f.binary ? (

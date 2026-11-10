@@ -226,7 +226,7 @@ In Extreme approval the Host decides what happens to such an escalation per proj
 
 ### Built-in floor rules (D-002)
 
-One floor rule is built into Codehouse and checked before the rules file's own, so no rules file can leave it out: `sealed-checks` denies every tool any path under `Gatehouse/sealed` or `Gatehouse/heldout-runs`, wherever Codehouse's data folder is, in either slash and any case. That is where the sealed held-out checks are kept and run.
+One floor rule is built into Codehouse and checked before the rules file's own, so no rules file can leave it out: `sealed-checks` denies every tool any path under `Gatehouse/sealed` or `Gatehouse/heldout-runs`, wherever Codehouse's data folder is, in either slash and any case. That is where the sealed held-out checks are kept and run. A second, `test-locks`, does the same for `Gatehouse/locks`, where the pins of locked tests are kept (D-007).
 
 ## 8. Redaction
 

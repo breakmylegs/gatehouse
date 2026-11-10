@@ -28,6 +28,8 @@ export interface StackOptions {
   /** Start no Approver at all, so the client cannot reach one. */
   approverDown?: boolean
   config?: Record<string, unknown>
+  /** D-007: the locked tests, where a test needs them. */
+  locks?: SessionDeps["locks"]
 }
 
 export interface Stack {
@@ -165,6 +167,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
   })
   const hooks: Stack["hooks"] = {}
   const deps: SessionDeps = {
+    ...(opts.locks ? { locks: opts.locks } : {}),
     limitCheck: async () => {
       await hooks.limitCheck?.()
     },

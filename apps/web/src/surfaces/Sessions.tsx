@@ -149,6 +149,8 @@ export function Sessions() {
   const [error, setError] = useState<string>()
   // C-004: refused for want of memory; the card explains and offers idle sessions to suspend.
   const [shortOfMemory, setShortOfMemory] = useState(false)
+  // D-007: locked tests changed outside Codehouse; accepting them lets the session start.
+  const [lockedChanged, setLockedChanged] = useState(false)
   // B10: a session in a new worktree of the folder's repository, from a branch, tag or commit you name.
   const [inWorktree, setInWorktree] = useState(false)
   const [base, setBase] = useState("")
@@ -215,6 +217,7 @@ export function Sessions() {
     setStartedAt(Date.now())
     setError(undefined)
     setShortOfMemory(false)
+    setLockedChanged(false)
     if (several) return void (await startRuns())
     const r = await send(
       {
@@ -238,6 +241,7 @@ export function Sessions() {
           : (r.error?.message ?? "The session did not start"),
       )
       setShortOfMemory(r.error?.code === "memory")
+      setLockedChanged(r.error?.code === "locked-tests")
       return
     }
     const { sessionId: id, info } = r.data as {
@@ -456,6 +460,27 @@ export function Sessions() {
         {busy ? <StartProgress since={startedAt} /> : null}
         {shortOfMemory ? (
           <MemoryCard />
+        ) : lockedChanged && error ? (
+          <div role="alert" className="grid gap-2 rounded-md border border-warn bg-s1 p-3 text-[14px]">
+            <strong>Not started: locked tests changed</strong>
+            <p className="m-0">{error}</p>
+            <div>
+              <button
+                type="button"
+                className="btn btn-primary !min-h-7"
+                onClick={() =>
+                  void send({ type: "locks_accept", cwd: fresh ? freshPath : cwd.trim() }).then((r) => {
+                    if (!r.ok) return void toast.error(r.error?.message ?? "They could not be accepted")
+                    setLockedChanged(false)
+                    setError(undefined)
+                    toast("Locked tests accepted as they now are. Start the session again.")
+                  })
+                }
+              >
+                Accept them as they now are
+              </button>
+            </div>
+          </div>
         ) : error ? (
           <p role="alert" className="m-0 font-semibold text-sev">
             {error}

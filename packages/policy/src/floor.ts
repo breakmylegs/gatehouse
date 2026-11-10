@@ -30,6 +30,13 @@ export const BUILTIN_FLOOR: readonly Rule[] = [
     message:
       "Codehouse's sealed held-out checks are never read by a session. Work from the project's own tests; the person runs the held-out checks and you are told only how many pass.",
   },
+  {
+    // D-007: the pins of the locked tests, and the key that seals them.
+    id: "test-locks",
+    pathGlobs: ["**/gatehouse/locks", "**/gatehouse/locks/**"],
+    message:
+      "Codehouse's locks on tests are kept by the person, not by a session. Ask the person if a locked test needs to change.",
+  },
 ]
 
 function toolApplies(rule: Rule, tool: string): boolean {

@@ -1,3 +1,4 @@
+import { TestLocks } from "./test-locks.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
@@ -517,6 +518,9 @@ export function createHost(opts: HostOptions = {}): Host {
     if (exe) deps.limiter = limiter(exe)
   }
   manager = new SessionManager(deps)
+  // D-007: the locked tests, their pins sealed by a key DPAPI keeps for this Windows user.
+  const locks = new TestLocks({ dir: path.join(gatehouseDataDir(env), "locks"), sealer: () => sealer() })
+  deps.locks = locks
   // D-002: sealed held-out checks, run under a job object where Codehouse-Limits.exe can be had.
   const limitsExe = findLimitsExe({
     installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
@@ -1010,6 +1014,7 @@ export function createHost(opts: HostOptions = {}): Host {
     account,
     limits: limitPauser,
     heldOut,
+    locks,
     governor,
     audit,
     engine,

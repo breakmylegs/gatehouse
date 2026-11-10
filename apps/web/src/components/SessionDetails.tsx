@@ -3,6 +3,7 @@ import { useEffect, useState } from "react"
 import { clock, money } from "../lib/format"
 import { send, useStore } from "../store"
 import { HeldOutPanel } from "./HeldOutPanel"
+import { LocksPanel } from "./LocksPanel"
 
 /**
  * O21 (owner, 9 Nov, with two screenshots): a session's details beside it. Where it runs (computer, folder,
@@ -270,6 +271,8 @@ export function SessionDetails({
       )}
 
       {chat ? null : <HeldOutPanel session={session} />}
+
+      {chat ? null : <LocksPanel session={session} />}
 
       <section aria-labelledby={`bg-${session.id}`}>
         <h3 id={`bg-${session.id}`} className="m-0 mb-1.5 text-[14px]">

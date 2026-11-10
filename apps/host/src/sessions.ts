@@ -1,3 +1,4 @@
+import type { TestLocks } from "./test-locks.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
@@ -202,6 +203,15 @@ export function strictAboutTests(
   return (s?.strictProjects ?? []).some((n) => typeof n === "string" && n.trim().toLowerCase() === p)
 }
 
+/** D-007: locked tests changed outside Codehouse; no session starts in the project until the owner accepts them. */
+export class LockedTestsChangedError extends Error {
+  constructor(readonly files: string[]) {
+    super(
+      `Locked tests were changed outside Codehouse since they were locked: ${files.slice(0, 5).join(", ")}${files.length > 5 ? ` and ${files.length - 5} more` : ""}. Look at the changes, then accept the new versions to start a session here.`,
+    )
+  }
+}
+
 export class LimitPausedError extends Error {
   constructor(reason?: "spend") {
     super(
@@ -389,6 +399,8 @@ export interface SessionDeps {
   checkpoints: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
+  /** D-007: the locked tests. */
+  locks?: TestLocks
   account: AccountMonitor
   /** Owner, 9 Nov: one look at the limits now, so a bypass that has run out pauses the session at once. */
   limitCheck?: () => Promise<void>
@@ -571,6 +583,8 @@ export class Session extends EventEmitter<SessionEvents> {
   #bypassTimer: NodeJS.Timeout | undefined
   /** D-001: weakenings of the tests Extreme approval approved in this session, which it says. */
   #testsWeakened = 0
+  /** D-007: calls a person approved that touched locked tests, by toolUseID, so they are pinned again after. */
+  readonly #lockedCalls = new Map<string, string[]>()
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -840,6 +854,7 @@ export class Session extends EventEmitter<SessionEvents> {
       kill: () => d.kill.isEngaged(),
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
+      ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,
@@ -879,6 +894,7 @@ export class Session extends EventEmitter<SessionEvents> {
       pwsh: d.pwsh,
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
+      ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
       ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
       decided: this.#decided,
       verdicts: this.#verdicts,
@@ -1922,6 +1938,12 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         opts.restore?.wake ? "session started again" : opts.kind === "chat" ? "chat" : "session",
         opts.restore ? { sessionId: opts.restore.id } : { cwd: opts.cwd },
       )
+    // D-007: a coding session does not start while a locked test has changed outside Codehouse; one coming back after
+    // a restart was open before, and carries on.
+    if (!opts.restore && opts.kind !== "chat" && this.#deps.locks) {
+      const changed = await this.#deps.locks.changedOutside(opts.cwd)
+      if (changed.length) throw new LockedTestsChangedError(changed)
+    }
     const config = this.#deps.config()
     // B09: the most open at once, over every account and both kinds. A session coming back after a restart is not
     // counted against it: it was open before.

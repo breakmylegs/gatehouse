@@ -86,6 +86,11 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("memory_status") }),
   /** D-002: the session's project's sealed held-out checks: how many, the names (desktop only), and changes to them. */
   z.object({ type: z.literal("heldout_list"), sessionId: Id }),
+  /** D-007: the session's project's locked tests; locking and unlocking one; accepting ones changed outside Codehouse. */
+  z.object({ type: z.literal("locks_state"), sessionId: Id }),
+  z.object({ type: z.literal("lock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("unlock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("locks_accept"), cwd: z.string().min(1).max(1000) }),
   z.object({
     type: z.literal("heldout_add"),
     sessionId: Id,

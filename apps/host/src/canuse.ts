@@ -1,3 +1,4 @@
+import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { INTEGRITY_PREFIX } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
@@ -47,6 +48,9 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
+  locks?: Pick<TestLocks, "touched">
+  lockedCalls?: Map<string, string[]>
   /** D-001: this project is strict about its tests, so Extreme approval does not approve a weakening. */
   strictTests?: () => boolean
   /** D-001: Extreme approval approved a weakening of the tests, which the session then says (pattern, reason). */
@@ -196,7 +200,39 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           },
         ))
       // B32: the hook already applied it to an early verdict; applying it again changes nothing.
-      const verdict = withProvenance(judged, toolName, input, deps.provenance)
+      let verdict = withProvenance(judged, toolName, input, deps.provenance)
+      // D-007: a call that would change a locked test goes to a person, whatever the rules said, unless they denied it.
+      // Locks that cannot be read count as touched (fail closed). Recorded before anything is decided.
+      if (deps.locks && verdict.outcome !== "deny") {
+        const files = await deps.locks
+          .touched(deps.cwd, toolName, input)
+          .catch(() => ["(the locks could not be read)"])
+        if (files.length) {
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: LOCKED_TEST_RULE,
+            reason: lockedReason(files),
+            risk: Math.max(verdict.risk, 90),
+            decidedBy: "rules",
+          }
+          const written = await deps.audit.record({
+            session: deps.sessionId,
+            event: "locked_test_escalated",
+            channel: "host",
+            tool: toolName,
+            toolUseId: toolUseID,
+            cwd: deps.cwd,
+            project: deps.project,
+            input: { files },
+            verdict,
+            latencyMs: 0,
+          })
+          if (!written)
+            return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+          deps.lockedCalls?.set(toolUseID, files)
+        }
+      }
       if (!early) deps.onDecision?.(toolUseID, verdict)
       if (verdict.outcome === "allow") {
         // C-013: a remembered rule that has used its allowed number of calls asks instead.
@@ -271,7 +307,11 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           options,
           {
             ...verdict,
-            reason: `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
+            // A locked test's reason already says Extreme approval does not approve it.
+            reason:
+              verdict.ruleId === LOCKED_TEST_RULE
+                ? verdict.reason
+                : `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
           },
           effects,
         )
@@ -302,6 +342,8 @@ export const PLAN_EDIT_TOOLS: ReadonlySet<string> = new Set([
 export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   // B32: a command copied from a web page is always a person's decision.
   TAINT_RULE,
+  // D-007: a locked test changes only with a person.
+  LOCKED_TEST_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",
