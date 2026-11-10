@@ -23,8 +23,26 @@ export const Verdict = z.object({
     "evaluator-unavailable",
   ]),
   policyHash: z.string(),
+  /** D-013: what the shell call would also run (npm scripts, hooks, recipes, wrappers), for the card. */
+  expanded: z.array(z.object({ from: z.string(), line: z.string() })).max(20).optional(),
+  /** D-013: what it would run that cannot be read. */
+  unknownEffects: z.array(z.string()).max(10).optional(),
 })
 export type Verdict = z.infer<typeof Verdict>
+
+/**
+ * G20: what a call would delete or throw away, and whether git can bring it back (apps/host/src/effects.ts). On a
+ * request only where there is something to say.
+ */
+export const Effects = z.object({
+  kind: z.enum(["delete", "discard"]),
+  count: z.number().int().min(0),
+  paths: z.array(z.string()).max(20),
+  more: z.boolean(),
+  reversible: z.boolean(),
+  undo: z.string(),
+})
+export type Effects = z.infer<typeof Effects>
 
 export const EscalationRequest = z.object({
   id: z.string(), // UUIDv7
@@ -37,6 +55,8 @@ export const EscalationRequest = z.object({
   cwd: z.string(),
   project: z.string(),
   verdict: Verdict,
+  /** G20: absent when the call deletes and discards nothing. */
+  effects: Effects.optional(),
   createdAt: z.string(),
   expiresAt: z.string(),
   payloadHash: z.string(), // SHA-256 of the canonical plaintext payload sent to the phone

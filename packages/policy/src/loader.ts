@@ -5,10 +5,10 @@ import path from "node:path"
 import { parse as parseYaml } from "yaml"
 import { canonicalize, sha256Hex } from "@gatehouse/shared"
 import { FILE_TOOLS, SHELL_TOOLS } from "./analyse.js"
-import { resolvePath, toKey } from "./paths.js"
+import { realKey, resolvePath, toKey } from "./paths.js"
 import { checkOverlay, checkRememberFile, checkRulesFile } from "./schema.js"
 import { loadLibrary, mergeRules, readUserRules } from "./library.js"
-import type { Overlay, Policy, RememberFile, Rule, RulesFile } from "./types.js"
+import type { GrantLimits, Overlay, Policy, RememberFile, Rule, RulesFile } from "./types.js"
 
 export class PolicyLoadError extends Error {
   constructor(readonly errors: string[]) {
@@ -102,7 +102,44 @@ function checkRuleShapes(section: string, rules: Rule[], errors: string[]): void
   }
 }
 
-function rememberToRules(file: RememberFile, errors: string[]): Rule[] {
+/** C-013: the file of grant limits beside rules.local.yaml. */
+export const grantLimitsPath = (localPath: string) =>
+  path.join(path.dirname(localPath), "rules.local.meta.json")
+
+/** The grant limits by rule id, read tolerantly: no file, or one that cannot be read, gives none. */
+export function readGrantLimits(localPath: string): Record<string, GrantLimits> {
+  try {
+    const raw = JSON.parse(fs.readFileSync(grantLimitsPath(localPath), "utf8")) as { grants?: unknown }
+    return raw.grants && typeof raw.grants === "object" ? (raw.grants as Record<string, GrantLimits>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * The limits as the rule carries them. Fails closed: an expiry that cannot be read means expired, a scope that
+ * cannot be resolved still restricts to the path as written, and a use limit that is not a whole number above zero
+ * means none left.
+ */
+function limitsOf(g: GrantLimits | undefined): Pick<Rule, "notAfter" | "withinKey" | "maxUses"> {
+  if (!g || typeof g !== "object") return {}
+  const out: Pick<Rule, "notAfter" | "withinKey" | "maxUses"> = {}
+  if (g.expiresAt !== undefined) {
+    const t = typeof g.expiresAt === "string" ? Date.parse(g.expiresAt) : Number.NaN
+    out.notAfter = Number.isNaN(t) ? 0 : t
+  }
+  if (g.scope !== undefined)
+    out.withinKey = typeof g.scope === "string" && g.scope ? realKey(g.scope) : "\0"
+  if (g.maxUses !== undefined)
+    out.maxUses = Number.isInteger(g.maxUses) && (g.maxUses as number) > 0 ? (g.maxUses as number) : 0
+  return out
+}
+
+function rememberToRules(
+  file: RememberFile,
+  errors: string[],
+  limits: Record<string, GrantLimits> = {},
+): Rule[] {
   const rules: Rule[] = []
   const seen = new Set<string>()
   for (const entry of file.remember) {
@@ -113,8 +150,11 @@ function rememberToRules(file: RememberFile, errors: string[]): Rule[] {
       errors.push(`remember/${entry.id}: give exactly one of command, path or host`)
       continue
     }
-    // B31: kept to one project when it names one.
-    const scope = entry.project ? { projects: [entry.project.toLowerCase()] } : {}
+    // B31: kept to one project when it names one. C-013: and to its time, folder and uses when they are set.
+    const scope = {
+      ...(entry.project ? { projects: [entry.project.toLowerCase()] } : {}),
+      ...limitsOf(limits[entry.id]),
+    }
     if (entry.host) {
       if (entry.tool !== "WebFetch") {
         errors.push(`remember/${entry.id}: a host rule needs tool WebFetch`)
@@ -227,7 +267,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
   if (opts.localPath && fs.existsSync(opts.localPath)) {
     try {
       const checked = checkRememberFile(readYaml(opts.localPath))
-      if (checked.ok) remember = rememberToRules(checked.value, errors)
+      if (checked.ok) remember = rememberToRules(checked.value, errors, readGrantLimits(opts.localPath))
       else errors.push(...checked.errors.map((e) => `${path.basename(opts.localPath ?? "")}: ${e}`))
     } catch (e) {
       errors.push(`${path.basename(opts.localPath)}: ${e instanceof Error ? e.message : String(e)}`)

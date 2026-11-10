@@ -28,9 +28,19 @@ export interface StackOptions {
   /** Start no Approver at all, so the client cannot reach one. */
   approverDown?: boolean
   config?: Record<string, unknown>
+  /** D-007: the locked tests, where a test needs them. */
+  locks?: SessionDeps["locks"]
+  /** D-009: stands in for Codehouse's own actions. */
+  codehouseAction?: SessionDeps["codehouseAction"]
 }
 
 export interface Stack {
+  /** What a session calls for one look at the limits (owner, 9 Nov); a test sets it. */
+  hooks: {
+    limitCheck?: () => Promise<void>
+    /** C-004: the memory governor's check before a new session; a test sets it. */
+    admit?: (what: string, detail?: Record<string, unknown>) => Promise<void>
+  }
   sdk: FakeSdk
   repo: string
   dir: string
@@ -157,7 +167,18 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     probeOptions: () => ({}) as never,
     managedDetected: async () => false,
   })
+  const hooks: Stack["hooks"] = {}
   const deps: SessionDeps = {
+    ...(opts.locks ? { locks: opts.locks } : {}),
+    ...(opts.codehouseAction ? { codehouseAction: opts.codehouseAction } : {}),
+    limitCheck: async () => {
+      await hooks.limitCheck?.()
+    },
+    governor: {
+      admit: async (what, detail) => {
+        await hooks.admit?.(what, detail)
+      },
+    },
     queryFn: sdk.queryFn,
     config: () => config,
     policy: () => store.current,
@@ -196,6 +217,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     )
 
   return {
+    hooks,
     sdk,
     repo,
     dir,

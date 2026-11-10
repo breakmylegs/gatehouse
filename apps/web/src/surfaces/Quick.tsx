@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { chatName } from "../lib/chatName"
+import { api } from "../lib/api"
 import { onShell, tellShell } from "../lib/shell"
 import { titleOf } from "../lib/sessionActions"
 import { accountForNew, send, useSessionList } from "../store"
@@ -23,14 +24,36 @@ export function Quick() {
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0],
     [sessions],
   )
+  // CH-08: the chat you used last, to carry on there instead of starting a new one.
+  const lastChat = useMemo(
+    () =>
+      sessions
+        .filter(
+          (s) => s.kind === "chat" && s.state !== "ended" && s.state !== "error" && !s.archived,
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0],
+    [sessions],
+  )
   const [text, setText] = useState("")
-  const [to, setTo] = useState<"chat" | "session">("chat")
+  const [to, setTo] = useState<"chat" | "last-chat" | "session">("chat")
+  /** A picture of the screen to attach (CH-08): PNG bytes as base64. Pictures are not redacted. */
+  const [picture, setPicture] = useState<string>()
+  const [capturing, setCapturing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const box = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     box.current?.focus()
     return onShell((m) => {
+      if (m.startsWith("captured:")) {
+        setCapturing(false)
+        setPicture(m.slice("captured:".length))
+        return
+      }
+      if (m === "capture-none") {
+        setCapturing(false)
+        return
+      }
       if (m !== "quick-shown") return
       setError(undefined)
       box.current?.focus()
@@ -39,7 +62,7 @@ export function Quick() {
     })
   }, [])
 
-  const target = to === "session" ? current : undefined
+  const target = to === "session" ? current : to === "last-chat" ? lastChat : undefined
 
   async function go() {
     const said = text.trim()
@@ -68,13 +91,32 @@ export function Quick() {
       }
       id = (r.data as { sessionId: string }).sessionId
     }
-    const r = await send({ type: "prompt", sessionId: id, text: said })
+    // The picture goes into the chat's folder first, and the message points at it. The Host records it as a screen
+    // capture: pictures are not redacted.
+    let message = said
+    if (picture) {
+      const a = await api<{ rel: string }>("POST", "/api/files/attach-data", {
+        session: id,
+        type: "image/png",
+        name: "screen.png",
+        data: picture,
+        source: "screen-capture",
+      })
+      if (!a.ok || !a.data) {
+        setBusy(false)
+        setError(a.error ?? "The picture could not be attached")
+        return
+      }
+      message = `@${a.data.rel}\n\n${said}`
+    }
+    const r = await send({ type: "prompt", sessionId: id, text: message })
     setBusy(false)
     if (!r.ok) {
       setError(r.error?.message ?? "That was not sent")
       return
     }
     setText("")
+    setPicture(undefined)
     tellShell(`quick-open:${JSON.stringify({ session: id, text: said })}`)
   }
 
@@ -96,15 +138,31 @@ export function Quick() {
       <fieldset className="m-0 flex flex-wrap items-center gap-3 border-0 p-0 text-[13px]">
         <legend className="sr-only">Send to</legend>
         <label className="flex items-center gap-1.5">
-          <input type="radio" name="to" checked={!target} onChange={() => setTo("chat")} />
+          <input
+            type="radio"
+            name="to"
+            checked={to === "chat" || !target}
+            onChange={() => setTo("chat")}
+          />
           <span>A new chat</span>
         </label>
+        {lastChat ? (
+          <label className="flex items-center gap-1.5">
+            <input
+              type="radio"
+              name="to"
+              checked={to === "last-chat"}
+              onChange={() => setTo("last-chat")}
+            />
+            <span>{titleOf(lastChat)}</span>
+          </label>
+        ) : null}
         {current ? (
           <label className="flex items-center gap-1.5">
             <input
               type="radio"
               name="to"
-              checked={Boolean(target)}
+              checked={to === "session" && Boolean(target)}
               onChange={() => setTo("session")}
             />
             <span>{titleOf(current)}</span>
@@ -126,7 +184,48 @@ export function Quick() {
           }
         }}
       />
+      {picture ? (
+        <div className="flex items-center gap-2 text-[12.5px]">
+          <img
+            src={`data:image/png;base64,${picture}`}
+            alt="The picture to attach"
+            className="h-12 rounded border border-line"
+          />
+          <span role="note" className="text-mut">
+            Pictures are not redacted: what is in it goes to Claude as it is.
+          </span>
+          <button
+            type="button"
+            className="btn !min-h-7 ml-auto"
+            onClick={() => setPicture(undefined)}
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="btn !min-h-7"
+          disabled={capturing}
+          onClick={() => {
+            setCapturing(true)
+            tellShell("capture:region")
+          }}
+        >
+          Part of the screen
+        </button>
+        <button
+          type="button"
+          className="btn !min-h-7"
+          disabled={capturing}
+          onClick={() => {
+            setCapturing(true)
+            tellShell("capture:window")
+          }}
+        >
+          The window you were in
+        </button>
         {error ? (
           <p role="alert" className="m-0 text-[13px] text-bad">
             {error}

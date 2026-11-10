@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Windows.Forms;
@@ -16,6 +17,11 @@ using System.Windows.Forms;
 //   Codehouse-Helper.exe --open-files   the normal open window, several files; --open-file, one. Their paths on stdout,
 //                                       one to a line. Its title and file types come in CODEHOUSE_OPEN_TITLE and
 //                                       CODEHOUSE_OPEN_FILTER.
+//   Codehouse-Helper.exe --open-url     opens the https address (or claude:// link) in CODEHOUSE_OPEN_URL with whatever
+//                                       Windows has for it; anything else is refused with exit code 2.
+//   Codehouse-Helper.exe --memory       this computer's memory on stdout as one line of JSON (C-004): the commit charge
+//                                       and its limit, and physical memory, in bytes:
+//                                       {"commitUsed":n,"commitLimit":n,"physTotal":n,"physAvail":n}
 //
 // Names and folders travel in environment variables, never on the command line, so none can become an argument.
 // Output is UTF-8 without a byte order mark. Exit code 0 is success (a cancelled window too), 1 a failure, 2 misuse.
@@ -42,6 +48,8 @@ static class Helper
                 case "--save-as": return SaveAs();
                 case "--open-files": return OpenFiles(true);
                 case "--open-file": return OpenFiles(false);
+                case "--open-url": return OpenUrl();
+                case "--memory": return Memory();
                 default: return Usage();
             }
         }
@@ -54,7 +62,7 @@ static class Helper
 
     static int Usage()
     {
-        Console.Error.WriteLine("usage: Codehouse-Helper.exe --protect | --unprotect | --pick-folder | --save-as | --open-files | --open-file");
+        Console.Error.WriteLine("usage: Codehouse-Helper.exe --protect | --unprotect | --pick-folder | --save-as | --open-files | --open-file | --open-url | --memory");
         return 2;
     }
 
@@ -110,6 +118,46 @@ static class Helper
             }
             if (d.ShowDialog(owner) == DialogResult.OK) Console.Out.Write(string.Join("\n", d.FileNames));
         }
+        return 0;
+    }
+
+    /// <summary>Open in Claude (CH-06): an https address, or the Claude app's claude:// link, opened by whatever
+    /// Windows has for it. Anything else is refused. Nothing is read back.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    class MemoryStatusEx
+    {
+        public uint dwLength = (uint)Marshal.SizeOf(typeof(MemoryStatusEx));
+        public uint dwMemoryLoad;
+        public ulong ullTotalPhys, ullAvailPhys, ullTotalPageFile, ullAvailPageFile, ullTotalVirtual, ullAvailVirtual,
+            ullAvailExtendedVirtual;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    static extern bool GlobalMemoryStatusEx([In, Out] MemoryStatusEx buffer);
+
+    // The commit charge is what Windows has promised to programs, against what RAM and the page file can hold
+    // (ullTotalPageFile is the commit limit, ullAvailPageFile what is left of it). Past the limit, programs fail.
+    static int Memory()
+    {
+        MemoryStatusEx m = new MemoryStatusEx();
+        if (!GlobalMemoryStatusEx(m)) return 1;
+        Console.Out.Write("{\"commitUsed\":" + (m.ullTotalPageFile - m.ullAvailPageFile) + ",\"commitLimit\":" +
+            m.ullTotalPageFile + ",\"physTotal\":" + m.ullTotalPhys + ",\"physAvail\":" + m.ullAvailPhys + "}");
+        return 0;
+    }
+
+    static int OpenUrl()
+    {
+        string url = Environment.GetEnvironmentVariable("CODEHOUSE_OPEN_URL") ?? "";
+        Uri u;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out u) || (u.Scheme != "https" && u.Scheme != "claude"))
+        {
+            Console.Error.WriteLine("Only an https address or a claude:// link is opened.");
+            return 2;
+        }
+        System.Diagnostics.ProcessStartInfo psi = new System.Diagnostics.ProcessStartInfo(u.AbsoluteUri);
+        psi.UseShellExecute = true;
+        System.Diagnostics.Process.Start(psi);
         return 0;
     }
 

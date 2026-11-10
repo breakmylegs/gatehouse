@@ -1,3 +1,9 @@
+import { RubberStamp } from "./rubber-stamp.js"
+import { TestLockError, type TestLocks } from "./test-locks.js"
+import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
+import { runHeldOutFor } from "./heldout-session.js"
+import { sessionDetails } from "./session-details.js"
+import { MemoryRefusedError, type MemoryGovernor } from "./memory-governor.js"
 import { MAIN_ACCOUNT, type Accounts } from "./accounts.js"
 import fs from "node:fs"
 import type { SignInFlow } from "./signin.js"
@@ -39,10 +45,14 @@ import {
   OrgGuardError,
   SessionFolderError,
   SessionLimitError,
+  LockedTestsChangedError,
   ManagedPolicyError,
   type SessionManager,
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
+
+/** D-021: how long the friction holds a High approval back before the deliberate one. */
+const FRICTION_WAIT_MS = 2000
 
 export interface HostApp {
   manager: SessionManager
@@ -53,6 +63,16 @@ export interface HostApp {
   checkpoints: CheckpointManager
   usage: UsageStore
   account: AccountMonitor
+  /** D-007: the locked tests. Absent where they cannot be kept (tests). */
+  locks?: TestLocks
+  /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
+  heldOut?: HeldOutChecks
+  /** Section 6: the command that runs them, as a Codehouse action for the session. */
+  heldOutExec?: (sessionId: string) => HeldOutExec
+  /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
+  governor?: Pick<MemoryGovernor, "status">
+  /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
+  limits?: { over(account: string): Promise<string | undefined> }
   /** Starts Anthropic's own sign-in. Absent in tests that do not need it. */
   signIn?: SignInFlow
   /** The accounts signed in beside the main one. */
@@ -118,6 +138,9 @@ export class HostServer {
   readonly #fastify: FastifyInstance
   readonly #clients = new Set<WebSocket>()
   readonly #rawSockets = new Set<net.Socket>()
+  /** D-021: approvals given faster than they could be read, and when each friction was shown. */
+  readonly #rubberStamp = new RubberStamp()
+  readonly #frictionAt = new Map<string, number>()
   #port = 0
   dropped = 0
 
@@ -446,6 +469,7 @@ export class HostServer {
           ...(cmd.chatProject ? { chatProject: cmd.chatProject } : {}),
           ...(cmd.instructions ? { instructions: cmd.instructions } : {}),
           ...(cmd.research ? { research: true } : {}),
+          ...(cmd.about ? { aboutId: cmd.about } : {}),
           ...(cmd.account ? { account: cmd.account } : {}),
           ...(cmd.localModel ? { localModel: cmd.localModel } : {}),
           ...(cmd.resumeAt ? { resumeAt: cmd.resumeAt } : {}),
@@ -457,6 +481,149 @@ export class HostServer {
       case "warm_chat":
         a.manager.warmChat()
         return undefined
+      case "pin_counterexample":
+        return await this.#session(cmd.sessionId).pinCounterexample(cmd.id)
+      case "dismiss_counterexample":
+        this.#session(cmd.sessionId).dismissCounterexample(cmd.id)
+        return undefined
+      case "locks_state": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.locks) throw new CommandError("unavailable", "Locked tests are not available here")
+        return await a.locks.state(s.cwd)
+      }
+      case "lock_test":
+      case "unlock_test":
+      case "locks_accept": {
+        const l = a.locks
+        if (!l) throw new CommandError("unavailable", "Locked tests are not available here")
+        const s = cmd.type === "locks_accept" ? undefined : this.#session(cmd.sessionId)
+        const cwd = s?.cwd ?? (cmd.type === "locks_accept" ? cmd.cwd : "")
+        let paths: string[]
+        try {
+          if (cmd.type === "lock_test") paths = [await l.lock(cwd, cmd.path)]
+          else if (cmd.type === "unlock_test") {
+            await l.unlock(cwd, cmd.path)
+            paths = [cmd.path]
+          } else {
+            paths = await l.changedOutside(cwd)
+            await l.accept(cwd)
+          }
+        } catch (e) {
+          if (e instanceof TestLockError) throw new CommandError("invalid", e.message)
+          throw e
+        }
+        const event =
+          cmd.type === "lock_test" ? "test_locked" : cmd.type === "unlock_test" ? "test_unlocked" : "test_locks_accepted"
+        const written = await a.audit.record({
+          session: s?.id ?? "desktop",
+          event,
+          channel: "desktop",
+          tool: "locks",
+          cwd,
+          input: { paths },
+          verdict: {
+            outcome: "allow",
+            ruleId: "locked-test",
+            reason:
+              event === "test_locked"
+                ? "You locked a test: a session changes it only with you."
+                : event === "test_unlocked"
+                  ? "You unlocked a test."
+                  : "You accepted locked tests as they now are, after they changed outside Codehouse.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!written) a.log("locks: the change could not be recorded in the audit log")
+        return await l.state(cwd)
+      }
+      case "heldout_list": {
+        // The desktop only: this socket is the desktop's, never the phone's or a push channel's.
+        const s = this.#session(cmd.sessionId)
+        const h = a.heldOut
+        if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
+        return { project: s.project, ...(await h.list(s.project)) }
+      }
+      case "heldout_add":
+      case "heldout_remove":
+      case "heldout_command": {
+        const s = this.#session(cmd.sessionId)
+        const h = a.heldOut
+        if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
+        try {
+          if (cmd.type === "heldout_add") await h.add(s.project, cmd.name, cmd.content)
+          else if (cmd.type === "heldout_remove") await h.remove(s.project, cmd.name)
+          else await h.setCommand(s.project, cmd.command)
+        } catch (e) {
+          if (e instanceof HeldOutError) throw new CommandError("invalid", e.message)
+          throw e
+        }
+        // Recorded without the name or the content: that a check was added, removed, or the command changed.
+        await a.audit.record({
+          session: s.id,
+          event: "sealed_check_changed",
+          channel: "desktop",
+          tool: "heldout",
+          cwd: s.cwd,
+          project: s.project,
+          input: { change: cmd.type.slice("heldout_".length) },
+          verdict: {
+            outcome: "allow",
+            ruleId: "heldout-checks",
+            reason: "You changed this project's sealed held-out checks.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        return await h.summary(s.project)
+      }
+      case "heldout_run": {
+        const s = this.#session(cmd.sessionId)
+        const h = a.heldOut
+        if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
+        try {
+          return await runHeldOutFor(s, h, a.audit, "you", a.heldOutExec?.(s.id))
+        } catch (e) {
+          if (e instanceof HeldOutError) throw new CommandError("invalid", e.message)
+          throw e
+        }
+      }
+      case "memory_status": {
+        const st = (await a.governor?.status()) ?? { over: false }
+        return {
+          ...st,
+          idle: a.manager.idle().map((i) => ({ id: i.id, title: i.title ?? i.project, project: i.project })),
+        }
+      }
+      case "suspend_session": {
+        // Recorded before it applies; refused when it cannot be.
+        const s = this.#session(cmd.sessionId)
+        const written = await a.audit.record({
+          session: s.id,
+          event: "session_suspended",
+          channel: "desktop",
+          tool: "session",
+          cwd: s.cwd,
+          project: s.project,
+          input: { why: "memory" },
+          verdict: {
+            outcome: "allow",
+            ruleId: "memory-governor",
+            reason: "You suspended this idle session to free memory.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!written) throw new CommandError("audit-failure", "It could not be recorded, so it was not suspended")
+        a.terminal?.stop(s.id)
+        return { info: await a.manager.suspend(s.id) }
+      }
       case "close_session":
         a.terminal?.stop(cmd.sessionId)
         // One that could not come back after a restart is only put away.
@@ -479,15 +646,88 @@ export class HostServer {
       case "prompt":
         this.#session(cmd.sessionId).prompt(cmd.text)
         return undefined
+      case "tell": {
+        // G18: your message to another session, sent from this one's prompt box. It is yours, so it is a prompt like
+        // any other there; the record says where it came from and went, and how long it was, never the words.
+        if (cmd.from === cmd.to)
+          throw new Error("Use the prompt box itself to talk to this session.")
+        const target = this.#session(cmd.to)
+        this.#session(cmd.from)
+        target.prompt(cmd.text)
+        await this.#opts.app.audit.record({
+          session: cmd.to,
+          event: "message_relayed",
+          channel: "desktop",
+          tool: "session",
+          cwd: target.cwd,
+          input: { from: cmd.from, to: cmd.to, chars: cmd.text.length },
+          verdict: {
+            outcome: "allow",
+            ruleId: "message-relayed",
+            reason: "You sent a message to this session from another session's prompt box (/tell).",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        return undefined
+      }
+      case "review_dismiss": {
+        // G16: a finding on a review card you chose not to fix. Recorded (redacted, like every record) before the card
+        // lets it go; not recorded, it stays.
+        const s = this.#session(cmd.sessionId)
+        const recorded = await this.#opts.app.audit.record({
+          session: cmd.sessionId,
+          event: "review_finding_dismissed",
+          channel: "desktop",
+          tool: "review",
+          cwd: s.cwd,
+          input: { file: cmd.file, summary: cmd.summary },
+          verdict: {
+            outcome: "deny",
+            ruleId: "review-dismissed",
+            reason: "You dismissed a finding from a review of this session's changes.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!recorded) throw new Error("It could not be recorded, so it stays.")
+        return undefined
+      }
       case "interrupt":
         await this.#session(cmd.sessionId).interrupt()
         return undefined
       case "stop_session":
         await this.#session(cmd.sessionId).stop()
         return undefined
-      case "resume_session":
-        // A session Codehouse paused at the plan limit, started again by you before the limit resets.
-        await this.#session(cmd.sessionId).resume("you")
+      case "resume_session": {
+        // A session a limit paused, started again by you. Owner, 9 Nov: only once no limit in Settings would pause it
+        // again; past a limit it takes a bypass, with a time or a most it may spend.
+        const s = this.#session(cmd.sessionId)
+        const over = await a.limits?.over(s.account)
+        if (over)
+          throw new Error(`${over} Bypass the limits for this session, with a time or a most it may spend, to keep going.`)
+        await s.resume("you")
+        return undefined
+      }
+      case "set_limit_protection":
+        // The earlier form, from before 9 Nov: a time only.
+        await this.#session(cmd.sessionId).setBypass(
+          cmd.offMinutes === null ? null : { minutes: cmd.offMinutes },
+        )
+        return undefined
+      case "set_limit_bypass":
+        await this.#session(cmd.sessionId).setBypass(
+          cmd.end
+            ? null
+            : {
+                ...(cmd.minutes !== undefined ? { minutes: cmd.minutes } : {}),
+                ...(cmd.maxUsd !== undefined ? { maxUsd: cmd.maxUsd } : {}),
+              },
+        )
         return undefined
       case "set_resources":
         await this.#session(cmd.sessionId).setResources(cmd.level)
@@ -510,6 +750,43 @@ export class HostServer {
         await this.#session(cmd.sessionId).setModel(cmd.model)
         return undefined
       case "approve": {
+        // D-021: after approvals too fast to have been read, the next High one wants a second, deliberate approval.
+        const view = a.broker.get(cmd.requestId)
+        const risk = view?.request.verdict.risk ?? 0
+        const stamp = this.#rubberStamp
+        if (view && stamp.needsDeliberate(risk)) {
+          const shownAt = this.#frictionAt.get(cmd.requestId)
+          if (!cmd.deliberate || shownAt === undefined || Date.now() - shownAt < FRICTION_WAIT_MS) {
+            if (shownAt === undefined) {
+              this.#frictionAt.set(cmd.requestId, Date.now())
+              await a.audit
+                .record({
+                  session: view.request.sessionId,
+                  event: "approval_friction_shown",
+                  channel: "desktop",
+                  tool: view.request.toolName,
+                  toolUseId: view.request.toolUseId,
+                  cwd: view.request.cwd,
+                  project: view.request.project,
+                  input: { risk },
+                  verdict: {
+                    outcome: "escalate",
+                    ruleId: "rubber-stamp",
+                    reason: "Approvals came faster than they could be read, so this High one asks again.",
+                    risk,
+                    decidedBy: "rules",
+                    policyHash: "",
+                  },
+                  latencyMs: 0,
+                })
+                .catch(() => false)
+            }
+            throw new CommandError(
+              "friction",
+              "You approved several requests faster than they could be read. Look at what this one does; you can allow it after two seconds, or give it a limited grant instead.",
+            )
+          }
+        }
         const r = a.broker.resolve(
           cmd.requestId,
           {
@@ -518,12 +795,20 @@ export class HostServer {
             ...(cmd.message !== undefined ? { message: cmd.message } : {}),
             ...(cmd.updatedInput !== undefined ? { updatedInput: cmd.updatedInput } : {}),
             ...(cmd.remember ? { remember: true } : {}),
+            ...(cmd.remember && cmd.rememberFor ? { rememberFor: cmd.rememberFor } : {}),
           },
           "desktop",
         )
+        if (r.ok && view) {
+          this.#frictionAt.delete(cmd.requestId)
+          if (cmd.deliberate && stamp.needsDeliberate(risk)) stamp.deliberate()
+          else stamp.approved({ risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) })
+        }
         return resolveResult(r)
       }
       case "deny":
+        // D-021: a deny is never slowed, and ends a run of fast approvals.
+        this.#rubberStamp.denied()
         return resolveResult(
           a.broker.resolve(
             cmd.requestId,
@@ -542,13 +827,18 @@ export class HostServer {
       case "remember_preview": {
         const view = a.broker.get(cmd.requestId)
         if (!view) throw new CommandError("unknown-request", "That request is not waiting any more")
-        return await checkRemember(
+        const check = await checkRemember(
           a.engine,
           a.policy(),
           { toolName: view.request.toolName, input: view.rawInput },
           { cwd: view.request.cwd },
           a.pwsh,
         )
+        if (!check.ok) return check
+        // D-015: refused when what the session read mentions it; a site is to be typed to confirm.
+        const why = a.manager.get(view.request.sessionId)?.untrustedMention(check.candidate)
+        if (why) return { ok: false, reason: why }
+        return { ...check, ...(check.candidate.host ? { typeToConfirm: check.candidate.host } : {}) }
       }
       case "restart":
         if (!a.restart)
@@ -669,23 +959,34 @@ export class HostServer {
       }
       case "compare_chosen": {
         // B22: which answer you kept, by session and model, never what was said. The screen closes the rest.
+        // G25: or which of several runs of one prompt, each in its own worktree, by session and branch.
         const all = [cmd.kept, ...cmd.others].map((id) => a.manager.get(id)?.info())
-        if (all.some((s) => !s || s.kind !== "chat"))
-          throw new Error("Only chats started side by side can be compared.")
+        const runs = all.every((s) => s && s.kind !== "chat" && s.worktree)
+        if (!runs && all.some((s) => !s || s.kind !== "chat"))
+          throw new Error(
+            "Only chats started side by side, or runs each in its own worktree, can be compared.",
+          )
         const model = (s: (typeof all)[number]) => s?.model ?? "default"
+        const which = (s: (typeof all)[number]) => ({
+          session: s?.id,
+          model: model(s),
+          ...(runs ? { branch: s?.worktree?.branch } : {}),
+        })
         await this.#opts.app.audit.record({
           session: cmd.kept,
           event: "compare_chosen",
           channel: "desktop",
           tool: "compare",
           input: {
-            kept: { session: cmd.kept, model: model(all[0]) },
-            others: all.slice(1).map((s) => ({ session: s?.id, model: model(s) })),
+            kept: which(all[0]),
+            others: all.slice(1).map(which),
           },
           verdict: {
             outcome: "allow",
             ruleId: "compare-chosen",
-            reason: "You kept one of several answers compared side by side.",
+            reason: runs
+              ? "You kept one of several runs of the same prompt, each in its own worktree."
+              : "You kept one of several answers compared side by side.",
             risk: 0,
             decidedBy: "human-desktop",
             policyHash: "",
@@ -702,6 +1003,10 @@ export class HostServer {
         return await this.#history().search(cmd.query)
       case "context_usage":
         return await this.#session(cmd.sessionId).contextUsage()
+      case "session_details": {
+        const s = this.#session(cmd.sessionId)
+        return await sessionDetails(s.cwd, () => s.mcpStatus())
+      }
       case "compact":
         this.#session(cmd.sessionId).compact()
         return undefined
@@ -769,6 +1074,8 @@ function classify(e: unknown): CommandError {
   if (e instanceof KillSwitchEngagedError) return new CommandError("kill-switch", e.message)
   if (e instanceof SessionFolderError) return new CommandError("folder-missing", e.message)
   if (e instanceof SessionLimitError) return new CommandError("session-limit", e.message)
+  if (e instanceof MemoryRefusedError) return new CommandError("memory", e.message)
+  if (e instanceof LockedTestsChangedError) return new CommandError("locked-tests", e.message)
   if (e instanceof ManagedPolicyError) return new CommandError("managed-policy", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)

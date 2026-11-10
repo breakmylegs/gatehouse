@@ -15,6 +15,7 @@ import {
 } from "../lib/rail"
 import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
+import { askAbout } from "../lib/askAbout"
 import { openExport } from "./ExportDialog"
 import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
@@ -49,6 +50,7 @@ const STATE_MARK: Record<string, { text: string; className: string; icon: IconNa
 const PAGE_ICON: Partial<Record<Route, IconName>> = {
   approvals: "needs-you",
   sessions: "code",
+  board: "plan",
   usage: "usage",
   projects: "projects",
   memory: "memory",
@@ -194,7 +196,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
             }}
           >
             <Icon name={m} size={15} />
-            {m === "chat" ? "Chat" : "Code"}
+            {/* Owner, 6 Nov: not a general Claude chat, but asking about your code sessions from outside them. */}
+            {m === "chat" ? "Ask about code" : "Code"}
           </button>
         ))}
       </div>
@@ -203,7 +206,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
         <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
           {(
             [
-              ["chat", "new", "New chat"],
+              ["chat", "new", "New question"],
               ["projects", "projects", "Projects"],
               ["memory", "memory", "Memory"],
               ["prompts", "prompts", "Prompts"],
@@ -266,7 +269,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
             >
               <span className="rail-item-label">
                 <Icon name="new" />
-                New chat
+                Ask about code
               </span>
             </button>
           </li>
@@ -332,7 +335,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
       >
         <div className="flex items-center justify-between px-2 pb-1">
           <span className="text-[12px] font-semibold uppercase tracking-wide text-shell-mut">
-            {mode === "chat" ? "Chats" : "Sessions"}
+            {mode === "chat" ? "Questions" : "Sessions"}
           </span>
           <Menu
             label="Sessions list options"
@@ -356,7 +359,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
           <EmptyState picture={mode === "chat" ? "empty-chats" : "empty-sessions"}>
             <p className="m-0 text-[13.5px] text-shell-mut">
               {mode === "chat"
-                ? "No chats yet. Choose New chat to start one."
+                ? "No questions yet. Choose New question to ask about one of your code sessions and its code, without interrupting it."
                 : "No sessions yet. Choose New session to start one."}
             </p>
           </EmptyState>
@@ -454,6 +457,15 @@ export function Rail({ onHide }: { onHide: () => void }) {
                                     label: "Hand off a side task...",
                                     onSelect: () => setHandingOff(s),
                                   },
+                                  // Owner, 6 Nov: ask about this session and its code from outside it.
+                                  ...(s.state === "ended" || s.state === "error"
+                                    ? []
+                                    : [
+                                        {
+                                          label: "Ask about this session...",
+                                          onSelect: () => askAbout(s.id),
+                                        },
+                                      ]),
                                 ]),
                             { kind: "separator" },
                             { label: "Rename...", onSelect: () => setRenaming(s) },

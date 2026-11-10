@@ -1,3 +1,5 @@
+import { RememberFor } from "@gatehouse/shared/ws-protocol"
+import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
 import { registerFilesRoutes } from "./files-api.js"
@@ -13,15 +15,22 @@ import { registerDoctorRoutes } from "./doctor.js"
 import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
+import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
+import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
+import { registerContinueRoutes, type ContinueDeps } from "./chat/continue-api.js"
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
+import { registerBoardRoutes, type BoardStore, type Card } from "./board.js"
+import { registerGitPanelRoutes } from "./git-panel.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
 import { readItModels } from "./providers/it-models.js"
 import { registerHousekeepingRoutes } from "./housekeeping.js"
 import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
+import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
+import { makeAuditBundle } from "./audit-bundle.js"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
@@ -35,6 +44,7 @@ import {
   loadPolicy,
   PolicyEngine,
   PolicyLoadError,
+  readRememberEntries,
   removeRemember,
   replay,
   type LoadOptions,
@@ -71,6 +81,8 @@ import type { PhoneService } from "./relay/service.js"
  * (loopback Host header, own Origin, per-launch token) applies, and nothing here is reachable from the phone.
  */
 export interface AdminContext {
+  /** D-015: why a rule must not be accepted, from what any open session read; undefined when nothing says so. */
+  untrustedMention?: (rule: { command?: string; path?: string; host?: string }) => string | undefined
   engine: PolicyEngine
   store: PolicyStore
   pwsh: PwshWorker | undefined
@@ -95,6 +107,8 @@ export interface AdminContext {
   memory?: MemoryStore
   /** B34: routines, sessions that start themselves on a schedule. */
   routines?: RoutineStore
+  /** G24: the task board, and how a card's session starts. */
+  board?: { store: BoardStore; start: (card: Card) => Promise<string> }
   /** What chats show in a sandbox. */
   artifacts?: ArtifactStore
   /** Your saved prompts (W1-14). */
@@ -106,8 +120,14 @@ export interface AdminContext {
   chat?: ChatDeps
   /** While you were away, written by Claude (owner, 4 Nov). */
   recap?: RecapDeps
+  /** /btw: a side question about a session, answered without interrupting it (owner, 4 Nov). */
+  btw?: BtwDeps
   /** CH-04: importing a claude.ai export. */
   chatImport?: ImportDeps
+  /** CH-06: Open in Claude. */
+  chatHandoff?: HandoffDeps
+  /** CH-07: Continue locally. */
+  chatContinue?: ContinueDeps
   /** What a chat was told it remembers when it started (CH-03). */
   sessionMemory?: (
     id: string,
@@ -148,6 +168,10 @@ export interface AdminContext {
   }
   /** Updates to Codehouse itself. Absent in tests that do not need it. */
   updates?: UpdateService
+  /** The changelog in Settings (owner, 4 Nov): every release's notes, read from the releases and kept for offline. */
+  changelog?: ChangelogStore
+  /** G30: the PowerShell verifier, put in each audit bundle. */
+  auditVerifier?: string
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -354,6 +378,33 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     }
   })
 
+  // G30: the log as a zip anyone can check, with the verifier and a note; each one made is recorded.
+  app.get("/api/audit/bundle", async (_req, reply) => {
+    const { zip, records } = await makeAuditBundle(ctx.auditDir, ctx.auditVerifier)
+    await ctx.audit.record({
+      session: "host",
+      event: "audit_exported",
+      channel: "desktop",
+      tool: "audit",
+      input: { records, bytes: zip.length },
+      verdict: {
+        outcome: "allow",
+        ruleId: "audit-exported",
+        reason: "The audit log was exported as a bundle that can be checked.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    const day = new Date().toISOString().slice(0, 10)
+    return reply
+      .header("content-type", "application/zip")
+      .header("content-disposition", `attachment; filename="codehouse-audit-${day}.zip"`)
+      .header("cache-control", "no-store")
+      .send(zip)
+  })
+
   app.get("/api/audit/export", async (_req, reply) => {
     const text = listAuditFiles(ctx.auditDir)
       .map((f) => fs.readFileSync(path.join(ctx.auditDir, f), "utf8"))
@@ -458,6 +509,39 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return { ok: true, hash, audited: recorded, rulesYamlHash: sha(b.yaml) }
   })
 
+  // G29 (backlog): when each remembered rule was added and last used, from the audit log of the past year, so one you
+  // no longer use can be seen and removed.
+  app.get("/api/policy/remember/usage", async (_req, reply) => {
+    const localPath = ctx.loadOptions.localPath
+    let entries: ReturnType<typeof readRememberEntries> = []
+    try {
+      entries = localPath ? readRememberEntries(localPath) : []
+    } catch (e) {
+      return bad(reply, 422, (e as Error).message)
+    }
+    const used = new Map<string, { uses: number; lastUsed: string }>()
+    for (const r of recordsSince(ctx.auditDir, Date.now() - 365 * DAY)) {
+      if (r.verdict.outcome !== "allow" || !r.verdict.ruleId.startsWith("remember-")) continue
+      const was = used.get(r.verdict.ruleId)
+      used.set(r.verdict.ruleId, {
+        uses: (was?.uses ?? 0) + 1,
+        lastUsed: was && was.lastUsed > r.ts ? was.lastUsed : r.ts,
+      })
+    }
+    return {
+      rules: entries.map((e) => {
+        const id = `remember-${e.id}`
+        const u = used.get(id)
+        return {
+          id,
+          ...(e.createdAt ? { createdAt: e.createdAt } : {}),
+          uses: u?.uses ?? 0,
+          ...(u ? { lastUsed: u.lastUsed } : {}),
+        }
+      }),
+    }
+  })
+
   app.post("/api/policy/remember/remove", async (req, reply) => {
     const b = req.body
     if (!isObject(b) || typeof b.id !== "string" || b.id === "" || b.id.length > 100)
@@ -502,6 +586,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerFilesRoutes(app, ctx)
   registerAttachRoutes(app, ctx)
   registerUpdateRoutes(app, ctx)
+  if (ctx.changelog) registerChangelogRoutes(app, ctx.changelog)
   registerHousekeepingRoutes(app, ctx)
   registerExportRoutes(app, ctx)
   registerPromptRoutes(app, ctx)
@@ -509,10 +594,16 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerEvalRoutes(app, ctx)
   registerDoctorRoutes(app, ctx)
   registerWorktreeRoutes(app, ctx)
+  if (ctx.board)
+    registerBoardRoutes(app, { board: ctx.board.store, audit: ctx.audit, start: ctx.board.start })
+  registerGitPanelRoutes(app, ctx)
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
+  if (ctx.btw) registerBtwRoutes(app, ctx.btw)
   if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
+  if (ctx.chatHandoff) registerHandoffRoutes(app, ctx.chatHandoff)
+  if (ctx.chatContinue) registerContinueRoutes(app, ctx.chatContinue)
   // CH-03: exactly what a chat was told it remembers, for its Memory panel. Already redacted when it was kept.
   app.get("/api/memory/given", async (req, reply) => {
     const id = String((req.query as { session?: unknown }).session ?? "")
@@ -1032,6 +1123,8 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
       latencyMs: 0,
     })
   app.get("/api/routines", async () => ({ routines: routines.list() }))
+  // G23: the review inbox: each run's session, newest first. The screen adds its state, changes and cost.
+  app.get("/api/routines/runs", async () => ({ runs: routines.runs() }))
   app.put("/api/routines", async (req, reply) => {
     try {
       const r = await routines.put((req.body ?? {}) as Partial<Routine>)
@@ -1041,6 +1134,8 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
         time: r.time,
         days: r.days,
         extreme: r.extreme === true,
+        worktree: r.worktree === true,
+        phone: r.phone === true,
         enabled: r.enabled,
       })
       return { routine: r }
@@ -1411,10 +1506,20 @@ const LIVE_SETTINGS = [
   "maxSessions",
   "telemetry",
   "spendCapUsd",
+  "memoryGovernor",
+  "testIntegrity",
+  "untrustedFiles",
+  "riskBudget",
+  "outputStyle",
+  "worktreeLocation",
+  "pullRequests",
+  "browserTools",
   "globalInstructions",
   "profile",
   "keepAwake",
   "recapByClaude",
+  "chatHandoff",
+  "chatContinue",
   "providers",
 ] as const
 
@@ -1471,6 +1576,7 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const b = req.body as {
       candidate?: { tool?: unknown; command?: unknown; path?: unknown }
       cwd?: unknown
+      rememberFor?: unknown
     } | null
     const c = b?.candidate
     if (
@@ -1496,7 +1602,30 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
       ctx.pwsh,
     )
     if (!check.ok) return bad(reply, 422, check.reason)
-    const r = await appendRemember(localPath, check.candidate)
+    // D-015: not while what an open session read mentions it.
+    const why = ctx.untrustedMention?.(check.candidate)
+    if (why) {
+      await ctx.audit
+        .record({
+          session: "desktop",
+          event: "remember_refused_provenance",
+          channel: "desktop",
+          tool: "policy",
+          input: { candidate: check.candidate, from: "suggestion" },
+          verdict: { outcome: "deny", ruleId: "remember-provenance", reason: why, risk: 0, decidedBy: "rules", policyHash: ctx.store.current?.hash ?? "" },
+          latencyMs: 0,
+        })
+        .catch(() => false)
+      return bad(reply, 409, why.replace("It is allowed this once, not remembered.", "So it is not added."))
+    }
+    // C-013: like one remembered from a request, it lasts 30 days and only in that folder unless asked otherwise.
+    const rememberFor = RememberFor.safeParse(b?.rememberFor)
+    const r = await appendRemember(
+      localPath,
+      check.candidate,
+      undefined,
+      grantLimitsFor(rememberFor.success ? rememberFor.data : undefined, cwd),
+    )
     ctx.store.load()
     await ctx.audit.record({
       session: "desktop",

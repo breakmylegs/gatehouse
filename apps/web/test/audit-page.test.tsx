@@ -94,4 +94,13 @@ describe("the audit log", () => {
     const detail = screen.getByRole("complementary", { name: "Decision detail" })
     expect(within(detail).getByText("Deletes everything.")).toBeTruthy()
   })
+
+  it("opens a record asked for from a session's walkthrough, by its number (G31)", async () => {
+    useStore.setState({ auditOpen: 2 })
+    render(<Audit />)
+    await waitFor(() => expect(asked).toContain("/api/audit?before=3&limit=1"))
+    const detail = await screen.findByRole("complementary", { name: "Decision detail" })
+    expect(within(detail).getByText("Deletes everything.")).toBeTruthy()
+    expect(useStore.getState().auditOpen).toBeUndefined()
+  })
 })

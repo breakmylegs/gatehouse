@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { boundaryLine, BoundaryCards } from "../src/components/BoundaryCards"
 import { NewChat } from "../src/surfaces/NewChat"
 import { Projects } from "../src/surfaces/Projects"
+import { useStore } from "../src/store"
 
 const calls: Array<{ method: string; url: string; body?: unknown }> = []
 let projects: Array<{ name: string; providers?: string[] }> = []
@@ -47,6 +48,7 @@ vi.mock("../src/lib/api", () => ({
 beforeEach(() => {
   calls.length = 0
   projects = []
+  useStore.setState({ sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never } })
 })
 afterEach(cleanup)
 
@@ -116,12 +118,12 @@ describe("a model on this computer (B19)", () => {
     fireEvent.change(await screen.findByRole("combobox", { name: /project/i }), {
       target: { value: "Client A" },
     })
-    fireEvent.change(screen.getByRole("textbox", { name: /talk about/i }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /want to know/i }), {
       target: { value: "Summarise this" },
     })
     const gate = await screen.findByRole("group", { name: "The licence for tiny" })
     expect(gate.textContent).toMatch(/shows no licence/)
-    const start = screen.getByRole("button", { name: "Start the chat" })
+    const start = screen.getByRole("button", { name: "Ask" })
     expect(start).toBeDisabled()
     fireEvent.click(within(gate).getByRole("checkbox", { name: /I have read the licence/ }))
     expect(start).toBeEnabled()

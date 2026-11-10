@@ -1,3 +1,4 @@
+import { MemoryCard } from "../components/MemoryCard"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import NumberFlow from "@number-flow/react"
 import { useEffect, useState } from "react"
@@ -146,9 +147,17 @@ export function Sessions() {
   const freshPath = projects ? `${projects.replace(/[\\/]+$/, "")}\\${name}` : ""
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string>()
+  // C-004: refused for want of memory; the card explains and offers idle sessions to suspend.
+  const [shortOfMemory, setShortOfMemory] = useState(false)
+  // D-007: locked tests changed outside Codehouse; accepting them lets the session start.
+  const [lockedChanged, setLockedChanged] = useState(false)
   // B10: a session in a new worktree of the folder's repository, from a branch, tag or commit you name.
   const [inWorktree, setInWorktree] = useState(false)
   const [base, setBase] = useState("")
+  // G25: best of several runs of one prompt, each in its own worktree, compared side by side.
+  const [runs, setRuns] = useState(1)
+  const [runPrompt, setRunPrompt] = useState("")
+  const several = !fresh && inWorktree && runs > 1
 
   const sorted = [...sessions].sort(
     (a, b) => STATE[a.state].rank - STATE[b.state].rank || b.createdAt.localeCompare(a.createdAt),
@@ -163,11 +172,53 @@ export function Sessions() {
     else if (r.data?.path) setCwd(r.data.path)
   }
 
+  /** G25: the runs, each in a worktree of its own, the same prompt to each, opened side by side to compare. */
+  async function startRuns() {
+    const ids: string[] = []
+    const at = Date.now()
+    for (let i = 0; i < runs; i++) {
+      const r = await send(
+        {
+          type: "create_session",
+          cwd: cwd.trim(),
+          worktree: base.trim() ? { base: base.trim() } : {},
+          ...(model ? { model } : {}),
+          ...(effort ? { effort } : {}),
+          ...wireOf(mode),
+          ...accountForNew(),
+        },
+        START_WAIT_MS,
+      )
+      if (!r.ok) {
+        setBusy(false)
+        for (const id of ids) void send({ type: "close_session", sessionId: id })
+        setError(
+          `Run ${i + 1} did not start, so the others were closed: ${r.error?.message ?? "no reason given"}. Their worktrees are under Worktrees below.`,
+        )
+        return
+      }
+      ids.push((r.data as { sessionId: string }).sessionId)
+    }
+    setBusy(false)
+    const s = useStore.getState()
+    for (const id of ids) {
+      s.addUserText(id, runPrompt.trim())
+      void send({ type: "prompt", sessionId: id, text: runPrompt.trim() })
+    }
+    useStore.setState({ panes: ids, selectedSession: ids[0], compare: { ids, at } })
+    toast(`${runs} runs started, each in its own worktree. Keep the best when they are done.`)
+    setRunPrompt("")
+    setRoute("workspace")
+  }
+
   async function create(e: React.FormEvent) {
     e.preventDefault()
     setBusy(true)
     setStartedAt(Date.now())
     setError(undefined)
+    setShortOfMemory(false)
+    setLockedChanged(false)
+    if (several) return void (await startRuns())
     const r = await send(
       {
         type: "create_session",
@@ -189,6 +240,8 @@ export function Sessions() {
           ? "This is taking longer than usual. If the session starts it appears in the list below, and you can open it from there."
           : (r.error?.message ?? "The session did not start"),
       )
+      setShortOfMemory(r.error?.code === "memory")
+      setLockedChanged(r.error?.code === "locked-tests")
       return
     }
     const { sessionId: id, info } = r.data as {
@@ -286,7 +339,13 @@ export function Sessions() {
               ))}
             </select>
           </label>
-          {fresh ? null : <StartButton busy={busy} ready={Boolean(cwd.trim())} label="Start" />}
+          {fresh ? null : (
+            <StartButton
+              busy={busy}
+              ready={Boolean(cwd.trim()) && (!several || Boolean(runPrompt.trim()))}
+              label={several ? `Start ${runs} runs` : "Start"}
+            />
+          )}
         </div>
         {fresh ? (
           <div className="grid gap-2">
@@ -355,6 +414,37 @@ export function Sessions() {
                 />
               </label>
             ) : null}
+            {inWorktree ? (
+              <label className="flex items-center gap-2">
+                Runs
+                <select
+                  className="field w-20"
+                  value={runs}
+                  onChange={(e) => setRuns(Number(e.target.value))}
+                >
+                  {[1, 2, 3, 4].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {several ? (
+              <label className="grid w-full gap-1">
+                <span>
+                  What every run is asked to do (each works in its own worktree; compare them and
+                  keep the best)
+                </span>
+                <textarea
+                  className="field"
+                  rows={3}
+                  required
+                  value={runPrompt}
+                  onChange={(e) => setRunPrompt(e.target.value)}
+                />
+              </label>
+            ) : null}
           </div>
         )}
         {fresh ? null : projects === undefined ? null : !projects && !cwd.trim() ? (
@@ -368,7 +458,30 @@ export function Sessions() {
           mode. {BYPASS_NOTE} A missing folder is created.
         </p>
         {busy ? <StartProgress since={startedAt} /> : null}
-        {error ? (
+        {shortOfMemory ? (
+          <MemoryCard />
+        ) : lockedChanged && error ? (
+          <div role="alert" className="grid gap-2 rounded-md border border-warn bg-s1 p-3 text-[14px]">
+            <strong>Not started: locked tests changed</strong>
+            <p className="m-0">{error}</p>
+            <div>
+              <button
+                type="button"
+                className="btn btn-primary !min-h-7"
+                onClick={() =>
+                  void send({ type: "locks_accept", cwd: fresh ? freshPath : cwd.trim() }).then((r) => {
+                    if (!r.ok) return void toast.error(r.error?.message ?? "They could not be accepted")
+                    setLockedChanged(false)
+                    setError(undefined)
+                    toast("Locked tests accepted as they now are. Start the session again.")
+                  })
+                }
+              >
+                Accept them as they now are
+              </button>
+            </div>
+          </div>
+        ) : error ? (
           <p role="alert" className="m-0 font-semibold text-sev">
             {error}
           </p>

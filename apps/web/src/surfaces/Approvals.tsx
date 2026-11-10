@@ -6,6 +6,7 @@ import { QuickDecision } from "../components/QuickDecision"
 import { RiskBadge } from "../components/RiskBadge"
 import { SessionCode } from "../components/SessionCode"
 import { age } from "../lib/format"
+import { needsYou } from "../lib/needsYou"
 import { useNow } from "../lib/useNow"
 import { usePending, useStore } from "../store"
 import { EmptyState } from "../components/EmptyState"
@@ -21,6 +22,11 @@ export function Approvals() {
   const now = useNow()
   const seen = useStore((s) => s.seen)
   const markSeen = useStore((s) => s.markSeen)
+  // U2: the sessions that need you, beside the requests: failed, an Extreme run stopped short, possibly stuck.
+  const pulse = useStore((s) => s.pulse)
+  const selectSession = useStore((s) => s.selectSession)
+  const setRoute = useStore((s) => s.setRoute)
+  const attention = needsYou(sessions, pulse, now)
 
   const current =
     (selected ? pending.find((p) => p.request.id === selected) : undefined) ?? pending[0]
@@ -132,13 +138,40 @@ export function Approvals() {
                 </button>
                 {p.request.kind === "permission" ? (
                   <div className="absolute bottom-2.5 right-3.5">
-                    <QuickDecision view={p} variant="row" />
+                    <QuickDecision view={p} variant="row" onMore={() => select(p.request.id)} />
                   </div>
                 ) : null}
               </div>
             )}
           />
         )}
+        {attention.length > 0 ? (
+          <div className="max-h-48 overflow-auto border-t border-line px-4 py-2">
+            <h2 className="m-0 mb-1 text-[14px]">Sessions that need you</h2>
+            <ul className="m-0 grid list-none gap-1 p-0" aria-label="Sessions that need you">
+              {attention.map((x) => (
+                <li key={x.sessionId} className="flex items-start gap-2 text-[13px]">
+                  {sessions[x.sessionId] ? <SessionCode session={sessions[x.sessionId]!} /> : null}
+                  <span className="min-w-0 flex-1">
+                    <span className="text-mut">{sessions[x.sessionId]?.project}: </span>
+                    {x.text}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn !min-h-6 !px-2 !text-[12.5px]"
+                    aria-label={`Open ${sessions[x.sessionId]?.project ?? "the session"}`}
+                    onClick={() => {
+                      selectSession(x.sessionId)
+                      setRoute("workspace")
+                    }}
+                  >
+                    Open
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {recent.length > 0 ? (
           <div className="max-h-40 overflow-auto border-t border-line px-4 py-2">
             <h2 className="m-0 mb-1 text-[14px] text-mut">Just decided</h2>

@@ -8,7 +8,8 @@ import { checkFloor, type FloorHit } from "./floor.js"
 import { checkRememberFile } from "./schema.js"
 import type { PwshWorker } from "./pwsh.js"
 import { findProjectRoot } from "./paths.js"
-import type { EvalContext, Policy, RememberEntry, ToolCall } from "./types.js"
+import type { EvalContext, GrantLimits, Policy, RememberEntry, ToolCall } from "./types.js"
+import { grantLimitsPath } from "./loader.js"
 
 /**
  * The floor alone, for the Host's PreToolUse hook. The hook is the only place that sees every call (Claude
@@ -35,6 +36,9 @@ export function secretGlobs(policy: Policy): string[] {
     .filter((r) => r.pathGlobs && r.tools?.includes("Read"))
     .flatMap((r) => r.pathGlobs ?? [])
 }
+
+/** Risk 85 and over: Severe, never remembered (U4), never allowed from a push channel (invariant 8). */
+export const SEVERE_RISK = 85
 
 export interface RememberCandidate {
   tool: string
@@ -66,6 +70,8 @@ const STRUCTURAL = new Set([
   "pwsh-execution-policy",
   "engine-error",
   "policy-unavailable",
+  // G21: a command with characters you cannot see is never remembered.
+  "hidden-unicode",
 ])
 
 /**
@@ -96,6 +102,10 @@ export async function checkRemember(
   }
   if (STRUCTURAL.has(verdict.ruleId)) {
     return { ok: false, reason: `Rule ${verdict.ruleId} is built in and a remember rule cannot lift it.` }
+  }
+  // U4: a Severe request is decided by you every time; it never becomes a rule.
+  if (verdict.risk >= SEVERE_RISK) {
+    return { ok: false, reason: "A Severe request (risk 85 and over) is never remembered: each one is yours to decide." }
   }
 
   if (SHELL_TOOLS.has(call.toolName)) {
@@ -157,10 +167,29 @@ function entryKey(e: Pick<RememberEntry, "tool" | "command" | "path" | "host" | 
  * re-validates the result before it replaces the old file, and returns the id of a rule that already
  * says the same thing rather than adding a duplicate.
  */
+/** C-013: how long a new grant lasts unless the person chooses otherwise. */
+export const DEFAULT_GRANT_DAYS = 30
+
+/** Writes one grant's limits into rules.local.meta.json (by id), keeping everything else in the file. */
+async function writeGrantLimits(localPath: string, id: string, limits: GrantLimits | undefined): Promise<void> {
+  const file = grantLimitsPath(localPath)
+  let kept: Record<string, unknown> = {}
+  try {
+    kept = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+  } catch {
+    // none yet
+  }
+  const grants = { ...((kept.grants as Record<string, GrantLimits> | undefined) ?? {}) }
+  if (limits) grants[id] = limits
+  else delete grants[id]
+  await writeFileAtomic(file, JSON.stringify({ ...kept, version: 1, grants }, null, 2) + "\n")
+}
+
 export async function appendRemember(
   localPath: string,
   candidate: RememberCandidate,
   now: () => Date = () => new Date(),
+  limits?: GrantLimits,
 ): Promise<{ id: string; added: boolean }> {
   let entries: RememberEntry[] = []
   if (fs.existsSync(localPath)) {
@@ -175,11 +204,21 @@ export async function appendRemember(
   const next = { version: 1 as const, remember: [...entries, entry] }
   if (!checkRememberFile(next).ok) throw new Error("The new remember rule is not valid")
   fs.mkdirSync(path.dirname(localPath), { recursive: true })
+  // The limits first: if writing them fails, no rule is added without them.
+  if (limits) await writeGrantLimits(localPath, id, limits)
   await writeFileAtomic(localPath, stringifyYaml(next))
   return { id: `remember-${id}`, added: true }
 }
 
 /** Removes one remember rule from rules.local.yaml (only the desktop does this). Accepts the id with or without the `remember-` prefix. */
+/** The remember entries as they are kept, with when each was added (G29). None when there is no file yet. */
+export function readRememberEntries(localPath: string): RememberEntry[] {
+  if (!fs.existsSync(localPath)) return []
+  const checked = checkRememberFile(parseYaml(fs.readFileSync(localPath, "utf8")))
+  if (!checked.ok) throw new Error(`rules.local.yaml is not valid: ${checked.errors.join("; ")}`)
+  return checked.value.remember
+}
+
 export async function removeRemember(localPath: string, id: string): Promise<{ removed: boolean }> {
   if (!fs.existsSync(localPath)) return { removed: false }
   const checked = checkRememberFile(parseYaml(fs.readFileSync(localPath, "utf8")))
@@ -188,5 +227,6 @@ export async function removeRemember(localPath: string, id: string): Promise<{ r
   const kept = checked.value.remember.filter((e) => e.id !== bare)
   if (kept.length === checked.value.remember.length) return { removed: false }
   await writeFileAtomic(localPath, stringifyYaml({ version: 1 as const, remember: kept }))
+  await writeGrantLimits(localPath, bare, undefined).catch(() => undefined)
   return { removed: true }
 }

@@ -117,6 +117,8 @@ The version is `major.minor` from package.json and the number of commits (`npm r
 
 Every release also attaches `changes.json`, each change with the files it touched and its platform, for forks on other systems (see docs/forks.md). It plays no part in updating.
 
+Every release also attaches `changelog.json` (the name never changes): every published release's version, date and What is new notes, newest first, made at the sign step from `gh api repos/<repo>/releases` plus this release. Settings, Changelog reads the newest one through the same path as `update.json` (the public download link, or the API asset with a token) and keeps a copy for offline. It is unsigned text and plays no part in updating; the page shows it as text, never HTML. A release whose changelog cannot be made stops at the sign step.
+
 ## Updates never break, across renames (owner, 2 Nov 2026)
 
 "We cant have a breaking change ever that means people cant follow the in app upgrade." Every installed copy, however old, must be able to update in the app to the newest version, in several steps if it has to.

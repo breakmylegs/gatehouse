@@ -251,7 +251,7 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 - `tools` (not `allowedTools`) limits the built-in tools that exist: a chat has `WebSearch` and `WebFetch` only. It pre-approves nothing, so invariant 4 holds and every call still goes through the Approver. The in-process Companion is an MCP server and is unaffected.
 - `startup({ options })` pre-spawns the process and returns a `WarmQuery` whose `query(prompt)` takes the same async iterable the Host already uses. The options, including `cwd`, are fixed at that point, which is why a warm chat process is not built yet (see BUILD_REPORT, Phase 59).
 
-- `Options.settings` is used once, by Codehouse: `{ autoMemoryEnabled: false }` for a chat (ADR 0006, W1-08). `assertSafeOptions` refuses any other inline setting, since settings can carry permission rules (invariant 5). The memory itself is Codehouse's, through the in-process Companion's `remember`, `recall` and `forget` tools.
+- `Options.settings` is used by Codehouse for `{ autoMemoryEnabled: false }` for a chat (ADR 0006, W1-08), installed plugins off for a plugin's evaluation (B39), and, from 6 Nov, `{ outputStyle: "<name>" }` for a coding session when Settings, Sessions, Output style names one (`Settings.outputStyle` in sdk.d.ts; the name must match `OUTPUT_STYLE_NAME`). `assertSafeOptions` (`isSafeInlineSettings`) refuses any other inline setting, since settings can carry permission rules (invariant 5). The memory itself is Codehouse's, through the in-process Companion's `remember`, `recall` and `forget` tools.
 
 ## Other providers (1 Nov, sdk.d.ts 0.3.310)
 
@@ -278,3 +278,7 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 ## No live tool output (checked 4 Nov, B33)
 
 While a tool runs the SDK sends `tool_progress` (`tool_use_id`, `tool_name`, `elapsed_time_seconds`) and nothing of its output; the output comes in the tool result when it finishes. A background task's `task_started` and `task_progress` carry no output path; `task_notification` names `output_file` when the task ends. So a live read-only view of a running command waits for an SDK that streams it.
+
+## /btw side questions (6 Nov, sdk.d.ts 0.3.310)
+
+The bundled `sdk.mjs` has an `askSideQuestion` on the query object (Claude Code's own /btw), but `sdk.d.ts` does not declare it, so Codehouse does not use it. A /btw question is a separate one-turn `query()` instead, with the recap's options: `tools: []`, `permissionMode: "default"`, a `canUseTool` that denies, `maxTurns: 1`, `settingSources: []`, `persistSession: false`, `cwd` the temp folder, a sanitised `env` and an `outputFormat` json_schema. If `askSideQuestion` is typed in a later SDK it can replace this, once checked to run with no tools and nothing written to the session.

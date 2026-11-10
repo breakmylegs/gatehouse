@@ -7,8 +7,10 @@
 //   tsx scripts/release.ts ship [--skip-tests]   npm run release: the whole release from this computer. The commit
 //                                                must be pushed. The gate on what changed since the last release
 //                                                (scripts/gate.mjs), package and its check, installer, sign, then
-//                                                gh release create with Codehouse-Setup.exe first. --skip-tests when the
-//                                                gate has just passed on exactly this commit.
+//                                                gh release create with Codehouse-Setup.exe first. --skip-tests only
+//                                                with the owner's signed override for this version (C-002), recorded
+//                                                in the audit log.
+//   tsx scripts/release.ts allow-skip-tests <why> the owner's step, at a console: a signed override for this version
 //
 // GitHub Actions are switched off for this repository (the owner's account has few minutes), so releases are made
 // here. The signing key is the Ed25519 private key (PEM): CODEHOUSE_RELEASE_KEY holds it, or CODEHOUSE_RELEASE_KEY_FILE names
@@ -34,6 +36,22 @@ import {
   type LegacyRoute,
 } from "../apps/host/src/update/publish.js"
 import { writeZip } from "../apps/host/src/update/zip.js"
+import { RELEASE_KEYS } from "../apps/host/src/update/manifest.js"
+import { redact } from "@gatehouse/policy"
+import { AuditWriter } from "@gatehouse/shared/audit"
+import { auditDir } from "@gatehouse/shared/node"
+import {
+  checkSkipOverride,
+  makeSkipOverride,
+  overridePath,
+  readSkipOverride,
+} from "./skip-tests-override.js"
+import {
+  CHANGELOG_FILE,
+  parseChangelog,
+  whatIsNew,
+  type ChangelogEntry,
+} from "../apps/host/src/update/changelog.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const REPO = "breakmylegs/gatehouse"
@@ -130,6 +148,29 @@ function step(
   })
 }
 
+/**
+ * Every published release's notes and date, from GitHub through gh (signed in already, since gh publishes the release),
+ * for the changelog in Settings (owner, 4 Nov). Drafts have no date and are left out.
+ */
+function publishedReleases(): ChangelogEntry[] {
+  const out = execFileSync(
+    "gh",
+    [
+      "api",
+      "--paginate",
+      `repos/${REPO}/releases?per_page=100`,
+      "--jq",
+      '.[] | select(.published_at != null) | {version: (.tag_name | ltrimstr("v")), date: .published_at, body: (.body // "")}',
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+  )
+  return out
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { version: string; date: string; body: string })
+    .map((r) => ({ version: r.version, date: r.date, notes: whatIsNew(r.body) }))
+}
+
 const [cmd, a, b] = process.argv.slice(2)
 if (cmd === "version") {
   console.log(currentVersion().version)
@@ -157,6 +198,19 @@ if (cmd === "version") {
       2,
     ) + "\n",
   )
+  // Every release's notes, this one first, in one file the changelog in Settings reads (owner, 4 Nov).
+  const history = JSON.stringify(
+    {
+      releases: [
+        { version: v.version, date: new Date().toISOString(), notes: notes || "- Small fixes." },
+        ...publishedReleases().filter((r) => r.version !== v.version),
+      ],
+    },
+    null,
+    1,
+  )
+  if (!parseChangelog(history)?.length) throw new Error("The changelog could not be made.")
+  fs.writeFileSync(path.join(path.resolve(b), CHANGELOG_FILE), history + "\n")
   const routes = loadRoutes()
   if (!routes) throw new Error(NO_ROUTES)
   const setup = path.join(root, "dist-app", "Codehouse-Setup.exe")
@@ -197,6 +251,8 @@ if (cmd === "version") {
       "",
       "`changes.json` lists every change in this release with the files it touched and whether it is for every platform or Windows only, for forks of Codehouse on other systems (see docs/forks.md in the repository).",
       "",
+      "`changelog.json` holds every release's notes and date, for the changelog in Codehouse's Settings.",
+      "",
       "`update.json`, `update.sig`, the other `.json` and `.sig` files and the `codeh-*.zip` files are what Codehouse's updater downloads, for this version and for copies installed before a rename: only the parts that changed, checked against a signature. You do not need them.",
       "",
     ].join("\n"),
@@ -221,6 +277,33 @@ if (cmd === "version") {
   }
   const node = process.execPath
   const tsx = path.join(root, "node_modules", "tsx", "dist", "cli.mjs")
+  // C-002: skipping the tests needs the owner's signed override for exactly this version, recorded before going on.
+  if (process.argv.includes("--skip-tests")) {
+    const r = checkSkipOverride(readSkipOverride(), v.version, RELEASE_KEYS)
+    if (!r.ok)
+      throw new Error(
+        `--skip-tests needs the owner's signed override for ${v.version}: ${r.reason} The owner makes one with: npx tsx scripts/release.ts allow-skip-tests "<why>"`,
+      )
+    const writer = new AuditWriter({ dir: auditDir(), redact: (x) => redact(x, { terms: [] }) })
+    await writer.append({
+      session: "release",
+      event: "release_skip_tests",
+      channel: "desktop",
+      tool: "release",
+      cwd: root,
+      input: { version: v.version, reason: r.override.reason, expiresAt: r.override.expiresAt },
+      verdict: {
+        outcome: "allow",
+        ruleId: "release-skip-tests",
+        reason: "A release skipped its tests under the owner's signed override for this version.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    console.log(`[release] tests skipped under the owner's override: ${r.override.reason}`)
+  }
   // The gate checks what this release changes: everything since the last release, or everything when there is none.
   if (!process.argv.includes("--skip-tests")) {
     let last: string | undefined
@@ -277,6 +360,7 @@ if (cmd === "version") {
     "update.json",
     "update.sig",
     "changes.json",
+    CHANGELOG_FILE,
     ...fs.readFileSync(path.join(out, "routes.txt"), "utf8").split(/\r?\n/).filter(Boolean),
     ...fs.readdirSync(out).filter((f) => /^codeh-.*\.zip$/.test(f)),
   ].map((f) => path.join(out, f))
@@ -298,9 +382,25 @@ if (cmd === "version") {
   console.log(
     `[release] Codehouse ${v.version} is out: https://github.com/${REPO}/releases/tag/v${v.version}`,
   )
+} else if (cmd === "allow-skip-tests") {
+  // C-002: the owner's own step, typed at a console: it refuses to run without one, so no script can make it.
+  if (!process.stdin.isTTY)
+    throw new Error("This is the owner's step: run it yourself at a console.")
+  const reason = process.argv.slice(3).join(" ").trim()
+  const v = currentVersion()
+  const typed = await new Promise<string>((resolve) => {
+    process.stdout.write(`Type the version (${v.version}) to let its release skip the tests: `)
+    process.stdin.once("data", (d) => resolve(String(d).trim()))
+  })
+  process.stdin.pause()
+  if (typed !== v.version) throw new Error("That is not the version, so no override was made.")
+  const o = makeSkipOverride(releaseKey(), v.version, reason)
+  fs.mkdirSync(path.dirname(overridePath()), { recursive: true })
+  fs.writeFileSync(overridePath(), JSON.stringify(o, null, 2) + "\n")
+  console.log(`[release] ${v.version} may skip its tests until ${o.expiresAt}.`)
 } else {
   console.log(
-    "Usage: tsx scripts/release.ts version | stamp <dir> | publish <dir> <out> | ship [--skip-tests]",
+    "Usage: tsx scripts/release.ts version | stamp <dir> | publish <dir> <out> | ship [--skip-tests] | allow-skip-tests <why>",
   )
   process.exit(2)
 }

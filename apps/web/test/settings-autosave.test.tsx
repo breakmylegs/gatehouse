@@ -102,6 +102,78 @@ describe("settings save as you change them", () => {
     expect(screen.getByRole("note").textContent).toMatch(/charged as extra usage/)
   })
 
+  it("sets the output style new coding sessions start with, by name, and leaves out a name it cannot use", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const style = await screen.findByRole("combobox", { name: /How Claude writes its answers/ })
+    expect((style as HTMLSelectElement).value).toBe("")
+    fireEvent.change(style, { target: { value: "Explanatory" } })
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.outputStyle).toBe("Explanatory")
+    fireEvent.change(style, { target: { value: "own" } })
+    const name = await screen.findByRole("textbox", { name: /Your style's name/ })
+    fireEvent.change(name, { target: { value: "../notes" } })
+    fireEvent.blur(name)
+    await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("outputStyle"))
+    fireEvent.change(name, { target: { value: "Team notes" } })
+    fireEvent.blur(name)
+    await waitFor(() => expect(puts.at(-1)?.outputStyle).toBe("Team notes"))
+  })
+
+  it("sets where new worktrees go, writing nothing for beside the project and a folder only once there is one", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const where = await screen.findByRole("combobox", { name: /Where new worktrees go/ })
+    expect((where as HTMLSelectElement).value).toBe("beside")
+    fireEvent.change(where, { target: { value: "inside" } })
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.worktreeLocation).toEqual({ where: "inside" })
+    fireEvent.change(where, { target: { value: "folder" } })
+    await waitFor(() => expect(puts).toHaveLength(2))
+    expect(puts[1]).not.toHaveProperty("worktreeLocation")
+    const folder = screen.getByRole("textbox", { name: /Worktree folder/ })
+    fireEvent.change(folder, { target: { value: "C:\\dev\\worktrees\\" } })
+    fireEvent.blur(folder)
+    await waitFor(() =>
+      expect(puts.at(-1)?.worktreeLocation).toEqual({ where: "folder", folder: "C:\\dev\\worktrees" }),
+    )
+    fireEvent.change(where, { target: { value: "beside" } })
+    await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("worktreeLocation"))
+  })
+
+  it("sets pull requests from worktree sessions, as drafts unless told, writing only what differs", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const create = await screen.findByRole("checkbox", { name: /Open a pull request/ })
+    expect((screen.getByRole("checkbox", { name: "As a draft" }) as HTMLInputElement).disabled).toBe(true)
+    fireEvent.click(create)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]?.pullRequests).toEqual({ create: true })
+    fireEvent.click(screen.getByRole("checkbox", { name: "As a draft" }))
+    await waitFor(() => expect(puts.at(-1)?.pullRequests).toEqual({ create: true, draft: false }))
+    const prefix = screen.getByRole("textbox", { name: /Branch prefix/ })
+    fireEvent.change(prefix, { target: { value: "--force" } })
+    fireEvent.blur(prefix)
+    await waitFor(() => expect(puts).toHaveLength(3))
+    expect(puts.at(-1)?.pullRequests).not.toHaveProperty("branchPrefix")
+    fireEvent.change(prefix, { target: { value: "pk/" } })
+    fireEvent.blur(prefix)
+    await waitFor(() =>
+      expect(puts.at(-1)?.pullRequests).toEqual({ create: true, draft: false, branchPrefix: "pk/" }),
+    )
+  })
+
+  it("turns browser tools on, off unless chosen and not written when off", async () => {
+    render(<Settings />)
+    await openSection("Sessions")
+    const box = await screen.findByRole("checkbox", { name: /look at pages on this computer/ })
+    expect((box as HTMLInputElement).checked).toBe(false)
+    fireEvent.click(box)
+    await waitFor(() => expect(puts.at(-1)?.browserTools).toBe(true))
+    fireEvent.click(box)
+    await waitFor(() => expect(puts.at(-1)).not.toHaveProperty("browserTools"))
+  })
+
   it("saves a typed box when you leave it, not while you type, and not again when nothing changed", async () => {
     render(<Settings />)
     await openSection("Account and plan")

@@ -24,7 +24,7 @@ describe("reading a large JSON array a piece at a time", () => {
       expect(await read([bytes.subarray(0, cut), bytes.subarray(cut)]), `cut at ${cut}`).toEqual(
         items,
       )
-    expect(await read([Buffer.from("﻿[ ]")])).toEqual([])
+    expect(await read([Buffer.from("\uFEFF[ ]")])).toEqual([])
   })
 
   it("refuses anything that is not one whole, well-formed array", async () => {

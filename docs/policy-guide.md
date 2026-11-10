@@ -192,6 +192,46 @@ remember:
 - Verdicts from a remember rule use the rule id `remember-<id>`.
 - Remember rules are checked after the floor and deny rules, so they cannot cover a floor or deny category. They are checked before escalate rules, which is how they can allow `npm install lodash`. They cannot suppress the built-in escalations in section 3.
 
+### Lifetimes, scope and uses (C-013)
+
+Each rule remembered from now on carries limits, kept beside it in `policy/rules.local.meta.json` so that an older Codehouse still reads `rules.local.yaml` as before:
+
+```json
+{ "version": 1, "grants": { "npm-lodash": { "expiresAt": "2026-12-09T12:00:00.000Z", "scope": "C:/dev/app", "maxUses": 10 } } }
+```
+
+- `expiresAt`: after this time the rule no longer allows, and the call asks as it would without it. By default 30 days after it was remembered; you may choose 1, 7, 30 or 90 days, or until you remove it.
+- `scope`: the rule allows only in this folder and below it (compared after resolving links and 8.3 names). By default the session's folder; you may choose any folder.
+- `maxUses`: how many calls it may allow. The Host counts each tool call once, in `%LOCALAPPDATA%\Gatehouse\grant-uses.json`; when none are left, the call asks with the reason "has allowed its N uses". No limit by default.
+- Fail closed: an expiry that cannot be read counts as passed, a scope that is not a string matches no folder, a use limit that is not a positive whole number allows none, and a counts file that cannot be read counts every limited rule as used up.
+- Rules remembered before C-013 have no limits and keep working as they did. Removing a rule removes its limits.
+
+### The test integrity pack (D-001)
+
+Built into the engine, beside the hidden-character check, and like it no rule or remembered rule can let it through. It looks at Write, Edit and MultiEdit to a test file or test config, and at shell commands, and escalates at High risk (70, so Auto and Accept edits ask too) with a reason naming what weakens the tests. The rule id is `test-integrity-<pattern>`:
+
+| Pattern | What it catches |
+|---|---|
+| `assertion-removed` | Fewer assertions than before: `expect(`, `assert`, `self.assert*`, `Should`, `Assert.*`. A Write is compared with the file as it is. |
+| `skip-added` | A skip or only marker added: `.skip`, `.only`, `.todo`, `xit`, `xdescribe`, `fit`, `[Ignore]`, `[Skip]`, `Skip = "..."`, `@pytest.mark.skip`/`skipif`/`xfail`, `@unittest.skip`, `pytest.skip(`, Pester `-Skip`. |
+| `expected-changed` | An assertion kept with the same shape but a different expected value (strings and numbers compared). |
+| `test-deleted` | A test file deleted (`rm`, `del`, `Remove-Item`, `git rm`) or written empty. |
+| `coverage-lowered` | A coverage threshold lowered or taken out in test config (`lines`, `branches`, `functions`, `statements`, `fail_under`, `threshold`, `minimum`). |
+| `failure-hidden` | `|| true`, `|| exit 0`, `--passWithNoTests`, `continue-on-error: true` or `--no-verify` added to a test file or config, a test run made to pass whatever happens, or a commit or push with `--no-verify`. |
+| `shell-edit` | A test file changed from the shell (`sed -i`, `perl -i`, a redirect, `Set-Content` and the like), where the guard cannot see what changes. |
+
+Test files are found by convention: a `test`, `tests`, `spec` or `__tests__` folder; `*.test.*` and `*.spec.*`; `test_*.py`, `*_test.py` and `conftest.py`; `*Test.cs` and `*Tests.cs`; `*.Tests.ps1`; `*_test.go`. Test config: the vitest, jest, karma, playwright and cypress configs, `.mocharc`, `pytest.ini`, `tox.ini`, `.coveragerc`, `setup.cfg`, `pyproject.toml`, `codecov.yml`, `.nycrc`, `*.runsettings`, `PesterConfiguration.psd1`, workflow files and `package.json`.
+
+In Extreme approval the Host decides what happens to such an escalation per project (Settings, Sessions, Test integrity): by default it is approved and the session says its tests were weakened; a strict project waits for a person. Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
+
+### Built-in floor rules (D-002)
+
+One floor rule is built into Codehouse and checked before the rules file's own, so no rules file can leave it out: `sealed-checks` denies every tool any path under `Gatehouse/sealed` or `Gatehouse/heldout-runs`, wherever Codehouse's data folder is, in either slash and any case. That is where the sealed held-out checks are kept and run. A second, `test-locks`, does the same for `Gatehouse/locks`, where the pins of locked tests are kept (D-007).
+
+### What a shell call also runs (D-013)
+
+Before a Bash or PowerShell call is decided, the engine reads what it would also run (`expand.ts`; files are read, never run): an npm, pnpm or yarn script with its pre and post scripts, the lifecycle scripts of an install, and the scripts those call, a few levels deep and never round a loop; the recipe of a make target and of the targets it needs; the git hooks a git command fires (commit, push, merge, pull, checkout, switch, rebase, am), from `core.hooksPath` or `.git/hooks`, unless `--no-verify` skips them; a `.cmd` or `.bat` run by name or path; the local tool `npx` would run, or that it would fetch one; a local dotnet tool from `.config/dotnet-tools.json`; and, for PowerShell without `-NoProfile`, your profile. Each line is judged like the call. A deny on any line denies the call (its reason says which line, from where). A line a rule escalates (network, a package install, a push, a variable) makes the call ask when it is stricter than the call itself. What cannot be read escalates as `unknown-effects` (risk 60). A line no rule speaks of (an ordinary `vitest run`) does not by itself make the call ask, so a test script does not turn every `npm test` into a question. The lines go on the verdict (`expanded`, `unknownEffects`) and are shown on the desktop and phone cards under Also runs.
+
 ## 8. Redaction
 
 `redact()` and `redactString()` remove tokens, keys, Authorization headers, JWTs, connection strings, credentials in URLs, private key blocks and `key=value` secrets, plus any terms in the user's list (client names, internal host names). Strings under keys that look secret (`password`, `token`, `api_key` and so on) are replaced whole. Numbers are left alone. It never mutates its input. It is applied before anything is written to the audit log or sent to the relay.

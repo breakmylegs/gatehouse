@@ -1,11 +1,15 @@
+import { TestLocks } from "./test-locks.js"
+import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
 import { NtfyChannel, NtfySecretStore } from "./push/ntfy.js"
-import { LimitPauser, pausePoint } from "./limit-pause.js"
+import { ExtraSpendToday, LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
-import { RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
+import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
+import { BoardStore } from "./board.js"
+import { buildPhoneSessions, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -15,6 +19,9 @@ import { chatMemoryClient } from "./memory-client.js"
 import { MemoryStore } from "./memory.js"
 import { ProjectStore } from "./projects.js"
 import { findLimitsExe, limiter } from "./limits.js"
+import { HeldOutChecks, type HeldOutExec } from "./heldout.js"
+import { runCodehouseAction } from "./codehouse-action.js"
+import { runHeldOutFor } from "./heldout-session.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
@@ -22,7 +29,11 @@ import { pickFolderWithMac, saveAsWithMac } from "./folder-picker-mac.js" // Mac
 import { findCodehouseHelper } from "./win-helper.js"
 import { ChatStore } from "./chat/db.js"
 import { ChatRecorder } from "./chat/recorder.js"
+import { findEdge, hasAppLink, realLauncher } from "./chat/handoff.js"
+import { DEFAULT_SEED } from "./chat/continue.js"
+import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
+import { createBtwWriter } from "./btw.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -61,6 +72,7 @@ import {
   writeFileAtomic,
   type GatehouseConfig,
   managedPolicyDir,
+  useShadowCheckpoints,
 } from "@gatehouse/shared/node"
 import { AccountMonitor, type QueryFn } from "./account.js"
 import { Accounts, type AccountEntry } from "./accounts.js"
@@ -68,7 +80,11 @@ import { APPROVER_TIMEOUT_MS, ApproverClient } from "./approver-client.js"
 import { ApproverProcess, freePort, generateToken } from "./approver-process.js"
 import { Broker } from "./broker.js"
 import { CheckpointManager } from "./checkpoints.js"
+import { GrantUses } from "./grant-uses.js"
 import { createCompanionSdkServer } from "./companion-server.js"
+import { lookAtPage } from "./page-look.js"
+import { readAbout, type AboutDeps } from "./about-session.js"
+import { noteFor } from "./carry-on.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
 import { computeDigest } from "./analytics.js"
@@ -86,6 +102,7 @@ import { SessionMetaStore } from "./session-meta.js"
 import { localDay, UsageStore } from "./usage.js"
 import { UpdateService } from "./update/service.js"
 import { GitHubSource } from "./update/source.js"
+import { ChangelogStore } from "./update/changelog.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -201,11 +218,15 @@ export function createHost(opts: HostOptions = {}): Host {
   const approverTimeout = (): number =>
     store.current?.rules.defaults?.judge?.enabled === true ? 35_000 : APPROVER_TIMEOUT_MS
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
+  // G27: undo points for a folder outside git, kept in Codehouse's data folder, never in the folder itself.
+  useShadowCheckpoints(path.join(gatehouseDataDir(env), "undo"))
   const checkpoints = new CheckpointManager({
     config: () => config,
     policy: () => store.current,
     log,
   })
+  // C-013: how often each remembered rule with a use limit has allowed a call.
+  const grants = new GrantUses(path.join(gatehouseDataDir(env), "grant-uses.json"), () => store.current)
 
   // The Approver: spawned with a fresh token, or one that already exists (tests).
   let approverProcess: ApproverProcess | undefined
@@ -296,10 +317,22 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     sessionMeta,
   )
+  // Ask about code: the linked session read from Claude Code's own record of it, and as it is now when it is open.
+  const aboutDeps = (): AboutDeps => ({
+    messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
+    live: (id) => manager.get(id)?.info(),
+    redact: (t) => redactString(t, { terms: config.redactTerms }),
+  })
   const projects = new ProjectStore(path.join(gatehouseDataDir(env), "projects"))
-  const worktrees = new Worktrees(gatehouseDataDir(env))
+  // Where new worktrees go is read from Settings each time one is made; a folder must be inside a workspace root.
+  const worktrees = new Worktrees(gatehouseDataDir(env), {
+    place: () => config.worktreeLocation,
+    roots: () => store.current?.rules.workspaceRoots ?? [],
+    branchPrefix: () => config.pullRequests?.branchPrefix,
+  })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
+  const board = new BoardStore(path.join(gatehouseDataDir(env), "board.json"))
   // What chats remember: redacted before it is written, with the same word list as everything else.
   const memory = new MemoryStore(path.join(gatehouseDataDir(env), "memory"), (t) =>
     redact(t, { terms: config.redactTerms }),
@@ -321,7 +354,16 @@ export function createHost(opts: HostOptions = {}): Host {
   const artifacts = new ArtifactStore(path.join(gatehouseDataDir(env), "artifacts"), (t) =>
     redact(t, { terms: config.redactTerms }),
   )
+  // C-004: above the commit charge in Settings, nothing heavy of Codehouse's own starts. Read through the helper, found
+  // when first needed (below); a reading it cannot have refuses nothing.
+  const governor = new MemoryGovernor({
+    read: helperReader(() => helper()),
+    point: () => memoryPoint(config.memoryGovernor),
+    audit,
+    log,
+  })
   const deps: SessionDeps = {
+    governor,
     queryFn,
     worktrees,
     sessionMeta: (id) => sessionMeta.get(id),
@@ -384,8 +426,13 @@ export function createHost(opts: HostOptions = {}): Host {
     kill,
     usage,
     checkpoints,
+    grants,
     account,
-    companion: ({ sessionId, cwd, kind, chatProject }) => ({
+    // Owner, 9 Nov: a bypass that ran out pauses its session at once, not at the next look.
+    limitCheck: () => limitPauser.check(),
+    // Ask about code: how a linked code session stands and the latest of what was said in it, redacted.
+    aboutSaid: (about) => readAbout(about, aboutDeps()),
+    companion: ({ sessionId, cwd, kind, chatProject, about }) => ({
       companion: createCompanionSdkServer({
         sessionId,
         cwd,
@@ -418,6 +465,28 @@ export function createHost(opts: HostOptions = {}): Host {
         host: { notify: async (m) => (manager.notify(m.sessionId, m.text), true) },
         policy: () => store.current,
         redact: (v) => redact(v, { terms: config.redactTerms }),
+        // Ask about code: a chat about a code session reads it as it is now; it never writes to it.
+        ...(kind === "chat" && about
+          ? {
+              about: {
+                read: async () => ({ text: await readAbout(about, aboutDeps()) }),
+              },
+            }
+          : {}),
+        // Browser tools (Settings, off unless turned on): a coding session may look at a page on this computer.
+        ...(kind !== "chat" && config.browserTools === true
+          ? {
+              pages: {
+                look: async (url: string) => {
+                  await governor.admit("page look", { sessionId })
+                  return await lookAtPage(url, {
+                    edge: () => findEdge(),
+                    redact: (t) => redactString(t, { terms: config.redactTerms }),
+                  })
+                },
+              },
+            }
+          : {}),
       }),
     }),
     managedDetected,
@@ -451,6 +520,52 @@ export function createHost(opts: HostOptions = {}): Host {
     if (exe) deps.limiter = limiter(exe)
   }
   manager = new SessionManager(deps)
+  // D-007: the locked tests, their pins sealed by a key DPAPI keeps for this Windows user.
+  const locks = new TestLocks({ dir: path.join(gatehouseDataDir(env), "locks"), sealer: () => sealer() })
+  deps.locks = locks
+  // D-002: sealed held-out checks, run under a job object where Codehouse-Limits.exe can be had.
+  const limitsExe = findLimitsExe({
+    installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
+    repoRoot: REPO_ROOT,
+    dataDir: gatehouseDataDir(env),
+    log,
+  })
+  const heldOut = new HeldOutChecks({ dataDir: gatehouseDataDir(env), sealer: () => sealer() })
+  // D-009: a claim's check runs as Codehouse's own action, for the session it was made in.
+  deps.codehouseAction = (r) =>
+    runCodehouseAction(r, {
+      approver: deps.approver,
+      broker,
+      audit,
+      kill,
+      extreme: () => manager.get(r.sessionId)?.info().extreme === true,
+      ...(limitsExe ? { limitsExe } : {}),
+    })
+  // Section 6: what Codehouse runs itself is judged, run without credentials in a job at the session's level, and
+  // stopped by the kill switch.
+  const actionFor = (sessionId: string): HeldOutExec => async (command, cwd, timeoutMs) => {
+    const s = manager.get(sessionId)
+    const r = await runCodehouseAction(
+      {
+        sessionId,
+        cwd,
+        project: s?.project ?? "",
+        command,
+        why: "this project's held-out checks",
+        level: s?.info().resources ?? "high",
+        timeoutMs,
+      },
+      {
+        approver: deps.approver,
+        broker,
+        audit,
+        kill,
+        extreme: () => s?.info().extreme === true,
+        ...(limitsExe ? { limitsExe } : {}),
+      },
+    )
+    return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
+  }
   // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
   const chatStore = new ChatStore({
     file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
@@ -464,14 +579,27 @@ export function createHost(opts: HostOptions = {}): Host {
   manager.on("session", (info) => {
     if (info.state === "ended") chatRecorder.closed(info.id)
   })
+  const extraSpend = new ExtraSpendToday({
+    file: path.join(gatehouseDataDir(env), "extra-spend-today.json"),
+    today: () => localDay(new Date()),
+  })
   // Pauses every session at 95% of the plan's 5-hour limit and starts them again when it resets (owner, 31 Oct).
   const limitPauser = new LimitPauser({
     sessions: () => manager.liveSessions(),
     planUsage: (account, fresh) => manager.planUsage(account, fresh),
     pauseAt: () => pausePoint(config.planLimitPause),
-    // B20: today's spending over every session, and the cap on it.
-    spendToday: () => usage.snapshot().byDay[localDay(new Date())]?.costUsd ?? 0,
+    // B20: what was really spent today, and the cap on it. Owner, 6 Nov: a Claude session runs on the plan, so the
+    // API price it reports is not money spent and never counts; a model through a gateway may charge, so its does.
+    spendToday: () => {
+      const day = localDay(new Date())
+      const cells = usage.report(day, day).days[day] ?? {}
+      return manager
+        .liveSessions()
+        .filter((s) => s.info().local === true)
+        .reduce((n, s) => n + (cells[s.id]?.total.costUsd ?? 0), 0)
+    },
     spendCap: () => config.spendCapUsd,
+    extraToday: (account, used) => extraSpend.spent(account, used),
     autoResume: () => config.planLimitPause?.noAutoResume !== true,
     log,
   })
@@ -511,7 +639,42 @@ export function createHost(opts: HostOptions = {}): Host {
   }
   const sealer = (): Protector => sealerFor({ given: opts.phoneProtector, helper })
   const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
-  const phone = new PhoneService({ store: phoneStore, broker, kill, audit, log })
+  const phone = new PhoneService({
+    store: phoneStore,
+    broker,
+    kill,
+    audit,
+    log,
+    // G32: a signed message or Interrupt from the phone reaches only a session open here, as the phone was shown it.
+    sessions: {
+      has: (id) => {
+        const i = manager.get(id)?.info()
+        return i !== undefined && i.state !== "ended" && !i.evaluation
+      },
+      prompt: (id, text) => manager.get(id)?.prompt(text),
+      interrupt: async (id) => {
+        await manager.get(id)?.interrupt()
+      },
+      // G32 (B35's safe variant): only a routine you allowed for the phone, started the way the routine starts.
+      canStart: (id) => routines.list().some((r) => r.id === id && r.phone === true),
+      start: async (id) => {
+        const r = routines.list().find((x) => x.id === id && x.phone === true)
+        if (!r) throw new Error("no such routine")
+        const session = await manager.start(routineSessionOptions(r))
+        session.prompt(r.prompt)
+        const branch = session.info().worktree?.branch
+        await routines
+          .noteRun({
+            routineId: r.id,
+            name: r.name,
+            sessionId: session.id,
+            at: new Date().toISOString(),
+            ...(branch ? { branch } : {}),
+          })
+          .catch(() => undefined)
+      },
+    },
+  })
   phoneHolder.svc = phone
   // Push through ntfy: outbound only. Refused answers are recorded; good ones are recorded by the decision itself.
   // A server that needs a sign-in has its token or password sealed as Slack's tokens are (owner, 4 Nov).
@@ -586,14 +749,20 @@ export function createHost(opts: HostOptions = {}): Host {
       ? fs.readFileSync(env.GATEHOUSE_UPDATE_KEY_FILE, "utf8")
       : undefined
   if (testBase) log(`updates come from ${testBase} (a test setting)`)
+  const updateSource = new GitHubSource({
+    token: () => updateToken.get(),
+    ...(testBase ? { base: testBase } : {}),
+  })
+  // The changelog in Settings: read from the same releases, only when Settings asks, and kept for offline.
+  const changelog = new ChangelogStore({
+    file: path.join(gatehouseDataDir(env), "updates", "changelog.json"),
+    fetch: () => updateSource.changelog(),
+  })
   const updates = new UpdateService({
     installDir,
     sourceVersion: installDir ? "0.0.0-source" : sourceVersion(),
     dir: path.join(gatehouseDataDir(env), "updates"),
-    source: new GitHubSource({
-      token: () => updateToken.get(),
-      ...(testBase ? { base: testBase } : {}),
-    }),
+    source: updateSource,
     ...(testKey ? { keys: [testKey] } : {}),
     settings: () => {
       const u = config.updates ?? { checkEveryMinutes: 30, skipped: [], downloadInBackground: true }
@@ -698,7 +867,7 @@ export function createHost(opts: HostOptions = {}): Host {
       void phone
         .notify("notify", { title: "Claude", body: String(data.text), project })
         .catch(() => undefined)
-    else if (type === "queue_empty")
+    else if (type === "queue_empty") {
       void phone
         .notify("notify", {
           title: "Build queue empty",
@@ -706,11 +875,59 @@ export function createHost(opts: HostOptions = {}): Host {
           project,
         })
         .catch(() => undefined)
-    else if (type === "stop")
+      void ntfy.note("build queue empty", "Claude has finished its queue.", project)
+      // D-002: when a session says it is done, its project's held-out checks run, if it has any; the counts only
+      // reach it. A failure here is logged without the checks' names or output.
+      const s = manager.get(sessionId)
+      if (s)
+        void heldOut
+          .summary(s.project)
+          .then((x) =>
+            x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty", actionFor(s.id)) : undefined,
+          )
+          .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
+    } else if (type === "risk_budget_exhausted") {
+      // D-018: the risk budget is spent: the phone and push channels are told.
+      const body = data.extreme
+        ? "Its risk budget is spent, so Extreme approval paused it until you start it again."
+        : "Its risk budget is spent, so it went back to Manual."
+      void phone.notify("notify", { title: "Risk budget spent", body, project }).catch(() => undefined)
+      void ntfy.note("risk budget spent", body, project)
+    } else if (type === "carry_on_end" || type === "stuck") {
+      // O16: the end of an Extreme run, and a turn that may be stuck, reach your phone too. A run that ended because
+      // the queue is empty is told above, and one you stopped needs no telling.
+      const words = noteFor(type, data)
+      if (words) {
+        void phone.notify("notify", { ...words, project }).catch(() => undefined)
+        void ntfy.note(words.title.toLowerCase(), words.body, project)
+      }
+    } else if (type === "stop")
       void phone
         .notify("stop", { title: "Session finished", body: "", project })
         .catch(() => undefined)
+    // G32: what was said changed, so the phone's view of it is shared again soon.
+    if (type === "stop" || type === "queue_empty") phoneSessions.poke()
   })
+  // G32 (O18, owner 30 Oct): the sessions on the phone, read only, redacted and sealed to each phone; only while one
+  // is paired.
+  const phoneSessions = new PhoneSessionsSharer({
+    build: () =>
+      buildPhoneSessions({
+        list: () => manager.list(),
+        messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        templates: () =>
+          routines
+            .list()
+            .filter((r) => r.phone === true)
+            .map((r) => ({ id: r.id, name: r.name })),
+      }),
+    share: (s) => phone.shareSessions(s),
+    wanted: () => phoneStore.relay() !== undefined && phoneStore.phones().length > 0,
+    log,
+  })
+  manager.on("session", () => phoneSessions.poke())
+  phoneSessions.start()
 
   const health = (): Health => {
     const acct = account.last()
@@ -835,6 +1052,11 @@ export function createHost(opts: HostOptions = {}): Host {
     checkpoints,
     usage,
     account,
+    limits: limitPauser,
+    heldOut,
+    heldOutExec: actionFor,
+    locks,
+    governor,
     audit,
     engine,
     policy: () => store.current,
@@ -848,6 +1070,7 @@ export function createHost(opts: HostOptions = {}): Host {
       audit,
       auditDir: dir,
       loadOptions,
+      untrustedMention: (rule) => manager.liveSessions().map((s) => s.untrustedMention(rule)).find(Boolean),
       env,
       config: () => config,
       log,
@@ -884,9 +1107,30 @@ export function createHost(opts: HostOptions = {}): Host {
         audit,
         policyHash: () => store.current?.hash ?? "",
       },
+      // /btw (owner, 4 Nov): the same limits as the recap, asked for by you, so not turned off with it.
+      btw: {
+        writer: createBtwWriter(),
+        session: (id) => {
+          const i = manager.get(id)?.info()
+          return i ? { project: i.project, ...(i.local ? { local: true } : {}) } : undefined
+        },
+        orgOk: () => account.last()?.org.ok === true,
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+      },
       projects,
       memory,
       routines,
+      // G24: a card moved to Running starts a normal session in its folder, with its prompt.
+      board: {
+        store: board,
+        start: async (card) => {
+          const session = await manager.start({ cwd: card.folder, mode: "default" })
+          session.prompt(card.prompt)
+          return session.id
+        },
+      },
       artifacts,
       prompts,
       marketplace,
@@ -898,6 +1142,37 @@ export function createHost(opts: HostOptions = {}): Host {
         return exe
           ? helperPickers(exe).openFiles({ many: true, title: "Add files or photos" })
           : pickFilesWithWindows()
+      },
+      // CH-07: Continue locally. The chat starts like any other (the organisation guard, Plan mode, the floor and the
+      // Approver), with the seed you saw in its instructions.
+      chatContinue: {
+        store: chatStore,
+        options: () => ({ ...DEFAULT_SEED, ...(config.chatContinue ?? {}) }),
+        redact: (t) => redactString(t, { terms: config.redactTerms }),
+        summarise: createSummariser(),
+        start: async (o) =>
+          (
+            await manager.start({
+              cwd: "chat",
+              kind: "chat",
+              mode: "plan",
+              title: o.title,
+              instructions: o.seed,
+              forkOf: o.forkOf,
+            })
+          ).id,
+        audit,
+        policyHash: () => store.current?.hash ?? "",
+      },
+      // CH-06: Open in Claude, in a separate program; nothing is read back.
+      chatHandoff: {
+        store: chatStore,
+        settings: () => config.chatHandoff ?? {},
+        launcher: realLauncher(helper),
+        findEdge: () => findEdge(),
+        hasAppLink: () => hasAppLink(),
+        audit,
+        policyHash: () => store.current?.hash ?? "",
       },
       // CH-04: importing a claude.ai export, the zip chosen in the open window and nowhere else.
       chatImport: {
@@ -918,6 +1193,9 @@ export function createHost(opts: HostOptions = {}): Host {
         tmpDir: os.tmpdir(),
       },
       updates,
+      changelog,
+      // G30: the verifier that goes in each audit bundle (scripts\verify-audit.ps1, in the app folder too).
+      auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,
@@ -1068,12 +1346,19 @@ export function createHost(opts: HostOptions = {}): Host {
           latencyMs: 0,
         })
         if (!recorded) throw new Error("it could not be recorded, so it did not start")
-        const session = await manager.start({
-          cwd: r.folder,
-          mode: "default",
-          ...(r.extreme ? { extreme: true } : {}),
-        })
+        const session = await manager.start(routineSessionOptions(r))
         session.prompt(r.prompt)
+        // G23: kept for the review inbox in Settings; a run that cannot be noted still runs.
+        const branch = session.info().worktree?.branch
+        await routines
+          .noteRun({
+            routineId: r.id,
+            name: r.name,
+            sessionId: session.id,
+            at: new Date().toISOString(),
+            ...(branch ? { branch } : {}),
+          })
+          .catch((e: Error) => log(`routine run not noted: ${e.message}`))
         return session.id
       }
       new RoutineScheduler({ store: routines, log, start: runRoutine }).start()

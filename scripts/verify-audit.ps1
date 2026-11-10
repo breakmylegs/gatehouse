@@ -4,7 +4,8 @@
 #
 #   .\scripts\verify-audit.ps1 [-Dir <folder>] [-Json]
 #
-# Exit code 0: the chain is intact. 1: problems found. Needs PowerShell 7.5 or later.
+# Exit code 0: the chain is intact. 1: problems found. Runs in PowerShell 7.5 or later and in the Windows
+# PowerShell 5.1 built into Windows (owner, 4 Nov: no PowerShell version is a hard dependency).
 param(
     [string]$Dir = $(if ($env:GATEHOUSE_AUDIT_DIR) { $env:GATEHOUSE_AUDIT_DIR } elseif ($env:GATEHOUSE_DATA_DIR) { Join-Path $env:GATEHOUSE_DATA_DIR 'audit' } else { Join-Path $env:LOCALAPPDATA 'Gatehouse\audit' }),
     [switch]$Json
@@ -50,7 +51,8 @@ function ConvertTo-Canonical($v) {
     if ($v -is [bool]) { if ($v) { return 'true' } else { return 'false' } }
     if ($v -is [string]) { return ConvertTo-CanonicalString $v }
     if ($v -is [int] -or $v -is [long]) { return ([long]$v).ToString([System.Globalization.CultureInfo]::InvariantCulture) }
-    if ($v -is [double]) {
+    # Windows PowerShell 5.1's reader gives decimal for a number with a fraction or exponent.
+    if ($v -is [double] -or $v -is [decimal]) {
         if ($v -eq [math]::Floor($v) -and [math]::Abs($v) -lt 9007199254740992) { return ([long]$v).ToString([System.Globalization.CultureInfo]::InvariantCulture) }
         throw 'non-integer number in an audit record'
     }
@@ -69,7 +71,24 @@ function ConvertTo-Canonical($v) {
 
 function Get-Sha256Hex([string]$text) {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
-    return [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $hash = $sha.ComputeHash($bytes) } finally { $sha.Dispose() }
+    return ([BitConverter]::ToString($hash) -replace '-', '').ToLowerInvariant()
+}
+
+# One JSON value as dictionaries, arrays, strings, numbers and booleans, with dates left as the strings they are.
+# PowerShell 7.5 has ConvertFrom-Json -AsHashtable -DateKind String; Windows PowerShell 5.1 has .NET Framework's own
+# JSON reader, which never turns a string into a date.
+$script:JsonReader = $null
+if ($PSVersionTable.PSEdition -ne 'Core') {
+    Add-Type -AssemblyName System.Web.Extensions
+    $script:JsonReader = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+    $script:JsonReader.MaxJsonLength = [int]::MaxValue
+    $script:JsonReader.RecursionLimit = 1000
+}
+function Read-Json([string]$text) {
+    if ($null -eq $script:JsonReader) { return ConvertFrom-Json -InputObject $text -AsHashtable -DateKind String }
+    return $script:JsonReader.DeserializeObject($text)
 }
 
 function Test-IsInteger($v) { return ($v -is [int] -or $v -is [long]) }
@@ -119,7 +138,7 @@ foreach ($file in $files) {
             continue
         }
         try {
-            $rec = ConvertFrom-Json -InputObject $raw -AsHashtable -DateKind String
+            $rec = Read-Json $raw
         } catch {
             Add-Problem $file $lineNo $null 'not valid JSON'
             continue
@@ -148,7 +167,7 @@ foreach ($file in $files) {
 $headFile = Join-Path $Dir 'head.json'
 $head = $null
 if (Test-Path -LiteralPath $headFile) {
-    try { $head = ConvertFrom-Json -InputObject ([System.IO.File]::ReadAllText($headFile)) -AsHashtable -DateKind String }
+    try { $head = Read-Json ([System.IO.File]::ReadAllText($headFile)) }
     catch { Add-Problem 'head.json' 0 $null 'head.json is not valid JSON' }
 } elseif ($records -gt 0) {
     Add-Problem 'head.json' 0 $null 'head.json is missing'

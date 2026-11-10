@@ -24,6 +24,9 @@ export type ShellMessage =
   // B16: a session in a window of its own, and that window closing itself.
   | `popout:${string}`
   | "pane-close"
+  // CH-08: a picture of part of the screen, or of the window you were in, from the quick prompt.
+  | "capture:region"
+  | "capture:window"
 
 export function tellShell(message: ShellMessage): void {
   try {

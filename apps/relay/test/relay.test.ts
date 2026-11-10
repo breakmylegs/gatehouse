@@ -520,6 +520,32 @@ describe("requests, decisions and revocation", () => {
     expect((await call("GET", "/api/phone/pending", undefined, s2.json.token)).json).toEqual([])
   })
 
+  it("keeps each phone's sealed sessions for that phone alone, and a revoked phone reads them no more (G32)", async () => {
+    const a = await enrol()
+    const b = await enrol("other")
+    const p1 = await pair(a.r.json.token)
+    const p2 = await pair(a.r.json.token)
+    const sealed = await sealJson({ sessions: [] }, p1.phoneKeys.publicKey, "sessions")
+    // Only the computer the phone is paired with may put them.
+    expect(
+      (await call("PUT", "/api/device/sessions", { phoneId: p1.phoneId, sealed }, b.r.json.token))
+        .status,
+    ).toBe(404)
+    expect(
+      (await call("PUT", "/api/device/sessions", { phoneId: p1.phoneId, sealed }, a.r.json.token))
+        .status,
+    ).toBe(200)
+    const s1 = await login(p1.phoneId, p1.auth)
+    const got = await call("GET", "/api/phone/sessions", undefined, s1.json.token)
+    expect(got.json.sealed).toEqual(sealed)
+    const s2 = await login(p2.phoneId, p2.auth)
+    expect((await call("GET", "/api/phone/sessions", undefined, s2.json.token)).status).toBe(404)
+    expect((await call("GET", "/api/phone/sessions")).status).toBe(401)
+    // Revoked: the phone's session ends at once, so it reads nothing more (the snapshot is dropped too).
+    await call("DELETE", `/api/device/phones/${p1.phoneId}`, undefined, a.r.json.token)
+    expect((await call("GET", "/api/phone/sessions", undefined, s1.json.token)).status).toBe(401)
+  })
+
   it("revokes at once: the session, the pending requests and the phone are gone", async () => {
     const { r } = await enrol()
     const p = await pair(r.json.token)

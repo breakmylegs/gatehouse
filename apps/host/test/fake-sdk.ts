@@ -32,7 +32,14 @@ export interface TurnApi {
     toolName: string,
     input: Record<string, unknown>,
     /** response: what the tool gave back, as PostToolUse hooks see it (B32). */
-    opts?: { selfApproved?: boolean; toolUseId?: string; mcpSource?: string; response?: unknown },
+    opts?: {
+      selfApproved?: boolean
+      toolUseId?: string
+      mcpSource?: string
+      response?: unknown
+      /** The tool failed with this error (PostToolUseFailure). */
+      error?: string
+    },
   ): Promise<ToolCallResult>
   say(text: string): void
   /** Emits a raw system message, for example a warning. */
@@ -145,7 +152,7 @@ export class FakeSdk {
     })
 
     const hook = async (
-      event: "PreToolUse" | "PostToolUse",
+      event: "PreToolUse" | "PostToolUse" | "PostToolUseFailure",
       toolName: string,
       input: Record<string, unknown>,
       id: string,
@@ -166,6 +173,7 @@ export class FakeSdk {
             cwd: opts.cwd,
             session_id: sessionId,
             ...(event === "PostToolUse" ? { tool_response: response } : {}),
+            ...(event === "PostToolUseFailure" ? { error: String(response) } : {}),
           } as never,
           id,
           { signal },
@@ -231,12 +239,22 @@ export class FakeSdk {
           }
           finalInput = permission.updatedInput ?? input
         }
-        await hook("PostToolUse", toolName, finalInput, id, signal, o.response)
+        // A tool that fails (o.error) reaches PostToolUseFailure with its error, as in Claude Code.
+        if (o.error !== undefined)
+          await hook("PostToolUseFailure", toolName, finalInput, id, signal, o.error)
+        else await hook("PostToolUse", toolName, finalInput, id, signal, o.response)
         push({
           type: "user",
           message: {
             role: "user",
-            content: [{ type: "tool_result", tool_use_id: id, content: "ok" }],
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: id,
+                content: o.error ?? "ok",
+                ...(o.error !== undefined ? { is_error: true } : {}),
+              },
+            ],
           },
         })
         return { executed: true, input: finalInput, permission, canUseToolCalled: called }

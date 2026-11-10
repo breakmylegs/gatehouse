@@ -26,7 +26,7 @@ export const LEVELS: Record<
   higher: { cpu: 75, memoryMb: 8192, priority: "normal" },
 }
 
-const levelArgs = (l: ResourceLevel) => [
+export const levelArgs = (l: ResourceLevel) => [
   "--cpu",
   String(LEVELS[l].cpu),
   "--memory-mb",

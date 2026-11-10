@@ -62,7 +62,7 @@ Status: **done** (already true or built), **partial**, **todo**, **later** (bloc
 | B27 | Review agent on a worktree diff | done (4 Nov) | Plan mode, read-only; findings linked to diff lines |
 | B28 | Security scan agent | done (4 Nov) | Read-only; patches only through B12 |
 | B29 | Test and build loop panel | done (4 Nov), through goal mode | Test commands allow-listed per project in policy |
-| B30 | Local codebase index | todo | ripgrep (needs IT) plus tree-sitter WASM; floor-excluded files never indexed; one-click delete |
+| B30 | Local codebase index | no, superseded (6 Nov) | Claude Code's own Grep and Glob search the code with the ripgrep it ships, and Ask about code reads through them under the floor. An index would add a dependency (tree-sitter) and keep a second copy of the code's contents to protect, for little gain, so it is not built (standing decision, 4 Nov: the best option, safety first) |
 | B31 | Allow-listed docs fetch | done (3 Nov): remembered sites, per project | WebFetch goes to the Approver and is marked untrusted; add a per-project domain allow list |
 | B32 | Provenance labels against prompt injection | done (4 Nov) | Web content is marked untrusted (ADR 0007); add taint: calls whose arguments come from untrusted content get a higher risk |
 | B33 | Read-only view of agent shell output | waiting on the SDK (4 Nov) | Checked against SDK 0.3.310: a running tool reports only elapsed time (tool_progress), which the activity line shows; output arrives when the call finishes (the tool tree) and a background task names its output file only when it ends (task_notification). A live view needs an SDK that streams output; no undocumented path is used |

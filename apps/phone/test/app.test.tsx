@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -17,6 +17,27 @@ vi.mock("../src/core", () => ({
   isIos: () => true,
   unlock: vi.fn(async () => ({ token: "t", expiresAt: Date.now() + 600_000 })),
   loadPending: vi.fn(async () => state.items),
+  sendToSession: vi.fn(async (_s: unknown, _d: unknown, what: unknown) => {
+    state.answers.push({ session: what })
+  }),
+  startTemplate: vi.fn(async (_s: unknown, _d: unknown, id: string) => {
+    state.answers.push({ start: id })
+  }),
+  loadSessions: vi.fn(async () => ({
+    at: "2026-11-09T10:00:00Z",
+    sessions: [
+      {
+        id: "s1",
+        project: "atlas",
+        title: "Add the basket",
+        state: "waiting",
+        waiting: 1,
+        latest: "You: add a basket\nClaude: Done, with tests.",
+      },
+      { id: "s2", project: "shop", state: "idle", waiting: 0, latest: "" },
+    ],
+    templates: [{ id: "r1", name: "Nightly triage" }],
+  })),
   answer: vi.fn(async (_s: unknown, _d: unknown, item: { relayId: string }, what: unknown) => {
     if (state.answerError) throw new Error(state.answerError)
     state.answers.push({ id: item.relayId, what })
@@ -252,6 +273,97 @@ describe("the list and a request", () => {
     cleanup()
     await unlocked()
     expect(await screen.findByText(/no longer waiting/)).toBeInTheDocument()
+  })
+
+  it("shows what a call would delete and whether it can be undone, as the desktop does (G20)", async () => {
+    state.items = [
+      opened(
+        {},
+        {
+          effects: {
+            kind: "delete",
+            count: 1,
+            paths: ["notes.txt"],
+            more: false,
+            reversible: false,
+            undo: "Cannot be undone: 1 file is not committed in git as it is.",
+          },
+        },
+      ),
+    ]
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: /Run shell command/ }))
+    const effects = screen.getByLabelText("What it would delete or throw away")
+    expect(effects.textContent).toContain("Deletes 1 file")
+    expect(effects.textContent).toContain("notes.txt")
+    expect(effects.textContent).toContain("Cannot be undone")
+  })
+
+  it("allows a Severe request only by holding, then Face ID; a tap does nothing (U4)", async () => {
+    state.items = [opened({}, { verdict: { ...opened().opened.payload.verdict, risk: 90 } })]
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: /Run shell command/ }))
+    await userEvent.click(screen.getByRole("button", { name: "Allow once…" }))
+    const hold = screen.getByRole("button", { name: "Hold to allow with Face ID" })
+    fireEvent.click(hold)
+    expect(await screen.findByText(/press and hold for a moment/)).toBeInTheDocument()
+    expect(state.answers).toEqual([])
+    const now = vi.spyOn(Date, "now")
+    // Half a second is not long enough.
+    now.mockReturnValue(1_000_000)
+    fireEvent.pointerDown(hold)
+    now.mockReturnValue(1_000_500)
+    fireEvent.click(hold)
+    expect(state.answers).toEqual([])
+    now.mockReturnValue(1_000_000)
+    fireEvent.pointerDown(hold)
+    now.mockReturnValue(1_001_600)
+    fireEvent.click(hold)
+    now.mockRestore()
+    await waitFor(() => expect(state.answers).toEqual([{ id: "r1", what: { decision: "allow" } }]))
+  })
+
+  it("shows the sessions on the computer and the latest of what was said, read only (G32)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    const list = await screen.findByRole("list", { name: "Sessions" })
+    expect(list.textContent).toContain("Add the basket")
+    expect(list.textContent).toContain("Needs you, 1 request waits for you")
+    await userEvent.click(screen.getByRole("button", { name: /Add the basket/ }))
+    expect(list.textContent).toContain("Claude: Done, with tests.")
+  })
+
+  it("starts a routine allowed for the phone, by name, signed on the phone (G32)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Start Nightly triage with Face ID" }),
+    )
+    await waitFor(() => expect(state.answers).toEqual([{ start: "r1" }]))
+    expect(
+      await screen.findByText(/starts once your computer checks the signature/),
+    ).toBeInTheDocument()
+  })
+
+  it("sends a session a message, and Interrupt, each signed on the phone (G32)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    await userEvent.click(await screen.findByRole("button", { name: /Add the basket/ }))
+    const send = screen.getByRole("button", { name: "Send with Face ID" })
+    expect(send).toBeDisabled()
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "Message to this session" }),
+      "Run the tests",
+    )
+    await userEvent.click(send)
+    await waitFor(() =>
+      expect(state.answers).toEqual([{ session: { sessionId: "s1", text: "Run the tests" } }]),
+    )
+    expect(await screen.findByText(/once your computer checks the signature/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "Interrupt…" }))
+    await waitFor(() =>
+      expect(state.answers.at(-1)).toEqual({ session: { sessionId: "s1", interrupt: true } }),
+    )
   })
 
   it("opens a request straight from a notification link", async () => {

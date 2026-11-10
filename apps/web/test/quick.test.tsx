@@ -21,11 +21,23 @@ vi.mock("../src/store", async (orig) => {
   }
 })
 
+const attached: Array<Record<string, unknown>> = []
+vi.mock("../src/lib/api", () => ({
+  api: vi.fn(async (_m: string, url: string, body: Record<string, unknown>) => {
+    if (url === "/api/files/attach-data") {
+      attached.push(body)
+      return { ok: true, status: 200, data: { rel: ".codehouse/attachments/ab12cd-screen.png" } }
+    }
+    return { ok: false, status: 404 }
+  }),
+}))
+
 const posted: string[] = []
 let listeners: Array<(e: { data: unknown }) => void> = []
 beforeEach(() => {
   sent.length = 0
   posted.length = 0
+  attached.length = 0
   listeners = []
   ;(globalThis as Record<string, unknown>).chrome = {
     webview: {
@@ -85,6 +97,49 @@ describe("the quick prompt", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }))
     await waitFor(() => expect(posted).toHaveLength(1))
     expect(sent).toEqual([{ type: "prompt", sessionId: "shop", text: "Run the tests" }])
+  })
+
+  it("carries on in the chat you used last, instead of starting one (CH-08)", async () => {
+    render(<Quick />)
+    const radios = screen.getAllByRole("radio")
+    expect(radios).toHaveLength(3)
+    fireEvent.click(radios[1]!)
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "And one more thing" } })
+    fireEvent.click(screen.getByRole("button", { name: "Send" }))
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(sent).toEqual([{ type: "prompt", sessionId: "talk", text: "And one more thing" }])
+  })
+
+  it("attaches a picture of the screen, says pictures are not redacted, and tells the Host what it is (CH-08)", async () => {
+    render(<Quick />)
+    fireEvent.click(screen.getByRole("button", { name: "Part of the screen" }))
+    expect(posted).toEqual(["capture:region"])
+    act(() => listeners.forEach((l) => l({ data: "captured:AQID" })))
+    expect(screen.getByRole("img", { name: "The picture to attach" })).toBeTruthy()
+    expect(screen.getByText(/Pictures are not redacted/)).toBeTruthy()
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "What is this error?" } })
+    fireEvent.click(screen.getByRole("button", { name: "Send" }))
+    await waitFor(() => expect(sent.some((c) => c.type === "prompt")).toBe(true))
+    expect(attached).toEqual([
+      expect.objectContaining({
+        session: "chat-9",
+        type: "image/png",
+        data: "AQID",
+        source: "screen-capture",
+      }),
+    ])
+    expect(sent.at(-1)).toEqual({
+      type: "prompt",
+      sessionId: "chat-9",
+      text: "@.codehouse/attachments/ab12cd-screen.png\n\nWhat is this error?",
+    })
+    // The window may also say nothing was taken (Esc while dragging): the buttons work again.
+    fireEvent.click(screen.getByRole("button", { name: "The window you were in" }))
+    act(() => listeners.forEach((l) => l({ data: "capture-none" })))
+    expect(
+      (screen.getByRole("button", { name: "The window you were in" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false)
   })
 
   it("asks the window to put it away on Esc", () => {

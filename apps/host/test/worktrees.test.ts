@@ -74,6 +74,28 @@ describe("making a worktree", () => {
     await expect(wts.create(plain)).rejects.toThrow(/not in a git repository/)
     expect(wts.records()).toHaveLength(1)
   })
+
+  it("goes where Settings says: inside the project, kept out of git, or a folder inside a workspace root only", async () => {
+    let place: { where: "beside" | "inside" | "folder"; folder?: string } = { where: "inside" }
+    const roots = [dir]
+    const wts = new Worktrees(path.join(dir, "data"), { place: () => place, roots: () => roots })
+    const inside = await wts.create(repo)
+    expect(path.dirname(inside.path)).toBe(path.join(repo, ".codehouse", "worktrees"))
+    // Kept out of git by the repository's own exclude file, once, never its .gitignore.
+    expect(git(repo, "status", "--porcelain")).toBe("")
+    expect(fs.existsSync(path.join(repo, ".gitignore"))).toBe(false)
+    await wts.create(repo)
+    const exclude = fs.readFileSync(path.join(repo, ".git", "info", "exclude"), "utf8")
+    expect(exclude.split("\n").filter((l) => l === "/.codehouse/worktrees/")).toHaveLength(1)
+    // A folder inside a workspace root: <folder>/<repo name>/<name>.
+    place = { where: "folder", folder: path.join(dir, "trees") }
+    const there = await wts.create(repo)
+    expect(path.dirname(there.path)).toBe(path.join(dir, "trees", "shop"))
+    // Outside every root, a session could change nothing: refused, and nothing made.
+    roots.splice(0, 1, path.join(dir, "elsewhere"))
+    await expect(wts.create(repo)).rejects.toThrow(/outside your workspace roots/)
+    expect(wts.records()).toHaveLength(3)
+  })
 })
 
 describe("removing a worktree", () => {
@@ -152,5 +174,37 @@ describe("a session in a worktree", () => {
     expect(s.sdk.queries.at(-1)?.options.cwd).toBe(w.path)
     expect(session.info().worktree).toEqual({ branch: w.branch, repo })
     await session.close()
+  })
+
+  it("opens a pull request for its own branch when Settings says, as a draft, on a branch with your prefix", async () => {
+    s = await buildStack({
+      config: { pullRequests: { create: true, fixChecks: true, branchPrefix: "pk/" } },
+    })
+    const config = s.deps.config()
+    s.deps.worktrees = new Worktrees(path.join(dir, "data"), {
+      branchPrefix: () => config.pullRequests?.branchPrefix,
+    })
+    const prompt = () =>
+      JSON.stringify((s.sdk.queries.at(-1)?.options as { systemPrompt?: unknown }).systemPrompt)
+    const session = await s.manager.start({ cwd: repo, worktree: {} })
+    const w = s.deps.worktrees.records()[0]!
+    expect(w.branch).toMatch(/^pk\/\d{4}-\d{2}-\d{2}-[0-9a-f]{6}$/)
+    expect(prompt()).toContain(`git push -u origin ${w.branch}`)
+    expect(prompt()).toContain("gh pr create --draft")
+    expect(prompt()).toContain("gh pr checks")
+    // G15: a cap on attempts, and never merging by itself.
+    expect(prompt()).toContain("at most 3 times in all")
+    expect(prompt()).toContain("Never merge the pull request yourself")
+    await session.close()
+    // Not a draft when turned off; and a session outside a worktree is never told to push anything.
+    config.pullRequests = { create: true, draft: false }
+    await (await s.manager.start({ cwd: repo, worktree: {} })).close()
+    expect(prompt()).toMatch(/gh pr create[^-]/)
+    await (await s.manager.start({ cwd: repo })).close()
+    expect(prompt()).not.toContain("gh pr create")
+    // An unusable prefix falls back to codehouse/.
+    config.pullRequests = { branchPrefix: "--force" }
+    await (await s.manager.start({ cwd: repo, worktree: {} })).close()
+    expect(s.deps.worktrees.records().at(-1)?.branch).toMatch(/^codehouse\//)
   })
 })

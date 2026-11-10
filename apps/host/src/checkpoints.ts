@@ -12,6 +12,7 @@ import {
   type RestoreResult,
 } from "@gatehouse/shared/node"
 import { secretGlobs, type Policy } from "@gatehouse/policy"
+import { effectsOf } from "./effects.js"
 import type { GatehouseConfig } from "@gatehouse/shared/node"
 
 export const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"])
@@ -33,6 +34,7 @@ export interface CheckpointManagerOptions {
 export class CheckpointManager {
   readonly #opts: CheckpointManagerOptions
   readonly #lastEdit = new Map<string, number>()
+  readonly #lastEffects = new Map<string, { label: string; at: number }>()
 
   constructor(opts: CheckpointManagerOptions) {
     this.#opts = opts
@@ -57,14 +59,41 @@ export class CheckpointManager {
     }
   }
 
-  /** Before an escalated call (if the setting is on). */
+  /** Before an escalated call (if the setting is on), unless one was just taken for the same call. */
   async beforeEscalation(
     sessionId: string,
     cwd: string,
     what: string,
   ): Promise<Checkpoint | undefined> {
     if (!this.#opts.config().checkpoints.beforeEscalation) return undefined
-    return this.#take(sessionId, cwd, `before: ${what}`)
+    const label = `before: ${what}`
+    const last = this.#lastEffects.get(sessionId)
+    if (last && last.label === label && (this.#opts.now ?? Date.now)() - last.at < 30_000)
+      return undefined
+    return this.#take(sessionId, cwd, label)
+  }
+
+  /**
+   * G27: before any shell command that would delete files or throw work away, however it is allowed (your rules, Auto,
+   * Extreme approval or you), so its undo point is in Changes. Outside git this uses Codehouse's own store for the
+   * folder. Nothing for other calls; a failure is logged and the call goes on.
+   */
+  async beforeEffects(
+    sessionId: string,
+    cwd: string,
+    tool: string,
+    input: Record<string, unknown>,
+  ): Promise<Checkpoint | undefined> {
+    if (tool !== "Bash" && tool !== "PowerShell") return undefined
+    if (!this.#opts.config().checkpoints.beforeEscalation) return undefined
+    const effects = await effectsOf(tool, input, cwd).catch(() => undefined)
+    if (!effects || (effects.count === 0 && !effects.more)) return undefined
+    const command = typeof input.command === "string" ? input.command : tool
+    const label = `before: ${`${tool} ${command}`.slice(0, 80)}`
+    const cp = await this.#take(sessionId, cwd, label)
+    // Timed from when it is done: the same call escalated straight after needs no second one.
+    if (cp) this.#lastEffects.set(sessionId, { label, at: (this.#opts.now ?? Date.now)() })
+    return cp
   }
 
   /** Before an edit tool runs. Takes one checkpoint at the start of a burst of edits. */

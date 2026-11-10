@@ -1,9 +1,27 @@
-import { fromOutside, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
+import {
+  fromOutside,
+  TAINT_RULE,
+  UNTRUSTED_FILES,
+  withProvenance,
+  type Provenance,
+} from "./provenance.js"
+import { compileGlobs } from "@gatehouse/policy"
+
+const untrusted = (globs: readonly string[]) => compileGlobs(globs.map((g) => g.toLowerCase()))
+import {
+  makesCommit,
+  scanCommit,
+  secretReason,
+  SECRET_IN_COMMIT_RULE,
+  type Found,
+} from "./commit-scan.js"
 import type { HookCallback, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk"
 import { evaluateFloor, type Policy, type PwshWorker } from "@gatehouse/policy"
 import type { Verdict } from "@gatehouse/shared"
 import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
+import type { GrantUses } from "./grant-uses.js"
+import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -79,6 +97,11 @@ export interface SessionHookDeps {
   audit: HostAudit
   kill: () => boolean
   checkpoints?: CheckpointManager
+  /** C-013: counts the uses of remembered rules that have a limit. */
+  grants?: GrantUses
+  /** D-007: the locked tests, and the calls a person approved that touched them. */
+  locks?: Pick<TestLocks, "touched" | "repin">
+  lockedCalls?: Map<string, string[]>
   /** toolUseIDs that went through canUseTool, so PostToolUse can tell which calls Claude Code approved itself. */
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
@@ -99,8 +122,20 @@ export interface SessionHookDeps {
   onDecision?: (toolUseId: string, verdict: Verdict) => void
   /** B32: what the session read from outside, to catch a command copied from it. */
   provenance?: Provenance
+  /** D-018: a call Claude Code approved by itself, with the verdict the Approver gave it. */
+  onSelfApproved?: (verdict: Verdict) => void
+  /** D-015: the files whose words are not the project's own (globs). Absent: UNTRUSTED_FILES. */
+  untrustedFiles?: () => readonly string[]
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
+  /** D-008: what a shell command printed, read for counterexamples. */
+  onToolOutput?: (tool: string, output: string) => void
+  /** G19: how each call ended: with the error when it failed, undefined when it worked. */
+  onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => void
+  /** G22: commits are checked for secrets unless this is false (tests only). */
+  scanCommits?: boolean
+  /** Tests only: stands in for reading the commit. */
+  commitScanner?: (cwd: string, command: string) => Promise<Found[]>
   log: (line: string) => void
 }
 
@@ -152,9 +187,51 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         })
         return denyOutput(`${hit.reason} (rule ${hit.ruleId})`)
       }
+      // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person.
+      if (deps.scanCommits !== false && makesCommit(input.tool_name, toolInput)) {
+        let found: Found[]
+        try {
+          found = await (deps.commitScanner ?? scanCommit)(cwd, String(toolInput.command))
+        } catch {
+          return askOutput(
+            "Codehouse could not check this commit for secrets, so it asks you before it runs.",
+          )
+        }
+        if (found.length) {
+          const reason = secretReason(found)
+          await deps.audit.record({
+            session: deps.sessionId,
+            event: "floor_deny",
+            channel: "host",
+            tool: input.tool_name,
+            toolUseId: input.tool_use_id,
+            cwd,
+            input: toolInput,
+            verdict: {
+              outcome: "deny",
+              ruleId: SECRET_IN_COMMIT_RULE,
+              reason,
+              risk: 100,
+              decidedBy: "floor",
+              policyHash: policy?.hash ?? "none",
+            },
+            latencyMs: 0,
+          })
+          return denyOutput(`${reason} (rule ${SECRET_IN_COMMIT_RULE})`)
+        }
+      }
       // The call passed the floor. If it is an edit, take a checkpoint at the start of a burst of edits.
       await deps.checkpoints?.noteEdit(deps.sessionId, cwd, input.tool_name)
+      // G27: and if it is a command that would delete files or throw work away, an undo point before it runs.
+      await deps.checkpoints?.beforeEffects(deps.sessionId, cwd, input.tool_name, toolInput)
       const mode = deps.mode?.() ?? "default"
+      // D-007: a call that would change a locked test is asked in these modes too; canUseTool records and decides it.
+      if (SELF_APPROVING_MODES.has(mode) && deps.locks) {
+        const files = await deps.locks
+          .touched(cwd, input.tool_name, toolInput)
+          .catch(() => ["(the locks could not be read)"])
+        if (files.length) return askOutput(lockedReason(files))
+      }
       if (deps.approver && SELF_APPROVING_MODES.has(mode) && !NOT_JUDGED.has(input.tool_name)) {
         const judged = await deps.approver.evaluate(
           { toolName: input.tool_name, input: toolInput },
@@ -175,6 +252,9 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
+        // C-013: a remembered rule that has used its allowed number of calls asks instead.
+        if (deps.grants?.spent(verdict, input.tool_use_id))
+          return askOutput(deps.grants.reason(verdict.ruleId))
         if (
           verdict.outcome === "escalate" &&
           (verdict.risk >= ASK_FROM_RISK ||
@@ -215,15 +295,64 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
       return NO_DECISION
     try {
+      // G19: the loop guard hears how each call ended.
+      deps.onToolOutcome?.(
+        input.tool_name,
+        input.tool_input,
+        input.hook_event_name === "PostToolUseFailure" && input.is_interrupt !== true
+          ? String(input.error ?? "")
+          : undefined,
+      )
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(input.tool_response)
+      // D-015: a file that is not the project's own words (a README, a dependency's code), read in the session.
+      if (input.hook_event_name === "PostToolUse" && input.tool_name === "Read" && deps.provenance) {
+        const file = asRecord(input.tool_input).file_path
+        if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
+          deps.provenance.addUntrustedFile(input.tool_response)
+      }
+      // D-008: a shell command's output, read for a property test's or a fuzz run's counterexample.
+      if (deps.onToolOutput && (input.tool_name === "Bash" || input.tool_name === "PowerShell")) {
+        const r = input.hook_event_name === "PostToolUse" ? input.tool_response : (input as { error?: unknown }).error
+        const text = typeof r === "string" ? r : JSON.stringify(r ?? "")
+        if (text) deps.onToolOutput(input.tool_name, text.slice(0, 200_000))
+      }
       if (input.hook_event_name === "PostToolUse" && WRITE_TOOLS.has(input.tool_name)) {
         const p = asRecord(input.tool_input)
         const file = p.file_path ?? p.notebook_path
         if (typeof file === "string" && file) deps.onWritten?.(file)
       }
+      // D-018: a call Claude Code approved by itself (it never reached canUseTool) spends the risk budget.
+      const early = deps.verdicts?.get(input.tool_use_id)
+      if (early && !deps.decided.has(input.tool_use_id) && input.hook_event_name === "PostToolUse")
+        deps.onSelfApproved?.(early)
       deps.verdicts?.delete(input.tool_use_id)
+      // D-007: a locked test changed with a person's approval is pinned again as it now is, and that is recorded.
+      const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
+      const locked = deps.lockedCalls?.get(input.tool_use_id)
+      if (input.hook_event_name === "PostToolUse" && locked && deps.locks) {
+        deps.lockedCalls?.delete(input.tool_use_id)
+        await deps.locks.repin(cwd, locked).catch(() => undefined)
+        await deps.audit.record({
+          session: deps.sessionId,
+          event: "test_lock_repinned",
+          channel: "host",
+          tool: input.tool_name,
+          toolUseId: input.tool_use_id,
+          cwd,
+          input: { files: locked },
+          verdict: {
+            outcome: "allow",
+            ruleId: LOCKED_TEST_RULE,
+            reason: "A locked test was changed with your approval, so it is locked as it now is.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: deps.policy()?.hash ?? "none",
+          },
+          latencyMs: 0,
+        })
+      }
       if (deps.decided.has(input.tool_use_id)) return NO_DECISION
       await deps.audit.record({
         session: deps.sessionId,

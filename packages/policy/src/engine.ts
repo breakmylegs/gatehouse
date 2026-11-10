@@ -2,6 +2,15 @@ import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
+import { expandEffects } from "./expand.js"
+import { hiddenCharacters } from "./hidden.js"
+import {
+  fileFindings,
+  INTEGRITY_PATTERNS,
+  INTEGRITY_RISK,
+  integrityRuleId,
+  shellFindings,
+} from "./test-integrity.js"
 import { compileGlobs, matchAnyWildcard } from "./match.js"
 import { findProjectRoot, isInside, realKey, relativeTo, type ResolvedPath } from "./paths.js"
 import type { PwshWorker } from "./pwsh.js"
@@ -50,6 +59,21 @@ const BUILTIN = {
   },
 } as const
 
+/** D-013: what a shell call would run that Codehouse cannot read: an npx fetch, a hook that is a program. */
+export const UNKNOWN_EFFECTS = {
+  ruleId: "unknown-effects",
+  reason: "It would also run something Codehouse cannot read, so what it does is not known in advance:",
+  risk: 60,
+} as const
+
+/** Backlog G21: a call carrying characters you cannot see goes to a person, whatever rule would allow it. */
+export const HIDDEN_UNICODE = {
+  ruleId: "hidden-unicode",
+  reason:
+    "It contains characters you cannot see (shown as their codes on the card), which can make a command or code mean something other than it looks.",
+  risk: 80,
+} as const
+
 export interface BuiltInRule {
   ruleId: string
   reason: string
@@ -59,11 +83,18 @@ export interface BuiltInRule {
 /** Rule ids the engine produces without any rule in the file. Used to explain a verdict. */
 export const BUILTIN_RULES: readonly BuiltInRule[] = [
   ...Object.values(BUILTIN),
+  HIDDEN_UNICODE,
+  UNKNOWN_EFFECTS,
   {
     ruleId: "shell-obfuscation",
     reason: "The command uses an encoded, dynamic or piped-to-shell form.",
     risk: 90,
   },
+  ...INTEGRITY_PATTERNS.map((p) => ({
+    ruleId: integrityRuleId(p),
+    reason: "The change weakens the project's tests, so it needs your approval (test-integrity).",
+    risk: INTEGRITY_RISK,
+  })),
 ]
 
 interface Effective {
@@ -123,11 +154,53 @@ export class PolicyEngine {
       const policy = this.#getPolicy()
       if (!policy) return this.#verdict("escalate", BUILTIN.noPolicy, policyHash, "rules")
       policyHash = policy.hash
-      return await this.#evaluate(call, ctx, policy)
+      const v = await this.#evaluate(call, ctx, policy)
+      // D-013: a shell call is judged with everything it would run besides what it says.
+      return call.toolName === "Bash" || call.toolName === "PowerShell"
+        ? await this.#withEffects(call, ctx, policy, v)
+        : v
     } catch {
       // Invariant 1: any failure escalates. It never allows and never throws.
       return this.#verdict("escalate", BUILTIN.engineError, policyHash, "rules")
     }
+  }
+
+  /**
+   * D-013: the lines a shell call would run besides itself (npm scripts, Makefile recipes, git hooks, wrappers, local
+   * tools, the PowerShell profile), each judged like the call. A deny on any line denies the call; a line a rule
+   * escalates, or an effect that cannot be read, makes it ask; the strictest wins. A line no rule speaks of does not by
+   * itself make the call ask, so an ordinary test script does not turn every npm test into a question.
+   */
+  async #withEffects(call: ToolCall, ctx: EvalContext, policy: Policy, v: Verdict): Promise<Verdict> {
+    const command = typeof (call.input as { command?: unknown })?.command === "string" ? String((call.input as { command: string }).command) : ""
+    if (!command) return v
+    const exp = expandEffects(command, call.toolName === "PowerShell" ? "pwsh" : "bash", ctx.cwd)
+    if (!exp.lines.length && !exp.unknown.length) return v
+    const shown = exp.lines.slice(0, 20).map((l) => ({ from: l.from, line: l.line.slice(0, 300) }))
+    const withShown = (x: Verdict): Verdict => ({
+      ...x,
+      ...(shown.length ? { expanded: shown } : {}),
+      ...(exp.unknown.length ? { unknownEffects: exp.unknown.slice(0, 10) } : {}),
+    })
+    if (v.outcome === "deny") return withShown(v)
+    let worst: Verdict | undefined
+    for (const l of exp.lines) {
+      const lv = await this.#evaluate(
+        { toolName: l.shell === "pwsh" ? "PowerShell" : "Bash", input: { command: l.line } },
+        ctx,
+        policy,
+      )
+      const said = (x: string) => `${l.from} runs "${l.line.slice(0, 120)}": ${x}`
+      if (lv.outcome === "deny") return withShown({ ...lv, reason: said(lv.reason) })
+      if (lv.outcome === "escalate" && lv.ruleId !== BUILTIN.noRule.ruleId && lv.ruleId !== BUILTIN.unknownTool.ruleId)
+        if (!worst || lv.risk > worst.risk) worst = { ...lv, reason: said(lv.reason) }
+    }
+    if (exp.unknown.length) {
+      const u = this.#verdict("escalate", { ...UNKNOWN_EFFECTS, reason: `${UNKNOWN_EFFECTS.reason} ${exp.unknown[0]}.` }, policy.hash, "rules")
+      if (!worst || u.risk > worst.risk) worst = u
+    }
+    if (worst && (v.outcome === "allow" || worst.risk > v.risk)) return withShown({ ...worst, segments: v.segments } as Verdict)
+    return withShown(v)
   }
 
   #verdict(
@@ -186,6 +259,8 @@ export class PolicyEngine {
       sessionKind: ctx.sessionKind ?? "code",
       projectName,
       ...(call.toolName === "WebFetch" && typeof input.url === "string" ? { url: input.url } : {}),
+      cwdKey: realKey(ctx.cwd),
+      now: ctx.now ?? Date.now(),
     }
 
     // Deny rules, per call and per segment. Deny wins.
@@ -226,6 +301,16 @@ export class PolicyEngine {
     if (fl.downloadString) escalations.push(BUILTIN.download)
     if (fl.registryWrite) escalations.push(BUILTIN.registry)
     if (fl.executionPolicy) escalations.push(BUILTIN.execPolicy)
+    // G21: no rule, remembered or not, lets an invisible character through unseen.
+    const hidden = hiddenCharacters(call)
+    if (hidden.length)
+      escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
+    // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
+    const integrity = f.isShell
+      ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")
+      : fileFindings(call.toolName, input, f.targets[0]?.abs)
+    for (const x of integrity)
+      escalations.push({ ruleId: integrityRuleId(x.pattern), reason: x.reason, risk: INTEGRITY_RISK })
     // Flags the floor did not choose to deny still escalate.
     if (fl.encodedCommand || fl.invokeExpression || fl.dynamicInvocation || fl.evalDynamic || fl.pipeToShell) {
       escalations.push({
@@ -354,6 +439,9 @@ interface MatchEnv {
   projectName?: string
   /** The address a WebFetch reads (B31). */
   url?: string
+  /** C-013: the folder the call is made in (a real-path key), and the moment it is decided. */
+  cwdKey: string
+  now: number
 }
 
 /**
@@ -439,6 +527,9 @@ function matchRemember(rule: Rule, env: MatchEnv): RuleMatch | null {
   const { f } = env
   if (!rule.tools?.includes(f.tool)) return null
   if (rule.projects && !(env.projectName !== undefined && rule.projects.includes(env.projectName))) return null
+  // C-013: an expired grant, or one made for another folder, does not apply: the call asks as it would without it.
+  if (rule.notAfter !== undefined && env.now > rule.notAfter) return null
+  if (rule.withinKey !== undefined && !isInside(env.cwdKey, rule.withinKey)) return null
   if (rule.urlHosts) return env.url !== undefined && onSites(env.url, rule.urlHosts) ? { call: true, segs: new Set() } : null
   const segs = new Set<number>()
   let call = false

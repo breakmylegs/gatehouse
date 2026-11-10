@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it, vi } from "vitest"
 import {
   checkRoutine,
   isDue,
+  routineSessionOptions,
   RoutineScheduler,
   RoutineStore,
   type Routine,
@@ -71,5 +72,34 @@ describe("a routine", () => {
     })
     expect(await store.remove(saved.id)).toBe(true)
     expect(store.list()).toEqual([])
+  })
+
+  it("keeps its runs for the review inbox, newest first and the latest 50, and runs in a worktree when asked (G23)", async () => {
+    const file = path.join(dir, "runs.json")
+    const store = new RoutineStore(file)
+    const saved = await store.put({ ...morning, worktree: true, phone: true })
+    expect(saved).toMatchObject({ worktree: true, phone: true })
+    expect(checkRoutine({ ...morning, phone: "yes" as never })).not.toHaveProperty("phone")
+    expect(checkRoutine({ ...morning, worktree: "yes" as never })).not.toHaveProperty("worktree")
+    for (let i = 0; i < 52; i++)
+      await store.noteRun({
+        routineId: saved.id,
+        name: "Triage",
+        sessionId: `s${i}`,
+        at: `2026-11-09T0${i % 10}:00:00Z`,
+        ...(i % 2 ? { branch: `codehouse/${i}` } : {}),
+      })
+    const again = new RoutineStore(file)
+    expect(again.list()[0]?.worktree).toBe(true)
+    expect(routineSessionOptions(again.list()[0]!)).toEqual({
+      cwd: morning.folder,
+      mode: "default",
+      worktree: {},
+    })
+    expect(routineSessionOptions(morning)).toEqual({ cwd: morning.folder, mode: "default" })
+    const runs = again.runs()
+    expect(runs).toHaveLength(50)
+    expect(runs[0]).toMatchObject({ sessionId: "s51", branch: "codehouse/51" })
+    expect(runs.at(-1)?.sessionId).toBe("s2")
   })
 })

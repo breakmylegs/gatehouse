@@ -1,5 +1,5 @@
 import { MergeView, unifiedMergeView } from "@codemirror/merge"
-import { defaultKeymap } from "@codemirror/commands"
+import { defaultKeymap, history, historyKeymap } from "@codemirror/commands"
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search"
 import { EditorState, type Extension } from "@codemirror/state"
 import {
@@ -14,12 +14,13 @@ import { useEffect, useRef, useState } from "react"
 
 /**
  * Codehouse's views of code (B11), on CodeMirror 6: a file, and a changed file before and after. Both are read only:
- * the keyboard moves through them, Ctrl+F searches, and nothing typed changes a file. CodeMirror draws only the lines
+ * the keyboard moves through them, Ctrl+F searches, and nothing typed changes a file. The editor (G33) is the one place
+ * typing changes text, and only once you save it. CodeMirror draws only the lines
  * in view, so a file of several megabytes opens at once. (Chosen over Monaco: a fraction of the size, no web workers,
  * and strong screen reader support; see BUILD_REPORT, Phase 101.)
  */
-const base = (label: string): Extension[] => [
-  EditorState.readOnly.of(true),
+const base = (label: string, editable = false): Extension[] => [
+  EditorState.readOnly.of(!editable),
   lineNumbers(),
   highlightSpecialChars(),
   drawSelection(),
@@ -28,7 +29,10 @@ const base = (label: string): Extension[] => [
   search({ top: true }),
   keymap.of([...searchKeymap, ...defaultKeymap]),
   EditorView.lineWrapping,
-  EditorView.contentAttributes.of({ "aria-label": label, "aria-readonly": "true" }),
+  EditorView.contentAttributes.of({
+    "aria-label": label,
+    "aria-readonly": editable ? "false" : "true",
+  }),
   EditorView.theme({
     "&": { fontSize: "13px", backgroundColor: "var(--c-s1)", color: "var(--c-tx)" },
     ".cm-content": { fontFamily: "var(--font-code)" },
@@ -41,6 +45,54 @@ const base = (label: string): Extension[] => [
     "&.cm-focused": { outline: "2px solid var(--c-acc)", outlineOffset: "-2px" },
   }),
 ]
+
+/**
+ * G33: a file's text you can change, with line numbers, search, undo (Ctrl+Z) and Ctrl+S to save. What you type stays
+ * here until you save; the Host saves it only over the version you opened.
+ */
+export function CodeEditor({
+  text,
+  label,
+  onChange,
+  onSave,
+}: {
+  text: string
+  label: string
+  onChange: (text: string) => void
+  onSave: () => void
+}) {
+  const host = useRef<HTMLDivElement>(null)
+  // The latest handlers, so the editor is made once per file and never loses what you typed.
+  const handlers = useRef({ onChange, onSave })
+  handlers.current = { onChange, onSave }
+  useEffect(() => {
+    if (!host.current) return
+    const view = new EditorView({
+      doc: text,
+      extensions: [
+        ...base(label, true),
+        history(),
+        keymap.of([
+          {
+            key: "Mod-s",
+            preventDefault: true,
+            run: () => {
+              handlers.current.onSave()
+              return true
+            },
+          },
+          ...historyKeymap,
+        ]),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) handlers.current.onChange(u.state.doc.toString())
+        }),
+      ],
+      parent: host.current,
+    })
+    return () => view.destroy()
+  }, [text, label])
+  return <div ref={host} className="code-view" data-testid="code-editor" />
+}
 
 /** A file's text, read only, with line numbers and search. */
 export function CodeView({ text, label }: { text: string; label: string }) {

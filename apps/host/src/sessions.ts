@@ -1,3 +1,10 @@
+import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
+import type { ActionRequest, ActionResult } from "./codehouse-action.js"
+import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
+import { CounterexamplePins } from "./counterexample-pins.js"
+import type { TestLocks } from "./test-locks.js"
+import type { HeavyJob } from "./memory-governor.js"
+import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
 import crypto from "node:crypto"
 import os from "node:os"
@@ -20,6 +27,7 @@ import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
 import { createCanUseTool } from "./canuse.js"
 import type { CheckpointManager } from "./checkpoints.js"
+import type { GrantUses } from "./grant-uses.js"
 import {
   createEventHook,
   createFloorHook,
@@ -31,6 +39,9 @@ import type { HostKillSwitch } from "./kill.js"
 import { pluginsWithMods } from "./marketplace.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
 import type { Worktrees } from "./worktrees.js"
+import type { SessionLink } from "./about-session.js"
+import { LoopGuard, LOOP_REPEATS } from "./loop-guard.js"
+import { STUCK_MS, StuckWatch } from "./stuck-watch.js"
 import {
   assertSafeOptions,
   isAllowedMode,
@@ -182,6 +193,41 @@ export class KillSwitchEngagedError extends Error {
   }
 }
 
+/** Owner, 9 Nov: a message to a session a limit paused; going on needs a bypass for this session. */
+/**
+ * D-001: whether a project is strict about its tests, so Extreme approval waits for a person on a weakening. By name,
+ * the folder's, as policy overlays are; or every project.
+ */
+export function strictAboutTests(
+  s: { strictAll?: boolean; strictProjects?: string[] } | undefined,
+  project: string,
+): boolean {
+  if (s?.strictAll === true) return true
+  const p = project.trim().toLowerCase()
+  return (s?.strictProjects ?? []).some((n) => typeof n === "string" && n.trim().toLowerCase() === p)
+}
+
+/** D-007: locked tests changed outside Codehouse; no session starts in the project until the owner accepts them. */
+export class LockedTestsChangedError extends Error {
+  constructor(readonly files: string[]) {
+    super(
+      `Locked tests were changed outside Codehouse since they were locked: ${files.slice(0, 5).join(", ")}${files.length > 5 ? ` and ${files.length - 5} more` : ""}. Look at the changes, then accept the new versions to start a session here.`,
+    )
+  }
+}
+
+export class LimitPausedError extends Error {
+  constructor(reason?: "spend" | "risk") {
+    super(
+      reason === "risk"
+        ? "This session is paused: its risk budget is spent. Start it again from its pane when you have looked at what it did."
+        : reason === "spend"
+          ? "This session is paused: today's spending reached the most Settings allows a day. Bypass the limits for this session, with a time or a most it may spend, to keep going."
+          : "This session is paused at the plan limit set in Settings. Bypass the limits for this session, with a time or a most it may spend, to keep going.",
+    )
+  }
+}
+
 export type SessionState = "starting" | "idle" | "running" | "waiting" | "error" | "ended"
 
 export interface SessionInfo {
@@ -218,6 +264,18 @@ export interface SessionInfo {
   restarted?: { wasRunning: boolean; forced?: boolean; crashed?: boolean }
   /** What is still working in the background after the turn ended, by description. */
   background?: string[]
+  /** O21: the same work with when each began. */
+  backgroundTasks?: Array<{ id: string; description: string; startedAt: string }>
+  /** C-004: suspended to free memory; Start again brings it back on the same conversation. */
+  suspended?: boolean
+  /** D-001: how many weakenings of the tests Extreme approval approved in this session. */
+  testsWeakened?: number
+  /** D-018: what is left of the session's risk budget; absent when it has none. */
+  riskBudget?: number
+  /** D-009: claims that the work is done, as checked, newest last. */
+  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string }>
+  /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
+  counterexamples?: Array<{ id: string; framework: string; example: string; writesItself: boolean; test?: string }>
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn?: CarryOnStatus
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
@@ -242,10 +300,14 @@ export interface SessionInfo {
   historyUntil?: string
   /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
   replaces?: string
+  /** CH-07: carried on here from an imported claude.ai chat, so it says it is not synced back. */
+  forkOf?: { conversation: string; message: string }
   /** Works in a git worktree Codehouse made for it (B10): its branch, and the repository it came from. */
   worktree?: { branch: string; repo: string }
+  /** Owner, 9 Nov: your bypass of the limits for this session, while it lasts. */
+  bypass?: { since: string; until?: string; maxUsd?: number; spentUsd: number }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
-  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" }
+  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" }
 }
 
 export interface SessionEvents {
@@ -266,6 +328,14 @@ export interface SessionEvents {
         | "carry_on_end"
         | "load"
         | "queue_empty"
+        | "stuck"
+        | "bypass_ended"
+        | "tests_weakened"
+        | "heldout_result"
+        | "counterexample_pinned"
+        | "claim_checked"
+        | "remember_refused"
+        | "risk_budget_exhausted"
       data: Record<string, unknown>
     },
   ]
@@ -281,8 +351,6 @@ export interface SessionEvents {
  */
 export const START_TIMEOUT_MS = 300_000
 
-/** A pause with no end time: how long Start now holds before a limit may pause the session again (a plan window). */
-export const HOLD_MS = 5 * 3_600_000
 
 export interface SessionDeps {
   queryFn: QueryFn
@@ -295,6 +363,8 @@ export interface SessionDeps {
   }
   /** B37: why IT's signed policy could not be checked, if it could not; then no session starts. */
   managedPolicyProblem?: () => string | undefined
+  /** C-004: refuses a new session or chat while this computer's memory is committed over the point in Settings. */
+  governor?: { admit(what: HeavyJob, detail?: Record<string, unknown>): Promise<void> }
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
   resumeSettings?: (sdkSessionId: string) => {
     model?: string
@@ -343,14 +413,26 @@ export interface SessionDeps {
   kill: HostKillSwitch
   usage: UsageStore
   checkpoints: CheckpointManager
+  /** C-013: counts the uses of remembered rules that have a limit. */
+  grants?: GrantUses
+  /** D-007: the locked tests. */
+  locks?: TestLocks
+  /** Section 6: runs a command as Codehouse's own action (D-009's claim checks). */
+  codehouseAction?: (r: ActionRequest) => Promise<ActionResult>
   account: AccountMonitor
+  /** Owner, 9 Nov: one look at the limits now, so a bypass that has run out pauses the session at once. */
+  limitCheck?: () => Promise<void>
   /** Builds the in-process Companion for a session. */
   companion: (s: {
     sessionId: string
     cwd: string
     kind?: "chat"
     chatProject?: string
+    /** Ask about code: the code session this chat is about. */
+    about?: SessionLink
   }) => Record<string, unknown>
+  /** Ask about code: how the linked session stands and the latest of what was said in it, redacted. */
+  aboutSaid?: (about: SessionLink) => Promise<string>
   managedDetected: () => Promise<boolean | undefined>
   localRulesPath?: string
   /** Tells the phone about a request that Extreme approval mode approved. */
@@ -378,6 +460,10 @@ export interface StartSessionOptions {
   instructions?: string
   /** A research chat (W1-10): it is given the research instruction. Ignored for a coding session. */
   research?: boolean
+  /** Ask about code (owner, 6 Nov): a chat about this code session, by its id; the manager looks it up. */
+  aboutId?: string
+  /** The code session this chat is about, as looked up (or as it was, when a chat comes back after a restart). */
+  about?: SessionLink
   /**
    * Brought back after Codehouse restarted: the same id, so the screen finds its panes again, and its original start
    * time. A chat keeps its folder.
@@ -391,6 +477,8 @@ export interface StartSessionOptions {
     crashed?: boolean
     /** It was paused at the plan limit when Codehouse closed: it comes back still paused, until the limit resets. */
     paused?: NonNullable<SessionInfo["paused"]>
+    /** C-004: you started again a session suspended to free memory, so the memory governor is asked first. */
+    wake?: boolean
   }
   /** How much of this computer it may use; High (no limits) when not given. */
   resources?: ResourceLevel
@@ -402,6 +490,8 @@ export interface StartSessionOptions {
   resumeAt?: string
   /** The session this one replaces in its pane (Retry and Edit). */
   replaces?: string
+  /** CH-07: carried on from an imported chat, at this message of it. */
+  forkOf?: { conversation: string; message: string }
   /** Start in a new git worktree of the repository cwd is in, from this base (its current commit when absent). */
   worktree?: { base?: string }
   /** The worktree it works in, once made (set by the manager, not the screen). */
@@ -483,10 +573,18 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #decided = new Set<string>()
   /** The files this session wrote or edited, by full path in lower case, while Codehouse runs. */
   readonly #written = new Set<string>()
+  /** G19: the same failure again and again, with nothing changed in between. */
+  readonly #loop = new LoopGuard()
+  /** O16: a turn with nothing from Claude for two minutes, and nothing waiting for you, is said to be possibly stuck. */
+  readonly #stuck = new StuckWatch({
+    waiting: () => this.#deps.broker.countFor(this.id) > 0,
+    onStuck: () => this.emit("event", { type: "stuck", data: { minutes: STUCK_MS / 60_000 } }),
+  })
   /** The Approver's verdicts from the PreToolUse hook (Auto and Accept edits), by toolUseID, for canUseTool. */
   readonly #verdicts = new Map<string, Verdict>()
   /** Background tasks still working (subagents, shell commands), by task id, from Claude Code's own list. */
-  readonly #background = new Map<string, string>()
+  /** O21: each task's description and when it began, for how long it has run. */
+  readonly #background = new Map<string, { description: string; startedAt: number }>()
   /** Extreme approval's run of automatic turns since your last message. */
   readonly #carry = new CarryOn(() => carryOnLimits(this.#deps.config().extremeCarryOn))
   /** The session's total cost after its last turn, so a run counts only what it spends. */
@@ -495,8 +593,84 @@ export class Session extends EventEmitter<SessionEvents> {
   #compactAfterTurn = false
   /** Paused at the plan limit: nothing carries on by itself until it starts again. */
   #paused: SessionInfo["paused"]
-  /** Owner, 5 Nov: started again by you, so no limit pauses it again until this (epoch ms). */
-  #protectionOffUntil: number | undefined
+  /**
+   * Owner, 9 Nov: your bypass of the limits for this session, with a time, a spending limit or both. Kept only while
+   * the Host runs: after a restart the limits in Settings apply again.
+   */
+  #bypass: { since: number; until?: number; maxUsd?: number; costAtStart: number } | undefined
+  #bypassTimer: NodeJS.Timeout | undefined
+  /** D-001: weakenings of the tests Extreme approval approved in this session, which it says. */
+  #testsWeakened = 0
+  /** D-008: the counterexamples this session's test runs found, to pin as locked regression tests. */
+  get #pins(): CounterexamplePins {
+    this.#pinsValue ??= new CounterexamplePins({
+      sessionId: this.id,
+      cwd: this.cwd,
+      project: this.project,
+      audit: this.#deps.audit,
+      ...(this.#deps.locks ? { locks: this.#deps.locks } : {}),
+      prompt: (text) => this.prompt(text),
+    })
+    return this.#pinsValue
+  }
+  #pinsValue: CounterexamplePins | undefined
+
+  /** D-008: pins one of the counterexamples (the owner chose Pin on the desktop). */
+  async pinCounterexample(id: string): Promise<{ file: string; by: string }> {
+    const r = await this.#pins.pin(id)
+    this.emit("event", { type: "counterexample_pinned", data: { file: r.file, by: r.by } })
+    this.emit("state", this.info())
+    return r
+  }
+
+  /** D-015: why a rule must not be remembered from this session, or undefined. */
+  untrustedMention(rule: RuleTerms): string | undefined {
+    return this.#provenance.mentions(rule, this.cwd)
+  }
+
+  dismissCounterexample(id: string): void {
+    this.#pins.dismiss(id)
+    this.emit("state", this.info())
+  }
+
+  /** D-018: what is left of the session's risk budget, or undefined when there is none (the default). */
+  #budget: number | undefined
+
+  /**
+   * D-018, the risk budget (opt-in; Settings, Sessions): an allow given without a person, by Extreme approval or by
+   * Claude Code in Auto or Accept edits, spends 1 point at Moderate risk and 3 at High. At zero a Manual-family session
+   * drops to Manual and an Extreme one pauses until you start it again. Your own message fills it again.
+   */
+  async #spendRisk(risk: number, by: "extreme" | "self-approved"): Promise<void> {
+    if (this.#budget === undefined || this.#budget <= 0) return
+    const cost = risk >= 85 ? 3 : risk >= 70 ? 3 : risk >= 40 ? 1 : 0
+    if (!cost) return
+    this.#budget = Math.max(0, this.#budget - cost)
+    this.emit("state", this.info())
+    if (this.#budget > 0) return
+    const extreme = this.#extreme
+    await this.#auditLimit(
+      "risk_budget_exhausted",
+      "risk-budget",
+      { by, extreme, mode: this.#mode },
+      extreme
+        ? "The session's risk budget is spent, so Extreme approval paused it."
+        : "The session's risk budget is spent, so it went back to Manual: each call now asks you.",
+      "rules",
+    )
+    this.emit("event", { type: "risk_budget_exhausted", data: { extreme, mode: this.#mode } })
+    if (extreme) await this.pause(100, undefined, "risk")
+    else if (this.#mode !== "default" && this.#mode !== "plan") await this.setMode("default")
+  }
+
+  /** D-018: the budget from Settings, filled again (a new session, or your own message). */
+  #fillBudget(): void {
+    const b = this.#deps.config().riskBudget
+    this.#budget = b && !b.off && Number.isInteger(b.points) && b.points > 0 ? b.points : undefined
+  }
+
+  /** D-007: calls a person approved that touched locked tests, by toolUseID, so they are pinned again after. */
+  readonly #lockedCalls = new Map<string, string[]>()
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -551,6 +725,8 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#sdkSessionId = opts.resume !== undefined && opts.fork !== true ? opts.resume : undefined
     this.cwd = opts.cwd
     this.project = path.basename(findProjectRoot(opts.cwd))
+    // D-018: the risk budget from Settings, if any.
+    this.#fillBudget()
     this.#mode = opts.mode ?? "default"
     this.#model = opts.localModel ?? opts.model
     // No higher than the cap in Settings (B18); a model on this computer has no effort to set.
@@ -589,6 +765,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
       ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
       ...(this.#opts.replaces !== undefined ? { replaces: this.#opts.replaces } : {}),
+      ...(this.#opts.forkOf !== undefined ? { forkOf: this.#opts.forkOf } : {}),
       ...(this.#opts.inWorktree ? { worktree: this.#opts.inWorktree } : {}),
       ...(this.#opts.restore
         ? {
@@ -599,16 +776,52 @@ export class Session extends EventEmitter<SessionEvents> {
             },
           }
         : {}),
-      ...(this.#background.size ? { background: [...this.#background.values()] } : {}),
+      ...(this.#background.size
+        ? {
+            background: [...this.#background.values()].map((b) => b.description),
+            backgroundTasks: [...this.#background].map(([id, b]) => ({
+              id,
+              description: b.description,
+              startedAt: new Date(b.startedAt).toISOString(),
+            })),
+          }
+        : {}),
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#goal ? { goal: this.#goal } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
+      ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
+      ...(this.#budget !== undefined ? { riskBudget: this.#budget } : {}),
+      ...(this.#claims.length ? { claims: this.#claims.map((c) => ({ ...c })) } : {}),
+      ...(this.#pins.list().length
+        ? {
+            counterexamples: this.#pins.list().map((p) => ({
+              id: p.id,
+              framework: p.framework,
+              example: p.example.slice(0, 300),
+              writesItself: p.writesItself,
+              ...(p.test ? { test: p.test.slice(0, 200) } : {}),
+            })),
+          }
+        : {}),
+      ...(this.#bypass
+        ? {
+            bypass: {
+              since: new Date(this.#bypass.since).toISOString(),
+              ...(this.#bypass.until !== undefined
+                ? { until: new Date(this.#bypass.until).toISOString() }
+                : {}),
+              ...(this.#bypass.maxUsd !== undefined ? { maxUsd: this.#bypass.maxUsd } : {}),
+              spentUsd: this.bypass?.spentUsd ?? 0,
+            },
+          }
+        : {}),
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
       ...(this.#opts.kind === "chat" && this.#opts.research ? { research: true } : {}),
+      ...(this.#opts.kind === "chat" && this.#opts.about ? { about: this.#opts.about } : {}),
       ...(this.#opts.evaluation ? { evaluation: this.#opts.evaluation } : {}),
       ...(this.#opts.localModel !== undefined
         ? { local: true, ...(this.#localLabel ? { localLabel: this.#localLabel } : {}) }
@@ -685,6 +898,15 @@ export class Session extends EventEmitter<SessionEvents> {
     // B23: a coding session's project may keep its instructions in AGENTS.md, for other coding agents.
     const agentsMd =
       this.#opts.kind !== "chat" ? await readAgentsMd(this.cwd, this.#deps.policy()) : undefined
+    // Ask about code: the linked session as it stands, and the latest of what was said in it, redacted.
+    const about =
+      this.#opts.kind === "chat" && this.#opts.about
+        ? {
+            title: this.#opts.about.title,
+            cwd: this.#opts.about.cwd,
+            said: (await this.#deps.aboutSaid?.(this.#opts.about).catch(() => "")) ?? "",
+          }
+        : undefined
     return composeInstructions({
       profile: this.#deps.config().profile,
       global: this.#deps.config().globalInstructions,
@@ -695,6 +917,17 @@ export class Session extends EventEmitter<SessionEvents> {
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",
       research: this.#opts.kind === "chat" && this.#opts.research === true,
+      ...(about ? { about } : {}),
+      // Settings, Pull requests: only a session in a worktree of its own, on its own branch.
+      ...(this.#opts.inWorktree && this.#deps.config().pullRequests?.create === true
+        ? {
+            pullRequest: {
+              branch: this.#opts.inWorktree.branch,
+              draft: this.#deps.config().pullRequests?.draft !== false,
+              fixChecks: this.#deps.config().pullRequests?.fixChecks === true,
+            },
+          }
+        : {}),
     })
   }
 
@@ -721,6 +954,8 @@ export class Session extends EventEmitter<SessionEvents> {
       audit: d.audit,
       kill: () => d.kill.isEngaged(),
       checkpoints: d.checkpoints,
+      ...(d.grants ? { grants: d.grants } : {}),
+      ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,
@@ -729,7 +964,29 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       approver: d.approver,
       verdicts: this.#verdicts,
-      onWritten: (file) => this.#written.add(writtenKey(file, this.cwd)),
+      onWritten: (file) => {
+        this.#written.add(writtenKey(file, this.cwd))
+        // D-008: a regression Claude was asked to write is locked once it is there.
+        void this.#pins
+          .noteWritten(file)
+          .then((locked) => locked && this.emit("event", { type: "counterexample_pinned", data: { file } }))
+          .catch((e: Error) => d.log(`counterexample pin: ${e.message}`))
+      },
+      // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
+      untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
+      onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
+      onToolOutput: (_tool, output) => {
+        if (this.#pins.noteOutput(output)) this.emit("state", this.info())
+      },
+      // G19: the same failure three times in a row with nothing changed stops the turn.
+      onToolOutcome: (tool, input, error) => {
+        // D-009: the turn's commands, for what a claim that the work is done rests on.
+        const command = (input as { command?: unknown } | undefined)?.command
+        if ((tool === "Bash" || tool === "PowerShell") && typeof command === "string")
+          this.#turnCommands.push(command.slice(0, 2000))
+        if (error === undefined) return this.#loop.succeeded(tool, input)
+        if (this.#loop.failed(tool, input, error)) void this.#stopForLoop(tool)
+      },
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
     const onStderr = (data: string) => {
@@ -754,11 +1011,22 @@ export class Session extends EventEmitter<SessionEvents> {
       engine: d.engine,
       pwsh: d.pwsh,
       checkpoints: d.checkpoints,
+      ...(d.grants ? { grants: d.grants } : {}),
+      ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
       ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
       decided: this.#decided,
       verdicts: this.#verdicts,
       extreme: () => this.#extreme,
       mode: () => this.#mode,
+      // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
+      strictTests: () => strictAboutTests(d.config().testIntegrity, this.project),
+      onRememberRefused: (why) => this.emit("event", { type: "remember_refused", data: { why } }),
+      onAutoApproved: (verdict) => void this.#spendRisk(verdict.risk, "extreme"),
+      onTestsWeakened: (pattern, reason) => {
+        this.#testsWeakened++
+        this.emit("event", { type: "tests_weakened", data: { pattern, reason } })
+        this.emit("state", this.info())
+      },
       ...(d.notifyAutoApproved ? { notifyAutoApproved: d.notifyAutoApproved } : {}),
       onDecision: this.#tellDecision,
       provenance: this.#provenance,
@@ -787,6 +1055,10 @@ export class Session extends EventEmitter<SessionEvents> {
               ...(instructions ? { append: instructions } : {}),
             },
             settingSources: ["user", "project", "local"],
+            // The output style chosen in Settings, by name: an inline setting that carries nothing else.
+            ...(d.config().outputStyle
+              ? { settings: { outputStyle: d.config().outputStyle as string } }
+              : {}),
           }),
       includePartialMessages: true,
       // Its account's own Claude Code folder, and never a credential (invariant 6).
@@ -809,6 +1081,7 @@ export class Session extends EventEmitter<SessionEvents> {
         cwd: this.cwd,
         ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
         ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
+        ...(this.#opts.kind === "chat" && this.#opts.about ? { about: this.#opts.about } : {}),
       }) as Options["mcpServers"],
       stderr: onStderr,
       // Inside a job object with the session's limits, when Codehouse can make one. Its stderr comes back to onStderr.
@@ -965,6 +1238,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   #onMessage(msg: SDKMessage): void {
     const m = msg as unknown as Record<string, unknown>
+    // O16: anything from Claude means the turn is alive.
+    this.#stuck.seen()
     if (typeof m.session_id === "string" && m.session_id !== this.#sdkSessionId) {
       this.#sdkSessionId = m.session_id
       this.emit("state", this.info())
@@ -1003,8 +1278,11 @@ export class Session extends EventEmitter<SessionEvents> {
     if (msg.type === "result") {
       this.#deps.usage.record(this.id, this.project, m)
       this.#running = false
+      this.#stuck.stop()
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      // D-009: a claim that the work is done is checked by running its command again.
+      if (typeof m.result === "string" && m.is_error !== true) void this.#checkClaims(m.result)
       // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
       if (typeof m.result === "string" && m.is_error !== true && saysQueueEmpty(m.result))
         this.emit("event", { type: "queue_empty", data: {} })
@@ -1029,10 +1307,15 @@ export class Session extends EventEmitter<SessionEvents> {
   #noteBackground(m: Record<string, unknown>): void {
     const sub = m.subtype as string
     if (sub === "background_tasks_changed" && Array.isArray(m.tasks)) {
+      // A task still running keeps the time it began (O21: how long each has run).
+      const before = new Map(this.#background)
       this.#background.clear()
       for (const t of m.tasks as Array<Record<string, unknown>>)
         if (typeof t.task_id === "string" && t.ambient !== true)
-          this.#background.set(t.task_id, typeof t.description === "string" ? t.description : "")
+          this.#background.set(t.task_id, {
+            description: typeof t.description === "string" ? t.description : "",
+            startedAt: before.get(t.task_id)?.startedAt ?? Date.now(),
+          })
       this.emit("state", this.info())
     } else if (
       sub === "task_notification" &&
@@ -1066,12 +1349,91 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
   prompt(text: string): void {
+    // Owner, 9 Nov: the limits in Settings hold. A message does not go past them; a bypass for this session does.
+    if (this.#paused) throw new LimitPausedError(this.#paused.reason)
+    // D-018: your own message fills the risk budget again.
+    this.#fillBudget()
     this.#syncKnowledge()
     this.#send(text)
     this.emit("prompted", text)
     this.#carry.started(this.#lastCost)
-    // Your own message is you starting it again; the pause is over.
-    if (this.#paused) void this.#endPause("you")
+  }
+
+  /** D-009: the turn's shell commands, kept from its start. */
+  #turnCommands: string[] = []
+  /** D-009: the claims checked in this session, newest last. */
+  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string }> = []
+
+  /**
+   * D-009: each claim in a reply is stamped Verified, Contradicted or Unverified, by running what it rests on again as a
+   * Codehouse action (section 6). With the tests weakened in this session (D-001), a claim about them is Unverified.
+   */
+  async #checkClaims(text: string): Promise<void> {
+    const run = this.#deps.codehouseAction
+    const claims = findClaims(text)
+    const commands = this.#turnCommands
+    this.#turnCommands = []
+    if (!claims.length || !run) return
+    const root = findProjectRoot(this.cwd)
+    const runs = new Map<string, Promise<ActionResult>>()
+    for (const c of claims) {
+      let outcome: ClaimOutcome = "unverified"
+      let why: string
+      const cmd = commandFor(c, commands, this.cwd, root)
+      if ((c.kind === "tests" || c.kind === "fixed") && this.#testsWeakened)
+        why = "the tests were weakened in this session"
+      else if (!cmd) why = "there is no command to check it with"
+      else {
+        const key = `${cmd.cwd}|${cmd.command}`
+        if (!runs.has(key))
+          runs.set(
+            key,
+            run({
+              sessionId: this.id,
+              cwd: cmd.cwd,
+              project: this.project,
+              command: cmd.command,
+              why: `checking Claude's claim: ${c.quote.slice(0, 80)}`,
+              level: this.#resources,
+            }),
+          )
+        const r = await runs.get(key)!
+        if (!r.ran) why = `it was not run: ${r.refused}`
+        else if (r.killed) why = "the kill switch stopped the check"
+        else if (r.timedOut) why = "the check did not finish in time"
+        else if (r.exitCode === 0) {
+          outcome = "verified"
+          why = `${cmd.command} passed when Codehouse ran it`
+        } else {
+          outcome = "contradicted"
+          why = `${cmd.command} failed when Codehouse ran it (exit ${r.exitCode})`
+        }
+      }
+      const entry = { kind: c.kind, quote: c.quote, outcome, why, ...(cmd ? { command: cmd.command } : {}) }
+      this.#claims = [...this.#claims, entry].slice(-10)
+      await this.#deps.audit
+        .record({
+          session: this.id,
+          event: "claim_verified",
+          channel: "host",
+          tool: "claims",
+          cwd: this.cwd,
+          project: this.project,
+          input: entry,
+          verdict: {
+            outcome: outcome === "contradicted" ? "deny" : "allow",
+            ruleId: "done-claim",
+            reason: `${CLAIM_WORDS[outcome]}: ${why}.`,
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: this.#deps.policy()?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+        .catch(() => undefined)
+      this.emit("event", { type: "claim_checked", data: entry })
+    }
+    this.emit("state", this.info())
   }
 
   #send(text: string): void {
@@ -1080,6 +1442,7 @@ export class Session extends EventEmitter<SessionEvents> {
       throw new Error(`The session has ${this.#state}`)
     if (this.#deps.kill.isEngaged()) throw new KillSwitchEngagedError()
     this.#running = true
+    this.#stuck.start()
     this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
     this.#input.push(text)
   }
@@ -1107,9 +1470,16 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#paused
   }
 
-  /** Until when no limit pauses this session again, because you started it while paused. */
-  get protectionOffUntil(): number | undefined {
-    return this.#protectionOffUntil
+  /** Your bypass of the limits, while it lasts, with what the session reports it used since you set it. */
+  get bypass(): LimitBypass | undefined {
+    const b = this.#bypass
+    if (!b) return undefined
+    return {
+      since: b.since,
+      ...(b.until !== undefined ? { until: b.until } : {}),
+      ...(b.maxUsd !== undefined ? { maxUsd: b.maxUsd } : {}),
+      spentUsd: Math.max(0, this.#lastCost - b.costAtStart),
+    }
   }
 
   /** Names a warm chat from the first message it is given, as a chat started then would be named. */
@@ -1144,6 +1514,12 @@ export class Session extends EventEmitter<SessionEvents> {
     return planLimits(await read({ skipBehaviors: true }))
   }
 
+  /** O21: the session's MCP servers as Claude Code reports them (used only for names, states and kinds). */
+  async mcpStatus(): Promise<unknown> {
+    const q = this.#q as unknown as { mcpServerStatus?: () => Promise<unknown> } | undefined
+    return q?.mcpServerStatus ? await q.mcpServerStatus() : []
+  }
+
   /** How full the conversation is, from the last response and local estimates (no extra token counting). */
   async contextUsage(): Promise<unknown> {
     if (!this.#q) throw new Error("The session has not started")
@@ -1154,8 +1530,24 @@ export class Session extends EventEmitter<SessionEvents> {
     return await q.getContextUsage({ detail: "summary" })
   }
 
+  /**
+   * G19: the same call failed the same way LOOP_REPEATS times in a row with nothing changed in between, so the turn
+   * stops (and Extreme stops carrying on), recorded, and the screen says why. Your next message starts afresh.
+   */
+  async #stopForLoop(tool: string): Promise<void> {
+    if (!this.#running) return
+    await this.#auditLimit(
+      "loop_stopped",
+      "loop-guard",
+      { tool, repeats: LOOP_REPEATS },
+      `The same ${tool} call failed the same way ${LOOP_REPEATS} times in a row with nothing changed in between, so Codehouse stopped the turn.`,
+      "rules",
+    ).catch(() => undefined)
+    await this.interrupt("loop").catch((e: Error) => this.#deps.log(`loop stop: ${e.message}`))
+  }
+
   /** Stops the running turn. The screen hears first, so the result that follows reads as stopped, not failed. */
-  async interrupt(by: "you" | "kill-switch" | "plan-limit" = "you"): Promise<void> {
+  async interrupt(by: "you" | "kill-switch" | "plan-limit" | "loop" = "you"): Promise<void> {
     // Stopping a turn stops Extreme carrying on, until your next message, and a compact that was to follow it.
     this.#carry.stopped()
     this.#compactAfterTurn = false
@@ -1164,6 +1556,7 @@ export class Session extends EventEmitter<SessionEvents> {
     await this.#q?.interrupt()
     if (this.#state === "running" || this.#state === "waiting") {
       this.#running = false
+      this.#stuck.stop()
       this.#setState("idle")
     }
   }
@@ -1174,6 +1567,12 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   async #afterTurn(m: Record<string, unknown>): Promise<void> {
     if (this.#paused) return
+    // Owner, 9 Nov: with a bypass running, the limits are looked at before carrying on, so one whose spending ran out
+    // in that turn pauses now rather than at the next look.
+    if (this.#bypass && this.#deps.limitCheck) {
+      await this.#deps.limitCheck().catch(() => undefined)
+      if (this.#paused) return
+    }
     const step = this.#carry.next({
       text: typeof m.result === "string" ? m.result : "",
       isError: m.is_error === true || String(m.subtype ?? "").startsWith("error"),
@@ -1223,6 +1622,9 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#carry.stopped()
       return
     }
+    // The session may have been closed, paused or stopped by the kill switch while the record was written.
+    const now = this.#state as SessionState
+    if (now === "error" || now === "ended" || this.#paused || this.#deps.kill.isEngaged()) return
     this.emit("event", { type: "carry_on", data })
     this.#send(
       data.restart !== true || this.#extreme
@@ -1237,7 +1639,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /** Stops everything now: the running turn and every background task. */
-  async stop(by: "you" | "kill-switch" | "plan-limit" = "you"): Promise<void> {
+  async stop(by: "you" | "kill-switch" | "plan-limit" | "loop" = "you"): Promise<void> {
     await this.interrupt(by)
     const q = this.#q as unknown as { stopTask?: (id: string) => Promise<void> } | undefined
     await Promise.allSettled([...this.#background.keys()].map((id) => q?.stopTask?.(id)))
@@ -1248,7 +1650,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
    * when you start it.
    */
-  async pause(percent: number, until?: string, reason?: "spend"): Promise<void> {
+  async pause(percent: number, until?: string, reason?: "spend" | "risk"): Promise<void> {
     if (!this.live || this.#paused) return
     const wasRunning = this.#running || this.#background.size > 0
     this.#paused = {
@@ -1265,9 +1667,11 @@ export class Session extends EventEmitter<SessionEvents> {
         wasRunning,
         ...(until ? { until } : {}),
       },
-      reason === "spend"
-        ? "Today's spending reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
-        : `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
+      reason === "risk"
+        ? "The session's risk budget is spent, so Codehouse paused this Extreme session until you start it again."
+        : reason === "spend"
+          ? "Today's extra spending beyond the plan reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
+          : `The plan's 5-hour limit reached ${Math.round(percent)}%, so Codehouse paused this session until it resets.`,
       "rules",
     )
     this.emit("event", {
@@ -1285,6 +1689,11 @@ export class Session extends EventEmitter<SessionEvents> {
   async resume(by: "you" | "limit-reset"): Promise<boolean> {
     const p = this.#paused
     if (!p) return false
+    // D-018: a session its risk budget paused starts again only when you start it, with its budget full.
+    if (p.reason === "risk") {
+      if (by !== "you") return false
+      this.#fillBudget()
+    }
     if (p.wasRunning) {
       // Sent first: if it cannot be (the kill switch), it stays paused and is tried again.
       this.#send(LIMIT_RESUME_PROMPT)
@@ -1294,17 +1703,111 @@ export class Session extends EventEmitter<SessionEvents> {
     return true
   }
 
+  /**
+   * Owner, 9 Nov: you bypass the limits in Settings for this session, for so many minutes, up to so much spending, or
+   * both, whichever runs out first; or end the bypass (null). While it lasts neither the plan's 5-hour limit nor the
+   * most spending a day pauses this session, and one they had paused carries on. When it runs out, the limits apply
+   * again at once and pause it if they are still over; going on again needs a new bypass. Recorded before it applies:
+   * a bypass that cannot be recorded is refused.
+   */
+  async setBypass(b: { minutes?: number; maxUsd?: number } | null): Promise<void> {
+    if (b === null) {
+      if (!this.#bypass) return
+      await this.#recordBypass("limit_bypass_end", { by: "you" }, "You ended the bypass of the limits for this session.")
+      this.#clearBypass()
+      this.emit("state", this.info())
+      await this.#deps.limitCheck?.().catch(() => undefined)
+      return
+    }
+    const minutes =
+      b.minutes !== undefined && Number.isFinite(b.minutes)
+        ? Math.min(Math.max(Math.round(b.minutes), 1), BYPASS_MAX_MINUTES)
+        : undefined
+    const maxUsd =
+      b.maxUsd !== undefined && Number.isFinite(b.maxUsd) && b.maxUsd > 0
+        ? Math.min(Math.round(b.maxUsd * 100) / 100, BYPASS_MAX_USD)
+        : undefined
+    if (minutes === undefined && maxUsd === undefined)
+      throw new Error("Give the bypass a time, a most it may spend, or both.")
+    const since = Date.now()
+    const until = minutes !== undefined ? since + minutes * 60_000 : undefined
+    await this.#recordBypass(
+      "limit_bypass",
+      {
+        ...(minutes !== undefined ? { minutes, until: new Date(until!).toISOString() } : {}),
+        ...(maxUsd !== undefined ? { maxUsd } : {}),
+      },
+      `You bypassed the limits in Settings for this session${minutes !== undefined ? ` for ${minutes} minutes` : ""}${minutes !== undefined && maxUsd !== undefined ? " or" : ""}${maxUsd !== undefined ? ` up to ${maxUsd.toFixed(2)} of spending` : ""}, whichever comes first.`,
+    )
+    this.#clearBypass()
+    this.#bypass = {
+      since,
+      ...(until !== undefined ? { until } : {}),
+      ...(maxUsd !== undefined ? { maxUsd } : {}),
+      costAtStart: this.#lastCost,
+    }
+    if (until !== undefined) {
+      // A look at the limits the moment the time runs out, not up to a minute later.
+      this.#bypassTimer = setTimeout(() => void this.#deps.limitCheck?.(), until - since + 50)
+      this.#bypassTimer.unref()
+    }
+    if (this.#paused) await this.resume("you")
+    this.emit("state", this.info())
+  }
+
+  /** The bypass ran out (the limit pauser): its time, or its spending. The limits apply again from this look. */
+  async endBypass(why: "time" | "spend", spentUsd: number): Promise<void> {
+    const b = this.#bypass
+    if (!b) return
+    this.#clearBypass()
+    await this.#auditLimit(
+      "limit_bypass_end",
+      "limit-bypass",
+      { by: why, spentUsd: Math.round(spentUsd * 100) / 100, ...(b.maxUsd !== undefined ? { maxUsd: b.maxUsd } : {}) },
+      why === "time"
+        ? "The time you gave the bypass of the limits ran out, so the limits in Settings apply to this session again."
+        : "The bypass of the limits reached the most you allowed it to spend, so the limits in Settings apply to this session again.",
+      "rules",
+    )
+    this.emit("event", { type: "bypass_ended", data: { why, spentUsd } })
+    this.emit("state", this.info())
+  }
+
+  #clearBypass(): void {
+    clearTimeout(this.#bypassTimer)
+    this.#bypassTimer = undefined
+    this.#bypass = undefined
+  }
+
+  /** Your bypass, in the audit log before it applies; refused when it cannot be recorded. */
+  async #recordBypass(event: string, input: Record<string, unknown>, reason: string): Promise<void> {
+    const written = await this.#deps.audit
+      .record({
+        session: this.id,
+        event,
+        channel: "desktop",
+        tool: "session",
+        cwd: this.cwd,
+        project: this.project,
+        input,
+        verdict: {
+          outcome: "allow",
+          ruleId: "limit-bypass",
+          reason,
+          risk: 0,
+          decidedBy: "human-desktop",
+          policyHash: this.#deps.policy()?.hash ?? "",
+        },
+        latencyMs: 0,
+      })
+      .catch(() => false)
+    if (!written) throw new Error("The bypass could not be recorded in the audit log, so it was not set.")
+  }
+
   async #endPause(by: "you" | "limit-reset"): Promise<void> {
     if (!this.#paused) return
     const p = this.#paused
     this.#paused = undefined
-    // Owner, 5 Nov: Start now ran a few messages and the next look paused it again. Started by you, it carries on
-    // until that pause would have ended anyway (midnight for the spending cap, the reset for the plan limit).
-    if (by === "you") {
-      const until = p.until ? Date.parse(p.until) : NaN
-      this.#protectionOffUntil =
-        Number.isFinite(until) && until > Date.now() ? until : Date.now() + HOLD_MS
-    }
     await this.#auditLimit(
       "limit_resume",
       "limit-resume",
@@ -1361,6 +1864,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
       ...(this.#opts.instructions ? { instructions: this.#opts.instructions } : {}),
       ...(this.#opts.research ? { research: true } : {}),
+      ...(this.#opts.about ? { about: this.#opts.about } : {}),
       ...(this.#sdkSessionId !== undefined ? { resume: this.#sdkSessionId } : {}),
     }
   }
@@ -1494,6 +1998,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   async close(): Promise<void> {
+    this.#stuck.stop()
     this.#deps.broker.cancelSession(this.id, "The session was closed")
     this.#input.end()
     this.#q?.close()
@@ -1637,6 +2142,19 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         ...opts,
       }
     }
+    // C-004: nothing new starts while memory is committed over the point in Settings; one coming back after a restart
+    // or a force stop was open before and takes back what it had.
+    if (!opts.restore || opts.restore.wake)
+      await this.#deps.governor?.admit(
+        opts.restore?.wake ? "session started again" : opts.kind === "chat" ? "chat" : "session",
+        opts.restore ? { sessionId: opts.restore.id } : { cwd: opts.cwd },
+      )
+    // D-007: a coding session does not start while a locked test has changed outside Codehouse; one coming back after
+    // a restart was open before, and carries on.
+    if (!opts.restore && opts.kind !== "chat" && this.#deps.locks) {
+      const changed = await this.#deps.locks.changedOutside(opts.cwd)
+      if (changed.length) throw new LockedTestsChangedError(changed)
+    }
     const config = this.#deps.config()
     // B09: the most open at once, over every account and both kinds. A session coming back after a restart is not
     // counted against it: it was open before.
@@ -1739,6 +2257,24 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         latencyMs: 0,
       })
       opts = { ...opts, cwd: wt.path, inWorktree: { branch: wt.branch, repo: wt.repo } }
+    }
+    // Ask about code (owner, 6 Nov): a chat about a code session open now, looked up by its id. The chat keeps where
+    // the session works and its conversation's id, so it can read them; it never writes to either.
+    if (opts.aboutId !== undefined && !opts.about) {
+      if (opts.kind !== "chat")
+        throw new SessionFolderError("Only a chat can be about a code session.")
+      const target = this.#sessions.get(opts.aboutId)?.info()
+      if (!target || target.kind === "chat")
+        throw new SessionFolderError("Choose a code session that is open to ask about.")
+      opts = {
+        ...opts,
+        about: {
+          id: target.id,
+          title: target.title ?? target.project,
+          cwd: target.cwd,
+          ...(target.sdkSessionId ? { sdkSessionId: target.sdkSessionId } : {}),
+        },
+      }
     }
     // A project belongs to a chat only, and must exist.
     if (opts.chatProject) {
@@ -1901,6 +2437,8 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       !opts.chatProject &&
       !opts.instructions &&
       !opts.research &&
+      opts.aboutId === undefined &&
+      opts.about === undefined &&
       opts.model === undefined &&
       opts.effort === undefined &&
       opts.resources === undefined &&
@@ -1994,6 +2532,48 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     await Promise.allSettled([...this.#sessions.values()].map((s) => s.stop("kill-switch")))
   }
 
+  /** C-004: the sessions that could be suspended to free memory: open, idle, nothing in the background or waiting. */
+  idle(): SessionInfo[] {
+    return [...this.#sessions.values()]
+      .filter((s) => s.live && this.#warm?.session !== s)
+      .map((s) => s.info())
+      .filter(
+        (i) =>
+          i.state === "idle" && !i.background?.length && i.pendingApprovals === 0 && !i.evaluation,
+      )
+  }
+
+  /**
+   * C-004: suspends an idle session to free memory. Its Claude Code process ends; the session stays listed, and
+   * Start again brings it back on the same conversation under the same id (asking the memory governor first). Only
+   * an idle one: nothing running, in the background or waiting for you.
+   */
+  async suspend(id: string): Promise<SessionInfo> {
+    const s = this.#sessions.get(id)
+    if (!s) throw new Error("That session is not open")
+    if (!this.idle().some((i) => i.id === id))
+      throw new Error("Only a session that is idle, with nothing in the background or waiting, can be suspended.")
+    const opts = s.restartOptions()
+    const before = s.info()
+    await s.close()
+    this.#sessions.delete(id)
+    const info: SessionInfo = {
+      ...before,
+      state: "error",
+      suspended: true,
+      error:
+        "Suspended to free memory. Start again brings it back on the same conversation, when memory allows.",
+    }
+    delete info.background
+    delete info.backgroundTasks
+    this.#coming.set(id, {
+      info,
+      opts: { ...opts, restore: { id, createdAt: s.createdAt, wasRunning: false, wake: true } },
+    })
+    this.emit("session", info)
+    return info
+  }
+
   /**
    * Ends a session's Claude Code process at once, for a session that does not stop when asked, and starts it again
    * on the same conversation under the same id, so its pane and transcript stay.
@@ -2002,12 +2582,17 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     const s = this.#sessions.get(id)
     const c = this.#coming.get(id)
     if (!s && c?.info.state === "error" && c.opts.restore) {
-      // One that could not come back: Start again tries once more, without carrying on by itself.
+      // One that could not come back: Start again tries once more, without carrying on by itself. A suspended one
+      // asks the memory governor first (C-004), and stays suspended if it is refused.
+      if (c.info.suspended) {
+        await this.#deps.governor?.admit("session started again", { sessionId: id })
+      }
       const info: SessionInfo = { ...c.info, state: "starting" }
       delete info.error
+      delete info.suspended
       this.#coming.set(id, { ...c, info })
       this.emit("session", info)
-      return await this.start({ ...c.opts, restore: { ...c.opts.restore, forced: true } })
+      return await this.start({ ...c.opts, restore: { ...c.opts.restore, forced: true, wake: false } })
     }
     if (!s) throw new Error("That session is not open")
     const again = s.restartOptions()

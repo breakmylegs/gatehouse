@@ -14,8 +14,20 @@ export const RESUME_PROMPT =
 export const LIMIT_RESUME_PROMPT =
   "Codehouse paused you because the plan's 5-hour limit was nearly used up, which stopped your last turn part way. You may carry on now. Continue from where you were, without starting again."
 
-const QUEUE_EMPTY = /\bQUEUE EMPTY\b/
-const GOAL_MET = /\bGOAL MET\b/
+/**
+ * Whether a reply ends with the line `word` (O11: it matched anywhere, so a reply that only quoted the instruction ended
+ * the run). Only the last line with words counts; markdown around it (bold, a quote mark, a full stop) is allowed.
+ */
+function endsWithLine(text: string, word: string): boolean {
+  const last = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .at(-1)
+  return last !== undefined && new RegExp(`^[>*_\`\\s]*${word}[*_\`.!\\s]*$`).test(last)
+}
+const QUEUE_EMPTY = { test: (t: string) => endsWithLine(t, "QUEUE EMPTY") }
+const GOAL_MET = { test: (t: string) => endsWithLine(t, "GOAL MET") }
 
 /** B25: a goal is one line, the check to run, such as "npm test". */
 export const MAX_GOAL = 300
@@ -28,6 +40,49 @@ export const goalOk = (check: string): boolean =>
  */
 export const goalPrompt = (check: string): string =>
   `Carry on towards the goal, without asking me anything: where you would ask, choose the recommended option yourself. When you think it is met, run exactly this check: ${check.trim()} . If it passes, end your reply with the line GOAL MET. If it fails, fix what it shows and keep going; never end with GOAL MET unless that check passed just now.`
+
+/**
+ * What your phone is told (backlog O16) when a run of Extreme approval ends, or a turn may be stuck. A run that ended
+ * because the queue is empty is told as that, and one you stopped needs no telling, so those give nothing.
+ */
+export function noteFor(
+  type: "carry_on_end" | "stuck",
+  data: Record<string, unknown>,
+): { title: string; body: string } | undefined {
+  if (type === "stuck")
+    return {
+      title: "Possibly stuck",
+      body: "Nothing has come from Claude for two minutes, and nothing is waiting for you. Look in Codehouse; Interrupt stops it.",
+    }
+  const turns = typeof data.turns === "number" ? data.turns : 0
+  const done = `after ${turns} automatic turn${turns === 1 ? "" : "s"}`
+  switch (data.why) {
+    case "goal":
+      return { title: "Goal met", body: `The goal's check passed ${done}.` }
+    case "turns":
+      return {
+        title: "Stopped at the turn limit",
+        body: `Extreme approval stopped ${done}, the most Settings allows. Send a message to carry on.`,
+      }
+    case "spend":
+      return {
+        title: "Stopped at the spending limit",
+        body: `Extreme approval stopped ${done}, at the spending Settings allows. Send a message to carry on.`,
+      }
+    case "stalled":
+      return {
+        title: "Stopped: no work done",
+        body: `Two turns in a row did no work, so Extreme approval stopped ${done}.`,
+      }
+    case "error":
+      return {
+        title: "Stopped: a turn failed",
+        body: `A turn failed, so Extreme approval stopped ${done}. Look in Codehouse.`,
+      }
+    default:
+      return undefined
+  }
+}
 
 /** Claude ended a reply saying its build queue is empty, in any mode (owner, 3 Nov: tell me when it is). */
 export const saysQueueEmpty = (text: string): boolean => QUEUE_EMPTY.test(text)

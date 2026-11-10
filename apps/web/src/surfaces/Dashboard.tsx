@@ -214,6 +214,24 @@ export function Dashboard() {
                       <SessionCode session={s} className="!text-[13px]" />
                       <span className="dash-state">{STATE[s.state]}</span>
                       {model ? <span className="dash-model">{model}</span> : null}
+                      {/* D-009: the last claim that the work is done, as checked. */}
+                      {s.claims?.length ? (
+                        <span
+                          className={
+                            s.claims.at(-1)!.outcome === "verified"
+                              ? "text-[12px] text-ok"
+                              : s.claims.at(-1)!.outcome === "contradicted"
+                                ? "text-[12px] font-semibold text-sev"
+                                : "text-[12px] text-warn"
+                          }
+                        >
+                          {s.claims.at(-1)!.outcome === "verified"
+                            ? "Claim verified"
+                            : s.claims.at(-1)!.outcome === "contradicted"
+                              ? "Claim contradicted"
+                              : "Claim unverified"}
+                        </span>
+                      ) : null}
                       {asks ? (
                         <RiskBadge risk={asks.request.verdict.risk} className="ml-auto" />
                       ) : null}

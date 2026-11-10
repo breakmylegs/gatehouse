@@ -13,6 +13,32 @@ export interface FloorHit {
   readonly reason: string
 }
 
+/**
+ * D-002: floor rules built into Codehouse, checked before any in the rules file, so neither an edited rules file nor
+ * an older one can leave them out. The sealed held-out checks and the folder they are run in are never reached by a
+ * session: every tool, every mode. Paths are matched in lower case, wherever Codehouse's data folder is.
+ */
+export const BUILTIN_FLOOR: readonly Rule[] = [
+  {
+    id: "sealed-checks",
+    pathGlobs: [
+      "**/gatehouse/sealed",
+      "**/gatehouse/sealed/**",
+      "**/gatehouse/heldout-runs",
+      "**/gatehouse/heldout-runs/**",
+    ],
+    message:
+      "Codehouse's sealed held-out checks are never read by a session. Work from the project's own tests; the person runs the held-out checks and you are told only how many pass.",
+  },
+  {
+    // D-007: the pins of the locked tests, and the key that seals them.
+    id: "test-locks",
+    pathGlobs: ["**/gatehouse/locks", "**/gatehouse/locks/**"],
+    message:
+      "Codehouse's locks on tests are kept by the person, not by a session. Ask the person if a locked test needs to change.",
+  },
+]
+
 function toolApplies(rule: Rule, tool: string): boolean {
   if (!rule.tools) return true
   return matchAnyWildcard(rule.tools, tool, false)
@@ -35,7 +61,7 @@ function candidateKeys(f: Features, ctx: EvalContext): string[] {
 
 export function checkFloor(f: Features, ctx: EvalContext, rules: readonly Rule[]): FloorHit | null {
   let keys: string[] | undefined
-  for (const rule of rules) {
+  for (const rule of [...BUILTIN_FLOOR, ...rules]) {
     if (!toolApplies(rule, f.tool)) continue
     if (rule.pathGlobs) {
       keys ??= candidateKeys(f, ctx)

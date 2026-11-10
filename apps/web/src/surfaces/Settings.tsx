@@ -1,6 +1,9 @@
 import { ClaudeImport } from "../components/ClaudeImport"
+import { SECTION_KEY } from "../lib/settingsSection"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
+import { ChangelogPanel } from "../components/ChangelogPanel"
+import { ViewerSetting } from "../components/ViewerSetting"
 import {
   AppearancePanel,
   GoTo,
@@ -56,11 +59,19 @@ interface Config {
   effortCap?: string
   maxSessions?: number
   spendCapUsd?: number
+  memoryGovernor?: { percent: number; off?: boolean }
+  testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
+  riskBudget?: { points: number; off?: boolean }
+  outputStyle?: string
+  worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
+  pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
+  browserTools?: boolean
   telemetry?: { file?: boolean; endpoint?: string }
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
   keepAwake?: boolean
   recapByClaude?: boolean
+  chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
 
 /** Extreme approval's limits after each message of yours. No limit keeps the highest number for an older version. */
@@ -110,9 +121,28 @@ interface Values {
   ecTurns: string
   plPause: string
   plResume: boolean
+  /** C-004: a percentage, or "off". */
+  memPoint: string
+  /** D-001: every project strict about its tests, or these, one to a line. */
+  tiAll: boolean
+  /** D-018: points of the risk budget, or "" for none. */
+  rbPoints: string
+  tiProjects: string
   effortCap: string
   maxSessions: string
   spendCap: string
+  /** The output style new coding sessions start with, by name; "" for Claude Code's default. */
+  style: string
+  /** Where new worktrees go, and the folder when it is one you choose. */
+  wtWhere: "beside" | "inside" | "folder"
+  wtFolder: string
+  /** Pull requests from a session in a worktree. */
+  prPrefix: string
+  prCreate: boolean
+  prDraft: boolean
+  prFix: boolean
+  /** Browser tools: a coding session may look at a page on this computer. */
+  browser: boolean
   telFile: boolean
   telEndpoint: string
   ecUsd: string
@@ -125,6 +155,10 @@ interface Values {
   awake: boolean
   /** While you were away, written by Claude. */
   recap: boolean
+  /** Open in Claude (CH-06). */
+  handoff: "edge" | "browser" | "app"
+  edgeProfile: string
+  appLink: boolean
 }
 
 function valuesOf(d: SettingsData): Values {
@@ -149,9 +183,21 @@ function valuesOf(d: SettingsData): Values {
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     plResume: c.planLimitPause?.noAutoResume !== true,
+    memPoint: c.memoryGovernor?.off ? "off" : String(c.memoryGovernor?.percent ?? 85),
+    tiAll: c.testIntegrity?.strictAll === true,
+    rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
+    tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
+    style: c.outputStyle ?? "",
+    wtWhere: c.worktreeLocation?.where ?? "beside",
+    wtFolder: c.worktreeLocation?.folder ?? "",
+    prPrefix: c.pullRequests?.branchPrefix ?? "codehouse/",
+    prCreate: c.pullRequests?.create === true,
+    prDraft: c.pullRequests?.draft !== false,
+    prFix: c.pullRequests?.fixChecks === true,
+    browser: c.browserTools === true,
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
@@ -160,6 +206,9 @@ function valuesOf(d: SettingsData): Values {
     work: c.profile?.work ?? "",
     awake: c.keepAwake !== false,
     recap: c.recapByClaude !== false,
+    handoff: c.chatHandoff?.target ?? "edge",
+    edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
+    appLink: c.chatHandoff?.appLink === true,
   }
 }
 
@@ -194,6 +243,18 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
   else body.recapByClaude = false
+  // Open in Claude: what this page sets, over anything else kept there (the address templates).
+  const handoff: Record<string, unknown> = {
+    ...((d.saved.chatHandoff as Record<string, unknown> | undefined) ?? {}),
+  }
+  delete handoff.target
+  delete handoff.edgeProfile
+  delete handoff.appLink
+  if (v.handoff !== "edge") handoff.target = v.handoff
+  if (v.edgeProfile !== "Default") handoff.edgeProfile = v.edgeProfile
+  if (v.appLink) handoff.appLink = true
+  if (Object.keys(handoff).length) body.chatHandoff = handoff
+  else delete body.chatHandoff
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
@@ -212,6 +273,63 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.maxSessions
   if (v.spendCap) body.spendCapUsd = Number(v.spendCap)
   else delete body.spendCapUsd
+  // C-004: absent is 85%, so the default is not written; a percentage is kept beside off for an older reader.
+  // D-018: absent is no budget; off is kept beside the points for an older reader.
+  if (!v.rbPoints && !d.saved.riskBudget) delete body.riskBudget
+  else
+    body.riskBudget = v.rbPoints
+      ? { ...(d.saved.riskBudget ?? {}), points: Number(v.rbPoints), off: undefined }
+      : { ...(d.saved.riskBudget ?? { points: 10 }), off: true }
+  // D-001: absent is no project strict, so nothing is written until one is.
+  const strictProjects = v.tiProjects
+    .split(/\r?\n/)
+    .map((x) => x.trim())
+    .filter(Boolean)
+  if (!v.tiAll && !strictProjects.length && !d.saved.testIntegrity) delete body.testIntegrity
+  else
+    body.testIntegrity = {
+      ...(d.saved.testIntegrity ?? {}),
+      strictAll: v.tiAll,
+      strictProjects,
+    }
+  if (v.memPoint === "85" && !d.saved.memoryGovernor) delete body.memoryGovernor
+  else
+    body.memoryGovernor = {
+      ...(d.saved.memoryGovernor ?? {}),
+      percent: v.memPoint === "off" ? (d.saved.memoryGovernor?.percent ?? 85) : Number(v.memPoint),
+      ...(v.memPoint === "off" ? { off: true } : { off: undefined }),
+    }
+  // A name the Host accepts, or none: half-typed or odd names are not saved.
+  if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
+  else delete body.outputStyle
+  // Pull requests: only what differs from the defaults is written; anything a newer version keeps there stays.
+  const { branchPrefix: _bp, create: _cr, draft: _dr, fixChecks: _fc, ...prKeep } =
+    d.saved.pullRequests ?? {}
+  const prefix = v.prPrefix.trim()
+  const pr = {
+    ...prKeep,
+    ...(prefix && prefix !== "codehouse/" && BRANCH_PREFIX.test(prefix)
+      ? { branchPrefix: prefix }
+      : {}),
+    ...(v.prCreate ? { create: true } : {}),
+    ...(v.prDraft ? {} : { draft: false }),
+    ...(v.prFix ? { fixChecks: true } : {}),
+  }
+  if (Object.keys(pr).length) body.pullRequests = pr
+  else delete body.pullRequests
+  if (v.browser) body.browserTools = true
+  else delete body.browserTools
+  // Beside the project is the default and is not written; anything a newer version keeps there stays.
+  const { where: _w2, folder: _f2, ...wtKeep } = d.saved.worktreeLocation ?? { where: "beside" }
+  const folder = v.wtFolder.trim().replace(/[\\/]+$/, "")
+  if (v.wtWhere === "beside" && !Object.keys(wtKeep).length) delete body.worktreeLocation
+  else if (v.wtWhere === "folder" && !folder) delete body.worktreeLocation
+  else
+    body.worktreeLocation = {
+      ...wtKeep,
+      where: v.wtWhere,
+      ...(v.wtWhere === "folder" ? { folder } : {}),
+    }
   if (v.telFile || v.telEndpoint.trim())
     body.telemetry = {
       ...(d.saved.telemetry ?? {}),
@@ -259,9 +377,21 @@ export const DEFAULT_VALUES: Values = {
   ecTurns: "200",
   plPause: "95",
   plResume: true,
+  memPoint: "85",
+  tiAll: false,
+  rbPoints: "",
+  tiProjects: "",
   effortCap: "",
   maxSessions: "",
   spendCap: "",
+  style: "",
+  wtWhere: "beside",
+  wtFolder: "",
+  prPrefix: "codehouse/",
+  prCreate: false,
+  prDraft: true,
+  prFix: false,
+  browser: false,
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
@@ -270,6 +400,9 @@ export const DEFAULT_VALUES: Values = {
   work: "",
   awake: true,
   recap: true,
+  handoff: "edge",
+  edgeProfile: "Default",
+  appLink: false,
 }
 const differs = (v: Values, keys: Array<keyof Values>) =>
   keys.some((k) => v[k] !== DEFAULT_VALUES[k])
@@ -296,6 +429,7 @@ export const SECTION_GROUPS = [
     [
       ["system", "System"],
       ["updates", "Updates"],
+      ["changelog", "Changelog"],
       ["developer", "Developer"],
     ],
   ],
@@ -313,7 +447,6 @@ export const SECTIONS: readonly SectionEntry[] = SECTION_GROUPS.flatMap(
   ([, list]) => list as readonly SectionEntry[],
 )
 type SectionId = SectionEntry[0]
-const SECTION_KEY = "gatehouse.settings.section"
 function readSection(): SectionId {
   try {
     const k = localStorage.getItem(SECTION_KEY)
@@ -411,6 +544,7 @@ export function Settings() {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const notify = useStore((s) => s.notify)
+  const appVersion = useStore((s) => s.update?.current)
   const setNotify = useStore((s) => s.setNotify)
   const [section, setSectionState] = useState<SectionId>(readSection)
   const [search, setSearch] = useState("")
@@ -517,7 +651,14 @@ export function Settings() {
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
+  const memChanged = differs(v, ["memPoint"])
+  const tiChanged = differs(v, ["tiAll", "tiProjects"])
+  const rbChanged = differs(v, ["rbPoints"])
   const effortChanged = differs(v, ["effortCap"])
+  const styleChanged = differs(v, ["style"])
+  const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
+  const prChanged = differs(v, ["prPrefix", "prCreate", "prDraft", "prFix"])
+  const browserChanged = differs(v, ["browser"])
   const limitChanged = differs(v, ["maxSessions", "spendCap"])
   const telemetryChanged = differs(v, ["telFile", "telEndpoint"])
   const instrChanged = differs(v, ["instr"])
@@ -816,7 +957,7 @@ export function Settings() {
               </Field>
               <Field
                 label="Most spending a day, over every session"
-                help="What Claude costs at API prices, as each session reports it. At the limit every session pauses until midnight, or until you raise it; Start now starts one sooner. Models on this computer cost nothing."
+                help="Only money really spent: extra usage beyond your plan, and models through a gateway that charge. Work inside your plan costs nothing more, so it never counts; the plan limit has its own pause. At the limit every session pauses until midnight, or until you raise it; Start now starts one sooner."
               >
                 <select
                   className="field"
@@ -835,6 +976,143 @@ export function Settings() {
               </Field>
             </Group>
 
+            <Group section="sessions" title="Output style" gap="gap-2" changed={styleChanged}>
+              <OutputStyleField
+                value={v.style}
+                onChange={(style) => change({ style }, "Output style")}
+                onType={(style) => edit({ style })}
+                onDone={() => commit("Output style")}
+              />
+            </Group>
+
+            <Group
+              section="sessions"
+              title="Worktree location"
+              gap="gap-2"
+              changed={worktreeChanged}
+            >
+              <Field
+                label="Where new worktrees go"
+                help="A session started in a worktree works in a separate copy of its project, on a branch of its own. Beside the project puts it in a folder next to the project's own. Inside the project puts it in the project's .codehouse folder, kept out of git on this computer; tools that search the whole project may see it. A folder you choose must be inside your workspace folders, or a session there could change nothing."
+              >
+                <select
+                  className="field"
+                  value={v.wtWhere}
+                  onChange={(e) =>
+                    change({ wtWhere: e.target.value as Values["wtWhere"] }, "Worktree location")
+                  }
+                >
+                  <option value="beside">Beside the project</option>
+                  <option value="inside">Inside the project</option>
+                  <option value="folder">A folder you choose</option>
+                </select>
+              </Field>
+              {v.wtWhere === "folder" ? (
+                <Field
+                  label="Worktree folder"
+                  help="Each project's worktrees go in a folder named after it in here, for example C:\dev\worktrees."
+                >
+                  <span className="flex flex-wrap gap-2">
+                    <input
+                      className="field mono min-w-[260px] flex-1"
+                      value={v.wtFolder}
+                      onChange={(e) => edit({ wtFolder: e.target.value })}
+                      spellCheck={false}
+                      {...typed("Worktree location")}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={async () => {
+                        const r = await api<{ path: string | null }>("POST", "/api/pick-folder", {
+                          start: v.wtFolder.trim(),
+                        })
+                        if (r.ok && r.data?.path)
+                          change({ wtFolder: r.data.path }, "Worktree location")
+                        else if (!r.ok)
+                          toast.error(
+                            r.error ?? "The folder window could not open. Type the folder instead.",
+                            { id: "settings" },
+                          )
+                      }}
+                    >
+                      Choose a folder...
+                    </button>
+                  </span>
+                </Field>
+              ) : null}
+            </Group>
+
+            <Group section="sessions" title="Viewer" gap="gap-2">
+              <ViewerSetting />
+            </Group>
+
+            <Group section="sessions" title="Browser tools" gap="gap-2" changed={browserChanged}>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.browser}
+                  onChange={(e) => change({ browser: e.target.checked }, "Browser tools")}
+                />
+                Let coding sessions look at pages on this computer to check their work
+              </label>
+              <p className="m-0 text-[13px] text-mut">
+                Claude gets a picture of a page a server on this computer shows (localhost only), and
+                its text with your private words taken out. Pictures cannot be redacted. Edge takes
+                each picture out of sight, in a profile made for it and removed straight after; a look
+                takes about 20 seconds. Claude cannot click or type into the page. Applies to sessions
+                started from now on; chats never have it.
+              </p>
+            </Group>
+
+            <Group section="sessions" title="Pull requests" gap="gap-2" changed={prChanged}>
+              <Field
+                label="Branch prefix"
+                help="What the name of each new worktree's branch starts with, for example your initials and a slash. Letters, numbers, dots, dashes, underscores and slashes."
+              >
+                <input
+                  className="field mono"
+                  value={v.prPrefix}
+                  maxLength={40}
+                  spellCheck={false}
+                  onChange={(e) => edit({ prPrefix: e.target.value })}
+                  aria-invalid={v.prPrefix.trim() !== "" && !BRANCH_PREFIX.test(v.prPrefix.trim())}
+                  {...typed("Pull requests")}
+                />
+              </Field>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.prCreate}
+                  onChange={(e) => change({ prCreate: e.target.checked }, "Pull requests")}
+                />
+                Open a pull request when a session in a worktree finishes its work
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.prDraft}
+                  disabled={!v.prCreate}
+                  onChange={(e) => change({ prDraft: e.target.checked }, "Pull requests")}
+                />
+                As a draft
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.prFix}
+                  disabled={!v.prCreate}
+                  onChange={(e) => change({ prFix: e.target.checked }, "Pull requests")}
+                />
+                Fix checks that fail on it (up to three tries, then it tells you)
+              </label>
+              <p className="m-0 text-[13px] text-mut">
+                Claude pushes the session's own branch and opens the pull request with gh. Each push
+                and each gh command asks you first, as always, unless Extreme approval is on for that
+                session. Sessions not in a worktree are never asked to push.
+              </p>
+            </Group>
+
             <Group section="sessions" title="Effort" gap="gap-2" changed={effortChanged}>
               <Field
                 label="Most effort a session may use"
@@ -849,6 +1127,73 @@ export function Settings() {
                   {EFFORTS.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Risk budget" gap="gap-2" changed={rbChanged}>
+              <Field
+                label="Points each session may spend on what is approved without you"
+                help="Off unless you set it. An approval given without you (Extreme approval, or Claude Code by itself in Auto or Accept edits) spends 1 point at Moderate risk and 3 at High. When a session has none left, an Extreme session pauses until you start it again, and any other goes back to Manual. Your own message fills it again. Your own approvals spend nothing."
+              >
+                <select
+                  className="field"
+                  value={v.rbPoints}
+                  onChange={(e) => change({ rbPoints: e.target.value }, "Risk budget")}
+                >
+                  {withCurrent(["", "3", "5", "10", "20", "50"], v.rbPoints).map((n) => (
+                    <option key={n} value={n}>
+                      {n === "" ? "No budget (off)" : `${n} points`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Test integrity" gap="gap-2" changed={tiChanged}>
+              <p className="m-0 text-[13px] text-mut">
+                A change that weakens a project's tests (an assertion taken out, a skip added, an
+                expected value changed, a test file deleted, a coverage threshold lowered, or a flag
+                that hides a failure) always comes to you, except in Extreme approval. There, by
+                default, it is approved and the session says the tests were weakened. A strict
+                project waits for you instead.
+              </p>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.tiAll}
+                  onChange={(e) => change({ tiAll: e.target.checked }, "Test integrity")}
+                />
+                Every project is strict
+              </label>
+              <Field
+                label="Strict projects, one folder name to a line"
+                help="The project's folder name, as in its policy overlay. Not case sensitive."
+              >
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.tiProjects}
+                  disabled={v.tiAll}
+                  onChange={(e) => change({ tiProjects: e.target.value }, "Test integrity")}
+                />
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Memory" gap="gap-2" changed={memChanged}>
+              <Field
+                label="Start nothing new when this computer's memory is committed past"
+                help="The commit charge is what Windows has promised to programs, against what memory and the page file can hold; past it programs fail. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on."
+              >
+                <select
+                  className="field"
+                  value={v.memPoint}
+                  onChange={(e) => change({ memPoint: e.target.value }, "Memory")}
+                >
+                  {withCurrent(["75", "80", "85", "90", "95", "off"], v.memPoint).map((n) => (
+                    <option key={n} value={n}>
+                      {n === "off" ? "Never: start whatever is asked" : `${n}%${n === "85" ? " (recommended)" : ""}`}
                     </option>
                   ))}
                 </select>
@@ -971,6 +1316,10 @@ export function Settings() {
 
             <Group section="updates" title="Updates" gap="gap-2">
               <UpdatesPanel />
+            </Group>
+
+            <Group section="changelog" title="Changelog" gap="gap-2">
+              <ChangelogPanel {...(appVersion ? { current: appVersion } : {})} />
             </Group>
 
             <Group section="account" title="Profile" gap="gap-3" changed={profileChanged}>
@@ -1142,6 +1491,72 @@ export function Settings() {
               <ClaudeImport />
             </Group>
 
+            <Group
+              section="privacy"
+              title="Open in Claude"
+              gap="gap-2"
+              changed={differs(v, ["handoff", "edgeProfile", "appLink"])}
+            >
+              <p className="m-0 text-[13px] text-mut">
+                Where an imported chat opens in claude.ai. You sign in there, in Edge or the Claude
+                app; Codehouse never sees it and reads nothing back.
+              </p>
+              <fieldset className="m-0 grid gap-1 border-0 p-0">
+                <legend className="sr-only">Open in</legend>
+                {(
+                  [
+                    ["edge", "An Edge app window"],
+                    ["browser", "Your default browser"],
+                    ["app", "The Claude app"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="handoff"
+                      checked={v.handoff === value}
+                      onChange={() => change({ handoff: value }, "Open in Claude")}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+              <label className="flex items-center gap-2">
+                <span>Edge profile</span>
+                <select
+                  className="field !min-h-7 !py-0"
+                  value={v.edgeProfile}
+                  onChange={(e) => change({ edgeProfile: e.target.value }, "Open in Claude")}
+                >
+                  {[
+                    "Default",
+                    "Profile 1",
+                    "Profile 2",
+                    "Profile 3",
+                    "Profile 4",
+                    "Profile 5",
+                    "Guest Profile",
+                  ].map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.appLink}
+                  onChange={(e) => change({ appLink: e.target.checked }, "Open in Claude")}
+                />
+                Let the Claude app open them
+              </label>
+              <p className="m-0 text-xs text-mut">
+                The Claude app's link is not documented by Anthropic, so it is off unless you turn
+                it on. When the app is not installed, Edge is used instead.
+              </p>
+            </Group>
+
             <Group section="phone" title="Notifications" gap="gap-2">
               <label className="flex items-center gap-2">
                 <input
@@ -1257,6 +1672,75 @@ function RestartPrompt({
         </div>
       )}
     </div>
+  )
+}
+
+/** A branch prefix as the Host accepts it (apps/host/src/worktrees.ts BRANCH_PREFIX). */
+const BRANCH_PREFIX = /^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/
+
+/** An output style's name as the Host accepts it (apps/host/src/safety.ts OUTPUT_STYLE_NAME). */
+const STYLE_NAME = /^[A-Za-z0-9][\w .-]{0,59}$/
+/** Claude Code's own styles. Yours live in its output-styles folder and are chosen by name. */
+const BUILT_IN_STYLES = ["Explanatory", "Learning"]
+
+/**
+ * Output style (owner's Settings overhaul): how Claude writes its answers in new coding sessions, by name. Chats have
+ * their own instructions and are not changed.
+ */
+function OutputStyleField({
+  value,
+  onChange,
+  onType,
+  onDone,
+}: {
+  value: string
+  onChange: (v: string) => void
+  onType: (v: string) => void
+  onDone: () => void
+}) {
+  const [own, setOwn] = useState(value !== "" && !BUILT_IN_STYLES.includes(value))
+  const choice = own ? "own" : value
+  return (
+    <>
+      <Field
+        label="How Claude writes its answers in new coding sessions"
+        help="Default is Claude Code's usual way. Explanatory adds notes on why it did things; Learning leaves small parts for you to write. Your own style is one you saved in Claude Code's output styles folder, chosen by its name. Sessions already open keep theirs; chats are not changed."
+      >
+        <select
+          className="field"
+          value={choice}
+          onChange={(e) => {
+            const next = e.target.value
+            setOwn(next === "own")
+            onChange(next === "own" ? "" : next)
+          }}
+        >
+          <option value="">Default</option>
+          {BUILT_IN_STYLES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+          <option value="own">Your own…</option>
+        </select>
+      </Field>
+      {own ? (
+        <Field
+          label="Your style's name"
+          help="As its file names it, without .md. Letters, numbers, spaces, dots, dashes and underscores."
+        >
+          <input
+            className="field"
+            value={value}
+            maxLength={60}
+            onChange={(e) => onType(e.target.value)}
+            onBlur={onDone}
+            onKeyDown={(e) => e.key === "Enter" && onDone()}
+            aria-invalid={value.trim() !== "" && !STYLE_NAME.test(value.trim())}
+          />
+        </Field>
+      ) : null}
+    </>
   )
 }
 

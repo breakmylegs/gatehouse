@@ -87,6 +87,146 @@ describe("transcript reducer", () => {
     t = reduce(t, assistant([{ type: "text", text: "more" }]))
     expect(t.todos.length).toBe(2)
   })
+  it("keeps the task list from Claude Code's task tools too: created, updated by id, removed (O10)", () => {
+    const result = (id: string, text: string, structured?: unknown) => ({
+      type: "user",
+      ...(structured ? { tool_use_result: structured } : {}),
+      message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] },
+    })
+    let t = reduce(
+      emptyTranscript(),
+      assistant([
+        {
+          type: "tool_use",
+          id: "c1",
+          name: "TaskCreate",
+          input: { subject: "Write the parser", description: "x" },
+        },
+        {
+          type: "tool_use",
+          id: "c2",
+          name: "TaskCreate",
+          input: { subject: "Test it", description: "y", activeForm: "Testing it" },
+        },
+      ]),
+    )
+    expect(t.todos.map((x) => [x.content, x.status])).toEqual([
+      ["Write the parser", "pending"],
+      ["Test it", "pending"],
+    ])
+    t = reduce(t, result("c1", "Task #1 created successfully: Write the parser"))
+    t = reduce(t, result("c2", "created", { task: { id: "2", subject: "Test it" } }))
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u1",
+          name: "TaskUpdate",
+          input: { taskId: "1", status: "completed" },
+        },
+      ]),
+    )
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u2",
+          name: "TaskUpdate",
+          input: { taskId: "2", status: "in_progress" },
+        },
+      ]),
+    )
+    expect(t.todos.map((x) => [x.content, x.status, x.activeForm])).toEqual([
+      ["Write the parser", "completed", undefined],
+      ["Test it", "in_progress", "Testing it"],
+    ])
+    // An update for a task it does not know changes nothing; a deleted one goes.
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u3",
+          name: "TaskUpdate",
+          input: { taskId: "9", status: "completed" },
+        },
+      ]),
+    )
+    t = reduce(
+      t,
+      assistant([
+        {
+          type: "tool_use",
+          id: "u4",
+          name: "TaskUpdate",
+          input: { taskId: "1", status: "deleted" },
+        },
+      ]),
+    )
+    expect(t.todos.map((x) => x.content)).toEqual(["Test it"])
+  })
+  it("ties a step to the commits made while it was in progress, and marks one ticked after failing tests (G17)", () => {
+    const todo = (id: string, todos: Array<[string, string]>) =>
+      assistant([
+        {
+          type: "tool_use",
+          id,
+          name: "TodoWrite",
+          input: { todos: todos.map(([content, status]) => ({ content, status })) },
+        },
+      ])
+    const run = (id: string, command: string, text: string, isError = false) => [
+      assistant([{ type: "tool_use", id, name: "Bash", input: { command } }]),
+      {
+        type: "user",
+        message: {
+          content: [{ type: "tool_result", tool_use_id: id, is_error: isError, content: text }],
+        },
+      },
+    ]
+    let t = emptyTranscript()
+    for (const m of [
+      todo("w1", [
+        ["Write the parser", "in_progress"],
+        ["Test it", "pending"],
+      ]),
+      ...run(
+        "b1",
+        'git add . && git commit -m "parser"',
+        "[main 1a2b3c4d] parser\n 1 file changed",
+      ),
+      ...run("b2", "npm test", "1 failed", true),
+      // Written again whole: the first step keeps its commit; the second is ticked while the tests fail.
+      todo("w2", [
+        ["Write the parser", "completed"],
+        ["Test it", "completed"],
+      ]),
+    ])
+      t = reduce(t, m)
+    expect(t.todos).toEqual([
+      {
+        content: "Write the parser",
+        status: "completed",
+        commits: ["1a2b3c4"],
+        afterFailedTests: true,
+      },
+      { content: "Test it", status: "completed", afterFailedTests: true },
+    ])
+    // Tests passing later do not clear a mark already given; a step ticked after they pass has none.
+    for (const m of [
+      ...run("b3", "npx vitest run", "all passed"),
+      todo("w3", [
+        ["Write the parser", "completed"],
+        ["Test it", "completed"],
+        ["Tidy", "completed"],
+      ]),
+    ])
+      t = reduce(t, m)
+    expect(t.todos.map((x) => x.afterFailedTests ?? false)).toEqual([true, true, false])
+  })
+
   it("records the end of a turn and marks subagent text", () => {
     let t = reduce(emptyTranscript(), {
       type: "result",
@@ -121,6 +261,11 @@ describe("transcript reducer", () => {
     })
     expect(reduce(markStopping(t, "kill-switch"), failed).items.at(-1)).toMatchObject({
       text: "The kill switch stopped this turn.",
+      isError: false,
+    })
+    // G19: the loop guard says why it stopped the turn.
+    expect(reduce(markStopping(t, "loop"), failed).items.at(-1)).toMatchObject({
+      text: expect.stringMatching(/same command failed the same way three times/),
       isError: false,
     })
     // A turn that finished just before the stop: your next message clears it.

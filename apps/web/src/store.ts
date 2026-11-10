@@ -52,6 +52,8 @@ export type Route =
   | "marketplace"
   | "doctor"
   | "home"
+  /** G24: the task board. */
+  | "board"
   /** CH-05: an imported claude.ai chat, read only. */
   | "imported"
 
@@ -125,11 +127,15 @@ export interface State {
   selectedRequest?: string
   /** A project chosen on the Projects page, for the new chat page to start in. Used once. */
   newChatProject?: string
+  /** Ask about code: the code session chosen from its menu, for the new question page. Used once. */
+  newChatAbout?: string
   /** CH-05: the imported chat the viewer shows. */
   importedChat?: string
   openImported: (id: string) => void
   /** B22: chats started side by side with the same message, and when, until you keep one. */
   compare?: { ids: string[]; at: number }
+  /** G31: an audit record to open when the Audit page next shows, by its number. */
+  auditOpen?: number
   theme: "light" | "dark"
   /** No choice of yours is kept, so the window follows the Windows theme as it changes. */
   themeFollows: boolean
@@ -212,6 +218,7 @@ const KEPT_ROUTES: Route[] = [
   "marketplace",
   "doctor",
   "home",
+  "board",
 ]
 /** Sessions side by side at most (owner, 1 Nov: "Up to 4 shown at once"); four sit two by two. */
 export const MAX_PANES = 4
@@ -536,7 +543,10 @@ export const useStore = create<State>((set, get) => ({
           return
         }
         if (e.event === "interrupted") {
-          const by = e.data.by === "kill-switch" || e.data.by === "plan-limit" ? e.data.by : "you"
+          const by =
+            e.data.by === "kill-switch" || e.data.by === "plan-limit" || e.data.by === "loop"
+              ? e.data.by
+              : "you"
           set((s) => ({
             transcripts: {
               ...s.transcripts,
@@ -783,8 +793,28 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
         : `Extreme approval: carrying on by itself, turn ${String(data.turn)}${typeof data.of === "number" ? ` of ${data.of}` : ""}.`
     case "paused":
       if (data.reason === "spend")
-        return "Paused: today's spending reached the most Settings allows a day. It starts again by itself tomorrow."
+        return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
+    case "remember_refused":
+      // D-015: allowed this once, but not remembered, and why.
+      return `Not remembered: ${str(data.why) ?? ""}`
+    case "claim_checked": {
+      // D-009: a claim that the work is done, stamped.
+      const word = data.outcome === "verified" ? "Verified" : data.outcome === "contradicted" ? "Contradicted" : "Unverified"
+      return `${word}: "${str(data.quote) ?? ""}" (${str(data.why) ?? ""}).`
+    }
+    case "counterexample_pinned":
+      return `A counterexample is pinned as a locked regression test: ${str(data.file) ?? ""}.`
+    case "heldout_result":
+      // D-002: the counts only; the names and the output stay in the desktop's Details panel.
+      return str(data.line)
+    case "tests_weakened":
+      // D-001: Extreme approval approved a change that weakens the tests; the session says so.
+      return `Tests weakened, approved by Extreme approval: ${str(data.reason) ?? "a change weakens the tests"} Claims that the work is done are not verified while this stands.`
+    case "bypass_ended":
+      return data.why === "time"
+        ? "The time you gave the bypass ran out, so the limits in Settings apply to this session again."
+        : `The bypass reached the most you allowed it to spend (${Number(data.spentUsd ?? 0).toFixed(2)}), so the limits in Settings apply to this session again.`
     case "resumed":
       return data.by === "you"
         ? "You started this session again."

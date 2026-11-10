@@ -13,6 +13,29 @@ export async function envelopeChallenge(envelope: Envelope): Promise<string> {
   return b64u(await sha256(canonicalize(envelope)))
 }
 
+/** G32: the additional data a sessions snapshot is sealed with, so it cannot pass for anything else. */
+export const SESSIONS_AAD = "sessions"
+
+/**
+ * G32 (O18, owner 30 Oct): the sessions as the phone may see them. Redacted on the Host before sealing; the latest
+ * of what was said in each is a short excerpt, never files.
+ */
+export interface PhoneSessions {
+  at: string
+  sessions: Array<{
+    id: string
+    project: string
+    title?: string
+    state: string
+    /** Requests waiting on you in it. */
+    waiting: number
+    /** The latest of what was said, oldest first, as "You:" and "Claude:" lines. */
+    latest: string
+  }>
+  /** G32: the routines you allowed to be started from the phone, by name only (B35's safe variant). */
+  templates?: Array<{ id: string; name: string }>
+}
+
 export interface OpenedRequest {
   payload: {
     id: string
@@ -28,6 +51,18 @@ export interface OpenedRequest {
       reason: string
       risk: number
       segments?: Array<{ text: string; ruleId: string; outcome: string }>
+      /** D-013: what the shell call would also run, and what of it cannot be read. */
+      expanded?: Array<{ from: string; line: string }>
+      unknownEffects?: string[]
+    }
+    /** G20: what the call would delete or throw away, when it would. */
+    effects?: {
+      kind: "delete" | "discard"
+      count: number
+      paths: string[]
+      more: boolean
+      reversible: boolean
+      undo: string
     }
     createdAt: string
     expiresAt: string
@@ -71,11 +106,17 @@ export function newEnvelope(o: {
   decision?: "allow" | "deny"
   message?: string
   answers?: Record<string, string>
+  sessionId?: string
+  text?: string
+  templateId?: string
 }): Envelope {
   return {
     v: 1,
     type: o.type,
     ...(o.requestId !== undefined ? { requestId: o.requestId } : {}),
+    ...(o.sessionId !== undefined ? { sessionId: o.sessionId } : {}),
+    ...(o.templateId !== undefined ? { templateId: o.templateId } : {}),
+    ...(o.text !== undefined ? { text: o.text } : {}),
     nonce: o.nonce ?? b64u(globalThis.crypto.getRandomValues(new Uint8Array(24))),
     ...(o.decision !== undefined ? { decision: o.decision } : {}),
     ...(o.message?.trim() ? { message: o.message.trim().slice(0, 500) } : {}),

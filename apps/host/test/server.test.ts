@@ -4,7 +4,7 @@ import path from "node:path"
 import http from "node:http"
 import net from "node:net"
 import os from "node:os"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import WebSocket from "ws"
 import type { Health, ServerEvent } from "@gatehouse/shared"
 import { WS_SUBPROTOCOL } from "@gatehouse/shared"
@@ -17,6 +17,7 @@ import {
   secretsEqual,
 } from "../src/server-guard.js"
 import { HostServer, type HostApp } from "../src/server.js"
+import { Worktrees } from "../src/worktrees.js"
 import { buildStack, type Stack } from "./stack.js"
 
 const TOKEN = "u".repeat(20) + "-ui-session-token-" + "z".repeat(10)
@@ -329,7 +330,9 @@ function connect(
         send(command) {
           const cmdId = `c${++n}`
           ws.send(JSON.stringify({ cmdId, command }))
-          return client.waitFor("reply", (e) => e.cmdId === cmdId)
+          // Checkpoints and undo run git, which is slow when the machine is busy: a reply may take up to two
+          // minutes; each test's own limit still stops a real hang.
+          return client.waitFor("reply", (e) => e.cmdId === cmdId, 120_000)
         },
         waitFor(type, pred = () => true, ms = 40_000) {
           const found = events.find((e) => e.type === type && pred(e as never))
@@ -459,6 +462,45 @@ describe("commands over the WebSocket", () => {
     expect(c.events.some((e) => e.type === "usage")).toBe(true)
     await c.send({ type: "close_session", sessionId })
   })
+
+  it("slows the next High approval after three made too fast to read, never a deny (D-021)", async () => {
+    const results: unknown[] = []
+    s.sdk.turn = async (api) => {
+      for (let i = 0; i < 5; i++) results.push(await api.callTool("Bash", { command: `git push origin rs${i}` }))
+    }
+    const created = await c.send({ type: "create_session", cwd: s.repo })
+    const sessionId = (created.data as { sessionId: string }).sessionId
+    await c.send({ type: "prompt", sessionId, text: "push" })
+    const asked = (i: number) =>
+      c.waitFor(
+        "approval_request",
+        (e) => e.view.request.sessionId === sessionId && JSON.stringify(e.view.rawInput).includes(`rs${i}`),
+      )
+    // Three High approvals, each within 800 ms of the card appearing.
+    for (let i = 0; i < 3; i++) {
+      const a = await asked(i)
+      expect(a.view.request.verdict.risk).toBeGreaterThanOrEqual(70)
+      expect(await c.send({ type: "approve", requestId: a.view.request.id, shownMs: 150, opened: true })).toMatchObject({ ok: true })
+    }
+    // The fourth wants a second look; a deny goes straight through.
+    const fourth = await asked(3)
+    expect(await c.send({ type: "approve", requestId: fourth.view.request.id, shownMs: 150, opened: true })).toMatchObject({
+      ok: false,
+      error: { code: "friction" },
+    })
+    expect(await c.send({ type: "deny", requestId: fourth.view.request.id })).toMatchObject({ ok: true })
+    // The fifth: too soon is still refused; after two seconds the deliberate approval is taken.
+    const fifth = await asked(4)
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, shownMs: 150 })).toMatchObject({ error: { code: "friction" } })
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, deliberate: true })).toMatchObject({ error: { code: "friction" } })
+    await new Promise((r) => setTimeout(r, 2100))
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, deliberate: true })).toMatchObject({ ok: true })
+    await c.waitFor("sdk_message", (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId)
+    expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, false, true])
+    expect(s.records().filter((r) => r.event === "approval_friction_shown")).toHaveLength(2)
+    await c.send({ type: "close_session", sessionId })
+    // Five High calls, each checkpointed before it asks: slow when git is.
+  }, 120_000)
 
   it("denies with a message, answers a question, and refuses a second answer", async () => {
     const results: Record<string, unknown> = {}
@@ -636,6 +678,53 @@ describe("commands over the WebSocket", () => {
     await c.send({ type: "close_session", sessionId })
   }, 240_000)
 
+  it("sends a message from one session's prompt box to another and records where, never the words (G18)", async () => {
+    s.sdk.turn = async () => undefined
+    const a = (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    const b = (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    const told = await c.send({
+      type: "tell",
+      from: a.sessionId,
+      to: b.sessionId,
+      text: "run the secret tests",
+    })
+    expect(told.ok).toBe(true)
+    await vi.waitFor(() =>
+      expect(s.sdk.queries.some((q) => q.prompts.includes("run the secret tests"))).toBe(true),
+    )
+    const rec = await c.waitFor(
+      "audit",
+      (e) => (e.record as { event: string }).event === "message_relayed",
+    )
+    expect(JSON.stringify(rec.record)).not.toContain("secret tests")
+    expect((await c.send({ type: "tell", from: a.sessionId, to: a.sessionId, text: "x" })).ok).toBe(
+      false,
+    )
+    await c.send({ type: "close_session", sessionId: a.sessionId })
+    await c.send({ type: "close_session", sessionId: b.sessionId })
+  }, 120_000)
+
+  it("records a review finding you dismiss (G16)", async () => {
+    s.sdk.turn = async () => undefined
+    const a = (await c.send({ type: "create_session", cwd: s.repo })).data as { sessionId: string }
+    const r = await c.send({
+      type: "review_dismiss",
+      sessionId: a.sessionId,
+      file: "src/pay.ts",
+      summary: "The amount is not checked.",
+    })
+    expect(r.ok).toBe(true)
+    const rec = await c.waitFor(
+      "audit",
+      (e) => (e.record as { event: string }).event === "review_finding_dismissed",
+    )
+    expect(rec.record).toMatchObject({
+      session: a.sessionId,
+      verdict: { ruleId: "review-dismissed", decidedBy: "human-desktop" },
+    })
+    await c.send({ type: "close_session", sessionId: a.sessionId })
+  }, 120_000)
+
   it("lists past sessions and refreshes the account", async () => {
     expect((await c.send({ type: "list_history", dir: "C:/x" })).data).toEqual([
       { sessionId: "old", dir: "C:/x" },
@@ -671,6 +760,39 @@ describe("commands over the WebSocket", () => {
     })
     await c.send({ type: "close_session", sessionId })
   })
+
+  it("records which of several runs in worktrees you kept, by session and branch (G25)", async () => {
+    const wts = new Worktrees(path.join(s.repo, "..", "g25-data"))
+    s.deps.worktrees = wts
+    try {
+      // Started directly: making a worktree can take longer than a reply waits on a busy machine.
+      const run = async () => (await s.manager.start({ cwd: s.repo, worktree: {} })).id
+      const a = await run()
+      const b = await run()
+      expect(await c.send({ type: "compare_chosen", kept: a, others: [b] })).toMatchObject({
+        ok: true,
+      })
+      const rec = s
+        .records()
+        .filter((r) => r.event === "compare_chosen")
+        .at(-1) as unknown as { inputJson: string }
+      const branch = (id: string) => s.manager.get(id)?.info().worktree?.branch
+      expect(JSON.parse(rec.inputJson)).toMatchObject({
+        kept: { session: a, branch: branch(a) },
+        others: [{ session: b, branch: branch(b) }],
+      })
+      // Coding sessions in the same folder, not each in a worktree, are not runs to choose between.
+      const p = (await s.manager.start({ cwd: s.repo })).id
+      const q = (await s.manager.start({ cwd: s.repo })).id
+      expect(await c.send({ type: "compare_chosen", kept: p, others: [q] })).toMatchObject({
+        ok: false,
+      })
+      for (const id of [a, b, p, q]) await c.send({ type: "close_session", sessionId: id })
+      for (const w of wts.records()) await wts.remove(w.path, { force: true })
+    } finally {
+      delete s.deps.worktrees
+    }
+  }, 300_000)
 
   it("records which of the chats compared side by side you kept, by session and model, and only for chats (B22)", async () => {
     const chat = async (model: string) =>

@@ -12,6 +12,7 @@ import path from "node:path"
 import type { FastifyInstance } from "fastify"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
+import { MergeError, mergeBack, previewMerge } from "./worktree-merge.js"
 
 export class WorktreeError extends Error {}
 
@@ -60,14 +61,75 @@ function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
   })
 }
 
+/** A branch prefix from Settings: never an option, "..", "//" or a .lock name; git checks the rest. */
+export const BRANCH_PREFIX = /^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/
+
 /** A base is a branch, tag or commit name, never an option or a path out of the repository. */
 const BASE = /^(?!-)[\w./@^~-]{1,100}$/
 
+/**
+ * Where new worktrees go (Settings, Sessions, Worktree location; owner's Settings overhaul, 6 Nov). Absent or beside:
+ * <repo>.worktrees/<name>. Inside: <repo>/.codehouse/worktrees/<name>, kept out of git through the repository's own
+ * info/exclude, never its .gitignore. A folder: <folder>/<repo name>/<name>, only inside a workspace root, since a
+ * session anywhere else could change nothing.
+ */
+export interface WorktreePlace {
+  where: "beside" | "inside" | "folder"
+  folder?: string
+}
+
+/** Whether `p` is `root` or inside it, as Windows compares paths. */
+function within(root: string, p: string): boolean {
+  const rel = path.relative(path.resolve(root).toLowerCase(), path.resolve(p).toLowerCase())
+  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))
+}
+
 export class Worktrees {
   readonly #file: string
+  readonly #place: () => WorktreePlace | undefined
+  readonly #roots: () => string[]
+  readonly #prefix: () => string | undefined
 
-  constructor(dataDir: string) {
+  constructor(
+    dataDir: string,
+    o: {
+      place?: () => WorktreePlace | undefined
+      roots?: () => string[]
+      /** Settings, Pull requests: what each new branch's name starts with. Absent or unusable: codehouse/. */
+      branchPrefix?: () => string | undefined
+    } = {},
+  ) {
     this.#file = path.join(dataDir, "worktrees.json")
+    this.#place = o.place ?? (() => undefined)
+    this.#roots = o.roots ?? (() => [])
+    this.#prefix = o.branchPrefix ?? (() => undefined)
+  }
+
+  /** The folder a new worktree of `repo` called `name` goes in, from Settings. */
+  async #where(repo: string, name: string): Promise<string> {
+    const place = this.#place()
+    if (place?.where === "inside") {
+      const exclude = path.resolve(
+        repo,
+        (await git(repo, ["rev-parse", "--git-path", "info/exclude"])).trim(),
+      )
+      const line = "/.codehouse/worktrees/"
+      const now = fs.existsSync(exclude) ? fs.readFileSync(exclude, "utf8") : ""
+      if (!now.split(/\r?\n/).includes(line)) {
+        fs.mkdirSync(path.dirname(exclude), { recursive: true })
+        fs.appendFileSync(exclude, `${now && !now.endsWith("\n") ? "\n" : ""}${line}\n`)
+      }
+      return path.join(repo, ".codehouse", "worktrees", name)
+    }
+    if (place?.where === "folder" && place.folder) {
+      const folder = path.resolve(place.folder)
+      if (!path.isAbsolute(place.folder) || !this.#roots().some((r) => within(r, folder)))
+        throw new WorktreeError(
+          "The worktree folder in Settings is outside your workspace roots, so a session there could change nothing. Choose one inside them, or put worktrees beside the project.",
+        )
+      return path.join(folder, path.basename(repo), name)
+    }
+    return path.join(path.dirname(repo), `${path.basename(repo)}.worktrees`, name)
   }
 
   /** Every worktree Codehouse made, as recorded. Read tolerantly: a newer version's fields are kept. */
@@ -96,8 +158,8 @@ export class Worktrees {
   }
 
   /**
-   * Makes a worktree of the repository that holds `folder`, from `base` (its current commit when absent), in a
-   * folder beside the repository: <repo>.worktrees/<name>, on the branch codehouse/<name>.
+   * Makes a worktree of the repository that holds `folder`, from `base` (its current commit when absent), where
+   * Settings says (beside the repository unless told otherwise), on the branch codehouse/<name>.
    */
   async create(folder: string, base?: string): Promise<WorktreeRecord> {
     const baseName = base?.trim() || "HEAD"
@@ -132,8 +194,9 @@ export class Worktrees {
         `There is no branch, tag or commit called ${baseName} in that repository.`,
       )
     const name = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(3).toString("hex")}`
-    const where = path.join(path.dirname(repo), `${path.basename(repo)}.worktrees`, name)
-    const branch = `codehouse/${name}`
+    const where = await this.#where(repo, name)
+    const asked = this.#prefix()
+    const branch = `${asked && BRANCH_PREFIX.test(asked) ? asked : "codehouse/"}${name}`
     fs.mkdirSync(path.dirname(where), { recursive: true })
     await git(repo, ["worktree", "add", "-b", branch, "--", where, commit], 180_000)
     const rec: WorktreeRecord = {
@@ -221,7 +284,10 @@ function folderBytes(dir: string): number {
   return total
 }
 
-/** GET /api/worktrees and POST /api/worktrees/remove: the cleanup panel. Each removal is recorded first. */
+/**
+ * GET /api/worktrees, POST /api/worktrees/remove, and merging back: the cleanup panel. Each removal and merge is
+ * recorded first.
+ */
 export function registerWorktreeRoutes(
   app: FastifyInstance,
   ctx: { worktrees?: Worktrees; audit: HostAudit; openIn?: (folder: string) => boolean },
@@ -264,6 +330,59 @@ export function registerWorktreeRoutes(
       return reply
         .code(e instanceof WorktreeError ? 409 : 500)
         .send({ error: (e as Error).message })
+    }
+  })
+
+  // Merge back (G14): what the branch brings first, then the merge of exactly that, recorded before it happens.
+  const recordOf = (p: unknown) =>
+    typeof p === "string" && p.length <= 4096
+      ? ctx.worktrees?.records().find((w) => samePath(w.path, p))
+      : undefined
+  app.get("/api/worktrees/merge-preview", async (req, reply) => {
+    if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
+    const rec = recordOf((req.query as { path?: unknown }).path)
+    if (!rec) return reply.code(404).send({ error: "Codehouse did not make that worktree." })
+    try {
+      return await previewMerge(rec)
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/worktrees/merge", async (req, reply) => {
+    if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
+    const b = (req.body ?? {}) as { path?: unknown; into?: unknown; tip?: unknown }
+    const rec = recordOf(b.path)
+    if (!rec) return reply.code(404).send({ error: "Codehouse did not make that worktree." })
+    if (
+      typeof b.into !== "string" ||
+      b.into.length > 255 ||
+      typeof b.tip !== "string" ||
+      !/^[0-9a-f]{40,64}$/.test(b.tip)
+    )
+      return reply.code(422).send({ error: "Look at what it brings before merging." })
+    const recorded = await ctx.audit.record({
+      session: "desktop",
+      event: "worktree_merged",
+      channel: "desktop",
+      tool: "git",
+      cwd: "",
+      input: { path: rec.path, branch: rec.branch, into: b.into, tip: b.tip },
+      verdict: {
+        outcome: "allow",
+        ruleId: "worktree-merged",
+        reason: "A worktree's branch was merged back into its checkout from the desktop, after its diff was shown.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded)
+      return reply.code(503).send({ error: "It could not be recorded, so it was not merged." })
+    try {
+      return await mergeBack(rec, { into: b.into, tip: b.tip })
+    } catch (e) {
+      return reply.code(e instanceof MergeError ? 409 : 500).send({ error: (e as Error).message })
     }
   })
 }

@@ -48,7 +48,7 @@ export async function* streamArray(
       }
       if (!started) {
         if (c === "[") started = true
-        else if (!(first && c === "﻿") && !WS.has(c))
+        else if (!(first && c === "\uFEFF") && !WS.has(c))
           throw new JsonStreamError("The file is not a JSON array.")
         first = false
         continue

@@ -1,15 +1,27 @@
 import { spawn } from "node:child_process"
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import type { FastifyInstance, FastifyReply } from "fastify"
+import { secretGlobs } from "@gatehouse/policy"
+import { createCheckpoint, writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
+import {
+  applyReplace,
+  previewReplace,
+  readerFor,
+  SearchError,
+  searchFiles,
+  type SearchOptions,
+} from "./file-search.js"
 
 /**
  * Files for the workspace: list a session's folder, read a file, preview a page, and reveal a file in Explorer.
  * Everything stays inside the session's own folder (real paths, so a junction cannot lead out), except a file the
  * session itself wrote or edited elsewhere, which can be read, copied out or shown in Explorer (owner, 4 Nov). Anything
- * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. Nothing here writes a file.
+ * the policy floor would refuse to read (secrets, keys) is shown as blocked, never opened. The two things here that
+ * write are your own: Replace (G35), shown first, after a checkpoint; and Save (G33), only over the version you
+ * opened. Both are recorded and never touch a blocked file.
  */
 
 const MAX_TEXT = 1024 * 1024
@@ -33,6 +45,8 @@ const TYPES: Record<string, string> = {
   ".md": "text/plain; charset=utf-8",
   ".woff2": "font/woff2",
 }
+
+const sha256 = (b: Buffer) => createHash("sha256").update(b).digest("hex")
 
 const bad = (reply: FastifyReply, status: number, error: string) =>
   reply.code(status).header("cache-control", "no-store").send({ error })
@@ -87,9 +101,86 @@ export function insideRoot(root: string, rel: string): { abs?: string; error?: s
   return { abs: targetReal }
 }
 
+/** Folders never searched for @: version control, dependencies and build output. */
+const SKIP_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  ".next",
+  "coverage",
+  ".turbo",
+  ".venv",
+  "__pycache__",
+  "target",
+  "bin",
+  "obj",
+])
+/** The most entries one search looks at, how deep it goes, and how many it returns. */
+const FIND_VISIT = 20_000
+const FIND_DEPTH = 12
+const FIND_MAX = 20
+
+/**
+ * Files under `root` (relative, forward slashes) whose name or path holds `query`, ignoring case: a name starting with
+ * it first, then a name holding it, then a path holding it, shorter paths first. Links and junctions are never followed,
+ * and the walk stops after FIND_VISIT entries. An empty query gives the files nearest the top.
+ */
+export function findFiles(root: string, query: string): string[] {
+  const q = query.toLowerCase().replace(/\\/g, "/")
+  const hits: Array<{ rel: string; rank: number }> = []
+  const queue: Array<{ dir: string; depth: number }> = [{ dir: root, depth: 0 }]
+  let visited = 0
+  while (queue.length && visited < FIND_VISIT) {
+    const { dir, depth } = queue.shift()!
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const d of entries) {
+      if (++visited > FIND_VISIT) break
+      const full = path.join(dir, d.name)
+      if (d.isSymbolicLink()) continue
+      if (d.isDirectory()) {
+        if (!SKIP_DIRS.has(d.name) && depth < FIND_DEPTH)
+          queue.push({ dir: full, depth: depth + 1 })
+        continue
+      }
+      if (!d.isFile()) continue
+      const rel = path.relative(root, full).split(path.sep).join("/")
+      const name = d.name.toLowerCase()
+      const rank = !q
+        ? 3
+        : name.startsWith(q)
+          ? 0
+          : name.includes(q)
+            ? 1
+            : rel.toLowerCase().includes(q)
+              ? 2
+              : -1
+      if (rank >= 0) hits.push({ rel, rank })
+    }
+  }
+  return hits
+    .sort((a, b) => a.rank - b.rank || a.rel.length - b.rel.length || a.rel.localeCompare(b.rel))
+    .slice(0, FIND_MAX)
+    .map((h) => h.rel)
+}
+
 export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & FilesDeps): void {
-  // Preview addresses: /preview/<token>/<path>. A token belongs to one session folder and lasts while Codehouse runs.
-  const previews = new Map<string, string>()
+  // Preview addresses: /preview/<token>/<path>. A token belongs to one session and its folder, and ends when that
+  // session closes or no longer works there (backlog O13: they used to last while Codehouse ran).
+  const previews = new Map<string, { root: string; session: string }>()
+  const liveRoot = (token: string): string | undefined => {
+    const p = previews.get(token)
+    if (!p) return undefined
+    if (ctx.sessionCwd?.(p.session) === p.root) return p.root
+    previews.delete(token)
+    return undefined
+  }
 
   const rootOf = (q: Record<string, unknown>): string | undefined =>
     typeof q.session === "string" ? ctx.sessionCwd?.(q.session) : undefined
@@ -119,6 +210,115 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const v = await ctx.engine.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd })
     return v.outcome === "deny" ? v.reason : undefined
   }
+
+  // G35: search the session's files, and replace with the changed lines shown first.
+  const searchOf = (b: Record<string, unknown>): SearchOptions => ({
+    pattern: typeof b.pattern === "string" ? b.pattern : typeof b.q === "string" ? b.q : "",
+    regex: b.regex === true || b.regex === "1",
+    caseSensitive: b.caseSensitive === true || b.case === "1",
+  })
+  const readIn = (root: string) => readerFor(root, insideRoot, (abs) => blocked(abs, root))
+  app.get("/api/files/search", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    try {
+      return await searchFiles(real(root), searchOf(q))
+    } catch (e) {
+      return bad(reply, e instanceof SearchError ? 422 : 500, (e as Error).message)
+    }
+  })
+  app.post("/api/files/replace/preview", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const paths = Array.isArray(b.paths)
+      ? b.paths.filter((p): p is string => typeof p === "string")
+      : []
+    const replacement = typeof b.replacement === "string" ? b.replacement : ""
+    try {
+      return await previewReplace(paths, searchOf(b), replacement, readIn(real(root)))
+    } catch (e) {
+      return bad(reply, e instanceof SearchError ? 422 : 500, (e as Error).message)
+    }
+  })
+  app.post("/api/files/replace", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const shown = (Array.isArray(b.files) ? b.files : []).filter(
+      (f): f is { path: string; hash: string } =>
+        typeof (f as { path?: unknown })?.path === "string" &&
+        typeof (f as { hash?: unknown })?.hash === "string",
+    )
+    if (!shown.length) return bad(reply, 422, "Look at what would change before replacing.")
+    const replacement = typeof b.replacement === "string" ? b.replacement : ""
+    const o = searchOf(b)
+    const policy = ctx.store.current
+    if (!policy)
+      return bad(
+        reply,
+        503,
+        "No policy is loaded, so secrets could not be kept out of the undo point.",
+      )
+    // A checkpoint first, so Undo in Changes puts every file back; without one, nothing is changed.
+    let ref: string
+    try {
+      ref = (
+        await createCheckpoint({
+          cwd: root,
+          sessionId: String(b.session),
+          label: `before replacing in ${shown.length === 1 ? "1 file" : `${shown.length} files`}`,
+          excludeGlobs: secretGlobs(policy),
+        })
+      ).ref
+    } catch {
+      return bad(
+        reply,
+        409,
+        "Replace needs the folder to be in git, so the change can be undone. Nothing was changed.",
+      )
+    }
+    const recorded = await ctx.audit.record({
+      session: String(b.session),
+      event: "files_replaced",
+      channel: "desktop",
+      tool: "replace",
+      cwd: root,
+      input: {
+        files: shown.length,
+        patternChars: o.pattern.length,
+        regex: o.regex === true,
+        checkpoint: ref,
+      },
+      verdict: {
+        outcome: "allow",
+        ruleId: "files-replaced",
+        reason:
+          "You replaced text across files from the desktop, after the changes were shown. A checkpoint was saved first.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: policy.hash,
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so nothing was changed.")
+    try {
+      const done = await applyReplace(shown, o, replacement, readIn(real(root)), writeFileAtomic)
+      return { ...done, checkpoint: ref }
+    } catch (e) {
+      return bad(reply, e instanceof SearchError ? 422 : 500, (e as Error).message)
+    }
+  })
+
+  // F15 (backlog): files in the session's folder whose name or path holds what you typed after @, for the prompt box.
+  app.get("/api/files/find", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const query = typeof q.q === "string" ? q.q.slice(0, 200) : ""
+    return { files: findFiles(real(root), query) }
+  })
 
   app.get("/api/files/list", async (req, reply) => {
     const q = req.query as Record<string, unknown>
@@ -181,16 +381,72 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const text = buf.toString("utf8")
     if (buf.includes(0) || text.includes(String.fromCharCode(0xfffd)))
       return { kind: "binary", size: st.size }
-    return { kind: "text", text, size: st.size, truncated: st.size > MAX_TEXT }
+    return {
+      kind: "text",
+      text,
+      size: st.size,
+      truncated: st.size > MAX_TEXT,
+      // G33: what the file was when shown, so a save can tell if it changed outside since.
+      hash: sha256(fs.readFileSync(where.abs)),
+    }
+  })
+
+  // G33: your own edit to a file in the session's folder, saved only if the file is still as it was when you opened
+  // it, never to a file the floor blocks, never past 1 MB, and recorded (where and how big, never the text).
+  app.post("/api/files/save", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    if (typeof b.text !== "string" || typeof b.hash !== "string")
+      return bad(reply, 422, "Say what to save, and which version you edited.")
+    if (Buffer.byteLength(b.text) > MAX_TEXT)
+      return bad(reply, 413, "Files over 1 MB are not edited here.")
+    const where = insideRoot(root, typeof b.path === "string" ? b.path : "")
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    if (!fs.statSync(where.abs).isFile()) return bad(reply, 400, "That is not a file.")
+    const why =
+      (await blocked(where.abs, root)) ??
+      (await ctx.engine
+        .evaluate({ toolName: "Edit", input: { file_path: where.abs } }, { cwd: root })
+        .then((v) => (v.outcome === "deny" && v.decidedBy === "floor" ? v.reason : undefined)))
+    if (why) return bad(reply, 403, `That file is blocked by the policy: ${why}`)
+    if (sha256(fs.readFileSync(where.abs)) !== b.hash)
+      return bad(
+        reply,
+        409,
+        "The file changed outside since you opened it, so it was not saved. Copy your text, then reload it.",
+      )
+    const recorded = await ctx.audit.record({
+      session: String(b.session),
+      event: "file_saved",
+      channel: "desktop",
+      tool: "Edit",
+      cwd: root,
+      input: { path: where.abs, bytes: Buffer.byteLength(b.text) },
+      verdict: {
+        outcome: "allow",
+        ruleId: "file-saved",
+        reason: "You edited and saved a file in the session's folder from the desktop.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so it was not saved.")
+    await writeFileAtomic(where.abs, b.text)
+    return { saved: true, hash: sha256(Buffer.from(b.text, "utf8")) }
   })
 
   app.post("/api/files/preview", async (req, reply) => {
     const b = (req.body ?? {}) as Record<string, unknown>
     const root = rootOf(b)
     if (!root) return bad(reply, 404, "That session is not running.")
-    for (const [t, r] of previews) if (r === root) return { base: `/preview/${t}/` }
+    const session = String(b.session)
+    for (const [t, p] of previews)
+      if (p.root === root && p.session === session) return { base: `/preview/${t}/` }
     const token = randomBytes(24).toString("base64url")
-    previews.set(token, root)
+    previews.set(token, { root, session })
     return { base: `/preview/${token}/` }
   })
 
@@ -245,7 +501,7 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
   app.get("/preview/:token/*", async (req, reply) => {
     const { token } = req.params as { token: string }
     const rest = (req.params as Record<string, string>)["*"] ?? ""
-    const root = previews.get(token)
+    const root = liveRoot(token)
     if (!root) return bad(reply, 404, "This preview has ended.")
     let rel: string
     try {

@@ -90,6 +90,33 @@ function build(loose: boolean) {
     keepAwake: z.boolean().optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** Continue locally (CH-07): the turns kept word for word, and the characters of history before the rest is summed up. */
+    chatContinue: z
+      .object({
+        turns: z.number().int().min(1).max(200).optional(),
+        budgetChars: z.number().int().min(2000).max(400_000).optional(),
+      })
+      .passthrough()
+      .optional(),
+    /** Open in Claude (CH-06): where an imported chat opens in claude.ai. Absent: an Edge app window, Default profile. */
+    chatHandoff: z
+      .object({
+        target: z.enum(["edge", "browser", "app"]).optional(),
+        edgeProfile: z
+          .string()
+          .regex(/^(Default|Profile \d{1,3}|Guest Profile)$/)
+          .optional(),
+        appLink: z.boolean().optional(),
+        templates: z
+          .object({
+            chat: z.string().max(300).optional(),
+            project: z.string().max(300).optional(),
+            new: z.string().max(300).optional(),
+          })
+          .optional(),
+      })
+      .passthrough()
+      .optional(),
     /**
      * Who you are to Claude, from Settings, Account and plan, Profile (owner, 4 Nov, after Claude's desktop app): what
      * it should call you and what best describes your work. Told to every session first. Absent: nothing.
@@ -221,9 +248,80 @@ function build(loose: boolean) {
     }).optional(),
     /** B20: the most spent a day, in dollars, over every session; at it, they pause until tomorrow. Absent: no cap. */
     spendCapUsd: z.number().min(1).max(10000).optional(),
+    /**
+     * Owner's Settings overhaul (6 Nov): the output style new coding sessions start with, by name (Claude Code's own
+     * Explanatory or Learning, or one of yours). Absent: Claude Code's default. Older versions keep it unused.
+     */
+    outputStyle: z
+      .string()
+      .regex(/^[A-Za-z0-9][\w .-]{0,59}$/)
+      .optional(),
+    /**
+     * Owner's Settings overhaul (6 Nov): where new worktrees go. Absent: beside the project. A folder must be inside a
+     * workspace root (checked when a worktree is made). Older versions keep it unused and put them beside.
+     */
+    /**
+     * Owner's Settings overhaul (6 Nov): pull requests from a session in a worktree. The branch prefix new worktree
+     * branches get (absent: codehouse/), and whether such a session opens a pull request when done (as a draft unless
+     * draft is false) and fixes failing checks. Pushing and gh still go through the rules (git-remote). Older versions
+     * keep it unused.
+     */
+    pullRequests: z
+      .object({
+        branchPrefix: z
+          .string()
+          .regex(/^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/)
+          .optional(),
+        create: z.boolean().optional(),
+        draft: z.boolean().optional(),
+        fixChecks: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional(),
+    /**
+     * Owner's Settings overhaul (6 Nov): Browser tools. On, a coding session has look_at_page: a picture and the text
+     * of a page on this computer (localhost only). Absent or false: off. Older versions keep it unused.
+     */
+    browserTools: z.boolean().optional(),
+    worktreeLocation: z
+      .object({
+        where: z.enum(["beside", "inside", "folder"]),
+        folder: z.string().max(240).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** B09: the most sessions and chats open at once, 1 to 32. Absent: no limit. Older versions keep it unused. */
     maxSessions: z.number().int().min(1).max(32).optional(),
     effortCap: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+    /**
+     * C-004: from this commit charge (a share of what RAM and the page file can hold) Codehouse starts no new session,
+     * chat or page look. Absent: 85%. Older versions keep it unused.
+     */
+    /**
+     * D-001: projects strict about their tests, by folder name, or all of them. Strict, Extreme approval waits for a
+     * person on a change that weakens the tests; otherwise it approves it and the session says so. Absent: none.
+     */
+    testIntegrity: z
+      .object({
+        strictAll: z.boolean().optional(),
+        strictProjects: z.array(z.string().max(120)).max(200).optional(),
+      })
+      .passthrough()
+      .optional(),
+    /**
+     * D-018: a risk budget for each session, opt-in: points an allow given without a person spends (Moderate 1, High
+     * 3); at zero Manual-family sessions drop to Manual and Extreme ones pause. Absent: no budget.
+     */
+    riskBudget: z
+      .object({ points: z.number().int().min(1).max(1000), off: z.boolean().optional() })
+      .passthrough()
+      .optional(),
+    /** D-015: files whose words are not the project's own (globs); absent: README and Markdown files, dependencies. */
+    untrustedFiles: z.array(z.string().max(260)).max(100).optional(),
+    memoryGovernor: z
+      .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
+      .passthrough()
+      .optional(),
     planLimitPause: obj({
       percent: z.number().int().min(50).max(99),
       off: z.boolean().optional(),

@@ -2,7 +2,7 @@ import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { decide } from "../lib/decide"
+import { decideFull } from "../lib/decide"
 import { age, clock, commandText, riskBand } from "../lib/format"
 import { splitByHighlights } from "../lib/highlight"
 import { useNow } from "../lib/useNow"
@@ -10,6 +10,7 @@ import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
 import { RiskBadge } from "./RiskBadge"
 import { SessionCode } from "./SessionCode"
+import { hasHidden, ShowHidden } from "./ShowHidden"
 
 const COLLAPSE_LINES = 12
 const COLLAPSE_CHARS = 1500
@@ -19,6 +20,8 @@ interface RememberPreview {
   ok: boolean
   reason?: string
   preview?: string
+  /** D-015: a whole site, the broadest kind of rule: typed to confirm. */
+  typeToConfirm?: string
 }
 
 type Panel = "none" | "deny" | "edit" | "remember"
@@ -28,6 +31,22 @@ const PHONE_TEXT: Record<PendingView["phone"], string> = {
   held: "Phone: held for quiet hours",
   delivered: "Phone notified",
   expired: "Phone: expired",
+}
+
+/** U4: the risk bands that slow Allow down: High waits a moment, Severe asks you to type "allow". */
+export const HIGH_RISK = 70
+export const SEVERE_RISK = 85
+export const HIGH_DELAY_MS = 1000
+
+/** G20: what a call would delete or throw away, in words: "Deletes 12 files" or "Throws away work in 3 files". */
+export function effectsWords(e: {
+  kind: "delete" | "discard"
+  count: number
+  more: boolean
+}): string {
+  const files = `${e.count}${e.more ? " or more" : ""} ${e.count === 1 && !e.more ? "file" : "files"}`
+  if (e.kind === "discard") return `Throws away work not committed in ${files}`
+  return e.count === 0 && !e.more ? "Deletes nothing that is there now" : `Deletes ${files}`
 }
 
 /** The file or folder an edit-style tool acts on, shown under Where. */
@@ -59,11 +78,34 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [confirmStop, setConfirmStop] = useState(false)
   const connected = useStore((s) => s.conn === "open")
   const [remember, setRemember] = useState<RememberPreview>()
+  // C-013: how long a remembered rule lasts, where, and how many times; 30 days in this folder unless you choose.
+  const [lasts, setLasts] = useState("30")
+  const [where, setWhere] = useState("here")
+  const [uses, setUses] = useState("")
+  // D-021: when the card appeared, and when a friction asked for a deliberate approval.
+  const shownAt = useRef(Date.now())
+  const [friction, setFriction] = useState<number>()
+  const [frictionReady, setFrictionReady] = useState(false)
+  useEffect(() => {
+    if (friction === undefined) return
+    setFrictionReady(false)
+    const t = setTimeout(() => setFrictionReady(true), 2000)
+    return () => clearTimeout(t)
+  }, [friction])
+  const [siteTyped, setSiteTyped] = useState("")
   const command = useMemo(
     () => commandText(req.toolName, view.rawInput),
     [req.toolName, view.rawInput],
   )
   const [edited, setEdited] = useState(command)
+  // U4 (C2, decided 9 Nov): gestures in proportion to risk. High waits a second before Allow can be used, so a request
+  // that appears under your cursor or hands is not allowed by the click or keys meant for something else; Severe asks
+  // you to type "allow" first, which a keyboard, a mouse and a screen reader can all do.
+  const high = req.kind === "permission" && req.verdict.risk >= HIGH_RISK
+  const severe = req.kind === "permission" && req.verdict.risk >= SEVERE_RISK
+  const [ready, setReady] = useState(!high)
+  const [confirming, setConfirming] = useState<"allow" | "edited">()
+  const [typed, setTyped] = useState("")
 
   useEffect(() => {
     setPanel("none")
@@ -73,7 +115,16 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     setConfirmStop(false)
     setRemember(undefined)
     setEdited(command)
+    setConfirming(undefined)
+    setTyped("")
   }, [req.id, command])
+
+  useEffect(() => {
+    if (!high) return setReady(true)
+    setReady(false)
+    const t = setTimeout(() => setReady(true), HIGH_DELAY_MS)
+    return () => clearTimeout(t)
+  }, [req.id, high])
 
   const segments = (req.verdict.segments ?? [])
     .filter((s) => s.outcome !== "allow")
@@ -90,17 +141,36 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   async function run(cmd: Parameters<typeof send>[0]): Promise<boolean> {
     setBusy(true)
     setError(undefined)
-    const failed = await decide(cmd)
+    // D-021: an approval says how long the card was in view, and that the card was open.
+    const sent = cmd.type === "approve" ? { ...cmd, shownMs: Date.now() - shownAt.current, opened: true } : cmd
+    const r = await decideFull(sent)
     setBusy(false)
-    if (failed) setError(failed)
-    return !failed
+    if (r.code === "friction") {
+      setFriction(Date.now())
+      return false
+    }
+    if (r.error) setError(r.error)
+    return !r.error
   }
 
   const deny = (msg?: string) =>
     run({ type: "deny", requestId: req.id, ...(msg?.trim() ? { message: msg.trim() } : {}) })
-  const allow = () => run({ type: "approve", requestId: req.id })
+  const allowNow = () => run({ type: "approve", requestId: req.id })
+  /** Allow, once it may be used: a Severe request asks you to type "allow" first. */
+  const allow = async () => {
+    if (!ready) return false
+    if (severe) {
+      setConfirming("allow")
+      return false
+    }
+    return allowNow()
+  }
 
   async function allowEdited() {
+    if (severe && confirming !== "edited") {
+      setConfirming("edited")
+      return
+    }
     let updatedInput: Record<string, unknown>
     if (isShell(req.toolName)) {
       updatedInput = { ...view.rawInput, command: edited }
@@ -253,13 +323,20 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 {shownParts.map((p, i) =>
                   p.hit ? (
                     <mark key={i} className="seg">
-                      {p.text}
+                      <ShowHidden text={p.text} />
                     </mark>
                   ) : (
-                    <span key={i}>{p.text}</span>
+                    <span key={i}>
+                      <ShowHidden text={p.text} />
+                    </span>
                   ),
                 )}
               </pre>
+              {hasHidden(command) ? (
+                <p role="note" className="m-0 mt-1.5 text-[13px] font-semibold text-sev">
+                  It holds characters you cannot see, shown above as their codes in brackets.
+                </p>
+              ) : null}
               <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[13px] text-mut">
                 {segments.length > 0 ? (
                   <span>Underlined: the part that caused the escalation.</span>
@@ -290,6 +367,46 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 <span className="block">Target: {targetPath(view.rawInput)}</span>
               ) : null}
             </dd>
+            {req.effects ? (
+              <>
+                <dt className="text-mut">Effects</dt>
+                <dd className="m-0 grid gap-0.5" aria-label="What it would delete or throw away">
+                  <span className={req.effects.reversible ? undefined : "font-semibold"}>
+                    {effectsWords(req.effects)}
+                  </span>
+                  {req.effects.paths.length ? (
+                    <span className="mono text-[12.5px] [overflow-wrap:anywhere]">
+                      {req.effects.paths.join(", ")}
+                      {req.effects.more || req.effects.count > req.effects.paths.length
+                        ? ", and more"
+                        : ""}
+                    </span>
+                  ) : null}
+                  <span className={req.effects.reversible ? "text-mut" : "text-sev"}>
+                    {req.effects.undo}
+                  </span>
+                </dd>
+              </>
+            ) : null}
+            {req.verdict.expanded?.length || req.verdict.unknownEffects?.length ? (
+              <>
+                {/* D-013: what it would also run, each line judged like the call. */}
+                <dt className="text-mut">Also runs</dt>
+                <dd className="m-0 grid gap-0.5" aria-label="What this would also run">
+                  {(req.verdict.expanded ?? []).map((e, i) => (
+                    <span key={i} className="grid">
+                      <span className="text-[12.5px] text-mut">{e.from}</span>
+                      <code className="mono text-[12.5px] [overflow-wrap:anywhere]">{e.line}</code>
+                    </span>
+                  ))}
+                  {(req.verdict.unknownEffects ?? []).map((u, i) => (
+                    <span key={`u${i}`} className="font-semibold text-warn">
+                      Unknown effects: {u}
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
             <dt className="text-mut">Why</dt>
             <dd className="m-0">{req.verdict.reason}</dd>
             <dt className="text-mut">Status</dt>
@@ -355,6 +472,42 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </div>
           ) : null}
 
+          {friction !== undefined ? (
+            <div role="alert" className="grid gap-2 rounded border border-warn p-2 text-[14px]">
+              <strong>Look again before allowing this</strong>
+              <span>
+                You approved several requests faster than anyone could read them. Read what this one
+                does above (its command, what it would also run, and what it would delete), then allow
+                it, or give it a limited grant instead. Denying is never slowed.
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!frictionReady || busy}
+                  onClick={() => void run({ type: "approve", requestId: req.id, deliberate: true })}
+                >
+                  {frictionReady ? "Yes, allow it" : "Read it first"}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!frictionReady || busy}
+                  onClick={() =>
+                    void run({
+                      type: "approve",
+                      requestId: req.id,
+                      deliberate: true,
+                      remember: true,
+                      rememberFor: { days: 1 },
+                    })
+                  }
+                >
+                  Allow, and for a day in this folder only
+                </button>
+              </div>
+            </div>
+          ) : null}
           {panel === "remember" ? (
             <div className="grid gap-2" role="group" aria-label="Remember this decision">
               {!remember ? (
@@ -363,12 +516,71 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 <>
                   <p className="m-0">This will add exactly one rule to your local policy:</p>
                   <pre className="cmd">{remember.preview}</pre>
+                  <div className="flex flex-wrap gap-3">
+                    <label className="grid gap-1">
+                      <span>Lasts</span>
+                      <select value={lasts} onChange={(e) => setLasts(e.target.value)}>
+                        <option value="1">1 day</option>
+                        <option value="7">7 days</option>
+                        <option value="30">30 days (recommended)</option>
+                        <option value="90">90 days</option>
+                        <option value="never">Until you remove it</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span>Where</span>
+                      <select value={where} onChange={(e) => setWhere(e.target.value)}>
+                        <option value="here">This folder only (recommended)</option>
+                        <option value="anywhere">Any folder</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-1">
+                      <span>Uses</span>
+                      <select value={uses} onChange={(e) => setUses(e.target.value)}>
+                        <option value="">No limit</option>
+                        <option value="1">Once more</option>
+                        <option value="10">10 times</option>
+                        <option value="100">100 times</option>
+                      </select>
+                    </label>
+                  </div>
+                  <p className="m-0 text-[13px] text-mut">
+                    When it ends, or it has been used up, Codehouse asks you again.
+                  </p>
+                  {remember.typeToConfirm ? (
+                    <label className="grid gap-1 text-[13px]">
+                      <span>
+                        This allows every page of a whole site. Type the site to confirm:{" "}
+                        <strong className="mono">{remember.typeToConfirm}</strong>
+                      </span>
+                      <input
+                        className="field mono"
+                        value={siteTyped}
+                        onChange={(e) => setSiteTyped(e.target.value)}
+                        aria-label={`Type ${remember.typeToConfirm} to confirm`}
+                      />
+                    </label>
+                  ) : null}
                   <div className="flex gap-2">
                     <button
                       className="btn btn-primary"
-                      disabled={busy}
+                      disabled={
+                        busy ||
+                        (remember.typeToConfirm !== undefined &&
+                          siteTyped.trim().toLowerCase() !== remember.typeToConfirm)
+                      }
                       onClick={() =>
-                        void run({ type: "approve", requestId: req.id, remember: true })
+                        void run({
+                          type: "approve",
+                          requestId: req.id,
+                          remember: true,
+                          rememberFor: {
+                            days: lasts === "never" ? null : Number(lasts),
+                            ...(where === "anywhere" ? { anywhere: true } : {}),
+                            ...(uses ? { maxUses: Number(uses) } : {}),
+                            ...(remember.typeToConfirm ? { confirmScope: siteTyped.trim() } : {}),
+                          },
+                        })
                       }
                     >
                       Allow once and remember
@@ -470,15 +682,70 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </button>
             <button
               className={clsx("btn pass-allow", view.defaultToNo ? "btn-strong" : "btn-primary")}
-              disabled={busy || !connected}
+              disabled={busy || !connected || !ready}
               onClick={() => void allow()}
               aria-keyshortcuts="Control+Enter"
             >
-              {req.kind === "plan" ? "Approve plan" : "Allow once"}{" "}
+              {req.kind === "plan" ? "Approve plan" : severe ? "Allow once…" : "Allow once"}{" "}
               <kbd aria-hidden="true">Ctrl Enter</kbd>
             </button>
           </div>
         )}
+        {confirming && !resolved ? (
+          <form
+            className="grid gap-2 border-t border-line pt-3"
+            aria-label="Confirm a Severe request"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (typed.trim().toLowerCase() !== "allow") return
+              const what = confirming
+              setConfirming(undefined)
+              setTyped("")
+              void (what === "edited" ? allowEdited() : allowNow())
+            }}
+          >
+            <label className="grid gap-1">
+              <span className="font-semibold">
+                This is Severe (risk {req.verdict.risk}). Type allow to confirm.
+              </span>
+              <input
+                className="field w-48"
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                onKeyDown={(e) => {
+                  // Inside the box Escape closes it, and Ctrl+Enter never allows on its own.
+                  if (e.key === "Escape") {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setConfirming(undefined)
+                    setTyped("")
+                  } else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) e.stopPropagation()
+                }}
+              />
+            </label>
+            <span className="flex gap-2">
+              <button
+                className="btn btn-strong"
+                disabled={busy || !connected || typed.trim().toLowerCase() !== "allow"}
+              >
+                {confirming === "edited" ? "Allow with my edit" : "Allow once"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  setConfirming(undefined)
+                  setTyped("")
+                }}
+              >
+                Cancel
+              </button>
+            </span>
+          </form>
+        ) : null}
       </aside>
     </article>
   )

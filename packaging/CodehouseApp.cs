@@ -678,6 +678,8 @@ internal sealed class MainForm : Form
     {
         base.OnHandleCreated(e);
         if (hotkeyOn) Hotkey.RegisterHotKey(Handle, HotkeyId, hotkeyMods | Hotkey.ModNoRepeat, hotkeyVk);
+        // Backlog U16: Mica behind the title bar where Windows draws it; otherwise the window stays opaque.
+        Backdrop.Apply(Handle);
     }
 
     // ---- voice typing (W1-16) ----

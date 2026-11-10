@@ -93,6 +93,8 @@ describe("the pack's spot pictures", () => {
   it("fill an empty sidebar: chats on the Chat side", () => {
     render(<Rail onHide={() => undefined} />)
     expect(document.querySelector('.empty-state[data-picture="empty-chats"]')).toBeTruthy()
-    expect(screen.getByText(/No chats yet/)).toBeTruthy()
+    // Ask about code (owner, 6 Nov): the side is for questions about your code sessions, not claude.ai chats.
+    expect(screen.getByText(/No questions yet/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: /claude\.ai/ })).toBeNull()
   })
 })

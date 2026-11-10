@@ -29,9 +29,25 @@ export interface Routine {
   enabled: boolean
   /** Started by a new commit or by files changing, not by the clock; time and days are then not used. */
   trigger?: Trigger
+  /** G23: each run works in a new git worktree of its folder, so it never touches your checkout. */
+  worktree?: boolean
+  /** G32: it may be started from the paired phone, by its name only, signed with the passkey. */
+  phone?: boolean
   /** The local day ("YYYY-MM-DD") it last ran, so it runs once a day at most. */
   lastRun?: string
 }
+
+/** G23: one time a routine ran, for the review inbox in Settings. */
+export interface RoutineRun {
+  routineId: string
+  name: string
+  sessionId: string
+  at: string
+  /** The worktree's branch, when it ran in one. */
+  branch?: string
+}
+
+const MAX_RUNS = 50
 
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/
 const MAX_ROUTINES = 50
@@ -60,6 +76,8 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
       time: TIME.test(String(r.time ?? "")) ? String(r.time) : "00:00",
       days: [],
       ...(r.extreme ? { extreme: true } : {}),
+      ...(r.worktree === true ? { worktree: true } : {}),
+      ...(r.phone === true ? { phone: true } : {}),
       enabled: r.enabled !== false,
       trigger: { kind },
     }
@@ -76,7 +94,25 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
     time: String(r.time),
     days,
     ...(r.extreme ? { extreme: true } : {}),
+    ...(r.worktree === true ? { worktree: true } : {}),
+    ...(r.phone === true ? { phone: true } : {}),
     enabled: r.enabled !== false,
+  }
+}
+
+/** How a routine's session starts: in its folder, in Manual mode, with Extreme approval and a new worktree if set. */
+export function routineSessionOptions(r: Routine): {
+  cwd: string
+  mode: "default"
+  extreme?: true
+  worktree?: Record<string, never>
+} {
+  return {
+    cwd: r.folder,
+    mode: "default",
+    ...(r.extreme ? { extreme: true as const } : {}),
+    // G23: a run in a worktree of its own never touches your checkout.
+    ...(r.worktree ? { worktree: {} } : {}),
   }
 }
 
@@ -97,14 +133,28 @@ export function isDue(r: Routine, now: Date): boolean {
 export class RoutineStore {
   readonly #file: string
   #all: Routine[] = []
+  #runs: RoutineRun[] = []
   #extra: Record<string, unknown> = {}
 
   constructor(file: string) {
     this.#file = file
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
-      const { routines, triggered, ...rest } = raw
+      const { routines, triggered, runs, ...rest } = raw
       this.#extra = rest
+      for (const x of (Array.isArray(runs) ? runs : []) as Array<Partial<RoutineRun>>)
+        if (
+          typeof x.routineId === "string" &&
+          typeof x.sessionId === "string" &&
+          typeof x.at === "string"
+        )
+          this.#runs.push({
+            routineId: x.routineId,
+            name: typeof x.name === "string" ? x.name : "",
+            sessionId: x.sessionId,
+            at: x.at,
+            ...(typeof x.branch === "string" ? { branch: x.branch } : {}),
+          })
       for (const list of [routines, triggered])
         for (const x of (Array.isArray(list) ? list : []) as Array<Partial<Routine>>) {
           try {
@@ -138,6 +188,7 @@ export class RoutineStore {
           version: 1,
           routines: this.#all.filter((r) => !r.trigger),
           triggered: this.#all.filter((r) => r.trigger),
+          runs: this.#runs,
         },
         null,
         2,
@@ -167,6 +218,17 @@ export class RoutineStore {
     if (this.#all.length === before) return false
     await this.#save()
     return true
+  }
+
+  /** G23: the runs, newest first, for the review inbox. */
+  runs(): RoutineRun[] {
+    return [...this.#runs].reverse()
+  }
+
+  /** G23: notes a run's session, keeping the latest MAX_RUNS. */
+  async noteRun(run: RoutineRun): Promise<void> {
+    this.#runs = [...this.#runs, run].slice(-MAX_RUNS)
+    await this.#save()
   }
 
   async ran(id: string, now: Date): Promise<void> {

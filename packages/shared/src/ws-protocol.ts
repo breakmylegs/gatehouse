@@ -31,6 +31,19 @@ export const ResourceLevel = z.enum(RESOURCE_LEVELS)
 export type ResourceLevel = z.infer<typeof ResourceLevel>
 const Message = z.string().max(500)
 
+/**
+ * C-013: a remembered rule's limits, chosen on the card. days: how long it lasts (null: until you remove it);
+ * anywhere: every folder rather than this session's; maxUses: how many calls it may allow.
+ */
+export const RememberFor = z.object({
+  /** D-015: the site typed to confirm remembering a whole site. */
+  confirmScope: z.string().max(260).optional(),
+  days: z.number().int().min(1).max(365).nullable().optional(),
+  anywhere: z.boolean().optional(),
+  maxUses: z.number().int().min(1).max(10_000).optional(),
+})
+export type RememberFor = z.infer<typeof RememberFor>
+
 export const ClientCommand = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_session"),
@@ -56,6 +69,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     instructions: z.string().max(8000).optional(),
     /** A research chat (W1-10): Claude plans its questions, searches, reads the best sources and cites each claim. */
     research: z.boolean().optional(),
+    /** Ask about code (owner, 6 Nov): the code session this chat is about, by its id. Chats only. */
+    about: z.string().max(100).optional(),
     /** A chat with a model on this computer instead of Claude (ADR 0011), by the name you allowed. */
     localModel: z
       .string()
@@ -69,9 +84,47 @@ export const ClientCommand = z.discriminatedUnion("type", [
     worktree: z.object({ base: z.string().max(100).optional() }).optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
+  /** C-004: how committed this computer's memory is, the point in Settings, and the idle sessions that could be suspended. */
+  z.object({ type: z.literal("memory_status") }),
+  /** D-002: the session's project's sealed held-out checks: how many, the names (desktop only), and changes to them. */
+  z.object({ type: z.literal("heldout_list"), sessionId: Id }),
+  /** D-007: the session's project's locked tests; locking and unlocking one; accepting ones changed outside Codehouse. */
+  z.object({ type: z.literal("locks_state"), sessionId: Id }),
+  /** D-008: pins a counterexample as a locked regression test, or puts it away. */
+  z.object({ type: z.literal("pin_counterexample"), sessionId: Id, id: z.string().max(40) }),
+  z.object({ type: z.literal("dismiss_counterexample"), sessionId: Id, id: z.string().max(40) }),
+  z.object({ type: z.literal("lock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("unlock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("locks_accept"), cwd: z.string().min(1).max(1000) }),
+  z.object({
+    type: z.literal("heldout_add"),
+    sessionId: Id,
+    name: z.string().min(1).max(120),
+    content: z.string().max(1_000_000),
+  }),
+  z.object({ type: z.literal("heldout_remove"), sessionId: Id, name: z.string().min(1).max(120) }),
+  z.object({ type: z.literal("heldout_command"), sessionId: Id, command: z.string().min(1).max(500) }),
+  /** D-002: runs them now; the counts reach the session, the detail only this desktop. */
+  z.object({ type: z.literal("heldout_run"), sessionId: Id }),
+  /** C-004: suspends an idle session to free memory; Start again brings it back. */
+  z.object({ type: z.literal("suspend_session"), sessionId: Id }),
   /** New chat or the quick prompt is open: have a chat ready for the first message (the warm chat). */
   z.object({ type: z.literal("warm_chat") }),
   z.object({ type: z.literal("prompt"), sessionId: Id, text: z.string().min(1).max(100_000) }),
+  /** G18: a message you send to another session from this one's prompt box (/tell), recorded by who sent it where. */
+  z.object({
+    type: z.literal("tell"),
+    from: Id,
+    to: Id,
+    text: z.string().min(1).max(100_000),
+  }),
+  /** G16: you dismissed a finding on a review card; recorded before it goes from the card. */
+  z.object({
+    type: z.literal("review_dismiss"),
+    sessionId: Id,
+    file: z.string().min(1).max(300),
+    summary: z.string().min(1).max(500),
+  }),
   z.object({ type: z.literal("interrupt"), sessionId: Id }),
   /** Stops the turn and every background task now. */
   z.object({ type: z.literal("stop_session"), sessionId: Id }),
@@ -79,6 +132,23 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("force_stop"), sessionId: Id }),
   /** Starts a session again that Codehouse paused at the plan limit, before the limit resets. */
   z.object({ type: z.literal("resume_session"), sessionId: Id }),
+  /** Owner, 5 Nov: limit protection off for this session for so many minutes (at most a day), or null for on again. */
+  z.object({
+    type: z.literal("set_limit_protection"),
+    sessionId: Id,
+    offMinutes: z.number().int().min(1).max(1440).nullable(),
+  }),
+  /**
+   * Owner, 9 Nov: bypass the limits in Settings for this session for so many minutes, up to so much spending, or both
+   * (whichever runs out first), or end the bypass with neither. Desktop only.
+   */
+  z.object({
+    type: z.literal("set_limit_bypass"),
+    sessionId: Id,
+    minutes: z.number().int().min(1).max(1440).optional(),
+    maxUsd: z.number().positive().max(1000).optional(),
+    end: z.boolean().optional(),
+  }),
   /** How much of this computer a session may use: Low, Medium or High. */
   z.object({
     type: z.literal("set_resources"),
@@ -99,6 +169,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
     message: Message.optional(),
     updatedInput: z.record(z.string(), z.unknown()).optional(),
     remember: z.boolean().optional(),
+    /** C-013: how the remembered rule is limited. Absent: 30 days, in the session's folder, any number of uses. */
+    rememberFor: RememberFor.optional(),
+    /** D-021: how long the card had been on the screen, and whether the full card was open (not a row of the queue). */
+    shownMs: z.number().int().min(0).max(86_400_000).optional(),
+    opened: z.boolean().optional(),
+    /** D-021: the second, deliberate approval the friction asked for. */
+    deliberate: z.boolean().optional(),
   }),
   z.object({ type: z.literal("deny"), requestId: Id, message: Message.optional() }),
   z.object({
@@ -209,6 +286,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("search_history"), query: z.string().min(2).max(200) }),
   /** How full a session's context is. */
   z.object({ type: z.literal("context_usage"), sessionId: Id }),
+  /** O21: the computer, repository and branch, and the connectors of a session, for its details panel. */
+  z.object({ type: z.literal("session_details"), sessionId: Id }),
   /** Summarise the older conversation: now between turns, or straight after the running one. */
   z.object({ type: z.literal("compact"), sessionId: Id }),
   z.object({ type: z.literal("refresh_account"), account: z.string().max(20).optional() }),
@@ -267,6 +346,40 @@ export const SessionInfo = z.object({
     .optional(),
   /** What is still working in the background after the turn ended (subagents, shell commands), by description. */
   background: z.array(z.string()).optional(),
+  /** O21: the same work with when each began, for how long it has run. Absent from older Hosts. */
+  backgroundTasks: z
+    .array(z.object({ id: z.string(), description: z.string(), startedAt: z.string() }))
+    .optional(),
+  /** C-004: suspended to free memory; Start again brings it back on the same conversation. Absent from older Hosts. */
+  suspended: z.boolean().optional(),
+  /** D-008: counterexamples the session's test runs found, to pin as locked regression tests. Absent from older Hosts. */
+  counterexamples: z
+    .array(
+      z.object({
+        id: z.string(),
+        framework: z.string(),
+        example: z.string(),
+        writesItself: z.boolean(),
+        test: z.string().optional(),
+      }),
+    )
+    .optional(),
+  /** D-018: what is left of the session's risk budget; absent when it has none. Absent from older Hosts. */
+  riskBudget: z.number().int().min(0).optional(),
+  /** D-009: claims that the work is done, as Codehouse checked them, newest last. Absent from older Hosts. */
+  claims: z
+    .array(
+      z.object({
+        kind: z.string(),
+        quote: z.string(),
+        outcome: z.enum(["verified", "contradicted", "unverified"]),
+        why: z.string(),
+        command: z.string().optional(),
+      }),
+    )
+    .optional(),
+  /** D-001: how many weakenings of the tests Extreme approval approved in this session. Absent from older Hosts. */
+  testsWeakened: z.number().int().min(0).optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
   resources: ResourceLevel.optional(),
   /** Which signed-in account it runs on. Absent for the main one. */
@@ -279,6 +392,15 @@ export const SessionInfo = z.object({
   instructions: z.string().optional(),
   /** A research chat (W1-10). */
   research: z.boolean().optional(),
+  /** Ask about code (owner, 6 Nov): the code session this chat is about. */
+  about: z
+    .object({
+      id: z.string(),
+      title: z.string(),
+      cwd: z.string(),
+      sdkSessionId: z.string().optional(),
+    })
+    .optional(),
   /** B39: one run of a plugin's evaluation, with the plugin on or off. Not brought back after a restart. */
   evaluation: z.object({ plugin: z.string(), with: z.boolean() }).optional(),
   /** Runs on a model on this computer, not Claude (ADR 0011). `model` names it. */
@@ -294,6 +416,20 @@ export const SessionInfo = z.object({
   /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */
   worktree: z.object({ branch: z.string(), repo: z.string() }).optional(),
   /**
+   * Owner, 9 Nov: your bypass of the limits in Settings for this session, while it lasts: until when, the most it may
+   * spend, and what it has spent so far. When either runs out the limits apply again.
+   */
+  bypass: z
+    .object({
+      since: z.string(),
+      until: z.string().optional(),
+      maxUsd: z.number().optional(),
+      spentUsd: z.number(),
+    })
+    .optional(),
+  /** CH-07: carried on here from an imported claude.ai chat, at this message of it. Not synced back. */
+  forkOf: z.object({ conversation: z.string(), message: z.string() }).optional(),
+  /**
    * Paused because the plan's 5-hour limit reached its pause point. It starts again by itself when the limit resets
    * (`until`, when known), or when you start it.
    */
@@ -304,8 +440,11 @@ export const SessionInfo = z.object({
       percent: z.number(),
       /** A turn was running when it paused, so starting it again carries on where it stopped. */
       wasRunning: z.boolean(),
-      /** B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. */
-      reason: z.enum(["spend"]).optional(),
+      /**
+       * B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. D-018 "risk":
+       * the session's risk budget is spent; it waits for you, and no limit starts it again by itself.
+       */
+      reason: z.enum(["spend", "risk"]).optional(),
     })
     .optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */

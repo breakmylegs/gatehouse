@@ -104,7 +104,7 @@ beforeEach(() => {
   sent.length = 0
   useStore.setState({
     route: "projects",
-    sessions: {},
+    sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never },
     transcripts: {},
     panes: [],
     newChatProject: undefined,
@@ -178,13 +178,13 @@ describe("starting a chat in a project", () => {
     expect(pick.value).toBe("Home")
     // The choice is used once: it is not still waiting for the next visit.
     expect(useStore.getState().newChatProject).toBeUndefined()
-    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to talk about?" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
       target: { value: "Where do the beds go?" },
     })
     fireEvent.change(screen.getByRole("textbox", { name: /Instructions for this chat/ }), {
       target: { value: "Keep it to three lines." },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     await waitFor(() => expect(sent.find((c) => c.type === "create_session")).toBeTruthy())
     expect(sent.find((c) => c.type === "create_session")).toMatchObject({
       kind: "chat",
@@ -197,12 +197,12 @@ describe("starting a chat in a project", () => {
     backend = []
     useStore.setState({ route: "chat" })
     render(<NewChat />)
-    await screen.findByRole("textbox", { name: "What do you want to talk about?" })
+    await screen.findByRole("textbox", { name: "What do you want to know?" })
     expect(screen.queryByRole("combobox", { name: /^Project/ })).toBeNull()
-    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to talk about?" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "What do you want to know?" }), {
       target: { value: "Hello" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     await waitFor(() => expect(sent.find((c) => c.type === "create_session")).toBeTruthy())
     const made = sent.find((c) => c.type === "create_session")!
     expect(made).not.toHaveProperty("chatProject")

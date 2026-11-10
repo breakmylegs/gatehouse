@@ -14,6 +14,7 @@ import { Rail } from "./components/Rail"
 import { RailResizer, savedRailWidth } from "./components/RailResizer"
 import { ShortcutSheet } from "./components/ShortcutSheet"
 import { railOrder, readHideEnded } from "./lib/rail"
+import { RAIL_EVENT } from "./lib/layouts"
 import { copyLatest } from "./lib/sessionActions"
 import { startShell } from "./lib/quickKey"
 import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
@@ -38,6 +39,7 @@ const Marketplace = lazy(() =>
 const Home = lazy(() => import("./surfaces/Home").then((m) => ({ default: m.Home })))
 const Doctor = lazy(() => import("./surfaces/Doctor").then((m) => ({ default: m.Doctor })))
 const Prompts = lazy(() => import("./surfaces/Prompts").then((m) => ({ default: m.Prompts })))
+const Board = lazy(() => import("./surfaces/Board").then((m) => ({ default: m.Board })))
 const Projects = lazy(() => import("./surfaces/Projects").then((m) => ({ default: m.Projects })))
 const Dashboard = lazy(() => import("./surfaces/Dashboard").then((m) => ({ default: m.Dashboard })))
 
@@ -98,11 +100,19 @@ export function App() {
         st.setRoute("workspace")
       }
     }
+    // U8: a layout shows or hides the sidebar as it says.
+    const setRail = (e: Event) => {
+      const hidden = (e as CustomEvent<{ hidden?: boolean }>).detail?.hidden === true
+      localStorage.setItem(RAIL_HIDDEN, hidden ? "1" : "")
+      setRailHidden(hidden)
+    }
     window.addEventListener("keydown", onKey)
     window.addEventListener("codeh:toggle-rail", flipRail)
+    window.addEventListener(RAIL_EVENT, setRail)
     return () => {
       window.removeEventListener("keydown", onKey)
       window.removeEventListener("codeh:toggle-rail", flipRail)
+      window.removeEventListener(RAIL_EVENT, setRail)
     }
   }, [setHelpOpen])
 
@@ -222,6 +232,7 @@ export function App() {
                   {route === "marketplace" && <Marketplace />}
                   {route === "doctor" && <Doctor />}
                   {route === "home" && <Home />}
+                  {route === "board" && <Board />}
                   {route === "imported" && <ImportedChat />}
                 </Suspense>
               </main>

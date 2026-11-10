@@ -1,10 +1,11 @@
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { decide } from "../lib/decide"
 import { commandText, riskBand } from "../lib/format"
 import { useStore } from "../store"
 import { RiskBadge } from "./RiskBadge"
+import { ShowHidden } from "./ShowHidden"
 
 const isShell = (tool: string) => tool === "Bash" || tool === "PowerShell"
 
@@ -48,13 +49,15 @@ export function QuickDecision({
   const connected = useStore((s) => s.conn === "open")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const shownAt = useRef(Date.now())
 
   async function run(outcome: "allow" | "deny") {
     setBusy(true)
     setError(undefined)
     const failed = await decide(
       outcome === "allow"
-        ? { type: "approve", requestId: req.id }
+        ? // D-021: approved from a row: the card was never opened.
+          { type: "approve", requestId: req.id, opened: false, shownMs: Date.now() - shownAt.current }
         : { type: "deny", requestId: req.id },
     )
     setBusy(false)
@@ -85,6 +88,9 @@ export function QuickDecision({
     </button>
   )
 
+  // Backlog U4: a Severe request is never allowed from a row, where its command is not shown; Read it first opens
+  // the full card. Deny stays one click.
+  const severe = riskBand(req.verdict.risk) === "Severe"
   if (variant === "row")
     return (
       <div
@@ -94,7 +100,13 @@ export function QuickDecision({
       >
         <div className="flex gap-1.5 [&_.btn]:!min-h-7 [&_.btn]:!px-2.5 [&_.btn]:!text-[13px]">
           {denyBtn}
-          {allowBtn}
+          {severe ? (
+            <button type="button" className="btn btn-strong" onClick={onMore}>
+              Read it first
+            </button>
+          ) : (
+            allowBtn
+          )}
         </div>
         {error ? (
           <p role="alert" className="m-0 text-[12.5px] font-semibold text-sev">
@@ -144,7 +156,9 @@ export function QuickDecision({
             <span>{isShell(req.toolName) ? "Command" : "Target"}</span>
             <span className="mono">{req.toolName}</span>
           </div>
-          <pre className="cmd max-h-24 overflow-auto !py-1.5 !text-[13px]">{shown.text}</pre>
+          <pre className="cmd max-h-24 overflow-auto !py-1.5 !text-[13px]">
+            <ShowHidden text={shown.text} />
+          </pre>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 [&_.btn]:gap-2">

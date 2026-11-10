@@ -1,16 +1,23 @@
+import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { INTEGRITY_PREFIX } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
   checkRemember,
   appendRemember,
+  DEFAULT_GRANT_DAYS,
+  type GrantLimits,
   evaluateFloor,
   type Policy,
   type PolicyEngine,
   type PwshWorker,
 } from "@gatehouse/policy"
-import { canonicalize, type Verdict } from "@gatehouse/shared"
+import { canonicalize, type Effects, type Verdict } from "@gatehouse/shared"
 import type { Broker, Resolution } from "./broker.js"
+import { effectsOf, UNKNOWN_EFFECTS } from "./effects.js"
+import type { GrantUses } from "./grant-uses.js"
+import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { HostAudit } from "./hostaudit.js"
@@ -41,12 +48,27 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /** D-018: Extreme approval approved an escalation (it spends the risk budget). */
+  onAutoApproved?: (verdict: Verdict) => void
+  /** D-015: a Remember was refused, and why, for the screen. */
+  onRememberRefused?: (why: string) => void
+  /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
+  locks?: Pick<TestLocks, "touched">
+  lockedCalls?: Map<string, string[]>
+  /** D-001: this project is strict about its tests, so Extreme approval does not approve a weakening. */
+  strictTests?: () => boolean
+  /** D-001: Extreme approval approved a weakening of the tests, which the session then says (pattern, reason). */
+  onTestsWeakened?: (pattern: string, reason: string) => void
   /** The session's permission mode now: in Plan mode no file is changed until the plan is approved. */
   mode?: () => string
   /** Tells the phone that a request was approved by Extreme approval mode. Never given the input. */
   notifyAutoApproved?: (toolName: string, project: string) => void
   /** Each tool call's verdict, for the line under it in the transcript. A person's answer comes as its audit record. */
   onDecision?: (toolUseId: string, verdict: Verdict) => void
+  /** C-013: counts the uses of remembered rules with a limit. Absent: no limits are counted (tests). */
+  grants?: GrantUses
+  /** G20: works out what a call would delete or throw away. Absent: effects.ts, in the session's folder. */
+  effects?: (toolName: string, input: Record<string, unknown>) => Promise<Effects | undefined>
   log: (line: string) => void
 }
 
@@ -182,22 +204,123 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           },
         ))
       // B32: the hook already applied it to an early verdict; applying it again changes nothing.
-      const verdict = withProvenance(judged, toolName, input, deps.provenance)
+      let verdict = withProvenance(judged, toolName, input, deps.provenance)
+      // D-007: a call that would change a locked test goes to a person, whatever the rules said, unless they denied it.
+      // Locks that cannot be read count as touched (fail closed). Recorded before anything is decided.
+      if (deps.locks && verdict.outcome !== "deny") {
+        const files = await deps.locks
+          .touched(deps.cwd, toolName, input)
+          .catch(() => ["(the locks could not be read)"])
+        if (files.length) {
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: LOCKED_TEST_RULE,
+            reason: lockedReason(files),
+            risk: Math.max(verdict.risk, 90),
+            decidedBy: "rules",
+          }
+          const written = await deps.audit.record({
+            session: deps.sessionId,
+            event: "locked_test_escalated",
+            channel: "host",
+            tool: toolName,
+            toolUseId: toolUseID,
+            cwd: deps.cwd,
+            project: deps.project,
+            input: { files },
+            verdict,
+            latencyMs: 0,
+          })
+          if (!written)
+            return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+          deps.lockedCalls?.set(toolUseID, files)
+        }
+      }
       if (!early) deps.onDecision?.(toolUseID, verdict)
-      if (verdict.outcome === "allow") return allow(input, toolUseID)
+      if (verdict.outcome === "allow") {
+        // C-013: a remembered rule that has used its allowed number of calls asks instead.
+        if (deps.grants?.spent(verdict, toolUseID))
+          return await escalate(deps, toolName, input, options, {
+            ...verdict,
+            outcome: "escalate",
+            reason: deps.grants.reason(verdict.ruleId),
+          })
+        // G20: the judge never allows by itself what cannot be undone; your own rules still do.
+        if (verdict.decidedBy === "judge") {
+          const effects = await effectsFor(deps, toolName, input)
+          if (effects && !effects.reversible)
+            return await escalate(
+              deps,
+              toolName,
+              input,
+              options,
+              { ...verdict, outcome: "escalate", reason: `${verdict.reason} ${CANNOT_UNDO_ASKS}` },
+              effects,
+            )
+        }
+        return allow(input, toolUseID)
+      }
       if (verdict.outcome === "deny") {
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)
       }
-      if (deps.extreme?.() === true) {
-        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId))
-          return await extremeApprove(deps, toolName, input, toolUseID, verdict)
-        // Say why on the card: you chose Extreme approval and would otherwise expect no question.
-        return await escalate(deps, toolName, input, options, {
-          ...verdict,
-          reason: `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
+      const effects = await effectsFor(deps, toolName, input)
+      // D-001: a change that weakens the tests is recorded, with its pattern, before anything is decided.
+      const weakens = verdict.ruleId.startsWith(INTEGRITY_PREFIX)
+      if (weakens) {
+        const written = await deps.audit.record({
+          session: deps.sessionId,
+          event: "test_integrity_escalated",
+          channel: "host",
+          tool: toolName,
+          toolUseId: toolUseID,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { pattern: verdict.ruleId.slice(INTEGRITY_PREFIX.length), reason: verdict.reason },
+          verdict,
+          latencyMs: 0,
         })
+        if (!written)
+          return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
       }
-      return await escalate(deps, toolName, input, options, verdict)
+      if (deps.extreme?.() === true && weakens && deps.strictTests?.()) {
+        // D-001, strict for this project: a weakening waits for a person even in Extreme approval.
+        return await escalate(
+          deps,
+          toolName,
+          input,
+          options,
+          { ...verdict, reason: `${verdict.reason} ${STRICT_TESTS_ASKS}` },
+          effects,
+        )
+      }
+      if (deps.extreme?.() === true) {
+        const cannotUndo = effects !== undefined && !effects.reversible
+        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId) && !cannotUndo) {
+          const approved = await extremeApprove(deps, toolName, input, toolUseID, verdict)
+          // D-001, the default: approved and flagged, so the session says its tests were weakened.
+          if (weakens && approved.behavior === "allow")
+            deps.onTestsWeakened?.(verdict.ruleId.slice(INTEGRITY_PREFIX.length), verdict.reason)
+          return approved
+        }
+        // Say why on the card: you chose Extreme approval and would otherwise expect no question.
+        return await escalate(
+          deps,
+          toolName,
+          input,
+          options,
+          {
+            ...verdict,
+            // A locked test's reason already says Extreme approval does not approve it.
+            reason:
+              verdict.ruleId === LOCKED_TEST_RULE
+                ? verdict.reason
+                : `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
+          },
+          effects,
+        )
+      }
+      return await escalate(deps, toolName, input, options, verdict, effects)
     } catch (e) {
       // Invariant 1: a failure in here is a denial, never an allow.
       deps.log(`canUseTool failed (${(e as Error).name}), the call was denied`)
@@ -223,6 +346,8 @@ export const PLAN_EDIT_TOOLS: ReadonlySet<string> = new Set([
 export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   // B32: a command copied from a web page is always a person's decision.
   TAINT_RULE,
+  // D-007: a locked test changes only with a person.
+  LOCKED_TEST_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",
@@ -233,9 +358,33 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   "kill-switch",
 ])
 
+/** D-001: added to the reason when a project is strict about its tests and Extreme approval meets a weakening. */
+export const STRICT_TESTS_ASKS =
+  "This project is strict about its tests (Settings, Sessions, Test integrity), so this waits for you even in Extreme approval."
+
 /** Added to the reason when Extreme approval meets one of NEVER_AUTO_APPROVED. */
 export const EXTREME_CANNOT_APPROVE =
   "Extreme approval only approves requests Codehouse could check, so this one waits for you."
+
+/** G20: added to the reason when Extreme approval or the judge meets a call that cannot be undone. */
+export const CANNOT_UNDO_ASKS =
+  "It cannot be undone, so it is never approved without you, even in Extreme approval."
+
+/**
+ * G20: what the call would delete or throw away. A failure working it out counts as cannot be undone for a shell
+ * command (fail closed), and as nothing for any other tool, which deletes nothing this way.
+ */
+async function effectsFor(
+  deps: CanUseDeps,
+  toolName: string,
+  input: Record<string, unknown>,
+): Promise<Effects | undefined> {
+  try {
+    return await (deps.effects ?? ((t, i) => effectsOf(t, i, deps.cwd)))(toolName, input)
+  } catch {
+    return toolName === "Bash" || toolName === "PowerShell" ? UNKNOWN_EFFECTS : undefined
+  }
+}
 
 /**
  * Extreme approval mode: an escalation is approved without asking. It is audited first (an allow that cannot be
@@ -275,6 +424,7 @@ async function extremeApprove(
   }
   try {
     deps.notifyAutoApproved?.(toolName, deps.project)
+    deps.onAutoApproved?.(verdict)
   } catch {
     // A notification problem never changes the decision.
   }
@@ -287,6 +437,7 @@ async function escalate(
   input: Record<string, unknown>,
   options: Options,
   verdict: Verdict,
+  effects?: Effects,
 ): Promise<PermissionResult> {
   const toolUseID = options.toolUseID
   await deps.checkpoints?.beforeEscalation(deps.sessionId, deps.cwd, label(toolName, input))
@@ -299,6 +450,7 @@ async function escalate(
     cwd: deps.cwd,
     project: deps.project,
     verdict,
+    ...(effects ? { effects } : {}),
     signal: options.signal,
     defaultToNo: options.defaultToNo === true || verdict.risk >= 70,
   })
@@ -366,7 +518,7 @@ async function escalate(
   }
 
   if (resolution.outcome === "allow" && resolution.remember && resolution.channel === "desktop") {
-    await rememberRule(deps, toolName, finalInput)
+    await rememberRule(deps, toolName, finalInput, resolution.rememberFor)
   }
   return result
 }
@@ -409,10 +561,27 @@ async function recheckEdited(
   return verdict.outcome === "deny" ? verdict : undefined
 }
 
+/**
+ * C-013: a new grant's limits. Unless you chose otherwise: 30 days, in this session's folder, any number of uses.
+ */
+export function grantLimitsFor(
+  rememberFor: RememberFor | undefined,
+  cwd: string,
+  now = Date.now(),
+): GrantLimits {
+  const days = rememberFor?.days === undefined ? DEFAULT_GRANT_DAYS : rememberFor.days
+  return {
+    ...(days !== null ? { expiresAt: new Date(now + days * 86_400_000).toISOString() } : {}),
+    ...(rememberFor?.anywhere ? {} : { scope: cwd }),
+    ...(rememberFor?.maxUses !== undefined ? { maxUses: rememberFor.maxUses } : {}),
+  }
+}
+
 async function rememberRule(
   deps: CanUseDeps,
   toolName: string,
   input: Record<string, unknown>,
+  rememberFor?: RememberFor,
 ): Promise<void> {
   if (!deps.localRulesPath) return
   try {
@@ -432,7 +601,43 @@ async function rememberRule(
       deps.log(`remember refused: ${check.reason}`)
       return
     }
-    const { id, added } = await appendRemember(deps.localRulesPath, check.candidate)
+    // D-015: a rule that what the session read from outside, or an untrusted file, mentions is not remembered; nor
+    // a site, the broadest kind, unless you typed it to confirm it.
+    const why =
+      deps.provenance?.mentions(check.candidate, deps.cwd) ??
+      (check.candidate.host && rememberFor?.confirmScope?.trim().toLowerCase() !== check.candidate.host
+        ? `Remembering a whole site needs you to type it to confirm (${check.candidate.host}); it is allowed this once, not remembered.`
+        : undefined)
+    if (why) {
+      await deps.audit
+        .record({
+          session: deps.sessionId,
+          event: "remember_refused_provenance",
+          channel: "host",
+          tool: toolName,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { candidate: check.candidate },
+          verdict: {
+            outcome: "deny",
+            ruleId: "remember-provenance",
+            reason: why,
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: deps.policy()?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+        .catch(() => false)
+      deps.onRememberRefused?.(why)
+      return
+    }
+    const { id, added } = await appendRemember(
+      deps.localRulesPath,
+      check.candidate,
+      undefined,
+      grantLimitsFor(rememberFor, deps.cwd),
+    )
     deps.log(`remember rule ${added ? "added" : "already present"}: ${id}`)
   } catch (e) {
     deps.log(`remember failed (${(e as Error).message})`)

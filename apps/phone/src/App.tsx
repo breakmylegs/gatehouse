@@ -9,14 +9,19 @@ import {
   isStandalone,
   kill,
   loadPending,
+  loadSessions,
   register,
+  sendToSession,
+  startTemplate,
   unlock,
   type PendingItem,
   type Session,
 } from "./core"
+import type { PhoneSessions } from "@gatehouse/shared/phone-protocol"
 import { storage, type DeviceInfo, type KeyMaterial, type Settings } from "./storage"
 
-type Route = { name: "home" } | { name: "detail"; id: string } | { name: "settings" }
+type Route =
+  { name: "home" } | { name: "detail"; id: string } | { name: "settings" } | { name: "sessions" }
 
 const bandOf = (r: number) => (r >= 85 ? "Severe" : r >= 70 ? "High" : r >= 40 ? "Moderate" : "Low")
 /** The Stitch risk shapes, as on the desktop: a diamond, a triangle, a hexagon and a solid square. */
@@ -176,6 +181,13 @@ export function App() {
       </Frame>
     )
 
+  if (route.name === "sessions")
+    return (
+      <Frame title="Sessions" back={() => setRoute({ name: "home" })}>
+        <SessionsScreen session={session} keys={keys} device={device} />
+      </Frame>
+    )
+
   if (route.name === "detail") {
     const item = items.find((i) => i.relayId === route.id)
     return (
@@ -211,9 +223,14 @@ export function App() {
     <Frame
       title="Waiting on you"
       action={
-        <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "settings" })}>
-          Settings
-        </button>
+        <span className="flex gap-2">
+          <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "sessions" })}>
+            Sessions
+          </button>
+          <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "settings" })}>
+            Settings
+          </button>
+        </span>
       }
     >
       <div className="grid gap-4 p-4">
@@ -566,6 +583,49 @@ function Detail({
         <dl className="m-0 grid grid-cols-[72px_1fr] gap-x-3 gap-y-1">
           <dt className="text-mut">Where</dt>
           <dd className="m-0 mono text-[15px] [overflow-wrap:anywhere]">{o.payload.cwd}</dd>
+          {o.payload.effects ? (
+            <>
+              <dt className="text-mut">Effects</dt>
+              <dd className="m-0 grid gap-0.5" aria-label="What it would delete or throw away">
+                <span className={o.payload.effects.reversible ? undefined : "font-semibold"}>
+                  {o.payload.effects.kind === "discard"
+                    ? `Throws away work not committed in ${o.payload.effects.count}${o.payload.effects.more ? " or more" : ""} files`
+                    : `Deletes ${o.payload.effects.count}${o.payload.effects.more ? " or more" : ""} ${o.payload.effects.count === 1 && !o.payload.effects.more ? "file" : "files"}`}
+                </span>
+                {o.payload.effects.paths.length ? (
+                  <span className="mono text-[14px] [overflow-wrap:anywhere]">
+                    {o.payload.effects.paths.join(", ")}
+                    {o.payload.effects.more ||
+                    o.payload.effects.count > o.payload.effects.paths.length
+                      ? ", and more"
+                      : ""}
+                  </span>
+                ) : null}
+                <span className={o.payload.effects.reversible ? "text-mut" : "text-sev"}>
+                  {o.payload.effects.undo}
+                </span>
+              </dd>
+            </>
+          ) : null}
+          {o.payload.verdict.expanded?.length || o.payload.verdict.unknownEffects?.length ? (
+            <>
+              {/* D-013: what it would also run. */}
+              <dt className="text-mut">Also runs</dt>
+              <dd className="m-0 grid gap-1" aria-label="What this would also run">
+                {(o.payload.verdict.expanded ?? []).map((e, i) => (
+                  <span key={i} className="grid">
+                    <span className="text-[14px] text-mut">{e.from}</span>
+                    <code className="mono text-[14px] [overflow-wrap:anywhere]">{e.line}</code>
+                  </span>
+                ))}
+                {(o.payload.verdict.unknownEffects ?? []).map((u, i) => (
+                  <span key={`u${i}`} className="font-semibold">
+                    Unknown effects: {u}
+                  </span>
+                ))}
+              </dd>
+            </>
+          ) : null}
           <dt className="text-mut">Rule</dt>
           <dd className="m-0 mono text-[15px]">{o.payload.verdict.ruleId}</dd>
           <dt className="text-mut">Why</dt>
@@ -617,13 +677,20 @@ function Detail({
         ) : confirmAllow ? (
           <div role="group" aria-label="Confirm allow" className="grid gap-2">
             <p className="m-0 font-semibold">Allow this once?</p>
-            <button
-              className="btn btn-strong"
-              disabled={busy}
-              onClick={() => void send({ decision: "allow", ...(message ? { message } : {}) })}
-            >
-              {busy ? "Waiting for Face ID…" : "Allow with Face ID"}
-            </button>
+            {o.payload.verdict.risk >= SEVERE_RISK ? (
+              <HoldToAllow
+                busy={busy}
+                onAllow={() => void send({ decision: "allow", ...(message ? { message } : {}) })}
+              />
+            ) : (
+              <button
+                className="btn btn-strong"
+                disabled={busy}
+                onClick={() => void send({ decision: "allow", ...(message ? { message } : {}) })}
+              >
+                {busy ? "Waiting for Face ID…" : "Allow with Face ID"}
+              </button>
+            )}
             <button
               className="btn"
               disabled={busy}
@@ -658,6 +725,242 @@ function Detail({
         )}
       </div>
     </div>
+  )
+}
+
+const STATE_WORDS: Record<string, string> = {
+  starting: "Starting",
+  idle: "Ready",
+  running: "Working",
+  waiting: "Needs you",
+  error: "Stopped with an error",
+  paused: "Paused",
+}
+
+/**
+ * G32 (O18, owner 30 Oct): the sessions open on your computer and the latest of what was said in each, sent end to end
+ * encrypted and opened here with this phone's key. A message to a session, and Interrupt, are each signed with Face ID
+ * and checked and recorded on the computer before they reach the session.
+ */
+function SessionsScreen({
+  session,
+  keys,
+  device,
+}: {
+  session: Session
+  keys: KeyMaterial | undefined
+  device: DeviceInfo
+}) {
+  const [data, setData] = useState<PhoneSessions>()
+  const [error, setError] = useState<string>()
+  const [open, setOpen] = useState<string>()
+  const [message, setMessage] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [said, setSaid] = useState<string>()
+  async function send(what: Parameters<typeof sendToSession>[2]) {
+    setBusy(true)
+    setSaid(undefined)
+    try {
+      await sendToSession(session, device, what)
+      setSaid(
+        "interrupt" in what
+          ? "Sent. The session stops once your computer checks the signature."
+          : "Sent. It reaches the session once your computer checks the signature.",
+      )
+      if (!("interrupt" in what)) setMessage("")
+    } catch (e) {
+      setSaid(friendly(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  useEffect(() => {
+    if (!keys) return
+    let gone = false
+    const load = () =>
+      loadSessions(session, keys).then(
+        (d) => !gone && (setData(d), setError(undefined)),
+        (e: unknown) => !gone && setError(friendly(e)),
+      )
+    void load()
+    const t = setInterval(() => void load(), 15_000)
+    return () => {
+      gone = true
+      clearInterval(t)
+    }
+  }, [session, keys])
+  if (error)
+    return (
+      <p role="alert" className="m-0 p-5 font-semibold text-sev">
+        {error}
+      </p>
+    )
+  if (!data) return <p className="m-0 p-5 text-mut">Loading…</p>
+  const starts = data.templates?.length ? (
+    <section aria-label="Start" className="grid gap-2 px-4 pt-4">
+      <h2 className="m-0 text-[17px] font-semibold">Start</h2>
+      {data.templates.map((t) => (
+        <button
+          key={t.id}
+          className="btn justify-self-start"
+          disabled={busy}
+          aria-label={`Start ${t.name} with Face ID`}
+          onClick={async () => {
+            setBusy(true)
+            setSaid(undefined)
+            try {
+              await startTemplate(session, device, t.id)
+              setSaid(`${t.name} starts once your computer checks the signature.`)
+            } catch (e) {
+              setSaid(friendly(e))
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {t.name}
+        </button>
+      ))}
+      {said && !open && data.sessions.length ? (
+        <p role="status" className="m-0 text-[15px]">
+          {said}
+        </p>
+      ) : null}
+    </section>
+  ) : null
+  if (!data.sessions.length)
+    return (
+      <>
+        {starts}
+        {said ? (
+          <p role="status" className="m-0 px-4 pt-2 text-[15px]">
+            {said}
+          </p>
+        ) : null}
+        <p className="m-0 p-5 text-mut">
+          No sessions to show yet. They appear here a moment after your computer shares them.
+        </p>
+      </>
+    )
+  return (
+    <>
+      {starts}
+      <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
+        {data.sessions.map((s) => (
+          <li key={s.id} className="panel grid gap-1.5 p-4">
+            <button
+              className="grid gap-1 border-0 bg-transparent p-0 text-left"
+              aria-expanded={open === s.id}
+              onClick={() => setOpen(open === s.id ? undefined : s.id)}
+            >
+              <span className="font-semibold">{s.title ?? s.project}</span>
+              <span className="text-[15px] text-mut">
+                {STATE_WORDS[s.state] ?? s.state}
+                {s.waiting
+                  ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you`
+                  : ""}
+              </span>
+            </button>
+            {open === s.id ? (
+              <>
+                {s.latest ? (
+                  <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
+                    {s.latest}
+                  </pre>
+                ) : (
+                  <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
+                )}
+                <label className="grid gap-1">
+                  <span className="font-semibold">Message to this session</span>
+                  <textarea
+                    className="field"
+                    rows={3}
+                    maxLength={4000}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    className="btn btn-primary"
+                    disabled={busy || !message.trim()}
+                    onClick={() => void send({ sessionId: s.id, text: message })}
+                  >
+                    {busy ? "Waiting for Face ID…" : "Send with Face ID"}
+                  </button>
+                  {s.state === "running" || s.state === "waiting" ? (
+                    <button
+                      className="btn"
+                      disabled={busy}
+                      onClick={() => void send({ sessionId: s.id, interrupt: true })}
+                    >
+                      Interrupt…
+                    </button>
+                  ) : null}
+                </div>
+                {said ? (
+                  <p role="status" className="m-0 text-[15px]">
+                    {said}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </>
+  )
+}
+
+/** U4: Severe, from risk 85; on the phone its Allow is held, not tapped. */
+const SEVERE_RISK = 85
+const HOLD_MS = 1500
+
+/**
+ * U4 (C2, decided 9 Nov): a Severe request is allowed on the phone by pressing and holding for a moment, then letting
+ * go, and then Face ID. A tap does nothing. The answer is sent from the release itself, which is what lets Face ID
+ * ask: Safari only asks for a passkey from a person's own gesture.
+ */
+function HoldToAllow({ busy, onAllow }: { busy: boolean; onAllow: () => void }) {
+  const since = useRef<number | undefined>(undefined)
+  const [holding, setHolding] = useState(false)
+  const [short, setShort] = useState(false)
+  return (
+    <>
+      <button
+        className="btn btn-strong hold-to-allow"
+        disabled={busy}
+        data-holding={holding ? "" : undefined}
+        onPointerDown={() => {
+          since.current = Date.now()
+          setHolding(true)
+          setShort(false)
+        }}
+        onPointerCancel={() => {
+          since.current = undefined
+          setHolding(false)
+        }}
+        onContextMenu={(e) => e.preventDefault()}
+        onClick={() => {
+          const held = since.current !== undefined && Date.now() - since.current >= HOLD_MS
+          since.current = undefined
+          setHolding(false)
+          if (held) onAllow()
+          else setShort(true)
+        }}
+      >
+        {busy
+          ? "Waiting for Face ID…"
+          : holding
+            ? "Keep holding, then let go"
+            : "Hold to allow with Face ID"}
+      </button>
+      {short ? (
+        <p role="status" className="m-0 text-[15px]">
+          This is Severe: press and hold for a moment, then let go.
+        </p>
+      ) : null}
+    </>
   )
 }
 

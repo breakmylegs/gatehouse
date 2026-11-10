@@ -99,6 +99,40 @@ describe("attachments for the composer", () => {
     ).toBe(404)
   })
 
+  it("records a picture of the screen from the quick prompt as a screen capture, which is not redacted (CH-08)", async () => {
+    audited.length = 0
+    const r = (
+      await post("/api/files/attach-data", {
+        session: "s1",
+        name: "screen.png",
+        type: "image/png",
+        data: Buffer.from([1, 2, 3]).toString("base64"),
+        source: "screen-capture",
+      })
+    ).json()
+    expect(r.rel).toMatch(/screen\.png$/)
+    expect(audited).toEqual([
+      expect.objectContaining({
+        event: "screen_capture",
+        verdict: expect.objectContaining({
+          ruleId: "screen-capture",
+          reason: expect.stringMatching(/not redacted/),
+        }),
+      }),
+    ])
+    // A file that only claims to be one is recorded as an attachment, as before.
+    audited.length = 0
+    await post("/api/files/attach-data", {
+      session: "s1",
+      kind: "file",
+      name: "notes.txt",
+      type: "text/plain",
+      data: Buffer.from("x").toString("base64"),
+      source: "screen-capture",
+    })
+    expect(audited).toEqual([expect.objectContaining({ event: "files_attached" })])
+  })
+
   it("takes any dropped file by its name, refusing a secrets file before anything is written (owner, 1 Nov)", async () => {
     const ok = (
       await post("/api/files/attach-data", {

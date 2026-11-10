@@ -3,9 +3,11 @@ import {
   computePayloadHash,
   newNonce,
   uuidv7,
+  type Effects,
   type EscalationRequest,
   type Verdict,
 } from "@gatehouse/shared"
+import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import { msUntilPhoneAllowed, phoneHeld, type QuietHours } from "./quiet-hours.js"
 
 /** `push` is an outbound notification channel such as ntfy: it answers with a one-time code. */
@@ -22,6 +24,8 @@ export type Answer =
       updatedInput?: Record<string, unknown>
       /** Desktop only: also write a narrow remember rule. */
       remember?: boolean
+      /** C-013: and how it is limited. */
+      rememberFor?: RememberFor
     }
   | { kind: "answers"; answers: Record<string, string> }
 
@@ -33,6 +37,7 @@ export interface Resolution {
   updatedInput?: Record<string, unknown>
   answers?: Record<string, string>
   remember?: boolean
+  rememberFor?: RememberFor
   at: string
   waitedMs: number
 }
@@ -55,6 +60,8 @@ export interface BrokerRequestSpec {
   cwd: string
   project: string
   verdict: Verdict
+  /** G20: what the call would delete or throw away, shown on the desktop and the phone. */
+  effects?: Effects
   /** The SDK's abort signal for this call. */
   signal?: AbortSignal
   /** The ask must not be approvable by a stray keystroke. */
@@ -164,6 +171,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
       cwd: this.#opts.redact(spec.cwd),
       project: this.#opts.redact(spec.project),
       verdict: this.#opts.redact(spec.verdict),
+      ...(spec.effects ? { effects: this.#opts.redact(spec.effects) } : {}),
       createdAt: created.toISOString(),
       expiresAt: expiresAt.toISOString(),
     }
@@ -279,6 +287,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
         ...(answer.message !== undefined ? { message: answer.message } : {}),
         ...(answer.updatedInput !== undefined ? { updatedInput: answer.updatedInput } : {}),
         ...(answer.remember ? { remember: true } : {}),
+        ...(answer.remember && answer.rememberFor ? { rememberFor: answer.rememberFor } : {}),
       })
     }
     this.#finish(id, resolution)
@@ -329,7 +338,10 @@ export class Broker extends EventEmitter<BrokerEvents> {
       }
     }
     // Invariant 11: the phone and push channels can allow, deny, answer and kill. They cannot edit input or create rules.
-    if (channel !== "desktop" && (answer.updatedInput !== undefined || answer.remember)) {
+    if (
+      channel !== "desktop" &&
+      (answer.updatedInput !== undefined || answer.remember || answer.rememberFor)
+    ) {
       return {
         ok: false,
         reason: "not-allowed-on-channel",

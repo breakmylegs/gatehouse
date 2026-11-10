@@ -14,6 +14,8 @@ export interface RecordedSession {
   historyUntil?: string
   /** The session it replaces in its pane (Retry and Edit), so the new branch stays in the same conversation. */
   replaces?: string
+  /** CH-07: carried on from an imported chat: a new conversation that says where it came from. */
+  forkOf?: { conversation: string; message: string }
   local?: boolean
   evaluation?: unknown
 }
@@ -80,7 +82,13 @@ export class ChatRecorder {
     if (!place) {
       const c = this.store.createConversation({
         title: info.title ?? (firstText ?? "").slice(0, 120),
-        provenance: { kind: "native" },
+        provenance: info.forkOf
+          ? {
+              kind: "fork",
+              fromConversation: info.forkOf.conversation,
+              fromMessage: info.forkOf.message,
+            }
+          : { kind: "native" },
         ...(info.sdkSessionId ? { sdkSessionId: info.sdkSessionId } : {}),
       })
       place = { conversationId: c.id, leaf: null, blocks: [] }

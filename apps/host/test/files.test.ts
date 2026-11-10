@@ -19,6 +19,8 @@ const copied: Array<{ event: string; input: Record<string, unknown> }> = []
 let audited = true
 // What the session wrote outside its folder (owner, 4 Nov).
 const written = new Set<string>()
+// Whether session s1 is still open (O13: a preview ends with its session).
+let s1Open = true
 
 beforeAll(async () => {
   root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "gh-files-")))
@@ -48,7 +50,7 @@ beforeAll(async () => {
   store.load()
   const ctx = {
     engine: new PolicyEngine({ getPolicy: () => store.current }),
-    sessionCwd: (id: string) => (id === "s1" ? ws : undefined),
+    sessionCwd: (id: string) => (id === "s1" && s1Open ? ws : undefined),
     sessionWrote: (id: string, abs: string) => id === "s1" && written.has(abs.toLowerCase()),
     reveal: (abs: string) => void revealed.push(abs),
     saveAs: async () => saveTo,
@@ -147,6 +149,38 @@ describe("the files panel", () => {
     expect((await get(`${base}.env`)).statusCode).toBe(403)
     expect((await get(`${base}..%2Foutside%2Fprivate.txt`)).statusCode).toBe(404)
     expect((await get("/preview/not-a-token/site/index.html")).statusCode).toBe(404)
+  })
+
+  it("finds files by what you type after @, best matches first, never through a junction (F15)", async () => {
+    const r = await app.inject({ method: "GET", url: "/api/files/find?session=s1&q=a.t" })
+    expect(r.json().files).toEqual(["src/a.ts"])
+    const readme = (await app.inject({ method: "GET", url: "/api/files/find?session=s1&q=read" })).json()
+    expect(readme.files[0]).toBe("README.md")
+    // The junction to a folder outside, and .git, are not searched.
+    const priv = (await app.inject({ method: "GET", url: "/api/files/find?session=s1&q=private" })).json()
+    expect(priv.files).toEqual([])
+    expect((await app.inject({ method: "GET", url: "/api/files/find?session=nope&q=a" })).statusCode).toBe(404)
+  })
+
+  it("ends a preview address when its session closes, and does not bring it back (O13)", async () => {
+    const { base } = (
+      await app.inject({ method: "POST", url: "/api/files/preview", payload: { session: "s1" } })
+    ).json()
+    expect((await get(`${base}site/index.html`)).statusCode).toBe(200)
+    s1Open = false
+    try {
+      const gone = await get(`${base}site/index.html`)
+      expect(gone.statusCode).toBe(404)
+      expect(gone.json().error).toMatch(/preview has ended/)
+    } finally {
+      s1Open = true
+    }
+    // The same session open again gets a new address; the old one stays ended.
+    expect((await get(`${base}site/index.html`)).statusCode).toBe(404)
+    const again = (
+      await app.inject({ method: "POST", url: "/api/files/preview", payload: { session: "s1" } })
+    ).json()
+    expect(again.base).not.toBe(base)
   })
 
   it("reveals a file in Explorer, inside the folder only", async () => {

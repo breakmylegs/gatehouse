@@ -1,4 +1,5 @@
 import type { Route } from "../store"
+import { applyLayout, LAYOUTS } from "./layouts"
 
 /**
  * Everything the palette (Ctrl+K) can do, in one list, so a menu and the palette cannot drift apart (owner's plan,
@@ -42,8 +43,13 @@ export const PAGES: Array<{ route: Route; label: string; keywords?: string }> = 
   { route: "dashboard", label: "Dashboard", keywords: "overview today" },
   { route: "approvals", label: "Approvals", keywords: "needs you waiting requests" },
   { route: "sessions", label: "New session", keywords: "start earlier resume" },
-  { route: "sessions", label: "All sessions", keywords: "list board earlier resume" },
-  { route: "chat", label: "New chat", keywords: "talk conversation" },
+  { route: "sessions", label: "All sessions", keywords: "list earlier resume" },
+  { route: "board", label: "Board", keywords: "task board cards kanban columns" },
+  {
+    route: "chat",
+    label: "Ask about code",
+    keywords: "new question chat talk conversation session btw",
+  },
   { route: "workspace", label: "Workspace", keywords: "session conversation panes" },
   { route: "policy", label: "What Claude may do", keywords: "policy rules choices" },
   { route: "audit", label: "Audit log", keywords: "history decisions record" },
@@ -162,6 +168,14 @@ export function buildCommands(c: CommandContext): AppCommand[] {
       keywords: "sidebar list",
       run: () => c.fire("codeh:hide-ended"),
     },
+    // U8: four layouts in one step.
+    ...LAYOUTS.map((l) => ({
+      id: `layout:${l.id}`,
+      label: l.label,
+      group: "Actions" as const,
+      keywords: `layout arrange panes ${l.keywords}`,
+      run: () => applyLayout(l.id),
+    })),
   ]
   return [...pages, ...actions]
 }

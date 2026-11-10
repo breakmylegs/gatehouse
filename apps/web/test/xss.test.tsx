@@ -60,6 +60,26 @@ describe("threat: markup in text shown to the user", () => {
     expect(container.textContent).toContain(payload)
   })
 
+  it("a review's findings block becomes the review card, its words still plain text (G16)", () => {
+    const block = JSON.stringify([
+      { file: "src/a.ts", line: 2, severity: "high", summary: HOSTILE[0], detail: HOSTILE[1] },
+    ])
+    const { container, getByRole } = render(
+      <ItemView
+        item={{
+          id: "5",
+          kind: "text",
+          text: `Found one:\n\n\`\`\`codehouse-review\n${block}\n\`\`\``,
+        }}
+        sessionId="s1"
+      />,
+    )
+    expect(getByRole("region", { name: "Review findings" })).toBeTruthy()
+    expect(getByRole("button", { name: `Fix this one: ${HOSTILE[0]}` })).toBeTruthy()
+    expect(container.querySelector("script, img, pre")).toBeNull()
+    expect(container.textContent).toContain("<script>alert(1)</script>")
+  })
+
   it("user text and system lines are text too", () => {
     const { container } = render(
       <>

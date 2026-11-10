@@ -62,6 +62,10 @@ All writers append through `AuditWriter` (the Approver now, the Host as well fro
 - If the log is shorter than `head.json` says, or the last line is not a record, the writer refuses to append and reports an integrity error, rather than extending a damaged log.
 - If a record cannot be written, the caller is told. The Approver turns an allow into an escalation in that case, so an unrecorded allow never happens.
 
+## Exporting
+
+The Audit page's Export saves a zip (`/api/audit/bundle`) holding the month files as they are, a `head.json` for the last record in the zip (made from what was copied, so it always agrees), `VERIFY.txt`, and `verify-audit.ps1`. Unzipped into a folder of its own, it passes `powershell -ExecutionPolicy Bypass -File verify-audit.ps1 -Dir <folder>` (the Windows PowerShell 5.1 built into Windows; `pwsh` works too) and `npm run audit:verify -- <folder>`, and one changed byte fails both. Each export is recorded as `audit_exported`.
+
 ## What this does and does not protect against
 
 It detects accidental damage and edits by anyone who does not also recompute every later hash and `head.json`. It does not stop someone with write access to the whole folder from rebuilding a consistent chain, because the hashes are not keyed. The log is a record for the owner, kept on their own laptop. If that threat matters, copy `head.json` somewhere else from time to time and compare.

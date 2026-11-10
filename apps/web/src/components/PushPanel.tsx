@@ -16,6 +16,10 @@ interface NtfyStatus {
   auth?: "token" | "basic"
   user?: string
   missingSecret?: boolean
+  /** Listening over a live stream, or by asking every few seconds. */
+  mode?: "stream" | "poll"
+  /** The server answered 429 (too many requests): Codehouse listens again at this time. */
+  slowedUntil?: string
 }
 
 const LIMITS = [
@@ -237,8 +241,12 @@ export function PushPanel() {
           </ol>
           <p aria-live="polite" className="sign m-0 text-[14px]">
             {st?.listening
-              ? "Listening for your answers."
-              : "Not listening yet. It retries by itself."}{" "}
+              ? st.mode === "poll"
+                ? "Listening for your answers, by asking the server every few seconds: it, or a proxy in front of it, holds back live updates."
+                : "Listening for your answers."
+              : st?.slowedUntil
+                ? `The server asked Codehouse to slow down (it limits how often one computer may ask), so it listens again at ${new Date(st.slowedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}.`
+                : "Not listening yet. It retries by itself."}{" "}
             Sent {st?.sent ?? 0} request notification{st?.sent === 1 ? "" : "s"} this run.
           </p>
           {sent ? (

@@ -32,6 +32,19 @@ export interface OpenSession {
   instructions?: string
   /** A research chat (W1-10). */
   research?: boolean
+  /** Ask about code: the code session a chat is about. */
+  about?: { id: string; title: string; cwd: string; sdkSessionId?: string }
+}
+
+/** A saved link to a code session, or nothing when it is not one Codehouse understands. */
+function readAbout(v: unknown): OpenSession["about"] {
+  const o = v && typeof v === "object" ? (v as Record<string, unknown>) : undefined
+  const id = str(o?.id)
+  const title = typeof o?.title === "string" ? o.title : undefined
+  const cwd = str(o?.cwd)
+  if (!id || !ID.test(id) || title === undefined || !cwd) return undefined
+  const sdk = str(o?.sdkSessionId)
+  return { id, title, cwd, ...(sdk ? { sdkSessionId: sdk } : {}) }
 }
 
 const MODES = new Set(["default", "plan", "acceptEdits", "auto"])
@@ -83,6 +96,7 @@ function read(e: Record<string, unknown>): OpenSession | undefined {
     ...(str(e.chatProject) ? { chatProject: str(e.chatProject) } : {}),
     ...(str(e.instructions) ? { instructions: str(e.instructions) } : {}),
     ...(e.research === true ? { research: true } : {}),
+    ...(e.kind === "chat" && readAbout(e.about) ? { about: readAbout(e.about) } : {}),
   }
 }
 
@@ -144,6 +158,7 @@ export class OpenSessionsStore {
         ...(info.chatProject ? { chatProject: info.chatProject } : {}),
         ...(info.instructions ? { instructions: info.instructions } : {}),
         ...(info.research ? { research: true } : {}),
+        ...(info.about ? { about: info.about } : {}),
       })
     this.#later()
   }
@@ -224,6 +239,7 @@ export async function restoreOpenSessions(
     ...(o.chatProject ? { chatProject: o.chatProject } : {}),
     ...(o.instructions ? { instructions: o.instructions } : {}),
     ...(o.research ? { research: true } : {}),
+    ...(o.about ? { about: o.about } : {}),
     ...(o.sdkSessionId ? { resume: o.sdkSessionId } : {}),
     restore: {
       id: o.id,

@@ -4,14 +4,18 @@ import {
   exportPublicKey,
   fingerprint,
   generateKeyPair,
+  openJson,
   type Sealed,
 } from "@gatehouse/shared/e2e"
 import {
   newEnvelope,
   openRequest,
+  SESSIONS_AAD,
   signAndSeal,
   type OpenedRequest,
+  type PhoneSessions,
 } from "@gatehouse/shared/phone-protocol"
+import { COMMAND_AAD, PHONE_PROMPT_MAX } from "@gatehouse/shared/relay-protocol"
 import { storage, type DeviceInfo, type KeyMaterial } from "./storage"
 
 /** Everything the phone does that is not drawing. Kept free of React so it can be tested and read on its own. */
@@ -271,6 +275,28 @@ export async function loadPending(session: Session, keys: KeyMaterial): Promise<
   return out
 }
 
+/**
+ * G32: the sessions Codehouse shared with this phone, opened with the phone's own key. None yet (the computer has not
+ * sent them, or the Relay restarted a moment ago) is an empty list, not an error.
+ */
+export async function loadSessions(session: Session, keys: KeyMaterial): Promise<PhoneSessions> {
+  let got: { sealed: Sealed; at: string }
+  try {
+    got = await call<{ sealed: Sealed; at: string }>(
+      "GET",
+      "/api/phone/sessions",
+      undefined,
+      session.token,
+    )
+  } catch (e) {
+    if (e instanceof RelayError && e.status === 404) return { at: "", sessions: [] }
+    throw e
+  }
+  const opened = await openJson<PhoneSessions>(got.sealed, keys.privateKey, SESSIONS_AAD)
+  if (!opened || !Array.isArray(opened.sessions)) throw new Error("The sessions could not be read.")
+  return opened
+}
+
 // ---- answering ----
 
 const ttl = { decision: 5 * 60_000, kill: 60_000 }
@@ -333,6 +359,50 @@ export async function kill(session: Session, device: DeviceInfo): Promise<void> 
     ttlMs: ttl.kill,
   })
   const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, "kill")
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
+/**
+ * G32 (invariant 11 as amended 30 Oct): a message to an open session, or Interrupt, signed with this phone's passkey
+ * (Face ID) over the whole envelope and sealed to the computer's key, so the Relay sees neither the session nor the
+ * words. Codehouse checks the signature, records it, and only then sends it on.
+ */
+export async function sendToSession(
+  session: Session,
+  device: DeviceInfo,
+  what: { sessionId: string; text: string } | { sessionId: string; interrupt: true },
+): Promise<void> {
+  const text = "text" in what ? what.text.trim().slice(0, PHONE_PROMPT_MAX) : undefined
+  if (text !== undefined && !text) throw new Error("Write a message first.")
+  const envelope = newEnvelope({
+    type: text !== undefined ? "prompt" : "interrupt",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    sessionId: what.sessionId,
+    ...(text !== undefined ? { text } : {}),
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
+/**
+ * G32 (B35's safe variant): starts one of the routines you allowed for the phone on the computer, by its id only,
+ * signed with Face ID. The folder and the instructions stay on the computer.
+ */
+export async function startTemplate(
+  session: Session,
+  device: DeviceInfo,
+  templateId: string,
+): Promise<void> {
+  const envelope = newEnvelope({
+    type: "start",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    templateId,
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
   await call("POST", "/api/phone/envelopes", { sealed }, session.token)
 }
 

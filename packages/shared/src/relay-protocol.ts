@@ -86,6 +86,15 @@ export const DeviceRequest = z.object({
   pushSealed: SealedSchema.optional(),
 })
 
+/**
+ * G32 (O18): the Host's sessions as the phone may see them, sealed to the phone's key, replaced each time. The Relay
+ * keeps only the latest, in memory: ciphertext it cannot read, gone when it restarts, sent again by the Host.
+ */
+export const DeviceSessions = z.object({
+  phoneId: z.string().min(1).max(100),
+  sealed: SealedSchema,
+})
+
 export const DeviceNotify = z.object({
   phoneId: z.string().min(1).max(100),
   sealed: SealedSchema,
@@ -104,12 +113,23 @@ export const SessionLogin = z.object({
   assertion: z.record(z.string(), z.unknown()),
 })
 
+/** G32: the longest message the phone may send to a session. */
+export const PHONE_PROMPT_MAX = 4000
+
+/** G32: the additional data a prompt or interrupt from the phone is sealed with (a request's id seals a decision). */
+export const COMMAND_AAD = "command"
+
 /** What a phone decision looks like once the Host has opened the sealed payload. */
 export const SignedDecision = z.object({
   envelope: z.object({
     v: z.literal(1),
-    type: z.enum(["decision", "answer", "kill"]),
+    /** G32 (owner 30 Oct): prompt and interrupt reach an open session; signed like a decision, never tied to one. */
+    type: z.enum(["decision", "answer", "kill", "prompt", "interrupt", "start"]),
     requestId: z.string().optional(),
+    sessionId: z.string().min(1).max(100).optional(),
+    /** G32: start names a routine you allowed for the phone; never a folder or free instructions. */
+    templateId: z.string().min(1).max(100).optional(),
+    text: z.string().min(1).max(PHONE_PROMPT_MAX).optional(),
     nonce: z.string().min(8).max(200),
     decision: z.enum(["allow", "deny"]).optional(),
     message: z.string().max(500).optional(),
@@ -150,6 +170,9 @@ export const PhonePayload = z.object({
     segments: z
       .array(z.object({ text: z.string(), ruleId: z.string(), outcome: z.string() }))
       .optional(),
+    /** D-013: what the shell call would also run, and what of it cannot be read. */
+    expanded: z.array(z.object({ from: z.string(), line: z.string() })).optional(),
+    unknownEffects: z.array(z.string()).optional(),
   }),
   createdAt: z.string(),
   expiresAt: z.string(),

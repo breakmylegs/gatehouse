@@ -62,6 +62,25 @@ describe("the request in the workspace", () => {
     fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true })
     expect(sent).toEqual([])
     fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "q1" }]))
+    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "q1", opened: false, shownMs: expect.any(Number) }]))
+  })
+})
+
+describe("a row of the queue (backlog U4)", () => {
+  it("never allows a Severe request in one click: Read it first opens the card, and Deny still works", async () => {
+    const opened = vi.fn()
+    render(<QuickDecision view={view(91)} variant="row" onMore={opened} />)
+    expect(screen.queryByRole("button", { name: /Allow once/ })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Read it first" }))
+    expect(opened).toHaveBeenCalled()
+    expect(sent).toEqual([])
+    fireEvent.click(screen.getByRole("button", { name: /Deny/ }))
+    await waitFor(() => expect(sent).toEqual([{ type: "deny", requestId: "q1" }]))
+  })
+
+  it("keeps one-click Allow below Severe", () => {
+    render(<QuickDecision view={view(80)} variant="row" />)
+    expect(screen.getByRole("button", { name: /Allow once/ })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Read it first" })).toBeNull()
   })
 })

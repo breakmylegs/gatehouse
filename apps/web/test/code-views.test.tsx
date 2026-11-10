@@ -139,6 +139,64 @@ describe("undoing one change in a file (B12)", () => {
     })
   })
 
+  it("says which decision allowed each change, and sends comments on several together to the prompt box (G13)", async () => {
+    versions = { ok: true, data: { before: "a\nb\nc\nd\n", after: "a\nBeta\nc\nd\ne\n" } }
+    const { useStore } = await import("../src/store")
+    useStore.setState({
+      transcripts: {
+        s1: {
+          items: [
+            {
+              kind: "tool",
+              toolUseId: "e1",
+              name: "Edit",
+              input: { file_path: "C:\\dev\\shop\\a.txt", old_string: "b", new_string: "Beta" },
+            },
+          ],
+          todos: [],
+          seq: 0,
+        },
+      },
+      decisions: {
+        e1: {
+          outcome: "allow",
+          decidedBy: "rules",
+          ruleId: "edit-in-project",
+          reason: "An edit inside the project.",
+          risk: 10,
+          at: 1,
+        },
+      },
+    } as never)
+    const composed: string[] = []
+    const listen = (e: Event) => composed.push((e as CustomEvent<{ text: string }>).detail.text)
+    window.addEventListener("codeh:compose", listen)
+    render(<ChangesPane sessionId="s1" cwd="C:\dev\shop" />)
+    fireEvent.click(await screen.findByRole("button", { name: /a\.txt/ }))
+    const list = await screen.findByRole("region", { name: "Changes in a.txt" })
+    expect(list.textContent).toContain("Edit: Allowed by your rules: An edit inside the project.")
+    expect(list.textContent).toContain("Not from an edit Claude made in this session")
+    fireEvent.click(screen.getByRole("button", { name: "Comment on: Changed line 2 (was 1 line)" }))
+    fireEvent.change(screen.getByRole("textbox", { name: /Your comment on: Changed line 2/ }), {
+      target: { value: "Spell it out." },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Done" }))
+    fireEvent.click(screen.getByRole("button", { name: "Comment on: Added 1 line at line 5" }))
+    fireEvent.change(screen.getByRole("textbox", { name: /Your comment on: Added 1 line/ }), {
+      target: { value: "Why this line?" },
+    })
+    expect(composed).toEqual([])
+    fireEvent.click(screen.getByRole("button", { name: "Put 2 comments in the prompt box" }))
+    window.removeEventListener("codeh:compose", listen)
+    expect(composed).toHaveLength(1)
+    expect(composed[0]).toContain(
+      "a.txt, Changed line 2 (was 1 line):\n```\nBeta\n```\nSpell it out.",
+    )
+    expect(composed[0]).toContain("a.txt, Added 1 line at line 5:\n```\ne\n```\nWhy this line?")
+    expect(screen.queryByRole("button", { name: /comments? in the prompt box/ })).toBeNull()
+    useStore.setState({ transcripts: {}, decisions: {} } as never)
+  })
+
   it("counts changes the way the Host does, and says what each is", async () => {
     const { changesIn, changeWords } = await import("../src/components/ChangesPane")
     const hunks = changesIn("one\ntwo\nthree\n", "one\nthree\nfour\n")

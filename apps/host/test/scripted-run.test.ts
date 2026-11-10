@@ -67,7 +67,8 @@ describe("calls the Approver decides by itself", () => {
     await done
     expect(r).toMatchObject({ executed: false, blockedBy: "permission", canUseToolCalled: true })
     expect(r?.message).toContain("destructive-shell")
-    expect(r?.message).toContain("Denied by rule destructive-shell")
+    // F2: and what to do instead, so it can take the safer way by itself.
+    expect(r?.message).toContain("git push --force-with-lease")
   })
 
   it("blocks a secrets file in the PreToolUse hook, before canUseTool, and audits it", async () => {

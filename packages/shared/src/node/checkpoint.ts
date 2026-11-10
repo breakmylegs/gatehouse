@@ -49,11 +49,131 @@ function cleanLabel(label: string): string {
   return printable.replace(/\s+/g, " ").trim().slice(0, 200) || "checkpoint"
 }
 
+/**
+ * G27: undo points for a folder that is not in git. Codehouse keeps a git store of its own for it, in its data folder
+ * (never in the folder itself), and every git call on that folder goes there through GIT_DIR and GIT_WORK_TREE. Off
+ * until the Host names the place (`useShadowCheckpoints`).
+ */
+let shadowRoot: string | undefined
+const shadowEnv = new Map<string, NodeJS.ProcessEnv>()
+const keyOf = (dir: string) => path.resolve(dir).toLowerCase()
+const envFor = (cwd: string): NodeJS.ProcessEnv => shadowEnv.get(keyOf(cwd)) ?? {}
+
+export function useShadowCheckpoints(dir: string | undefined): void {
+  shadowRoot = dir
+  shadowEnv.clear()
+}
+
+/** The most files a folder outside git may hold for Codehouse to keep undo points for it. */
+export const SHADOW_MAX_FILES = 20_000
+/** Never kept: what is rebuilt from elsewhere, and is often huge. */
+const SHADOW_IGNORES = [
+  "node_modules/",
+  ".venv/",
+  "venv/",
+  "__pycache__/",
+  ".next/",
+  ".turbo/",
+  "dist/",
+  "build/",
+  "out/",
+  "target/",
+  "bin/",
+  "obj/",
+  "coverage/",
+  ".git/",
+]
+
+/** The links and junctions under a folder (never followed), and how many files it holds, stopping past the cap. */
+function scanFolder(top: string): { links: string[]; files: number } {
+  const links: string[] = []
+  let files = 0
+  const skip = new Set(SHADOW_IGNORES.map((s) => s.replace(/\/$/, "")))
+  const walk = (dir: string) => {
+    if (files > SHADOW_MAX_FILES) return
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      const full = path.join(dir, e.name)
+      if (e.isSymbolicLink()) {
+        links.push(path.relative(top, full).split(path.sep).join("/"))
+        continue
+      }
+      if (e.isDirectory()) {
+        if (!skip.has(e.name)) walk(full)
+      } else if (++files > SHADOW_MAX_FILES) return
+    }
+  }
+  walk(top)
+  return { links, files }
+}
+
+/** A folder too broad to keep undo points for: a drive's root, your profile folder or above it, or Windows itself. */
+function tooBroad(top: string): boolean {
+  const t = keyOf(top)
+  const home = keyOf(os.homedir())
+  return (
+    path.parse(top).root.toLowerCase() === t ||
+    home === t ||
+    home.startsWith(t.endsWith(path.sep) ? t : t + path.sep) ||
+    t.startsWith(keyOf(process.env.SystemRoot ?? "C:\\Windows"))
+  )
+}
+
+/**
+ * The folder's own store, opened (and, to write, made) in the data folder. Reading never makes one: a folder with no
+ * undo points yet has none. Making one refuses a folder too broad or too big, sets the store to keep bytes as they
+ * are (no line-ending changes), and leaves out the heavy folders and every link or junction.
+ */
+async function shadowTop(cwd: string, forWrite: boolean): Promise<string> {
+  if (!shadowRoot) throw new CheckpointError("Not a git repository")
+  let top: string
+  try {
+    top = fs.realpathSync.native(cwd)
+  } catch {
+    throw new CheckpointError("The folder is not there")
+  }
+  const dir = path.join(
+    shadowRoot,
+    crypto.createHash("sha256").update(keyOf(top)).digest("hex").slice(0, 16),
+  )
+  const env = { GIT_DIR: dir, GIT_WORK_TREE: top }
+  const made = fs.existsSync(path.join(dir, "HEAD"))
+  if (!made && !forWrite) throw new CheckpointError("This folder has no undo points yet")
+  if (forWrite) {
+    if (tooBroad(top))
+      throw new CheckpointError("This folder is too broad for Codehouse to keep undo points for it")
+    const { links, files } = scanFolder(top)
+    if (files > SHADOW_MAX_FILES)
+      throw new CheckpointError(
+        `This folder holds over ${SHADOW_MAX_FILES.toLocaleString("en-GB")} files, too many to keep undo points for outside git`,
+      )
+    if (!made) {
+      fs.mkdirSync(dir, { recursive: true })
+      await git(top, ["init", "--quiet"], env)
+      await git(top, ["config", "core.autocrlf", "false"], env)
+      await git(top, ["config", "core.safecrlf", "false"], env)
+      fs.writeFileSync(path.join(dir, "codehouse-folder.txt"), `${top}\n`)
+    }
+    fs.mkdirSync(path.join(dir, "info"), { recursive: true })
+    fs.writeFileSync(
+      path.join(dir, "info", "exclude"),
+      [...SHADOW_IGNORES, ...links.map((l) => `/${l}`)].join("\n") + "\n",
+    )
+  }
+  shadowEnv.set(keyOf(top), env)
+  return top
+}
+
 async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}): Promise<string> {
   try {
     const { stdout } = await run("git", args, {
       cwd,
-      env: { ...process.env, ...GIT_IDENTITY, ...env },
+      env: { ...process.env, ...GIT_IDENTITY, ...envFor(cwd), ...env },
       maxBuffer: 64 * 1024 * 1024,
       windowsHide: true,
     })
@@ -71,7 +191,7 @@ async function gitRaw(cwd: string, args: string[], env: NodeJS.ProcessEnv = {}):
   try {
     const { stdout } = await run("git", args, {
       cwd,
-      env: { ...process.env, ...GIT_IDENTITY, ...env },
+      env: { ...process.env, ...GIT_IDENTITY, ...envFor(cwd), ...env },
       maxBuffer: 64 * 1024 * 1024,
       windowsHide: true,
     })
@@ -88,8 +208,18 @@ function stamp(d: Date): string {
   return d.toISOString().replace(/[-:]/g, "").replace(".", "")
 }
 
-async function repoTop(cwd: string): Promise<string> {
-  return git(cwd, ["rev-parse", "--show-toplevel"])
+/**
+ * The top of the repository the folder is in, or (G27) the folder itself when it is in no repository and Codehouse
+ * keeps undo points for it. `forWrite` is set only when a checkpoint is being made.
+ */
+async function repoTop(cwd: string, forWrite = false): Promise<string> {
+  if (shadowEnv.has(keyOf(cwd)) && !forWrite) return path.resolve(cwd)
+  try {
+    if (!shadowEnv.has(keyOf(cwd))) return await git(cwd, ["rev-parse", "--show-toplevel"])
+  } catch (e) {
+    if (!shadowRoot) throw e
+  }
+  return shadowTop(cwd, forWrite)
 }
 
 async function headOf(top: string): Promise<string | undefined> {
@@ -132,7 +262,7 @@ async function snapshotTree(
 export async function createCheckpoint(opts: CheckpointOptions): Promise<Checkpoint> {
   const now = (opts.now ?? (() => new Date()))()
   const label = cleanLabel(opts.label)
-  const top = await repoTop(opts.cwd)
+  const top = await repoTop(opts.cwd, true)
   const base = await headOf(top)
   const tree = await snapshotTree(top, base, opts.excludeGlobs)
   const commit = await git(top, [

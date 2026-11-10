@@ -1,4 +1,6 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { SessionDetails } from "../components/SessionDetails"
+import { CounterexampleCards } from "../components/CounterexampleCards"
 import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
@@ -40,6 +42,16 @@ import { carryOnFrom } from "../lib/redo"
 import { findIn } from "../lib/find"
 import { FindBar } from "../components/FindBar"
 import { RecapCard } from "../components/RecapCard"
+import { SideAnswerCard } from "../components/SideAnswer"
+import { askSideQuestion } from "../lib/btw"
+import { COMPOSE_EVENT, composeIn } from "../lib/compose"
+import { chooseMention, mentionAt, writeRanges } from "../lib/mentions"
+import {
+  LOCAL_PAGE,
+  OpenLocalPage,
+  readViewerPrefs,
+  useOpenWhatClaudeWrites,
+} from "../lib/viewerPrefs"
 import { useNow } from "../lib/useNow"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
@@ -49,6 +61,11 @@ import { PlanMeter } from "../components/PlanMeter"
 import { MODELS, StartProgress } from "./Sessions"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
+import { MoreLines, shownLines } from "../components/MoreLines"
+import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
+import { Walkthrough } from "../components/Walkthrough"
+import { SearchPane } from "../components/SearchPane"
+import { GitPane } from "../components/GitPane"
 import { PictureViewer } from "../components/PictureViewer"
 import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
@@ -110,6 +127,11 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/extreme", help: "Turn Extreme approval on or off for this session" },
   { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
+  { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
+  {
+    cmd: "/tell",
+    help: "Send a message to another session by its code, e.g. /tell GT 407 run the tests",
+  },
   { cmd: "/stop", help: "Stop the turn and anything in the background" },
   { cmd: "/close", help: "End this session" },
 ]
@@ -240,25 +262,41 @@ const STATE_WORDS: Record<SessionInfo["state"], string> = {
   ended: "Ended",
 }
 
-type Side = "plan" | "files" | "changes" | "terminal" | "artifacts" | "sources" | "memory"
+type Side =
+  | "plan"
+  | "files"
+  | "search"
+  | "changes"
+  | "git"
+  | "terminal"
+  | "artifacts"
+  | "sources"
+  | "memory"
+  | "details"
 /** Each side panel's icon from the Codehouse pack. */
 const SIDE_ICON: Record<Side, IconName> = {
   plan: "plan",
   files: "files",
+  search: "search",
   changes: "changes",
+  git: "checkpoint",
   terminal: "terminal",
   artifacts: "artifacts",
   sources: "sources",
   memory: "memory",
+  details: "usage",
 }
 const SIDE_LABEL: Record<Side, string> = {
   plan: "Plan",
   files: "Files",
+  search: "Search",
   changes: "Changes",
+  git: "Git",
   terminal: "Terminal",
   artifacts: "Artifacts",
   sources: "Sources",
   memory: "Memory",
+  details: "Details",
 }
 
 function SessionPane({
@@ -304,6 +342,9 @@ function SessionPane({
   }
   const [renaming, setRenaming] = useState(false)
   const [goalOpen, setGoalOpen] = useState(false)
+  const [bypassOpen, setBypassOpen] = useState(false)
+  // G31: the evidence for this session's work, above its transcript.
+  const [walkthrough, setWalkthrough] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -327,6 +368,22 @@ function SessionPane({
   useEffect(() => {
     if (opened?.kind === "browser") setLastUrl(opened.url)
   }, [opened])
+  // Settings, Viewer: a page or picture Claude writes opens in the viewer by itself, and a link to a page on this
+  // computer opens there (kept in this window, read at each use).
+  const cwd = session?.cwd
+  const openWritten = useCallback(
+    (file: string) => {
+      if (cwd) setOpened({ kind: "file", rel: relInside(cwd, file) ?? file })
+    },
+    [cwd],
+  )
+  useOpenWhatClaudeWrites(
+    selected,
+    selected ? transcript.items : undefined,
+    openWritten,
+    readViewerPrefs().autoOpen,
+  )
+  const openLocalPage = useCallback((url: string) => setOpened({ kind: "browser", url }), [])
 
   // Runs of tool calls read as one line each, opened on demand.
   // Calls refused or waiting on you stay in Summary (W1-12).
@@ -478,6 +535,10 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
+    // Owner, 9 Nov: past the limits in Settings only by a bypass for this session, with a time or a most it may spend.
+    session.bypass
+      ? { label: "End the limit bypass", onSelect: () => void setBypass(session.id, null) }
+      : { label: "Bypass the limits...", onSelect: () => setBypassOpen(true) },
     // B25: carry on until a check passes, while Extreme approval carries on.
     ...(chat
       ? []
@@ -507,6 +568,7 @@ function SessionPane({
           ...(session.sdkSessionId ? { sdkSessionId: session.sdkSessionId } : {}),
         }),
     },
+    ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
     { kind: "separator" },
     {
       label: "Larger text",
@@ -556,6 +618,7 @@ function SessionPane({
       data-viewer={opened ? "" : undefined}
       aria-label={`Session ${session.project}`}
     >
+      {/* O21: what this session runs on, its context, connectors, changes and background work. */}
       <header className="pane-head">
         <SessionCode session={session} className="!text-[16px]" />
         {/* Never narrower than the name and its state: the side panel buttons wrap below instead. */}
@@ -587,6 +650,12 @@ function SessionPane({
                 {session.localLabel ?? "On this computer"} · {session.model}
               </span>
               A chat in Plan mode: it reads files, and never changes them or searches the web
+            </span>
+          ) : chat && session.about ? (
+            // Ask about code (owner, 6 Nov): which session it is about, and that it changes nothing.
+            <span className="truncate text-xs text-mut">
+              About the code session {session.about.title}: Claude reads its files and what was said
+              in it, and never changes anything
             </span>
           ) : chat ? (
             <span className="truncate text-xs text-mut">
@@ -640,10 +709,23 @@ function SessionPane({
               <Icon name="memory" size={14} />
               Memory
             </button>
+            <button
+              ref={(el) => {
+                tools.current.details = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === "details"}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide("details")}
+            >
+              <Icon name="usage" size={14} />
+              Details
+            </button>
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
-            {(["plan", "files", "changes", "terminal"] as const).map((t) => (
+            {(["plan", "files", "search", "changes", "git", "terminal"] as const).map((t) => (
               <button
                 key={t}
                 ref={(el) => {
@@ -671,9 +753,27 @@ function SessionPane({
             >
               Browser
             </button>
+            <button
+              ref={(el) => {
+                tools.current.details = el
+              }}
+              type="button"
+              className="pane-tool"
+              aria-pressed={side === "details"}
+              aria-controls={`rail-${session.id}`}
+              onClick={() => toggleSide("details")}
+            >
+              <Icon name="usage" size={14} />
+              Details
+            </button>
           </span>
         )}
       </header>
+      {walkthrough ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Walkthrough sessionId={session.id} onClose={() => setWalkthrough(false)} />
+        </div>
+      ) : null}
       {goalOpen ? (
         <GoalDialog
           current={session.goal}
@@ -705,121 +805,124 @@ function SessionPane({
 
       <div className="pane-body min-h-0">
         <DetailView.Provider value={view.detail}>
-          <section
-            aria-label="Transcript"
-            className="pane-transcript relative min-h-0"
-            onKeyDown={(e) => {
-              if (e.ctrlKey && e.shiftKey && e.key === "End") {
-                e.preventDefault()
-                toLatest()
-              }
-            }}
-          >
-            <RecapCard sessionId={session.id} />
-            {finding ? (
-              <FindBar
-                query={findQuery}
-                count={hits.length}
-                at={Math.min(findAt, Math.max(0, hits.length - 1))}
-                onQuery={(q) => {
-                  setFindQuery(q)
-                  setFindAt(0)
-                }}
-                onStep={stepFind}
-                onClose={closeFind}
-              />
-            ) : null}
-            <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
-              {(() => {
-                // One message as drawn in either list.
-                const itemAt = (index: number, it: (typeof shownItems)[number]) => (
-                  <div
-                    className={clsx(
-                      "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
-                      hitSet.has(index) && "find-hit",
-                      index === current && "find-current",
-                    )}
-                  >
-                    {it.kind === "group" ? (
-                      <ToolGroup
-                        tools={it.tools}
-                        onOpenArtifact={openArtifacts}
-                        onOpenFile={(file) => {
-                          // A file outside the folder opens by its full path; the Host lets the pane read it only if
-                          // this session wrote or edited it (owner, 4 Nov).
-                          setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
-                        }}
-                      />
-                    ) : (
-                      <ItemView item={it} sessionId={session.id} />
-                    )}
-                  </div>
-                )
-                return screenReader ? (
-                  // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
-                  <ol
-                    className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
-                    aria-label="Conversation"
-                  >
-                    {shownItems.length === 0 ? (
-                      <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
-                        Nothing yet. Write a prompt below to start the work.
-                      </li>
-                    ) : null}
-                    {shownItems.map((it, index) => (
-                      <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
-                    ))}
-                  </ol>
-                ) : (
-                  <Virtuoso
-                    ref={scroller}
-                    style={{ height: "100%" }}
-                    data={shownItems}
-                    followOutput="smooth"
-                    atBottomThreshold={80}
-                    atBottomStateChange={(b) => {
-                      following.current = b
-                      setAtEnd(b)
-                    }}
-                    // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
-                    // unless you have scrolled up to read.
-                    totalListHeightChanged={() => {
-                      if (following.current) toLatest()
-                    }}
-                    initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
-                    computeItemKey={(_, it) => `${view.detail}:${it.id}`}
-                    itemContent={itemAt}
-                    components={{
-                      EmptyPlaceholder: () => (
-                        <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+          <OpenLocalPage.Provider value={openLocalPage}>
+            <section
+              aria-label="Transcript"
+              className="pane-transcript relative min-h-0"
+              onKeyDown={(e) => {
+                if (e.ctrlKey && e.shiftKey && e.key === "End") {
+                  e.preventDefault()
+                  toLatest()
+                }
+              }}
+            >
+              <RecapCard sessionId={session.id} />
+              <SideAnswerCard sessionId={session.id} />
+              {finding ? (
+                <FindBar
+                  query={findQuery}
+                  count={hits.length}
+                  at={Math.min(findAt, Math.max(0, hits.length - 1))}
+                  onQuery={(q) => {
+                    setFindQuery(q)
+                    setFindAt(0)
+                  }}
+                  onStep={stepFind}
+                  onClose={closeFind}
+                />
+              ) : null}
+              <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
+                {(() => {
+                  // One message as drawn in either list.
+                  const itemAt = (index: number, it: (typeof shownItems)[number]) => (
+                    <div
+                      className={clsx(
+                        "pane-item mx-auto max-w-[var(--transcript-width,860px)]",
+                        hitSet.has(index) && "find-hit",
+                        index === current && "find-current",
+                      )}
+                    >
+                      {it.kind === "group" ? (
+                        <ToolGroup
+                          tools={it.tools}
+                          onOpenArtifact={openArtifacts}
+                          onOpenFile={(file) => {
+                            // A file outside the folder opens by its full path; the Host lets the pane read it only if
+                            // this session wrote or edited it (owner, 4 Nov).
+                            setOpened({ kind: "file", rel: relInside(session.cwd, file) ?? file })
+                          }}
+                        />
+                      ) : (
+                        <ItemView item={it} sessionId={session.id} />
+                      )}
+                    </div>
+                  )
+                  return screenReader ? (
+                    // Screen reader mode (B40): every message in order, in one plain list a screen reader can move through.
+                    <ol
+                      className="pane-linear m-0 h-full list-none overflow-y-auto p-0"
+                      aria-label="Conversation"
+                    >
+                      {shownItems.length === 0 ? (
+                        <li className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
                           Nothing yet. Write a prompt below to start the work.
-                        </p>
-                      ),
-                    }}
-                  />
-                )
-              })()}
-            </BranchSteps.Provider>
-            {atEnd || shownItems.length === 0 ? null : (
-              <button
-                type="button"
-                className="jump-latest"
-                aria-label="Jump to latest"
-                onClick={() => toLatest(true)}
-              >
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                  <path
-                    d="M8 2.5v10M3.5 8.5 8 13l4.5-4.5"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            )}
-          </section>
+                        </li>
+                      ) : null}
+                      {shownItems.map((it, index) => (
+                        <li key={`${view.detail}:${it.id}`}>{itemAt(index, it)}</li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <Virtuoso
+                      ref={scroller}
+                      style={{ height: "100%" }}
+                      data={shownItems}
+                      followOutput="smooth"
+                      atBottomThreshold={80}
+                      atBottomStateChange={(b) => {
+                        following.current = b
+                        setAtEnd(b)
+                      }}
+                      // A message that grows once shown (a picture loading, a tool line opened) keeps the end in view too,
+                      // unless you have scrolled up to read.
+                      totalListHeightChanged={() => {
+                        if (following.current) toLatest()
+                      }}
+                      initialTopMostItemIndex={Math.max(0, shownItems.length - 1)}
+                      computeItemKey={(_, it) => `${view.detail}:${it.id}`}
+                      itemContent={itemAt}
+                      components={{
+                        EmptyPlaceholder: () => (
+                          <p className="mx-auto max-w-[var(--transcript-width,860px)] p-6 text-mut">
+                            Nothing yet. Write a prompt below to start the work.
+                          </p>
+                        ),
+                      }}
+                    />
+                  )
+                })()}
+              </BranchSteps.Provider>
+              {atEnd || shownItems.length === 0 ? null : (
+                <button
+                  type="button"
+                  className="jump-latest"
+                  aria-label="Jump to latest"
+                  onClick={() => toLatest(true)}
+                >
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <path
+                      d="M8 2.5v10M3.5 8.5 8 13l4.5-4.5"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              )}
+            </section>
+          </OpenLocalPage.Provider>
         </DetailView.Provider>
         {opened ? (
           <Viewer
@@ -853,7 +956,13 @@ function SessionPane({
               side === "terminal" ? "overflow-hidden" : "overflow-auto",
             )}
           >
-            {side === "artifacts" ? (
+            {side === "details" ? (
+              <SessionDetails
+                session={session}
+                chat={chat}
+                onOpenChanges={chat ? undefined : () => toggleSide("changes")}
+              />
+            ) : side === "artifacts" ? (
               <ArtifactsPane sessionId={session.id} refresh={artifactSaves} />
             ) : side === "sources" ? (
               <SourcesPane items={transcript.items} />
@@ -863,6 +972,10 @@ function SessionPane({
               <TerminalPane sessionId={session.id} cwd={session.cwd} />
             ) : side === "changes" ? (
               <ChangesPane sessionId={session.id} cwd={session.cwd} />
+            ) : side === "search" ? (
+              <SearchPane sessionId={session.id} onOpen={setOpened} />
+            ) : side === "git" ? (
+              <GitPane sessionId={session.id} onOpen={setOpened} />
             ) : side === "files" ? (
               <FilesPanel
                 sessionId={session.id}
@@ -885,6 +998,19 @@ function SessionPane({
         {session.state === "error" ? <StoppedLine session={session} /> : null}
         {session.state === "starting" ? <ComingBack session={session} /> : null}
         {session.paused ? <PausedLine session={session} paused={session.paused} /> : null}
+        {!session.paused && session.bypass ? <BypassLine session={session} /> : null}
+        <CounterexampleCards session={session} />
+        {!session.paused && !session.bypass && bypassOpen ? (
+          <div className="pane-stopped">
+            <BypassForm session={session} onClose={() => setBypassOpen(false)} />
+          </div>
+        ) : null}
+        {session.forkOf ? (
+          // CH-07: carried on from an imported claude.ai chat, and not synced back.
+          <p role="note" className="m-0 mb-1 text-[12.5px] text-mut">
+            Continued in Codehouse. Not synced to claude.ai.
+          </p>
+        ) : null}
         {pending[0] ? (
           <SessionRequest
             view={pending[0]}
@@ -1351,9 +1477,138 @@ function StoppedLine({ session }: { session: SessionInfo }) {
   )
 }
 
+/** Owner, 9 Nov: how long a bypass of the limits may last, in minutes, and how much it may spend, in dollars. */
+export const BYPASS_MINUTES = [30, 60, 180, 480, 1440] as const
+export const BYPASS_USD = [5, 10, 25, 50, 100] as const
+
+const minutesLabel = (m: number) =>
+  m < 60 ? `${m} minutes` : m === 60 ? "1 hour" : `${m / 60} hours`
+
+function setBypass(
+  sessionId: string,
+  b: { minutes?: number; maxUsd?: number } | null,
+): Promise<boolean> {
+  return send(
+    b === null
+      ? { type: "set_limit_bypass", sessionId, end: true }
+      : { type: "set_limit_bypass", sessionId, ...b },
+  ).then((r) => {
+    if (!r.ok) toast.error(r.error?.message ?? "The bypass could not be changed")
+    else
+      toast(b === null ? "The limits in Settings apply to this session again" : "Bypass set", {
+        id: "bypass",
+      })
+    return r.ok
+  })
+}
+
 /**
- * A session Codehouse paused at the plan's 5-hour limit (owner, 31 Oct): why, when it starts again by itself, and a
- * way to start it now.
+ * Owner, 9 Nov: going past the limits in Settings, for this session only, with a time, a most it may spend, or both.
+ * Whichever runs out first ends it, and the session pauses again until you set another.
+ */
+function BypassForm({ session, onClose }: { session: SessionInfo; onClose?: () => void }) {
+  const [minutes, setMinutes] = useState("")
+  const [usd, setUsd] = useState("")
+  const [busy, setBusy] = useState(false)
+  const maxUsd = usd.trim() ? Number(usd) : undefined
+  const usdBad = maxUsd !== undefined && !(Number.isFinite(maxUsd) && maxUsd > 0 && maxUsd <= 1000)
+  const ready = (minutes !== "" || maxUsd !== undefined) && !usdBad
+  return (
+    <div className="grid gap-1.5" role="group" aria-label="Bypass the limits for this session">
+      <span className="text-[13px]">
+        Keep going past the limits in Settings, for this session only. Give it a time, a most it
+        may spend, or both; when either runs out it pauses again.
+      </span>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-0.5 text-[13px]">
+          <span>For</span>
+          <select
+            className="field !min-h-7 !py-0"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+          >
+            <option value="">No time limit</option>
+            {BYPASS_MINUTES.map((m) => (
+              <option key={m} value={m}>
+                {minutesLabel(m)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-0.5 text-[13px]">
+          <span>Spending at most, in $</span>
+          <input
+            className="field !min-h-7 w-28 !py-0"
+            inputMode="decimal"
+            list={`bypass-usd-${session.id}`}
+            placeholder="No limit"
+            value={usd}
+            aria-invalid={usdBad || undefined}
+            onChange={(e) => setUsd(e.target.value)}
+          />
+          <datalist id={`bypass-usd-${session.id}`}>
+            {BYPASS_USD.map((n) => (
+              <option key={n} value={n} />
+            ))}
+          </datalist>
+        </label>
+        <button
+          type="button"
+          className="btn btn-primary !min-h-7"
+          disabled={!ready || busy}
+          onClick={() => {
+            setBusy(true)
+            void setBypass(session.id, {
+              ...(minutes ? { minutes: Number(minutes) } : {}),
+              ...(maxUsd !== undefined ? { maxUsd } : {}),
+            }).then((ok) => {
+              setBusy(false)
+              if (ok) onClose?.()
+            })
+          }}
+        >
+          {busy ? "Setting" : "Keep going"}
+        </button>
+        {onClose ? (
+          <button type="button" className="btn !min-h-7" onClick={onClose}>
+            Cancel
+          </button>
+        ) : null}
+      </div>
+      {usdBad ? (
+        <span className="text-[13px] text-sev">Give an amount above $0 and at most $1,000.</span>
+      ) : !ready ? (
+        <span className="text-[12.5px] text-mut">Choose a time, an amount, or both.</span>
+      ) : null}
+    </div>
+  )
+}
+
+/** A bypass running: how long it has left and what it may still spend, and a way to end it now. */
+function BypassLine({ session }: { session: SessionInfo }) {
+  const b = session.bypass!
+  const parts = [
+    b.until ? `until ${clock(b.until) || "later today"}` : "",
+    b.maxUsd !== undefined
+      ? `up to $${b.maxUsd.toFixed(2)} of spending ($${b.spentUsd.toFixed(2)} so far)`
+      : "",
+  ].filter(Boolean)
+  return (
+    <div role="status" className="pane-stopped">
+      <span>
+        <strong>Limits bypassed</strong> for this session {parts.join(" or ")}, whichever comes
+        first. Then the limits in Settings apply again and it pauses if they are still over.
+      </span>
+      <button type="button" className="btn !min-h-7" onClick={() => void setBypass(session.id, null)}>
+        End the bypass
+      </button>
+    </div>
+  )
+}
+
+/**
+ * A session Codehouse paused at a limit in Settings (owner, 31 Oct; 9 Nov): why, when it starts again by itself, Start
+ * now for once the limit is no longer over, and a bypass to keep going past it.
  */
 function PausedLine({
   session,
@@ -1364,13 +1619,20 @@ function PausedLine({
 }) {
   const [busy, setBusy] = useState(false)
   return (
-    <div role="status" className="pane-stopped">
-      {paused.reason === "spend" ? (
+    <div role="status" className="pane-stopped flex-wrap">
+      {paused.reason === "risk" ? (
+        // D-018: the session's risk budget is spent.
+        <span>
+          <strong>Paused.</strong> This session's risk budget is spent: Extreme approval approved as much
+          as Settings allows without you. Start it again when you have looked; its budget is then full.
+        </span>
+      ) : paused.reason === "spend" ? (
         // B20: today's spending over every session reached the cap in Settings.
         <span>
-          <strong>Paused.</strong> Today's spending reached the most Settings allows a day, so
-          Codehouse stopped this session{paused.wasRunning ? " part way through a turn" : ""}. It
-          starts again by itself tomorrow, or sooner if you raise the limit in Settings, Sessions.
+          <strong>Paused.</strong> Today's extra spending beyond your plan reached the most Settings
+          allows a day, so Codehouse stopped this session
+          {paused.wasRunning ? " part way through a turn" : ""}. It starts again by itself tomorrow,
+          or sooner if you raise the limit in Settings, Sessions.
         </span>
       ) : (
         <span>
@@ -1395,6 +1657,7 @@ function PausedLine({
       >
         {busy ? "Starting" : "Start now"}
       </button>
+      <BypassForm session={session} />
       {/* B21: or carry a chat on now with a model you allow, no looser with your words than Claude. */}
       <FallbackButton session={session} />
     </div>
@@ -1586,6 +1849,41 @@ function Composer({
     else localStorage.removeItem(draftKey)
   }, [text, draftKey])
   const [active, setActive] = useState(0)
+  // F15: the @ word at the cursor, and the session's files that match it.
+  const [mention, setMention] = useState<{ start: number; query: string }>()
+  const [found, setFound] = useState<string[]>([])
+  const [foundAt, setFoundAt] = useState(0)
+  useEffect(() => {
+    if (!mention) {
+      setFound([])
+      return
+    }
+    let gone = false
+    const t = setTimeout(() => {
+      void api<{ files: string[] }>(
+        "GET",
+        `/api/files/find?session=${encodeURIComponent(sessionId)}&q=${encodeURIComponent(mention.query)}`,
+      ).then((r) => {
+        if (gone) return
+        setFound(r.ok && r.data ? r.data.files : [])
+        setFoundAt(0)
+      })
+    }, 120)
+    return () => {
+      gone = true
+      clearTimeout(t)
+    }
+  }, [mention, sessionId])
+  const pickMention = (rel: string) => {
+    if (!mention) return
+    const next = chooseMention(text, mention, rel)
+    setText(next.text)
+    setMention(undefined)
+    requestAnimationFrame(() => {
+      area.current?.focus()
+      area.current?.setSelectionRange(next.caret, next.caret)
+    })
+  }
   const area = useRef<HTMLTextAreaElement>(null)
   const addUserText = useStore((s) => s.addUserText)
   const meta = useStore((s) => s.meta[sessionId])
@@ -1758,6 +2056,56 @@ function Composer({
         case "/model":
           r = await send({ type: "set_model", sessionId, ...(arg ? { model: arg } : {}) })
           break
+        case "/btw": {
+          // A side question, answered from what was said while the session carries on; never sent to it.
+          if (!arg) {
+            toast("Write your question after /btw, for example /btw how far has it got?", {
+              id: "btw",
+            })
+            return
+          }
+          setText("")
+          void askSideQuestion(
+            sessionId,
+            arg,
+            useStore.getState().transcripts[sessionId]?.items ?? [],
+          )
+          return
+        }
+        case "/tell": {
+          // G18: a message to another open session, by its code, without leaving this one.
+          const m = /^\/tell\s+([A-Za-z]{2,3})\s*(\d{3})\s+([\s\S]+)$/i.exec(t)
+          if (!m) {
+            toast(
+              "Write /tell, a session's code and your message, for example /tell GT 407 run the tests",
+              {
+                id: "tell",
+              },
+            )
+            return
+          }
+          const code = `${m[1]!.toUpperCase()} ${m[2]}`
+          const target = Object.values(useStore.getState().sessions).find(
+            (s) => sessionCode(s) === code && s.state !== "ended" && s.state !== "error",
+          )
+          if (!target || target.id === sessionId) {
+            toast.error(
+              target ? "That is this session: just write here." : `No open session is ${code}.`,
+            )
+            return
+          }
+          r = await send({ type: "tell", from: sessionId, to: target.id, text: m[3]! })
+          if (r.ok) {
+            addUserText(
+              target.id,
+              m[3]!,
+              undefined,
+              target.state === "running" || target.state === "waiting",
+            )
+            toast(`Sent to ${code}`, { id: "tell" })
+          }
+          break
+        }
         case "/stop":
           r = await send({ type: "stop_session", sessionId })
           break
@@ -1806,12 +2154,16 @@ function Composer({
     }
     // What Claude gets: your words, then a reference to each file and picture, which it opens.
     const named = [...files.map((f) => f.rel), ...pastedRels].map((rel) => `@${rel}`).join(" ")
-    const full = [t, named, pictures.map((p) => `@${p.rel}`).join(" ")].filter(Boolean).join("\n\n")
+    // F15: "@file:10-20" written out as "@file (lines 10 to 20)", so Claude reads those lines.
+    const said = writeRanges(t)
+    const full = [said, named, pictures.map((p) => `@${p.rel}`).join(" ")]
+      .filter(Boolean)
+      .join("\n\n")
     // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.
     const st = useStore.getState().sessions[sessionId]?.state
     addUserText(
       sessionId,
-      [t, named].filter(Boolean).join("\n\n"),
+      [said, named].filter(Boolean).join("\n\n"),
       pictures.map((p) => ({ url: p.url, name: p.name })),
       st === "running" || st === "waiting",
     )
@@ -1846,6 +2198,30 @@ function Composer({
               >
                 <span className="mono font-semibold">{c.cmd}</span>
                 <span className="text-mut">{c.help}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {mention && found.length > 0 && matches.length === 0 ? (
+        <ul
+          role="listbox"
+          aria-label="Files"
+          className="panel absolute bottom-full left-0 z-10 mb-1 m-0 w-[460px] max-w-full list-none p-1"
+        >
+          {found.map((rel, i) => (
+            <li key={rel} role="option" aria-selected={i === foundAt}>
+              <button
+                className={clsx(
+                  "mono w-full truncate rounded border-0 bg-transparent px-2 py-1 text-left text-[13px]",
+                  i === foundAt && "bg-s2",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  pickMention(rel)
+                }}
+              >
+                {rel}
               </button>
             </li>
           ))}
@@ -1977,14 +2353,36 @@ function Composer({
           rows={1}
           maxLength={100_000}
           disabled={disabled}
-          title="Enter sends, Shift+Enter adds a line, / for commands"
-          placeholder={disabled ? "This session has ended" : "Write a prompt, or / for commands"}
+          title="Enter sends, Shift+Enter adds a line, / for commands, @ for files"
+          placeholder={
+            disabled ? "This session has ended" : "Write a prompt, / for commands, @ for files"
+          }
           value={text}
           onChange={(e) => {
             setText(e.target.value)
             setActive(0)
+            setMention(mentionAt(e.target.value, e.target.selectionStart ?? e.target.value.length))
           }}
           onKeyDown={(e) => {
+            if (mention && found.length > 0) {
+              if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault()
+                setFoundAt(
+                  (a) => (a + (e.key === "ArrowDown" ? 1 : -1) + found.length) % found.length,
+                )
+                return
+              }
+              if ((e.key === "Enter" && !e.shiftKey) || e.key === "Tab") {
+                e.preventDefault()
+                pickMention(found[foundAt] ?? found[0]!)
+                return
+              }
+            }
+            if (mention && e.key === "Escape") {
+              e.preventDefault()
+              setMention(undefined)
+              return
+            }
             if (matches.length > 0 && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
               e.preventDefault()
               setActive(
@@ -2330,17 +2728,21 @@ function UserMessage({
   )
 }
 
-/** Puts text in a session's prompt box, for Edit on a message you sent: you change it there and send it again. */
-function composeIn(sessionId: string, text: string): void {
-  window.dispatchEvent(new CustomEvent(COMPOSE_EVENT, { detail: { sessionId, text } }))
-}
-const COMPOSE_EVENT = "codeh:compose"
-
-/** A code block with its language and a Copy button, as in the ChatGPT and Claude apps (owner, 1 Nov). */
+/**
+ * A code block with its language and a Copy button, as in the ChatGPT and Claude apps (owner, 1 Nov). A review's
+ * findings block (G16) shows as the review card instead, when it reads as findings.
+ */
 function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
   const pre = useRef<HTMLPreElement>(null)
-  const code = isValidElement<{ className?: string }>(children) ? children : undefined
+  const code = isValidElement<{ className?: string; children?: unknown }>(children)
+    ? children
+    : undefined
   const language = /language-([\w+#.-]+)/.exec(code?.props.className ?? "")?.[1]
+  const findings =
+    language === REVIEW_FENCE && typeof code?.props.children === "string"
+      ? parseFindings(code.props.children)
+      : undefined
+  if (findings) return <ReviewCard findings={findings} />
   return (
     <div className="code-block">
       <div className="code-head">
@@ -2353,7 +2755,29 @@ function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
     </div>
   )
 }
-const MARKDOWN_PARTS = { pre: CodeBlock }
+/**
+ * A link in Claude's words. One to a page on this computer opens in the pane's viewer when Settings, Viewer says so;
+ * every other link goes where it always went (the window sends it to your browser).
+ */
+function TranscriptLink({ href, children, ...rest }: ComponentProps<"a">) {
+  const openHere = useContext(OpenLocalPage)
+  const local = typeof href === "string" && LOCAL_PAGE.test(href)
+  return (
+    <a
+      {...rest}
+      href={href}
+      onClick={(e) => {
+        if (!local || !openHere || !readViewerPrefs().localLinks) return
+        e.preventDefault()
+        openHere(href!)
+      }}
+    >
+      {children}
+    </a>
+  )
+}
+
+const MARKDOWN_PARTS = { pre: CodeBlock, a: TranscriptLink }
 
 /**
  * What Claude said. Copy gives the Markdown to a plain editor and the formatted text to Word or Outlook, as the
@@ -2434,7 +2858,11 @@ export const ItemView = memo(function ItemView({
         </>
       )
     case "text":
-      return <ClaudeText text={item.text} at={item.at} subagent={item.subagent} />
+      return (
+        <ReviewSession.Provider value={sessionId}>
+          <ClaudeText text={item.text} at={item.at} subagent={item.subagent} />
+        </ReviewSession.Provider>
+      )
     case "thinking":
       return (
         <details className="text-mut" open={verbose || undefined}>
@@ -2606,32 +3034,38 @@ function ToolCard({ item }: { item: Extract<Item, { kind: "tool" }> }) {
 
 /** Line diff with +/- markers as well as colour, so it reads in any theme and without colour. */
 function DiffView({ oldText, newText }: { oldText: string; newText: string }) {
-  const parts = useMemo(() => diffLines(oldText, newText), [oldText, newText])
-  return (
-    <pre className="cmd max-h-96 overflow-auto !p-0" aria-label="Changes">
-      {parts.flatMap((p, i) =>
+  const [all, setAll] = useState(false)
+  const lines = useMemo(
+    () =>
+      diffLines(oldText, newText).flatMap((p, i) =>
         p.value
           .replace(/\n$/, "")
           .split("\n")
-          .map((line, j) => (
-            <div
-              key={`${i}-${j}`}
-              className={clsx(
-                "px-3",
-                p.added && "bg-hi font-semibold",
-                p.removed && "text-sev line-through decoration-1",
-              )}
-            >
-              <span aria-hidden="true" className="mr-2 inline-block w-3 select-none">
-                {p.added ? "+" : p.removed ? "-" : " "}
-              </span>
-              <span className="sr-only">
-                {p.added ? "Added: " : p.removed ? "Removed: " : "Unchanged: "}
-              </span>
-              {line}
-            </div>
-          )),
-      )}
+          .map((line, j) => ({ key: `${i}-${j}`, line, added: p.added, removed: p.removed })),
+      ),
+    [oldText, newText],
+  )
+  return (
+    <pre className="cmd max-h-96 overflow-auto !p-0" aria-label="Changes">
+      {shownLines(lines, all).map((l) => (
+        <div
+          key={l.key}
+          className={clsx(
+            "px-3",
+            l.added && "bg-hi font-semibold",
+            l.removed && "text-sev line-through decoration-1",
+          )}
+        >
+          <span aria-hidden="true" className="mr-2 inline-block w-3 select-none">
+            {l.added ? "+" : l.removed ? "-" : " "}
+          </span>
+          <span className="sr-only">
+            {l.added ? "Added: " : l.removed ? "Removed: " : "Unchanged: "}
+          </span>
+          {l.line}
+        </div>
+      ))}
+      <MoreLines total={lines.length} all={all} onShow={() => setAll(true)} />
     </pre>
   )
 }

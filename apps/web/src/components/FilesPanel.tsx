@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CodeView } from "./CodeViews"
+import { CodeEditor, CodeView } from "./CodeViews"
 import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -198,7 +198,7 @@ export function FilesPanel({
 }
 
 type Read =
-  | { kind: "text"; text: string; size: number; truncated: boolean }
+  | { kind: "text"; text: string; size: number; truncated: boolean; hash?: string }
   | { kind: "binary"; size: number }
   | { kind: "blocked"; reason: string; size: number }
 
@@ -222,8 +222,33 @@ export function Viewer({
   const [source, setSource] = useState(false)
   const [address, setAddress] = useState(opened.kind === "browser" ? opened.url : "")
   const [frameKey, setFrameKey] = useState(0)
+  // G33: your edit, kept here until saved; saved only over the version opened.
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState("")
+  const [saving, setSaving] = useState(false)
 
   const rel = opened.kind === "file" ? opened.rel : ""
+  const editable =
+    read?.kind === "text" &&
+    !read.truncated &&
+    Boolean(read.hash) &&
+    !/^([A-Za-z]:|[\\/])/.test(rel)
+
+  async function save() {
+    if (read?.kind !== "text" || !read.hash || saving) return
+    setSaving(true)
+    const r = await api<{ hash: string }>("POST", "/api/files/save", {
+      session: sessionId,
+      path: rel,
+      text: draft,
+      hash: read.hash,
+    })
+    setSaving(false)
+    if (!r.ok || !r.data) return toast.error(r.error ?? "It was not saved")
+    setRead({ ...read, text: draft, hash: r.data.hash, size: new Blob([draft]).size })
+    setEditing(false)
+    toast(`Saved ${rel}.`)
+  }
   const loadBase = useCallback(async () => {
     const r = await api<{ base: string }>("POST", "/api/files/preview", { session: sessionId })
     if (r.ok && r.data) setBase(r.data.base)
@@ -233,6 +258,7 @@ export function Viewer({
     setRead(undefined)
     setError(undefined)
     setSource(false)
+    setEditing(false)
     if (opened.kind !== "file") return
     void loadBase()
     if (IMAGE.test(rel)) return
@@ -282,6 +308,39 @@ export function Viewer({
               </button>
             ) : null}
             {read?.kind === "text" ? <CopyButton text={read.text} what="the text" /> : null}
+            {editable && read?.kind === "text" ? (
+              editing ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primary !min-h-7 !px-2 text-[13px]"
+                    disabled={saving || draft === read.text}
+                    onClick={() => void save()}
+                  >
+                    Save <kbd aria-hidden="true">Ctrl S</kbd>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn !min-h-7 !px-2 text-[13px]"
+                    onClick={() => setEditing(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn !min-h-7 !px-2 text-[13px]"
+                  onClick={() => {
+                    setDraft(read.text)
+                    setEditing(true)
+                    setSource(true)
+                  }}
+                >
+                  Edit
+                </button>
+              )
+            ) : null}
             <button
               type="button"
               className="btn !min-h-7 !px-2 text-[13px]"
@@ -365,6 +424,13 @@ export function Viewer({
           <p className="m-0 p-4 text-mut">
             This file is not text ({size(read.size)}). Use Show in Explorer to open it.
           </p>
+        ) : editing ? (
+          <CodeEditor
+            text={read.text}
+            label={`${rel}, editing`}
+            onChange={setDraft}
+            onSave={() => void save()}
+          />
         ) : HTML.test(rel) && !source && previewUrl ? (
           <iframe
             title={`Page ${rel}`}

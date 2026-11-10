@@ -210,6 +210,35 @@ describe("the sessions Codehouse brings back after a restart", () => {
     })
   })
 
+  it("keeps which code session a chat is about across a restart, and drops a link it cannot use", async () => {
+    const f = file()
+    const store = new OpenSessionsStore(f)
+    const about = { id: B, title: "Codehouse", cwd: "C:/dev/gatehouse", sdkSessionId: "conv-1" }
+    store.note(info(A, { kind: "chat", mode: "plan", about }))
+    await store.flush()
+    const started: StartSessionOptions[] = []
+    await restoreOpenSessions(new OpenSessionsStore(f), {
+      start: async (o) => void started.push(o),
+      killed: () => false,
+      audit: async () => undefined,
+      log: () => undefined,
+    })
+    expect(started[0]).toMatchObject({ kind: "chat", about })
+    // Written by hand or by another version: a link without its folder, or on a coding session, is left out.
+    const g = file()
+    fs.writeFileSync(
+      g,
+      JSON.stringify({
+        version: 1,
+        sessions: [
+          { ...info(A, { kind: "chat", mode: "plan" }), about: { id: B, title: "x" } },
+          { ...info(B), about },
+        ],
+      }),
+    )
+    expect(new OpenSessionsStore(g).list().map((o) => o.about)).toEqual([undefined, undefined])
+  })
+
   it("starts nothing while the kill switch is engaged, and keeps the list for later", async () => {
     const f = file()
     const store = new OpenSessionsStore(f)

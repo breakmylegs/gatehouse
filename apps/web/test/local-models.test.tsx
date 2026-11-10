@@ -52,7 +52,7 @@ beforeEach(() => {
   sent.length = 0
   puts.length = 0
   ready = true
-  useStore.setState({ sessions: {}, transcripts: {}, panes: [], route: "chat" })
+  useStore.setState({ sessions: { code1: { id: "code1", cwd: "C:/dev/shop", project: "shop", mode: "default", state: "idle", pendingApprovals: 0, createdAt: "2026-11-06T09:00:00Z" } as never }, transcripts: {}, panes: [], route: "chat" })
 })
 afterEach(cleanup)
 
@@ -66,12 +66,12 @@ describe("models on this computer", () => {
     expect((screen.getByRole("checkbox", { name: /Research/ }) as HTMLInputElement).disabled).toBe(
       true,
     )
-    fireEvent.change(screen.getByLabelText("What do you want to talk about?"), {
+    fireEvent.change(screen.getByLabelText("What do you want to know?"), {
       target: { value: "Explain this repo" },
     })
     // B19: its licence is shown first, and ticked.
     fireEvent.click(await screen.findByRole("checkbox", { name: /I have read the licence/ }))
-    fireEvent.click(screen.getByRole("button", { name: "Start the chat" }))
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }))
     await waitFor(() =>
       expect(sent[0]).toMatchObject({
         type: "create_session",

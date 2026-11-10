@@ -121,5 +121,23 @@ describe("a chat", () => {
     expect(code.systemPrompt).toMatchObject({ type: "preset", preset: "claude_code" })
     expect(code.settingSources).toEqual(["user", "project", "local"])
     expect(code.tools).toBeUndefined()
+    expect((code as { settings?: unknown }).settings).toBeUndefined()
+  })
+
+  it("starts a coding session with the output style chosen in Settings, and a chat without it", async () => {
+    const config = s.deps.config()
+    config.outputStyle = "Explanatory"
+    try {
+      setProjects(projects)
+      await s.manager.start({ cwd: path.join(projects, "styled"), freshFolder: true })
+      expect(s.sdk.queries.at(-1)?.options.settings).toEqual({ outputStyle: "Explanatory" })
+      s.deps.chatsDir = path.join(s.dir, "chats")
+      await s.manager.start({ cwd: "x", kind: "chat", title: "styled chat" })
+      expect(JSON.stringify(s.sdk.queries.at(-1)?.options.settings ?? {})).not.toContain(
+        "outputStyle",
+      )
+    } finally {
+      delete config.outputStyle
+    }
   })
 })

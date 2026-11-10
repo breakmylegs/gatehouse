@@ -151,6 +151,16 @@ describe("audit endpoints", () => {
     expect(res.headers["content-disposition"]).toContain("attachment")
     expect(res.body.trim().split("\n").length).toBe(3)
   })
+
+  it("exports a bundle that can be checked, as a zip, and records that it did (G30)", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/audit/bundle" })
+    expect(res.statusCode).toBe(200)
+    expect(res.headers["content-type"]).toContain("application/zip")
+    expect(res.headers["content-disposition"]).toMatch(/codehouse-audit-\d{4}-\d{2}-\d{2}\.zip/)
+    expect(res.rawPayload.subarray(0, 2).toString()).toBe("PK")
+    const log = await app.inject({ method: "GET", url: "/api/audit/export" })
+    expect(log.body).toContain('"event":"audit_exported"')
+  })
 })
 
 describe("policy endpoints", () => {
@@ -244,6 +254,42 @@ describe("remember rules", () => {
       event: "remember_removed",
     })
     expect((await post({ id })).statusCode).toBe(404)
+  })
+
+  it("says when each was added and last used, from the audit log (G29)", async () => {
+    const localPath = path.join(root, "rules.local.yaml")
+    const used = await appendRemember(localPath, { tool: "Bash", command: "npm run dev" })
+    const idle = await appendRemember(localPath, { tool: "Bash", command: "npm run lint" })
+    ctx.store.load()
+    await ctx.audit.record({
+      session: "s1",
+      event: "evaluate_permission",
+      channel: "approver",
+      tool: "Bash",
+      input: { command: "npm run dev" },
+      verdict: {
+        outcome: "allow",
+        ruleId: used.id,
+        reason: "Allowed by rule.",
+        risk: 0,
+        decidedBy: "rules",
+        policyHash: "h",
+      },
+      latencyMs: 1,
+    })
+    const rules = (await get("/api/policy/remember/usage")).rules as Array<{
+      id: string
+      uses: number
+      createdAt?: string
+      lastUsed?: string
+    }>
+    const a = rules.find((r) => r.id === used.id)!
+    const b = rules.find((r) => r.id === idle.id)!
+    expect(a).toMatchObject({ uses: 1 })
+    expect(a.lastUsed).toBeTruthy()
+    expect(a.createdAt).toBeTruthy()
+    expect(b).toMatchObject({ uses: 0 })
+    expect(b.lastUsed).toBeUndefined()
   })
 })
 

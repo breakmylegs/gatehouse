@@ -64,14 +64,109 @@ export interface Todo {
   status: "pending" | "in_progress" | "completed"
   /** What Claude says while doing it, such as "Running the tests". */
   activeForm?: string
+  /**
+   * O10: a task from Claude Code's task tools (TaskCreate, TaskUpdate) rather than TodoWrite: its id once the create
+   * has answered, and the create call that made it until then.
+   */
+  taskId?: string
+  createdBy?: string
+  /** G17: the commits made while this step was in progress (short hashes, oldest first). */
+  commits?: string[]
+  /** G17: ticked off while the session's last test run had failed. */
+  afterFailedTests?: true
+}
+
+const TASK_STATUS = ["pending", "in_progress", "completed"]
+
+/** A command that runs a project's tests (G17), so a step ticked after it failed can say so. */
+export const TEST_RUN =
+  /\b(?:npm(?:\.cmd)?\s+(?:run\s+)?(?:test|gate)|npx\s+vitest|vitest|jest|pytest|go\s+test|cargo\s+test|dotnet\s+test|mvn\s+test|gradle\s+test)\b/i
+const GIT_COMMIT = /\bgit\b[^\n|;&]*\bcommit\b/
+/** The hash git prints after a commit: "[main 1a2b3c4] the message". */
+const COMMITTED = /^\[[^\]\n]*?\b([0-9a-f]{7,40})\]/m
+
+/**
+ * G17: what a step keeps when the list is written again (TodoWrite gives the whole list each time): the same step,
+ * by its task id, the call that made it or its words, keeps its commits; a step newly ticked while the last test run
+ * had failed is marked, and keeps the mark while it stays ticked.
+ */
+function carryOver(prev: Todo[], next: Todo[], testsFailing: boolean | undefined): Todo[] {
+  return next.map((n) => {
+    const { commits: own, afterFailedTests: _mark, ...rest } = n
+    const p = prev.find(
+      (x) =>
+        (n.taskId !== undefined && x.taskId === n.taskId) ||
+        (n.createdBy !== undefined && x.createdBy === n.createdBy) ||
+        x.content === n.content,
+    )
+    const commits = own ?? p?.commits
+    const marked =
+      n.status === "completed" &&
+      (p?.status === "completed" ? p.afterFailedTests === true : testsFailing === true)
+    return {
+      ...rest,
+      ...(commits?.length ? { commits } : {}),
+      ...(marked ? { afterFailedTests: true as const } : {}),
+    }
+  })
+}
+
+/**
+ * O10 (the Plan panel ignored TaskCreate and TaskUpdate): Claude Code's task tools, as the same list TodoWrite gives.
+ * A create adds a task (its id comes with the answer); an update changes its status or words, or removes it.
+ */
+function applyTaskCall(
+  todos: Todo[] | undefined,
+  name: string,
+  input: Record<string, unknown>,
+  toolUseId: string,
+): Todo[] | undefined {
+  if (name === "TaskCreate" && str(input.subject))
+    return [
+      ...(todos ?? []),
+      {
+        content: str(input.subject),
+        status: "pending",
+        ...(str(input.activeForm) ? { activeForm: str(input.activeForm) } : {}),
+        createdBy: toolUseId,
+      },
+    ]
+  if (name === "TaskUpdate" && str(input.taskId) && todos) {
+    const id = str(input.taskId)
+    if (!todos.some((t) => t.taskId === id)) return undefined
+    if (input.status === "deleted") return todos.filter((t) => t.taskId !== id)
+    return todos.map((t) =>
+      t.taskId !== id
+        ? t
+        : {
+            ...t,
+            ...(TASK_STATUS.includes(str(input.status))
+              ? { status: str(input.status) as Todo["status"] }
+              : {}),
+            ...(str(input.subject) ? { content: str(input.subject) } : {}),
+            ...(str(input.activeForm) ? { activeForm: str(input.activeForm) } : {}),
+          },
+    )
+  }
+  return undefined
+}
+
+/** The id a TaskCreate answered with: from its structured result, or "Task #3 created" in its text. */
+function createdTaskId(structured: unknown, text: string): string | undefined {
+  const id = obj(obj(structured).task).id
+  if (typeof id === "string" && id) return id
+  if (typeof id === "number") return String(id)
+  return /Task #?(\w+) created/i.exec(text)?.[1]
 }
 
 export interface Transcript {
   items: Item[]
   todos: Todo[]
   seq: number
+  /** G17: whether the session's last test run failed (absent before any). */
+  testsFailing?: boolean
   /** Who stopped the running turn, until its result arrives. */
-  stopping?: "you" | "kill-switch" | "plan-limit"
+  stopping?: "you" | "kill-switch" | "plan-limit" | "loop"
   /** A tool result came back after a queued message was sent: Claude's next answer has seen it. */
   pickup?: boolean
   /** The id (uuid) of the newest message of the conversation seen, for Retry and Edit. */
@@ -227,7 +322,10 @@ function delivered(t: Transcript): Transcript {
 const hasQueued = (t: Transcript) => t.items.some((i) => i.kind === "user" && i.queued)
 
 /** The Host stopped the running turn: its result says so, instead of reading as an error. */
-export function markStopping(t: Transcript, by: "you" | "kill-switch" | "plan-limit"): Transcript {
+export function markStopping(
+  t: Transcript,
+  by: "you" | "kill-switch" | "plan-limit" | "loop",
+): Transcript {
   return { ...t, stopping: by }
 }
 
@@ -274,6 +372,8 @@ export function reduce(t: Transcript, message: unknown): Transcript {
               : "pending") as Todo["status"],
             ...(str(obj(x).activeForm) ? { activeForm: str(obj(x).activeForm) } : {}),
           }))
+        else if (!sub && (b.name === "TaskCreate" || b.name === "TaskUpdate"))
+          todos = applyTaskCall(todos ?? t.todos, str(b.name), input, str(b.id)) ?? todos
         add.push({
           id,
           kind: "tool",
@@ -284,12 +384,14 @@ export function reduce(t: Transcript, message: unknown): Transcript {
         })
       }
     })
-    return push(t, add, todos)
+    return push(t, add, todos && carryOver(t.todos, todos, t.testsFailing))
   }
   if (type === "user") {
     const content = obj(m.message).content
     if (!Array.isArray(content)) return t
     let items = t.items
+    let todos = t.todos
+    let testsFailing = t.testsFailing
     let changed = false
     for (const c of content) {
       const b = obj(c)
@@ -299,6 +401,24 @@ export function reduce(t: Transcript, message: unknown): Transcript {
       )
       if (idx < 0) continue
       const it = items[idx] as Extract<Item, { kind: "tool" }>
+      // O10: a task Claude made gets its id, so later updates find it.
+      if (it.name === "TaskCreate" && b.is_error !== true && todos) {
+        const taskId = createdTaskId(m.tool_use_result ?? m.toolUseResult, resultText(b.content))
+        if (taskId) todos = todos.map((x) => (x.createdBy === it.toolUseId ? { ...x, taskId } : x))
+      }
+      // G17: a test run's outcome, and a commit made while a step is in progress, which the step then lists.
+      const command = it.name === "Bash" || it.name === "PowerShell" ? str(it.input.command) : ""
+      if (command && TEST_RUN.test(command)) testsFailing = b.is_error === true
+      const hash =
+        command && GIT_COMMIT.test(command) && b.is_error !== true
+          ? COMMITTED.exec(resultText(b.content))?.[1]?.slice(0, 7)
+          : undefined
+      if (hash && todos.some((x) => x.status === "in_progress"))
+        todos = todos.map((x) =>
+          x.status === "in_progress" && !x.commits?.includes(hash)
+            ? { ...x, commits: [...(x.commits ?? []), hash] }
+            : x,
+        )
       if (items === t.items) items = [...items]
       const images = resultPictures(b.content, it)
       const found =
@@ -314,8 +434,10 @@ export function reduce(t: Transcript, message: unknown): Transcript {
       }
       changed = true
     }
-    if (changed && !sub && hasQueued(t)) return { ...t, items, seq: t.seq + 1, pickup: true }
-    return changed ? { ...t, items, seq: t.seq + 1 } : t
+    const kept = testsFailing === undefined ? {} : { testsFailing }
+    if (changed && !sub && hasQueued(t))
+      return { ...t, items, todos, ...kept, seq: t.seq + 1, pickup: true }
+    return changed ? { ...t, items, todos, ...kept, seq: t.seq + 1 } : t
   }
   if (type === "system" && str(m.subtype) === "compact_boundary")
     return addSystem(t, "Claude Code summarised the earlier conversation to make room.")
@@ -332,7 +454,9 @@ export function reduce(t: Transcript, message: unknown): Transcript {
             ? "You stopped this turn."
             : stopping === "plan-limit"
               ? "Codehouse paused this turn because the plan's 5-hour limit is nearly used up."
-              : "The kill switch stopped this turn."
+              : stopping === "loop"
+                ? "Codehouse stopped this turn: the same command failed the same way three times in a row, with nothing changed in between. Look at what it tried, then tell it how to go on."
+                : "The kill switch stopped this turn."
           : str(m.result) ||
             (isError ? (FAILED[str(m.subtype)] ?? "Claude Code did not say why.") : "Done"),
         isError,
