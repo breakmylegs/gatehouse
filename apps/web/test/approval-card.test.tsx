@@ -147,7 +147,7 @@ describe("ApprovalCard", () => {
     expect(sent).toEqual([])
     fireEvent.change(box, { target: { value: " Allow " } })
     fireEvent.click(confirm)
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1" }]))
+    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) }]))
   })
 
   it("has no effects row for a call that deletes nothing", () => {
@@ -179,7 +179,7 @@ describe("ApprovalCard", () => {
     expect(sent).toEqual([])
     await allowReady()
     fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1" }]))
+    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) }]))
   })
 
   it("answers the Stitch letter keys inside the card, and no letter ever allows", async () => {
@@ -250,6 +250,7 @@ describe("ApprovalCard", () => {
         type: "approve",
         requestId: "req-1",
         updatedInput: { command: "rm -rf build/tmp", description: "clean" },
+        opened: true, shownMs: expect.any(Number),
       },
     ])
   })
@@ -284,6 +285,7 @@ describe("ApprovalCard", () => {
       requestId: "req-1",
       remember: true,
       rememberFor: { days: 30 },
+      opened: true, shownMs: expect.any(Number),
     })
   })
 

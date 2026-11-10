@@ -122,7 +122,7 @@ describe("Allow once and Deny on the queue", () => {
     const rowB = screen.getByRole("group", { name: "Decide Run shell command from atlas" })
     fireEvent.click(within(rowB).getByRole("button", { name: "Deny" }))
     expect(sent).toEqual([
-      { type: "approve", requestId: "a" },
+      { type: "approve", requestId: "a", opened: false, shownMs: expect.any(Number) },
       { type: "deny", requestId: "b" },
     ])
     // Neither click opened the request on the card.
@@ -176,7 +176,7 @@ describe("deciding in the session's own workspace", () => {
     expect(within(panel).getByText("C:\\dev\\Test\\minisheet.html")).toBeTruthy()
     expect(within(panel).getByText(/No rule allows this call/)).toBeTruthy()
     fireEvent.click(within(panel).getByRole("button", { name: /^Allow once/ }))
-    expect(decided()).toEqual([{ type: "approve", requestId: "a" }])
+    expect(decided()).toEqual([{ type: "approve", requestId: "a", opened: false, shownMs: expect.any(Number) }])
   })
 
   it("takes Ctrl+Enter and Esc only while focus is inside the request", () => {

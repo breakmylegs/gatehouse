@@ -62,7 +62,7 @@ describe("the request in the workspace", () => {
     fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true })
     expect(sent).toEqual([])
     fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "q1" }]))
+    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "q1", opened: false, shownMs: expect.any(Number) }]))
   })
 })
 

@@ -499,7 +499,8 @@ describe("commands over the WebSocket", () => {
     expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, false, true])
     expect(s.records().filter((r) => r.event === "approval_friction_shown")).toHaveLength(2)
     await c.send({ type: "close_session", sessionId })
-  }, 30_000)
+    // Five High calls, each checkpointed before it asks: slow when git is.
+  }, 120_000)
 
   it("denies with a message, answers a question, and refuses a second answer", async () => {
     const results: Record<string, unknown> = {}
