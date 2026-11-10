@@ -88,6 +88,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("heldout_list"), sessionId: Id }),
   /** D-007: the session's project's locked tests; locking and unlocking one; accepting ones changed outside Codehouse. */
   z.object({ type: z.literal("locks_state"), sessionId: Id }),
+  /** D-008: pins a counterexample as a locked regression test, or puts it away. */
+  z.object({ type: z.literal("pin_counterexample"), sessionId: Id, id: z.string().max(40) }),
+  z.object({ type: z.literal("dismiss_counterexample"), sessionId: Id, id: z.string().max(40) }),
   z.object({ type: z.literal("lock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
   z.object({ type: z.literal("unlock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
   z.object({ type: z.literal("locks_accept"), cwd: z.string().min(1).max(1000) }),
@@ -342,6 +345,18 @@ export const SessionInfo = z.object({
     .optional(),
   /** C-004: suspended to free memory; Start again brings it back on the same conversation. Absent from older Hosts. */
   suspended: z.boolean().optional(),
+  /** D-008: counterexamples the session's test runs found, to pin as locked regression tests. Absent from older Hosts. */
+  counterexamples: z
+    .array(
+      z.object({
+        id: z.string(),
+        framework: z.string(),
+        example: z.string(),
+        writesItself: z.boolean(),
+        test: z.string().optional(),
+      }),
+    )
+    .optional(),
   /** D-001: how many weakenings of the tests Extreme approval approved in this session. Absent from older Hosts. */
   testsWeakened: z.number().int().min(0).optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */

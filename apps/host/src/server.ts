@@ -472,6 +472,11 @@ export class HostServer {
       case "warm_chat":
         a.manager.warmChat()
         return undefined
+      case "pin_counterexample":
+        return await this.#session(cmd.sessionId).pinCounterexample(cmd.id)
+      case "dismiss_counterexample":
+        this.#session(cmd.sessionId).dismissCounterexample(cmd.id)
+        return undefined
       case "locks_state": {
         const s = this.#session(cmd.sessionId)
         if (!a.locks) throw new CommandError("unavailable", "Locked tests are not available here")

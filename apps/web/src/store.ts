@@ -795,6 +795,8 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       if (data.reason === "spend")
         return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
+    case "counterexample_pinned":
+      return `A counterexample is pinned as a locked regression test: ${str(data.file) ?? ""}.`
     case "heldout_result":
       // D-002: the counts only; the names and the output stay in the desktop's Details panel.
       return str(data.line)

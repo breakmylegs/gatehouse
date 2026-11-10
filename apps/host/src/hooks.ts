@@ -115,6 +115,8 @@ export interface SessionHookDeps {
   provenance?: Provenance
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
+  /** D-008: what a shell command printed, read for counterexamples. */
+  onToolOutput?: (tool: string, output: string) => void
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
   onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => void
   /** G22: commits are checked for secrets unless this is false (tests only). */
@@ -291,6 +293,12 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(input.tool_response)
+      // D-008: a shell command's output, read for a property test's or a fuzz run's counterexample.
+      if (deps.onToolOutput && (input.tool_name === "Bash" || input.tool_name === "PowerShell")) {
+        const r = input.hook_event_name === "PostToolUse" ? input.tool_response : (input as { error?: unknown }).error
+        const text = typeof r === "string" ? r : JSON.stringify(r ?? "")
+        if (text) deps.onToolOutput(input.tool_name, text.slice(0, 200_000))
+      }
       if (input.hook_event_name === "PostToolUse" && WRITE_TOOLS.has(input.tool_name)) {
         const p = asRecord(input.tool_input)
         const file = p.file_path ?? p.notebook_path

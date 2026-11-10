@@ -1,3 +1,4 @@
+import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
@@ -264,6 +265,8 @@ export interface SessionInfo {
   suspended?: boolean
   /** D-001: how many weakenings of the tests Extreme approval approved in this session. */
   testsWeakened?: number
+  /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
+  counterexamples?: Array<{ id: string; framework: string; example: string; writesItself: boolean; test?: string }>
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
   carryOn?: CarryOnStatus
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */
@@ -320,6 +323,7 @@ export interface SessionEvents {
         | "bypass_ended"
         | "tests_weakened"
         | "heldout_result"
+        | "counterexample_pinned"
       data: Record<string, unknown>
     },
   ]
@@ -583,6 +587,33 @@ export class Session extends EventEmitter<SessionEvents> {
   #bypassTimer: NodeJS.Timeout | undefined
   /** D-001: weakenings of the tests Extreme approval approved in this session, which it says. */
   #testsWeakened = 0
+  /** D-008: the counterexamples this session's test runs found, to pin as locked regression tests. */
+  get #pins(): CounterexamplePins {
+    this.#pinsValue ??= new CounterexamplePins({
+      sessionId: this.id,
+      cwd: this.cwd,
+      project: this.project,
+      audit: this.#deps.audit,
+      ...(this.#deps.locks ? { locks: this.#deps.locks } : {}),
+      prompt: (text) => this.prompt(text),
+    })
+    return this.#pinsValue
+  }
+  #pinsValue: CounterexamplePins | undefined
+
+  /** D-008: pins one of the counterexamples (the owner chose Pin on the desktop). */
+  async pinCounterexample(id: string): Promise<{ file: string; by: string }> {
+    const r = await this.#pins.pin(id)
+    this.emit("event", { type: "counterexample_pinned", data: { file: r.file, by: r.by } })
+    this.emit("state", this.info())
+    return r
+  }
+
+  dismissCounterexample(id: string): void {
+    this.#pins.dismiss(id)
+    this.emit("state", this.info())
+  }
+
   /** D-007: calls a person approved that touched locked tests, by toolUseID, so they are pinned again after. */
   readonly #lockedCalls = new Map<string, string[]>()
   #resources: ResourceLevel = "high"
@@ -705,6 +736,17 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
       ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
+      ...(this.#pins.list().length
+        ? {
+            counterexamples: this.#pins.list().map((p) => ({
+              id: p.id,
+              framework: p.framework,
+              example: p.example.slice(0, 300),
+              writesItself: p.writesItself,
+              ...(p.test ? { test: p.test.slice(0, 200) } : {}),
+            })),
+          }
+        : {}),
       ...(this.#bypass
         ? {
             bypass: {
@@ -863,7 +905,18 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: () => this.#mode,
       approver: d.approver,
       verdicts: this.#verdicts,
-      onWritten: (file) => this.#written.add(writtenKey(file, this.cwd)),
+      onWritten: (file) => {
+        this.#written.add(writtenKey(file, this.cwd))
+        // D-008: a regression Claude was asked to write is locked once it is there.
+        void this.#pins
+          .noteWritten(file)
+          .then((locked) => locked && this.emit("event", { type: "counterexample_pinned", data: { file } }))
+          .catch((e: Error) => d.log(`counterexample pin: ${e.message}`))
+      },
+      // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
+      onToolOutput: (_tool, output) => {
+        if (this.#pins.noteOutput(output)) this.emit("state", this.info())
+      },
       // G19: the same failure three times in a row with nothing changed stops the turn.
       onToolOutcome: (tool, input, error) => {
         if (error === undefined) return this.#loop.succeeded(tool, input)
