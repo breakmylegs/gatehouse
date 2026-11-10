@@ -39,8 +39,9 @@ function fixture(): string {
   fs.mkdirSync(path.join(root, "src"), { recursive: true })
   fs.mkdirSync(path.join(root, "tests"), { recursive: true })
   fs.writeFileSync(path.join(root, "node_modules", "fast-check", "index.js"), FAKE_FAST_CHECK)
-  // The bug: adding to zero is off by one, so add(0, 1) is not add(1, 0).
-  fs.writeFileSync(path.join(root, "src", "add.js"), "exports.add = (a, b) => (a === 0 ? b + 1 : a + b)\n")
+  // The bug: one way round is off by one, so add(a, b) is not add(b, a) whenever they differ, add(0, 1) among them.
+  // (Not one that shows only on a zero: random runs would miss it often enough to make the test flaky.)
+  fs.writeFileSync(path.join(root, "src", "add.js"), "exports.add = (a, b) => (a > b ? a + b + 1 : a + b)\n")
   fs.writeFileSync(
     path.join(root, "tests", "add.test.js"),
     `const fc = require("fast-check")
