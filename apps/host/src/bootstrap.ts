@@ -1,5 +1,6 @@
 import { TestLocks } from "./test-locks.js"
 import { InstructionPins } from "./instruction-pins.js"
+import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
@@ -1221,6 +1222,8 @@ export function createHost(opts: HostOptions = {}): Host {
       changelog,
       // G30: the verifier that goes in each audit bundle (scripts\verify-audit.ps1, in the app folder too).
       auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
+      // C-011: the key timeline exports are signed with, sealed for this Windows user.
+      timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,

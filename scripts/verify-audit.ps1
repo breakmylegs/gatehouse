@@ -102,7 +102,8 @@ function Test-RecordShape($r) {
     foreach ($k in 'ts', 'session', 'event', 'tool', 'inputJson') {
         if (-not ($r.ContainsKey($k) -and $r[$k] -is [string])) { return $false }
     }
-    if (-not ($r.ContainsKey('channel') -and $r['channel'] -in @('approver', 'host', 'desktop', 'phone', 'timeout'))) { return $false }
+    # These two lists are the Node schema's (AuditChannel, Verdict.decidedBy); apps/host/test/audit-bundle.test.ts keeps them the same.
+    if (-not ($r.ContainsKey('channel') -and $r['channel'] -in @('approver', 'host', 'desktop', 'phone', 'push', 'timeout'))) { return $false }
     if (-not ($r.ContainsKey('latencyMs') -and (Test-IsInteger $r['latencyMs']) -and $r['latencyMs'] -ge 0)) { return $false }
     if (-not ($r.ContainsKey('prevHash') -and (Test-Hex64 $r['prevHash']))) { return $false }
     if (-not ($r.ContainsKey('hash') -and (Test-Hex64 $r['hash']))) { return $false }
@@ -111,13 +112,14 @@ function Test-RecordShape($r) {
     if (-not ($vd.ContainsKey('outcome') -and $vd['outcome'] -in @('allow', 'deny', 'escalate'))) { return $false }
     foreach ($k in 'ruleId', 'reason', 'policyHash') { if (-not ($vd.ContainsKey($k) -and $vd[$k] -is [string])) { return $false } }
     if (-not ($vd.ContainsKey('risk') -and (Test-IsInteger $vd['risk']) -and $vd['risk'] -ge 0 -and $vd['risk'] -le 100)) { return $false }
-    if (-not ($vd.ContainsKey('decidedBy') -and $vd['decidedBy'] -in @('floor', 'rules', 'judge', 'human-desktop', 'human-phone', 'timeout', 'evaluator-unavailable'))) { return $false }
+    if (-not ($vd.ContainsKey('decidedBy') -and $vd['decidedBy'] -in @('floor', 'rules', 'judge', 'human-desktop', 'human-phone', 'human-push', 'extreme-mode', 'timeout', 'evaluator-unavailable'))) { return $false }
     return $true
 }
 
 $prevSeq = [long]0
 $prevHash = $genesis
 $records = 0
+$bySeq = @{}
 $files = @()
 if (Test-Path -LiteralPath $Dir) {
     $files = @(Get-ChildItem -LiteralPath $Dir -File | Where-Object { $_.Name -match '^audit-\d{4}-\d{2}\.jsonl$' } | ForEach-Object { $_.Name })
@@ -149,6 +151,7 @@ foreach ($file in $files) {
         }
         $records++
         $seq = [long]$rec['seq']
+        $bySeq[$seq] = $rec
         if ($seq -ne $prevSeq + 1) { Add-Problem $file $lineNo $seq "seq $seq does not follow $prevSeq" }
         if ($rec['prevHash'] -ne $prevHash) { Add-Problem $file $lineNo $seq 'prevHash does not match the record before it' }
         $body = @{}
@@ -177,6 +180,72 @@ if ($null -ne $head) {
     if ($headSeq -gt $prevSeq) { Add-Problem 'head.json' 0 $null "the log ends at seq $prevSeq but head.json says ${headSeq}: records were removed from the end" }
     elseif ($headSeq -lt $prevSeq) { Add-Problem 'head.json' 0 $null "head.json is behind the log ($headSeq against $prevSeq)" }
     elseif ($head['hash'] -ne $prevHash) { Add-Problem 'head.json' 0 $null 'head.json hash does not match the last record' }
+}
+
+# C-011: a signed timeline export. The signature (ECDSA P-256, SHA-256, IEEE P1363) covers timeline.json's bytes
+# followed by head.json's; every entry must say what its records say. The same check as verify-timeline.ts.
+$timelineFile = Join-Path $Dir 'timeline.json'
+if (Test-Path -LiteralPath $timelineFile) {
+    $tBytes = [System.IO.File]::ReadAllBytes($timelineFile)
+    $hBytes = if (Test-Path -LiteralPath $headFile) { [System.IO.File]::ReadAllBytes($headFile) } else { $null }
+    if ($null -eq $hBytes) { Add-Problem 'head.json' 0 $null 'a timeline needs the head.json it was signed with' }
+    else {
+        try {
+            $jwk = Read-Json ([System.IO.File]::ReadAllText((Join-Path $Dir 'timeline-key.json')))
+            $fromB64Url = {
+                param([string]$s)
+                $b = $s.Replace('-', '+').Replace('_', '/')
+                switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+                [Convert]::FromBase64String($b)
+            }
+            $q = New-Object System.Security.Cryptography.ECPoint
+            $q.X = & $fromB64Url $jwk['x']
+            $q.Y = & $fromB64Url $jwk['y']
+            $p = New-Object System.Security.Cryptography.ECParameters
+            $p.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+            $p.Q = $q
+            $ec = [System.Security.Cryptography.ECDsa]::Create($p)
+            $sig = [Convert]::FromBase64String(([System.IO.File]::ReadAllText((Join-Path $Dir 'timeline.sig'))).Trim())
+            $data = New-Object byte[] ($tBytes.Length + $hBytes.Length)
+            [Array]::Copy($tBytes, 0, $data, 0, $tBytes.Length)
+            [Array]::Copy($hBytes, 0, $data, $tBytes.Length, $hBytes.Length)
+            if (-not $ec.VerifyData($data, $sig, [System.Security.Cryptography.HashAlgorithmName]::SHA256)) {
+                Add-Problem 'timeline.sig' 0 $null 'the signature does not match timeline.json and head.json, so one of them was changed'
+            }
+        } catch {
+            Add-Problem 'timeline.sig' 0 $null 'the signature or its key could not be read'
+        }
+    }
+    $t = $null
+    try { $t = Read-Json ([System.Text.Encoding]::UTF8.GetString($tBytes)) } catch { $t = $null }
+    if ($null -eq $t -or $t['version'] -ne 1 -or $t['session'] -isnot [string] -or $null -eq $t['entries']) {
+        Add-Problem 'timeline.json' 0 $null 'timeline.json is not a timeline'
+    } else {
+        $prevEntry = [long]0
+        foreach ($e in $t['entries']) {
+            $rs = @($e['records'])
+            $eSeq = [long]$e['seq']
+            if ($rs.Count -eq 0 -or [long]$rs[0] -ne $eSeq) { Add-Problem 'timeline.json' 0 $eSeq "an entry's place is not its first record"; continue }
+            if ($eSeq -le $prevEntry) { Add-Problem 'timeline.json' 0 $eSeq 'the entries are not in audit order' }
+            $prevEntry = $eSeq
+            $last = $null
+            $before = [long]0
+            foreach ($s in $rs) {
+                $r = $bySeq[[long]$s]
+                if ($null -eq $r) { Add-Problem 'timeline.json' 0 $eSeq "record $s is not in this export" }
+                elseif ($r['session'] -ne $t['session']) { Add-Problem 'timeline.json' 0 $eSeq "record $s belongs to another session" }
+                if ([long]$s -le $before) { Add-Problem 'timeline.json' 0 $eSeq "an entry's records are not in order" }
+                $before = [long]$s
+                if ($null -ne $r) { $last = $r }
+            }
+            if ($null -ne $last) {
+                $v = $last['verdict']
+                if ($last['tool'] -ne $e['tool'] -or $v['outcome'] -ne $e['outcome'] -or $v['ruleId'] -ne $e['ruleId'] -or [long]$v['risk'] -ne [long]$e['risk'] -or $v['decidedBy'] -ne $e['decidedBy']) {
+                    Add-Problem 'timeline.json' 0 $eSeq 'the entry does not say what its last record says'
+                }
+            }
+        }
+    }
 }
 
 $ok = ($problems.Count -eq 0)

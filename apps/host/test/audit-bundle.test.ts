@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { AuditWriter, verifyAudit, type AuditEntry } from "@gatehouse/shared/audit"
+import { AuditChannel, AuditWriter, verifyAudit, type AuditEntry } from "@gatehouse/shared/audit"
+import { Verdict } from "@gatehouse/shared"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { makeAuditBundle, stageAuditBundle } from "../src/audit-bundle.js"
 import { REPO_ROOT } from "../src/bootstrap.js"
@@ -85,6 +86,17 @@ describe("the audit bundle", () => {
     expect(fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith("codeh-audit-")).length).toBe(
       before,
     )
+  })
+
+  it("has a PowerShell verifier that accepts every channel and decider the Node schema does", () => {
+    // 10 Nov: it accepted neither push nor Extreme approval, so a log with one such record failed it.
+    const ps = fs.readFileSync(path.join(REPO_ROOT, "scripts", "verify-audit.ps1"), "utf8")
+    const listAfter = (key: string) => {
+      const m = new RegExp(`\\$\\w+\\['${key}'\\] -in @\\(([^)]*)\\)`).exec(ps)
+      return [...(m?.[1] ?? "").matchAll(/'([^']+)'/g)].map((x) => x[1]).sort()
+    }
+    expect(listAfter("channel")).toEqual([...AuditChannel.options].sort())
+    expect(listAfter("decidedBy")).toEqual([...Verdict.shape.decidedBy.options].sort())
   })
 
   // The verifier it carries needs PowerShell 7, as its note says; where pwsh is not installed this is skipped.

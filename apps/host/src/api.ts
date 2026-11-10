@@ -32,6 +32,7 @@ import { registerUpdateRoutes } from "./update-api.js"
 import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
 import { makeAuditBundle } from "./audit-bundle.js"
 import { sessionRecords, sessionTimeline } from "./timeline.js"
+import { makeTimelineExport, type TimelineSigner } from "./timeline-export.js"
 import { listCheckpoints } from "@gatehouse/shared/node"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
@@ -174,6 +175,8 @@ export interface AdminContext {
   changelog?: ChangelogStore
   /** G30: the PowerShell verifier, put in each audit bundle. */
   auditVerifier?: string
+  /** C-011: the key a session's timeline export is signed with. */
+  timelineSigner?: TimelineSigner
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -413,6 +416,54 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return reply
       .header("content-type", "application/zip")
       .header("content-disposition", `attachment; filename="codehouse-audit-${day}.zip"`)
+      .header("cache-control", "no-store")
+      .send(zip)
+  })
+
+  // C-011: the signing key's fingerprint, to compare with the one an export names.
+  app.get("/api/timeline/key", async (_req, reply) => {
+    if (!ctx.timelineSigner) return bad(reply, 503, "Signed exports are not available here.")
+    return { fingerprint: await ctx.timelineSigner.fingerprint() }
+  })
+
+  // C-011: one session's timeline, signed, in the audit bundle, with what both verifiers said of it.
+  app.get("/api/timeline/export", async (req, reply) => {
+    const session = String((req.query as { session?: string }).session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    if (!ctx.timelineSigner || !ctx.auditVerifier) return bad(reply, 503, "Signed exports are not available here.")
+    const records = sessionRecords(ctx.auditDir, session)
+    const cwd = records.find((r) => r.cwd)?.cwd
+    const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
+    const entries = sessionTimeline(records, checkpoints)
+    const { zip, fingerprint, ok } = await makeTimelineExport({
+      auditDir: ctx.auditDir,
+      session,
+      entries,
+      signer: ctx.timelineSigner,
+      verifier: ctx.auditVerifier,
+    })
+    const written = await ctx.audit.record({
+      session,
+      event: "timeline_exported",
+      channel: "desktop",
+      tool: "audit",
+      input: { entries: entries.length, bytes: zip.length, fingerprint, verified: ok },
+      verdict: {
+        outcome: "allow",
+        ruleId: "timeline-exported",
+        reason: "A session's timeline was exported, signed, with the records it was made from.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!written) return bad(reply, 500, "The export could not be recorded in the audit log, so it was not given.")
+    const day = new Date().toISOString().slice(0, 10)
+    return reply
+      .header("content-type", "application/zip")
+      .header("content-disposition", `attachment; filename="codehouse-timeline-${day}.zip"`)
+      .header("x-codehouse-key", fingerprint)
       .header("cache-control", "no-store")
       .send(zip)
   })

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { api } from "../lib/api"
+import { toast } from "sonner"
+import { api, download } from "../lib/api"
 import { send, useStore } from "../store"
 
 /**
@@ -96,7 +97,21 @@ export function Timeline({ sessionId, onClose }: { sessionId: string; onClose: (
       <div className="flex items-center gap-2">
         <h2 className="m-0 text-[17px]">Timeline</h2>
         <span className="text-[13px] text-mut">Every call, in the order the audit log holds them.</span>
-        <button type="button" className="btn ml-auto !min-h-7" onClick={onClose}>
+        <button
+          type="button"
+          className="btn ml-auto !min-h-7"
+          onClick={async () => {
+            // C-011: signed, with the records it was made from and what both verifiers said of it.
+            const day = new Date().toISOString().slice(0, 10)
+            const e = await download(`/api/timeline/export?session=${encodeURIComponent(sessionId)}`, `codehouse-timeline-${day}.zip`)
+            if (e) return void toast.error(e)
+            const k = await api<{ fingerprint: string }>("GET", "/api/timeline/key")
+            toast(`Exported, signed with the key ${k.ok && k.data ? k.data.fingerprint : "of this computer"}.`)
+          }}
+        >
+          Export, signed
+        </button>
+        <button type="button" className="btn !min-h-7" onClick={onClose}>
           Close
         </button>
       </div>

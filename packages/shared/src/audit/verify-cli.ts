@@ -1,11 +1,15 @@
 import { auditDir } from "../node/paths.js"
 import { verifyAudit } from "./verify.js"
+import { verifyTimelineExport } from "./verify-timeline.js"
 
 const args = process.argv.slice(2)
 const json = args.includes("--json")
 const dir = args.find((a) => !a.startsWith("--")) ?? auditDir()
 
-const result = verifyAudit(dir)
+const chain = verifyAudit(dir)
+// C-011: a signed timeline export is checked too, when the folder holds one.
+const timeline = verifyTimelineExport(dir)
+const result = { ...chain, ok: chain.ok && timeline.length === 0, problems: [...chain.problems, ...timeline] }
 if (json) {
   console.log(JSON.stringify(result, null, 2))
 } else if (result.ok) {

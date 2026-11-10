@@ -241,6 +241,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **Timeline...** in the same menu lists everything the session did, from the audit log, in its order: each call with how it was decided (the rule, the risk, and who: your rules, you, your phone or Extreme approval), and things like a pause or a mode change. Each call has **Open record**, **Try in policy** (Try a request on the Approver page, with the call filled in), and where there is one, the checkpoint taken while it waited and the diff of the file it changed.
 
+**Export, signed** in the Timeline saves it as a zip with the audit records it was made from, signed with a key made on this computer, and a note on how to check it with Windows PowerShell. Changing one byte of it makes the check fail. Codehouse shows the key's fingerprint when you export; the note in the zip names it too.
+
 **Walkthrough...** in the same menu shows the evidence for a coding session's work in one place: its plan, with the commits made for each step; the files it changed; every test run and whether it passed; and the decisions that were not your rules allowing by themselves (yours, Extreme approval's, and every call stopped), each with its audit record, which **Open record** shows on the Audit page. **Copy** gives it all as Markdown, for a pull request or a report.
 
 **Fork** in the same menu starts a copy of the conversation beside it, in the same folder, and each carries on on its own (once Claude has finished what it is doing). **Hand off a side task...** starts a new session for something that came up: say what it should do, and choose In a new worktree to keep it off this session's files. Both keep the session's mode, approval, model, effort and account.
