@@ -1,6 +1,6 @@
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { decide } from "../lib/decide"
 import { commandText, riskBand } from "../lib/format"
 import { useStore } from "../store"
@@ -49,13 +49,15 @@ export function QuickDecision({
   const connected = useStore((s) => s.conn === "open")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const shownAt = useRef(Date.now())
 
   async function run(outcome: "allow" | "deny") {
     setBusy(true)
     setError(undefined)
     const failed = await decide(
       outcome === "allow"
-        ? { type: "approve", requestId: req.id }
+        ? // D-021: approved from a row: the card was never opened.
+          { type: "approve", requestId: req.id, opened: false, shownMs: Date.now() - shownAt.current }
         : { type: "deny", requestId: req.id },
     )
     setBusy(false)

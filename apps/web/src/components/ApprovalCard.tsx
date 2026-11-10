@@ -2,7 +2,7 @@ import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { decide } from "../lib/decide"
+import { decideFull } from "../lib/decide"
 import { age, clock, commandText, riskBand } from "../lib/format"
 import { splitByHighlights } from "../lib/highlight"
 import { useNow } from "../lib/useNow"
@@ -82,6 +82,16 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [lasts, setLasts] = useState("30")
   const [where, setWhere] = useState("here")
   const [uses, setUses] = useState("")
+  // D-021: when the card appeared, and when a friction asked for a deliberate approval.
+  const shownAt = useRef(Date.now())
+  const [friction, setFriction] = useState<number>()
+  const [frictionReady, setFrictionReady] = useState(false)
+  useEffect(() => {
+    if (friction === undefined) return
+    setFrictionReady(false)
+    const t = setTimeout(() => setFrictionReady(true), 2000)
+    return () => clearTimeout(t)
+  }, [friction])
   const [siteTyped, setSiteTyped] = useState("")
   const command = useMemo(
     () => commandText(req.toolName, view.rawInput),
@@ -131,10 +141,16 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   async function run(cmd: Parameters<typeof send>[0]): Promise<boolean> {
     setBusy(true)
     setError(undefined)
-    const failed = await decide(cmd)
+    // D-021: an approval says how long the card was in view, and that the card was open.
+    const sent = cmd.type === "approve" ? { ...cmd, shownMs: Date.now() - shownAt.current, opened: true } : cmd
+    const r = await decideFull(sent)
     setBusy(false)
-    if (failed) setError(failed)
-    return !failed
+    if (r.code === "friction") {
+      setFriction(Date.now())
+      return false
+    }
+    if (r.error) setError(r.error)
+    return !r.error
   }
 
   const deny = (msg?: string) =>
@@ -456,6 +472,42 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </div>
           ) : null}
 
+          {friction !== undefined ? (
+            <div role="alert" className="grid gap-2 rounded border border-warn p-2 text-[14px]">
+              <strong>Look again before allowing this</strong>
+              <span>
+                You approved several requests faster than anyone could read them. Read what this one
+                does above (its command, what it would also run, and what it would delete), then allow
+                it, or give it a limited grant instead. Denying is never slowed.
+              </span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!frictionReady || busy}
+                  onClick={() => void run({ type: "approve", requestId: req.id, deliberate: true })}
+                >
+                  {frictionReady ? "Yes, allow it" : "Read it first"}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={!frictionReady || busy}
+                  onClick={() =>
+                    void run({
+                      type: "approve",
+                      requestId: req.id,
+                      deliberate: true,
+                      remember: true,
+                      rememberFor: { days: 1 },
+                    })
+                  }
+                >
+                  Allow, and for a day in this folder only
+                </button>
+              </div>
+            </div>
+          ) : null}
           {panel === "remember" ? (
             <div className="grid gap-2" role="group" aria-label="Remember this decision">
               {!remember ? (

@@ -463,6 +463,44 @@ describe("commands over the WebSocket", () => {
     await c.send({ type: "close_session", sessionId })
   })
 
+  it("slows the next High approval after three made too fast to read, never a deny (D-021)", async () => {
+    const results: unknown[] = []
+    s.sdk.turn = async (api) => {
+      for (let i = 0; i < 5; i++) results.push(await api.callTool("Bash", { command: `git push origin rs${i}` }))
+    }
+    const created = await c.send({ type: "create_session", cwd: s.repo })
+    const sessionId = (created.data as { sessionId: string }).sessionId
+    await c.send({ type: "prompt", sessionId, text: "push" })
+    const asked = (i: number) =>
+      c.waitFor(
+        "approval_request",
+        (e) => e.view.request.sessionId === sessionId && JSON.stringify(e.view.rawInput).includes(`rs${i}`),
+      )
+    // Three High approvals, each within 800 ms of the card appearing.
+    for (let i = 0; i < 3; i++) {
+      const a = await asked(i)
+      expect(a.view.request.verdict.risk).toBeGreaterThanOrEqual(70)
+      expect(await c.send({ type: "approve", requestId: a.view.request.id, shownMs: 150, opened: true })).toMatchObject({ ok: true })
+    }
+    // The fourth wants a second look; a deny goes straight through.
+    const fourth = await asked(3)
+    expect(await c.send({ type: "approve", requestId: fourth.view.request.id, shownMs: 150, opened: true })).toMatchObject({
+      ok: false,
+      error: { code: "friction" },
+    })
+    expect(await c.send({ type: "deny", requestId: fourth.view.request.id })).toMatchObject({ ok: true })
+    // The fifth: too soon is still refused; after two seconds the deliberate approval is taken.
+    const fifth = await asked(4)
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, shownMs: 150 })).toMatchObject({ error: { code: "friction" } })
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, deliberate: true })).toMatchObject({ error: { code: "friction" } })
+    await new Promise((r) => setTimeout(r, 2100))
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, deliberate: true })).toMatchObject({ ok: true })
+    await c.waitFor("sdk_message", (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId)
+    expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, false, true])
+    expect(s.records().filter((r) => r.event === "approval_friction_shown")).toHaveLength(2)
+    await c.send({ type: "close_session", sessionId })
+  }, 30_000)
+
   it("denies with a message, answers a question, and refuses a second answer", async () => {
     const results: Record<string, unknown> = {}
     s.sdk.turn = async (api) => {

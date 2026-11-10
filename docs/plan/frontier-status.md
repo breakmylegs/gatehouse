@@ -68,7 +68,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-013 | Effect-complete approval cards | built | slice/D-013-effect-cards | BUILD_REPORT "Frontier D-013" | Decision for the owner to confirm: a line no rule speaks of does not by itself make the call ask |
 | D-015 | Allow-rule provenance lock | built | slice/D-015-provenance-lock | BUILD_REPORT "Frontier D-015" | Untrusted files kept apart from B32's taint; the broadest rule a person can remember is a site, typed to confirm |
 | D-018 | Risk budget per session | built | slice/D-018-risk-budget | BUILD_REPORT "Frontier D-018" | Opt-in, off by default; a person's own approvals spend nothing |
-| D-021 | Rubber-stamp detector | todo | | | |
+| D-021 | Rubber-stamp detector | built | slice/D-021-rubber-stamp | BUILD_REPORT "Frontier D-021" | Per desktop connection; the deliberate approval checked by the Host too |
 | D-025 | Dead-man timer for Extreme | todo | | | Opt-in, off by default |
 | D-030 | Approval lineage on commits | todo | | | |
 | D-053 | Dependency admission control | todo | | | Safe variant offline; connectors per conflict 1 |

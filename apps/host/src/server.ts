@@ -1,3 +1,4 @@
+import { RubberStamp } from "./rubber-stamp.js"
 import { TestLockError, type TestLocks } from "./test-locks.js"
 import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
@@ -49,6 +50,9 @@ import {
   type SessionManager,
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
+
+/** D-021: how long the friction holds a High approval back before the deliberate one. */
+const FRICTION_WAIT_MS = 2000
 
 export interface HostApp {
   manager: SessionManager
@@ -134,6 +138,9 @@ export class HostServer {
   readonly #fastify: FastifyInstance
   readonly #clients = new Set<WebSocket>()
   readonly #rawSockets = new Set<net.Socket>()
+  /** D-021: approvals given faster than they could be read, and when each friction was shown. */
+  readonly #rubberStamp = new RubberStamp()
+  readonly #frictionAt = new Map<string, number>()
   #port = 0
   dropped = 0
 
@@ -743,6 +750,43 @@ export class HostServer {
         await this.#session(cmd.sessionId).setModel(cmd.model)
         return undefined
       case "approve": {
+        // D-021: after approvals too fast to have been read, the next High one wants a second, deliberate approval.
+        const view = a.broker.get(cmd.requestId)
+        const risk = view?.request.verdict.risk ?? 0
+        const stamp = this.#rubberStamp
+        if (view && stamp.needsDeliberate(risk)) {
+          const shownAt = this.#frictionAt.get(cmd.requestId)
+          if (!cmd.deliberate || shownAt === undefined || Date.now() - shownAt < FRICTION_WAIT_MS) {
+            if (shownAt === undefined) {
+              this.#frictionAt.set(cmd.requestId, Date.now())
+              await a.audit
+                .record({
+                  session: view.request.sessionId,
+                  event: "approval_friction_shown",
+                  channel: "desktop",
+                  tool: view.request.toolName,
+                  toolUseId: view.request.toolUseId,
+                  cwd: view.request.cwd,
+                  project: view.request.project,
+                  input: { risk },
+                  verdict: {
+                    outcome: "escalate",
+                    ruleId: "rubber-stamp",
+                    reason: "Approvals came faster than they could be read, so this High one asks again.",
+                    risk,
+                    decidedBy: "rules",
+                    policyHash: "",
+                  },
+                  latencyMs: 0,
+                })
+                .catch(() => false)
+            }
+            throw new CommandError(
+              "friction",
+              "You approved several requests faster than they could be read. Look at what this one does; you can allow it after two seconds, or give it a limited grant instead.",
+            )
+          }
+        }
         const r = a.broker.resolve(
           cmd.requestId,
           {
@@ -755,9 +799,16 @@ export class HostServer {
           },
           "desktop",
         )
+        if (r.ok && view) {
+          this.#frictionAt.delete(cmd.requestId)
+          if (cmd.deliberate && stamp.needsDeliberate(risk)) stamp.deliberate()
+          else stamp.approved({ risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) })
+        }
         return resolveResult(r)
       }
       case "deny":
+        // D-021: a deny is never slowed, and ends a run of fast approvals.
+        this.#rubberStamp.denied()
         return resolveResult(
           a.broker.resolve(
             cmd.requestId,

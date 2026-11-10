@@ -171,6 +171,11 @@ export const ClientCommand = z.discriminatedUnion("type", [
     remember: z.boolean().optional(),
     /** C-013: how the remembered rule is limited. Absent: 30 days, in the session's folder, any number of uses. */
     rememberFor: RememberFor.optional(),
+    /** D-021: how long the card had been on the screen, and whether the full card was open (not a row of the queue). */
+    shownMs: z.number().int().min(0).max(86_400_000).optional(),
+    opened: z.boolean().optional(),
+    /** D-021: the second, deliberate approval the friction asked for. */
+    deliberate: z.boolean().optional(),
   }),
   z.object({ type: z.literal("deny"), requestId: Id, message: Message.optional() }),
   z.object({
