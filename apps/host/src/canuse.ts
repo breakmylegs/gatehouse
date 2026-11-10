@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
 import { INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
@@ -55,6 +56,9 @@ export interface CanUseDeps {
   /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
   locks?: Pick<TestLocks, "touched">
   lockedCalls?: Map<string, string[]>
+  /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
+  instructions?: Pick<InstructionPins, "touched">
+  instructionCalls?: Map<string, string[]>
   /** D-001: this project is strict about its tests, so Extreme approval does not approve a weakening. */
   strictTests?: () => boolean
   /** D-001: Extreme approval approved a weakening of the tests, which the session then says (pattern, reason). */
@@ -237,6 +241,40 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           deps.lockedCalls?.set(toolUseID, files)
         }
       }
+      // D-059: an agent's change to what the project tells Claude goes to a person the same way, with the change shown.
+      if (deps.instructions && verdict.outcome !== "deny" && verdict.ruleId !== LOCKED_TEST_RULE) {
+        let files: string[]
+        try {
+          files = deps.instructions.touched(deps.cwd, toolName, input)
+        } catch {
+          files = ["(the instruction files could not be read)"]
+        }
+        if (files.length) {
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: INSTRUCTIONS_RULE,
+            reason: instructionsReason(files),
+            risk: Math.max(verdict.risk, 80),
+            decidedBy: "rules",
+          }
+          const written = await deps.audit.record({
+            session: deps.sessionId,
+            event: "instructions_edit_escalated",
+            channel: "host",
+            tool: toolName,
+            toolUseId: toolUseID,
+            cwd: deps.cwd,
+            project: deps.project,
+            input: { files },
+            verdict,
+            latencyMs: 0,
+          })
+          if (!written)
+            return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+          deps.instructionCalls?.set(toolUseID, files)
+        }
+      }
       if (!early) deps.onDecision?.(toolUseID, verdict)
       if (verdict.outcome === "allow") {
         // C-013: a remembered rule that has used its allowed number of calls asks instead.
@@ -330,7 +368,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
             ...verdict,
             // A locked test's reason already says Extreme approval does not approve it.
             reason:
-              verdict.ruleId === LOCKED_TEST_RULE || verdict.ruleId === INSTALLER_RULE
+              verdict.ruleId === LOCKED_TEST_RULE || verdict.ruleId === INSTALLER_RULE || verdict.ruleId === INSTRUCTIONS_RULE
                 ? verdict.reason
                 : `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
           },
@@ -367,6 +405,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   LOCKED_TEST_RULE,
   // D-096: installing software on Windows runs a publisher's installer with your rights.
   INSTALLER_RULE,
+  // D-059: what a project tells Claude changes only with a person.
+  INSTRUCTIONS_RULE,
   // D-055: whether a project may use a licence is a person's decision.
   LICENCE_NOT_ALLOWED,
   "evaluator-unavailable",

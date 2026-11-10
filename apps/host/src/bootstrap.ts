@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { InstructionPins } from "./instruction-pins.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
@@ -523,6 +524,12 @@ export function createHost(opts: HostOptions = {}): Host {
   // D-007: the locked tests, their pins sealed by a key DPAPI keeps for this Windows user.
   const locks = new TestLocks({ dir: path.join(gatehouseDataDir(env), "locks"), sealer: () => sealer() })
   deps.locks = locks
+  // D-059: what each project tells Claude, pinned the same way.
+  const instructions = new InstructionPins({
+    dir: path.join(gatehouseDataDir(env), "instruction-pins"),
+    sealer: () => sealer(),
+  })
+  deps.instructions = instructions
   // D-002: sealed held-out checks, run under a job object where Codehouse-Limits.exe can be had.
   const limitsExe = findLimitsExe({
     installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
@@ -1063,6 +1070,7 @@ export function createHost(opts: HostOptions = {}): Host {
     heldOut,
     heldOutExec: actionFor,
     locks,
+    instructions,
     governor,
     audit,
     engine,

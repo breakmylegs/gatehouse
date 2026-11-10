@@ -23,6 +23,7 @@ import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -103,6 +104,9 @@ export interface SessionHookDeps {
   /** D-007: the locked tests, and the calls a person approved that touched them. */
   locks?: Pick<TestLocks, "touched" | "repin">
   lockedCalls?: Map<string, string[]>
+  /** D-059: what the project tells Claude, and the calls a person approved that changed it. */
+  instructions?: Pick<InstructionPins, "touched" | "repin">
+  instructionCalls?: Map<string, string[]>
   /** toolUseIDs that went through canUseTool, so PostToolUse can tell which calls Claude Code approved itself. */
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
@@ -235,6 +239,16 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           .catch(() => ["(the locks could not be read)"])
         if (files.length) return askOutput(lockedReason(files))
       }
+      // D-059: and so is a change to what the project tells Claude.
+      if (SELF_APPROVING_MODES.has(mode) && deps.instructions) {
+        let files: string[]
+        try {
+          files = deps.instructions.touched(cwd, input.tool_name, toolInput)
+        } catch {
+          files = ["(the instruction files could not be read)"]
+        }
+        if (files.length) return askOutput(instructionsReason(files))
+      }
       if (deps.approver && SELF_APPROVING_MODES.has(mode) && !NOT_JUDGED.has(input.tool_name)) {
         const judged = await deps.approver.evaluate(
           { toolName: input.tool_name, input: toolInput },
@@ -352,6 +366,30 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
             outcome: "allow",
             ruleId: LOCKED_TEST_RULE,
             reason: "A locked test was changed with your approval, so it is locked as it now is.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: deps.policy()?.hash ?? "none",
+          },
+          latencyMs: 0,
+        })
+      }
+      // D-059: so is an instruction file a person approved changing, and that is recorded.
+      const instructed = deps.instructionCalls?.get(input.tool_use_id)
+      if (input.hook_event_name === "PostToolUse" && instructed && deps.instructions) {
+        deps.instructionCalls?.delete(input.tool_use_id)
+        await deps.instructions.repin(cwd, instructed).catch(() => undefined)
+        await deps.audit.record({
+          session: deps.sessionId,
+          event: "instructions_repinned",
+          channel: "host",
+          tool: input.tool_name,
+          toolUseId: input.tool_use_id,
+          cwd,
+          input: { files: instructed },
+          verdict: {
+            outcome: "allow",
+            ruleId: INSTRUCTIONS_RULE,
+            reason: "What the project tells Claude was changed with your approval, so it is pinned as it now is.",
             risk: 0,
             decidedBy: "rules",
             policyHash: deps.policy()?.hash ?? "none",

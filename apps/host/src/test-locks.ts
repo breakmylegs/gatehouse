@@ -41,7 +41,7 @@ const rel = (root: string, p: string) => path.relative(root, p).replace(/\\/g, "
  * The folder as its real path, so a file named from it compares with the project's root, which is found from the real
  * path too: the same folder can be named by an 8.3 short name (PETERJ~1.KEL) or through a link.
  */
-const realDir = (cwd: string) => {
+export const realDir = (cwd: string) => {
   try {
     return fs.realpathSync.native(cwd)
   } catch {
@@ -49,7 +49,7 @@ const realDir = (cwd: string) => {
   }
 }
 /** A path as its real path, for one not there yet too: the real path of the nearest folder that is, and the rest. */
-const realPath = (p: string): string => {
+export const realPath = (p: string): string => {
   const abs = path.resolve(p)
   try {
     return fs.realpathSync.native(abs)
@@ -231,25 +231,32 @@ export class TestLocks {
     }
     if (tool !== "Bash" && tool !== "PowerShell") return []
     const command = typeof input.command === "string" ? input.command : ""
-    const out: string[] = []
-    for (const words of commandsOf(command)) {
-      // A redirect into a locked test changes it, whatever the command: "> f", ">f", "2>> f".
-      const redirects: string[] = []
-      words.forEach((w, i) => {
-        const m = /^\d?>>?(.*)$/.exec(w)
-        if (m) redirects.push(m[1] || (words[i + 1] ?? ""))
-      })
-      for (const r of redirects) if (r && isLocked(r)) out.push(rel(root, realPath(path.resolve(base, r))))
-      const named = words
-        .slice(1)
-        .filter((w) => !w.startsWith("-") && !redirects.includes(w) && isLocked(w))
-      if (!named.length) continue
-      const name = (words[0] ?? "").toLowerCase().replace(/\.exe$/, "")
-      const readOnly = READ_ONLY.has(name) || READ_ONLY_PAIRS.test(words.join(" "))
-      if (!readOnly) out.push(...named.map((w) => rel(root, realPath(path.resolve(base, w)))))
-    }
-    return [...new Set(out)]
+    return changedByShell(command, cwd, (abs) => isLocked(abs)).map((abs) => rel(root, abs))
   }
+}
+
+/**
+ * The files a shell command would change, as real paths, among those `isTarget` picks: a redirect into one, whatever the
+ * command ("> f", ">f", "2>> f"), or one a command names other than to read or run it. Shared by D-007 and D-059.
+ */
+export function changedByShell(command: string, cwd: string, isTarget: (abs: string) => boolean): string[] {
+  const base = realDir(cwd)
+  const abs = (w: string) => realPath(path.resolve(base, w))
+  const out: string[] = []
+  for (const words of commandsOf(command)) {
+    const redirects: string[] = []
+    words.forEach((w, i) => {
+      const m = /^\d?>>?(.*)$/.exec(w)
+      if (m) redirects.push(m[1] || (words[i + 1] ?? ""))
+    })
+    for (const r of redirects) if (r && isTarget(abs(r))) out.push(abs(r))
+    const named = words.slice(1).filter((w) => !w.startsWith("-") && !redirects.includes(w) && isTarget(abs(w)))
+    if (!named.length) continue
+    const name = (words[0] ?? "").toLowerCase().replace(/\.exe$/, "")
+    const readOnly = READ_ONLY.has(name) || READ_ONLY_PAIRS.test(words.join(" "))
+    if (!readOnly) out.push(...named.map(abs))
+  }
+  return [...new Set(out)]
 }
 
 export const lockedReason = (files: string[]) =>

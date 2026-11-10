@@ -75,7 +75,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-054 | Lockfile diff guard | built | slice/D-054-lockfile-guard | BUILD_REPORT "Frontier D-054" | Every hand edit of a lockfile asks; install scripts and off-registry sources named |
 | D-055 | Licence policy | built safe variant | slice/D-055-licences | BUILD_REPORT "Frontier D-055" | Offline: npm's download cache is not read, so a package not installed yet is unknown; Extreme never approves a licence outside the list; legal list owed |
 | D-058 | Secret commit block | built | slice/D-058-secret-commit | BUILD_REPORT "Frontier D-058" | Extends G22: pushes are read too, findings name the line; golden lines in apps/host/test/golden |
-| D-059 | Instruction integrity pinning | todo | | | |
+| D-059 | Instruction integrity pinning | built | slice/D-059-instruction-pins | BUILD_REPORT "Frontier D-059" | Pins per project, sealed; outside changes block start, messages and Extreme turns until approved with a diff |
 | D-060 | Agent-config tamper floor | built | slice/D-060-config-tamper | BUILD_REPORT "Frontier D-060" | Built into the floor; content-aware for Claude and VS Code settings |
 | D-064 | Install-script default deny | todo | | | |
 | D-096 | WinGet and installer admission | built | slice/D-096-installer-admission | BUILD_REPORT "Frontier D-096" | Offline: publisher from the WinGet id, unchecked |

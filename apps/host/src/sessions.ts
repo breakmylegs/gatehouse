@@ -4,6 +4,7 @@ import type { ActionRequest, ActionResult } from "./codehouse-action.js"
 import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
+import { InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
@@ -217,6 +218,36 @@ export class LockedTestsChangedError extends Error {
   }
 }
 
+/** D-059: a change outside Codehouse to what a project tells Claude, recorded (the files, never their words). */
+async function recordInstructionsChanged(
+  audit: HostAudit,
+  session: string,
+  cwd: string,
+  project: string | undefined,
+  files: string[],
+): Promise<void> {
+  await audit
+    .record({
+      session,
+      event: "instructions_changed",
+      channel: "host",
+      tool: "instructions",
+      cwd,
+      ...(project ? { project } : {}),
+      input: { files, by: "outside" },
+      verdict: {
+        outcome: "escalate",
+        ruleId: "instructions-edit",
+        reason: "What this project tells Claude changed outside Codehouse, so nothing starts until you approve the change.",
+        risk: 80,
+        decidedBy: "rules",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    .catch(() => false)
+}
+
 export class LimitPausedError extends Error {
   constructor(reason?: "spend" | "risk") {
     super(
@@ -339,6 +370,7 @@ export interface SessionEvents {
         | "claim_checked"
         | "remember_refused"
         | "risk_budget_exhausted"
+        | "instructions_changed"
         | "heartbeat_missed"
         | "commit_noted"
       data: Record<string, unknown>
@@ -422,6 +454,8 @@ export interface SessionDeps {
   grants?: GrantUses
   /** D-007: the locked tests. */
   locks?: TestLocks
+  /** D-059: the pins of what each project tells Claude. */
+  instructions?: InstructionPins
   /** D-025, tests only: how long a minute of the dead-man timer is, and how often it is looked at. */
   deadmanMinuteMs?: number
   deadmanLookMs?: number
@@ -725,6 +759,30 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** D-007: calls a person approved that touched locked tests, by toolUseID, so they are pinned again after. */
   readonly #lockedCalls = new Map<string, string[]>()
+  /** D-059: the same for instruction files; and the change outside Codehouse last recorded, so it is recorded once. */
+  readonly #instructionCalls = new Map<string, string[]>()
+  #instructionsSeen: string | undefined
+
+  /**
+   * D-059: refuses when what the project tells Claude changed outside Codehouse since it was pinned, until the owner
+   * approves the change on the desktop. Asked before each of your messages and each turn Extreme approval starts. A
+   * chat reads no project's instructions. Pins that cannot be read count as changed.
+   */
+  async checkInstructions(): Promise<void> {
+    if (this.#opts.kind === "chat" || !this.#deps.instructions) return
+    const changed = await this.#deps.instructions.changedOutside(this.cwd).catch(() => ["(the pins could not be read)"])
+    if (!changed.length) {
+      this.#instructionsSeen = undefined
+      return
+    }
+    const key = changed.join("\n")
+    if (this.#instructionsSeen !== key) {
+      this.#instructionsSeen = key
+      await recordInstructionsChanged(this.#deps.audit, this.id, this.cwd, this.project, changed)
+      this.emit("event", { type: "instructions_changed", data: { files: changed } })
+    }
+    throw new InstructionsChangedError(changed)
+  }
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -1011,6 +1069,9 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
+      ...(d.instructions && this.#opts.kind !== "chat"
+        ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
+        : {}),
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,
@@ -1072,6 +1133,9 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
+      ...(d.instructions && this.#opts.kind !== "chat"
+        ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
+        : {}),
       ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
       decided: this.#decided,
       verdicts: this.#verdicts,
@@ -1654,6 +1718,13 @@ export class Session extends EventEmitter<SessionEvents> {
   async #carryOnNow(data: Record<string, unknown>): Promise<void> {
     if (this.#deps.kill.isEngaged() || this.#running || this.#paused) return
     if (this.#state === "error" || this.#state === "ended") return
+    // D-059: no turn starts on instructions changed outside Codehouse; the screen is told, and the run waits for you.
+    try {
+      await this.checkInstructions()
+    } catch {
+      this.#carry.stopped()
+      return
+    }
     const written = await this.#deps.audit.record({
       session: this.id,
       event: "extreme_carry_on",
@@ -2218,6 +2289,16 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     if (!opts.restore && opts.kind !== "chat" && this.#deps.locks) {
       const changed = await this.#deps.locks.changedOutside(opts.cwd)
       if (changed.length) throw new LockedTestsChangedError(changed)
+    }
+    // D-059: nor while what the project tells Claude changed outside Codehouse, until you approve the change.
+    if (!opts.restore && opts.kind !== "chat" && this.#deps.instructions) {
+      const changed = await this.#deps.instructions
+        .changedOutside(opts.cwd)
+        .catch(() => ["(the pins could not be read)"])
+      if (changed.length) {
+        await recordInstructionsChanged(this.#deps.audit, "desktop", opts.cwd, undefined, changed)
+        throw new InstructionsChangedError(changed)
+      }
     }
     const config = this.#deps.config()
     // B09: the most open at once, over every account and both kinds. A session coming back after a restart is not

@@ -1,5 +1,6 @@
 import { RubberStamp } from "./rubber-stamp.js"
 import { TestLockError, type TestLocks } from "./test-locks.js"
+import { approveInstructions, InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
 import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
@@ -65,6 +66,8 @@ export interface HostApp {
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
+  /** D-059: the pins of what each project tells Claude. Absent where they cannot be kept (tests). */
+  instructions?: InstructionPins
   /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
   heldOut?: HeldOutChecks
   /** Section 6: the command that runs them, as a Codehouse action for the session. */
@@ -544,6 +547,18 @@ export class HostServer {
         if (!written) a.log("locks: the change could not be recorded in the audit log")
         return await l.state(cwd)
       }
+      case "instructions_state": {
+        if (!a.instructions) throw new CommandError("unavailable", "Instruction pins are not available here")
+        return await a.instructions.state(cmd.cwd)
+      }
+      case "instructions_approve": {
+        // D-059: you read the change on the desktop and approve it; recorded before the pins move.
+        const pins = a.instructions
+        if (!pins) throw new CommandError("unavailable", "Instruction pins are not available here")
+        if (!(await approveInstructions(pins, a.audit, cmd.cwd)))
+          throw new CommandError("audit", "The approval could not be recorded, so the change is not approved.")
+        return await pins.state(cmd.cwd)
+      }
       case "heldout_list": {
         // The desktop only: this socket is the desktop's, never the phone's or a push channel's.
         const s = this.#session(cmd.sessionId)
@@ -648,9 +663,13 @@ export class HostServer {
       }
       case "term_stop":
         return { stopped: a.terminal?.stop(cmd.sessionId) ?? false }
-      case "prompt":
-        this.#session(cmd.sessionId).prompt(cmd.text)
+      case "prompt": {
+        const s = this.#session(cmd.sessionId)
+        // D-059: no turn starts on instructions changed outside Codehouse until you approve the change.
+        await s.checkInstructions()
+        s.prompt(cmd.text)
         return undefined
+      }
       case "tell": {
         // G18: your message to another session, sent from this one's prompt box. It is yours, so it is a prompt like
         // any other there; the record says where it came from and went, and how long it was, never the words.
@@ -1081,6 +1100,7 @@ function classify(e: unknown): CommandError {
   if (e instanceof SessionLimitError) return new CommandError("session-limit", e.message)
   if (e instanceof MemoryRefusedError) return new CommandError("memory", e.message)
   if (e instanceof LockedTestsChangedError) return new CommandError("locked-tests", e.message)
+  if (e instanceof InstructionsChangedError) return new CommandError("instructions-changed", e.message)
   if (e instanceof ManagedPolicyError) return new CommandError("managed-policy", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)

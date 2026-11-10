@@ -1,6 +1,7 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
+import { InstructionsReview } from "../components/InstructionsReview"
 import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
@@ -1009,6 +1010,7 @@ function SessionPane({
         {session.paused ? <PausedLine session={session} paused={session.paused} /> : null}
         {!session.paused && session.bypass ? <BypassLine session={session} /> : null}
         <CounterexampleCards session={session} />
+        {session.kind === "chat" ? null : <InstructionsFor session={session} />}
         {!session.paused && !session.bypass && bypassOpen ? (
           <div className="pane-stopped">
             <BypassForm session={session} onClose={() => setBypassOpen(false)} />
@@ -1455,6 +1457,24 @@ function ContextMeter({
  * Why a session stopped, in its own words, and a way to start it again on the same conversation (owner, 31 Oct:
  * "it is not clear why").
  */
+/** D-059: a message refused because the project's instructions changed outside Codehouse. */
+const INSTRUCTIONS_EVENT = "codehouse-instructions-changed"
+
+/** D-059: the review of a change to what the project tells Claude, looked at again after each turn and refusal. */
+function InstructionsFor({ session }: { session: SessionInfo }) {
+  const [refused, setRefused] = useState(0)
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === session.id) setRefused((n) => n + 1)
+    }
+    window.addEventListener(INSTRUCTIONS_EVENT, on)
+    return () => window.removeEventListener(INSTRUCTIONS_EVENT, on)
+  }, [session.id])
+  // Looked at when a turn ends (an idle session after work), and when a message was refused.
+  const nonce = refused * 2 + (session.state === "idle" ? 1 : 0)
+  return <InstructionsReview cwd={session.cwd} nonce={nonce} />
+}
+
 function StoppedLine({ session }: { session: SessionInfo }) {
   const [busy, setBusy] = useState(false)
   return (
@@ -2187,7 +2207,12 @@ function Composer({
     setFiles([])
     setPasted([])
     const r = await send({ type: "prompt", sessionId, text: full })
-    if (!r.ok) toast.error(r.error?.message ?? "The prompt was not sent")
+    if (!r.ok) {
+      // D-059: the change to the project's instructions is shown above the prompt box for you to read.
+      if (r.error?.code === "instructions-changed")
+        window.dispatchEvent(new CustomEvent(INSTRUCTIONS_EVENT, { detail: sessionId }))
+      toast.error(r.error?.message ?? "The prompt was not sent")
+    }
   }
 
   return (
