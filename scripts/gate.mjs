@@ -102,8 +102,11 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   // its own output, or the run fails with nothing to go on (30 Oct: "72 passed (73)" and no FAIL line).
   if (r.status !== 0 && !summary.some((l) => /FAIL|error TS|✖|problems?\)/.test(l)))
     console.log(out.slice(-4000))
+  lastOutput = out
   return r.status ?? 1
 }
+/** What the last run printed, for the files a dead worker was running (they are not in vitest's report). */
+let lastOutput = ""
 
 // What changed: committed since the base, staged, unstaged and new files.
 const base =
@@ -300,9 +303,14 @@ if (fullReason) {
       // 10 Nov: with memory short, workers died part way through files that pass on their own, and a run of the whole
       // set in one worker died the same way an hour later. The files that did not pass are run again instead, each in
       // a process of its own, as many at once as free memory allows (C-001); one that fails twice still fails.
-      const again = j.testResults
-        .filter((r) => r.status !== "passed" && r.status !== "skipped")
-        .map((r) => path.relative(root, r.name).split(path.sep).join("/"))
+      const rel = (f) => path.relative(root, path.resolve(root, f)).split(path.sep).join("/")
+      const again = [
+        ...new Set([
+          ...j.testResults.filter((r) => r.status !== "passed" && r.status !== "skipped").map((r) => rel(r.name)),
+          // A file a worker died in is not in the report at all; vitest names it in its error.
+          ...[...lastOutput.matchAll(/while running test file (\S+?\.test\.\w+)/g)].map((m) => rel(m[1])),
+        ]),
+      ]
       if (again.length) {
         say(`  ${again.length} file${again.length === 1 ? "" : "s"} did not pass; each runs again in a process of its own`)
         code = run(`tests: ${again.length} again, one file at a time by free memory`, node, [
