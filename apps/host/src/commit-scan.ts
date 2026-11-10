@@ -18,7 +18,8 @@ export const SECRET_IN_COMMIT_RULE = "secret-in-commit"
 const KINDS: Array<{ kind: string; re: RegExp }> = [
   { kind: "a private key", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { kind: "an Anthropic API key", re: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
-  { kind: "an OpenAI API key", re: /\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/ },
+  // Not an Anthropic key, which the line above names.
+  { kind: "an OpenAI API key", re: /\bsk-(?!ant-)(?:proj-)?[A-Za-z0-9_-]{32,}/ },
   { kind: "a GitHub token", re: /\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})/ },
   { kind: "a Slack token", re: /\bxox[abprs]-[A-Za-z0-9-]{20,}/ },
   { kind: "an AWS access key", re: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/ },

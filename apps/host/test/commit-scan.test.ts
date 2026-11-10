@@ -157,7 +157,8 @@ const TOKENS: Record<string, string> = {
   OPENAI: ["sk-", "proj-", "Hq3Lm8Rt2Wv6Xz9Bc4Nd7Fg1Jk5Pa0Se"].join(""),
   GH: ["gh", "p_", "R4nD0mT0k3nV4lu3F0rT3st1ngOnLy1234"].join(""),
   SLACK: ["xo", "xb-", "1234567890-0987654321-AbCdEf"].join(""),
-  GOOGLE: ["AI", "za", "SyD3mOk3yF0rT3st1ngPurp0s3s0nly12"].join(""),
+  // A Google key is AIza and 35 more.
+  GOOGLE: ["AI", "za", "SyD3mOk3yF0rT3st1ngPurp0s3s0nly1234"].join(""),
   URLPW: ["postgres://admin", ":", "s3cretpass", "@db.local/app"].join(""),
 }
 

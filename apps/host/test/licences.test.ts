@@ -52,7 +52,8 @@ describe("licence policy in canUseTool (D-055)", () => {
     // An unreadable licence is recorded too; Extreme approval may approve it, and says so in the record.
     const u = setup(LICENCE_UNKNOWN)
     expect((await u.call())?.behavior).toBe("allow")
-    expect(u.records.map((r) => r.event ?? r.verdict.decidedBy)).toEqual(["licence_escalated", "extreme-mode"])
+    expect(u.records.map((r) => r.event)).toEqual(["licence_escalated", "human_decision"])
+    expect(u.records[1]?.verdict).toMatchObject({ decidedBy: "extreme-mode", outcome: "allow" })
   })
 
   it("does not go on when licence_escalated cannot be recorded", async () => {

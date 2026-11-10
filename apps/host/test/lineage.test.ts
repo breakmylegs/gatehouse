@@ -1,6 +1,6 @@
 // D-030, approval lineage on commits: a session's commit gets a note under refs/notes/codehouse naming the audit record
 // written for it, and that record names the commit and verifies against the chain. Notes are never pushed.
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -12,8 +12,9 @@ import { noteCommit, readNote } from "../src/lineage.js"
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-lineage-"))
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
 
+let repos = 0
 function repo(): string {
-  const r = path.join(dir, "repo")
+  const r = path.join(dir, `repo${++repos}`)
   fs.mkdirSync(r, { recursive: true })
   const git = (...a: string[]) => execFileSync("git", a, { cwd: r, windowsHide: true })
   git("init", "-q", "-b", "main")
@@ -46,7 +47,7 @@ describe("approval lineage on commits (D-030)", () => {
     const read = await readNote(r, head)
     expect(read).toEqual(note)
     const records = listAuditFiles(auditDir).flatMap((f) =>
-      fs.readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as AuditRecord),
+      fs.readFileSync(path.join(auditDir, f), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as AuditRecord),
     )
     const rec = records.find((x) => x.seq === read!.auditSeq)!
     expect(rec.hash).toBe(read!.auditHash)
@@ -56,7 +57,8 @@ describe("approval lineage on commits (D-030)", () => {
     expect(verifyAudit(auditDir)).toMatchObject({ ok: true })
     // The note lives on its own ref, which is not pushed.
     expect(execFileSync("git", ["for-each-ref", "refs/notes"], { cwd: r }).toString()).toContain("refs/notes/codehouse")
-    expect(execFileSync("git", ["config", "--get-all", "remote.origin.push"], { cwd: r, stdio: ["ignore", "pipe", "ignore"] }).toString()).toBe("")
+    // No push refspec was added for it (git config exits with 1 for a key that is not set).
+    expect(spawnSync("git", ["config", "--get-all", "remote.origin.push"], { cwd: r }).status).toBe(1)
   })
 
   it("makes no note when the record cannot be written, or there is no commit", async () => {
