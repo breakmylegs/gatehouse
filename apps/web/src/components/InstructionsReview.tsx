@@ -45,7 +45,8 @@ export function InstructionsReview({ cwd, nonce = 0, onApproved }: { cwd: string
   useEffect(() => {
     let live = true
     void send({ type: "instructions_state", cwd }).then((r) => {
-      if (live && r.ok && r.data) setSt(r.data as State)
+      const d = r.data as State | undefined
+      if (live && r.ok && Array.isArray(d?.changes)) setSt(d)
     })
     return () => {
       live = false
@@ -57,7 +58,8 @@ export function InstructionsReview({ cwd, nonce = 0, onApproved }: { cwd: string
     void send({ type: "instructions_approve", cwd }).then((r) => {
       setBusy(false)
       if (!r.ok) return void toast.error(r.error?.message ?? "The change was not approved")
-      setSt(r.data as State)
+      const d = r.data as State | undefined
+      setSt(Array.isArray(d?.changes) ? d : { changes: [], unreadable: false })
       toast("Approved. Sessions here can carry on.")
       onApproved?.()
     })

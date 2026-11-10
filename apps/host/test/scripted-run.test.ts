@@ -154,7 +154,8 @@ describe("escalation to a person", () => {
     await s.waitForPending()
     const view = s.broker.list()[0]
     expect(view?.request).toMatchObject({ kind: "permission", toolName: "Bash", project: "proj" })
-    expect(view?.request.verdict).toMatchObject({ outcome: "escalate", ruleId: "package-install" })
+    // D-053: lodash is a package this project does not use yet.
+    expect(view?.request.verdict).toMatchObject({ outcome: "escalate", ruleId: "dependency-new" })
     expect(view?.rawInput).toEqual({ command: "npm install lodash" })
     expect(view?.defaultToNo).toBe(true) // risk 70 or more never has "allow" as the default
 
@@ -179,7 +180,7 @@ describe("escalation to a person", () => {
     expect(rec).toMatchObject({
       tool: "Bash",
       channel: "desktop",
-      verdict: { outcome: "allow", decidedBy: "human-desktop", ruleId: "package-install" },
+      verdict: { outcome: "allow", decidedBy: "human-desktop", ruleId: "dependency-new" },
     })
     expect(rec?.latencyMs).toBeGreaterThanOrEqual(0)
   })

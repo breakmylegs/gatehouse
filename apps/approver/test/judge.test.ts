@@ -91,7 +91,8 @@ describe("the judge inside the Approver", () => {
       ctx: { cwd: on.cwd, sessionId: "s" },
     })
     expect(deny.structured.outcome).toBe("deny")
-    expect(pkg.structured).toMatchObject({ outcome: "escalate", ruleId: "package-install" })
+    // D-053: a package the project does not use yet; not a rule the judge may answer either.
+    expect(pkg.structured).toMatchObject({ outcome: "escalate", ruleId: "dependency-new" })
     expect(floor.structured.decidedBy).toBe("floor")
     expect(calls).toEqual([])
   })

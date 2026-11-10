@@ -1470,9 +1470,9 @@ function InstructionsFor({ session }: { session: SessionInfo }) {
     window.addEventListener(INSTRUCTIONS_EVENT, on)
     return () => window.removeEventListener(INSTRUCTIONS_EVENT, on)
   }, [session.id])
-  // Looked at when a turn ends (an idle session after work), and when a message was refused.
-  const nonce = refused * 2 + (session.state === "idle" ? 1 : 0)
-  return <InstructionsReview cwd={session.cwd} nonce={nonce} />
+  // Only when the Host says the instructions changed, or a message was refused for it; looked at again each time.
+  if (!session.instructionsChanged && !refused) return null
+  return <InstructionsReview cwd={session.cwd} nonce={refused * 2 + (session.instructionsChanged ? 1 : 0)} />
 }
 
 function StoppedLine({ session }: { session: SessionInfo }) {

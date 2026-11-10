@@ -439,7 +439,8 @@ describe("commands over the WebSocket", () => {
 
     const asked = await c.waitFor("approval_request", (e) => e.view.request.sessionId === sessionId)
     expect(asked.view.rawInput).toEqual({ command: "npm install via-ws" })
-    expect(asked.view.request.verdict.ruleId).toBe("package-install")
+    // D-053: a package the project does not use yet.
+    expect(asked.view.request.verdict.ruleId).toBe("dependency-new")
     const waiting = await c.waitFor(
       "session",
       (e) => e.info.id === sessionId && e.info.state === "waiting",

@@ -332,6 +332,8 @@ export interface SessionInfo {
   local?: boolean
   /** Where its words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel?: string
+  /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */
+  instructionsChanged?: boolean
   /** A fork from a point: its earlier conversation is shown up to this message only. */
   historyUntil?: string
   /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
@@ -774,7 +776,10 @@ export class Session extends EventEmitter<SessionEvents> {
     if (this.#opts.kind === "chat" || !this.#deps.instructions) return
     const changed = await this.#deps.instructions.changedOutside(this.cwd).catch(() => ["(the pins could not be read)"])
     if (!changed.length) {
-      this.#instructionsSeen = undefined
+      if (this.#instructionsSeen !== undefined) {
+        this.#instructionsSeen = undefined
+        this.emit("state", this.info())
+      }
       return
     }
     const key = changed.join("\n")
@@ -782,6 +787,8 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#instructionsSeen = key
       await recordInstructionsChanged(this.#deps.audit, this.id, this.cwd, this.project, changed)
       this.emit("event", { type: "instructions_changed", data: { files: changed } })
+      // The screen shows the change for review while this is set.
+      this.emit("state", this.info())
     }
     throw new InstructionsChangedError(changed)
   }
@@ -941,6 +948,8 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.localModel !== undefined
         ? { local: true, ...(this.#localLabel ? { localLabel: this.#localLabel } : {}) }
         : {}),
+      // D-059: what the project tells Claude changed outside Codehouse and waits for your review.
+      ...(this.#instructionsSeen !== undefined ? { instructionsChanged: true } : {}),
       ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
         ? { carryOn: this.#carry.status() }
         : {}),

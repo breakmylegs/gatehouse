@@ -444,7 +444,7 @@ The sections come in three groups. **Preferences**: General, Account and plan, P
 
 **Instructions for every session** (Sessions) are your own words that every new session is told at its start, ahead of its project's and its own. They apply to sessions started after you save.
 
-**Instructions** are what a project tells Claude: CLAUDE.md, AGENTS.md, Claude's settings, skills, commands and agents. Codehouse pins them. When a session changes one, the request comes to you, even in Extreme approval, and the card shows the change. When one changes outside Codehouse (a pull, a checkout, another editor), no session starts there and no message or turn goes on until you have read the change and chosen **I have read it: approve the change**, in the new session form or above the prompt box.
+**Instructions** are what a project tells Claude: its CLAUDE and AGENTS files, Claude's settings, skills, commands and agents. Codehouse pins them. When a session changes one, the request comes to you, even in Extreme approval, and the card shows the change. When one changes outside Codehouse (a pull, a checkout, another editor), no session starts there and no message or turn goes on until you have read the change and chosen **I have read it: approve the change**, in the new session form or above the prompt box.
 
 **New dependencies**: a session's install or manifest edit that adds a package the project does not use yet comes to you, and the card says when the name is a letter or two from a popular package, the usual sign of a typo or a look-alike. A name AI models are known to invent is refused. Nothing is looked up online.
 

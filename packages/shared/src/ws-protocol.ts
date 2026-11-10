@@ -417,6 +417,8 @@ export const SessionInfo = z.object({
   goal: z.string().max(300).optional(),
   /** Where a local chat's words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel: z.string().max(120).optional(),
+  /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */
+  instructionsChanged: z.boolean().optional(),
   /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */
   historyUntil: z.string().max(100).optional(),
   /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */
