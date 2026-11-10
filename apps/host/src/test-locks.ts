@@ -37,6 +37,27 @@ export interface LockState {
 }
 
 const rel = (root: string, p: string) => path.relative(root, p).replace(/\\/g, "/")
+/**
+ * The folder as its real path, so a file named from it compares with the project's root, which is found from the real
+ * path too: the same folder can be named by an 8.3 short name (PETERJ~1.KEL) or through a link.
+ */
+const realDir = (cwd: string) => {
+  try {
+    return fs.realpathSync.native(cwd)
+  } catch {
+    return path.resolve(cwd)
+  }
+}
+/** A path as its real path, for one not there yet too: the real path of the nearest folder that is, and the rest. */
+const realPath = (p: string): string => {
+  const abs = path.resolve(p)
+  try {
+    return fs.realpathSync.native(abs)
+  } catch {
+    const parent = path.dirname(abs)
+    return parent === abs ? abs : path.join(realPath(parent), path.basename(abs))
+  }
+}
 const hashOf = (file: string): string | undefined => {
   try {
     return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex")
@@ -127,7 +148,7 @@ export class TestLocks {
   /** Locks a file of the project (desktop only). Refused while the lock file is tampered: accept or unlock first. */
   async lock(cwd: string, file: string): Promise<string> {
     const root = TestLocks.rootOf(cwd)
-    const abs = path.resolve(cwd, file)
+    const abs = realPath(path.resolve(realDir(cwd), file))
     const r = rel(root, abs)
     if (r.startsWith("..") || path.isAbsolute(r)) throw new TestLockError("Only a file inside the project can be locked.")
     const h = hashOf(abs)
@@ -199,13 +220,14 @@ export class TestLocks {
     const cur = await this.#read(root)
     const locked = new Set(Object.keys(cur.files).map((p) => p.toLowerCase()))
     if (!locked.size && !cur.tampered) return []
+    const base = realDir(cwd)
     const isLocked = (word: string) => {
-      const r = rel(root, path.resolve(cwd, word)).toLowerCase()
+      const r = rel(root, realPath(path.resolve(base, word))).toLowerCase()
       return locked.has(r) || (cur.tampered && isTestFile(r))
     }
     if (["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(tool)) {
       const f = typeof input.file_path === "string" ? input.file_path : input.notebook_path
-      return typeof f === "string" && isLocked(f) ? [rel(root, path.resolve(cwd, f))] : []
+      return typeof f === "string" && isLocked(f) ? [rel(root, realPath(path.resolve(base, f)))] : []
     }
     if (tool !== "Bash" && tool !== "PowerShell") return []
     const command = typeof input.command === "string" ? input.command : ""
@@ -217,14 +239,14 @@ export class TestLocks {
         const m = /^\d?>>?(.*)$/.exec(w)
         if (m) redirects.push(m[1] || (words[i + 1] ?? ""))
       })
-      for (const r of redirects) if (r && isLocked(r)) out.push(rel(root, path.resolve(cwd, r)))
+      for (const r of redirects) if (r && isLocked(r)) out.push(rel(root, realPath(path.resolve(base, r))))
       const named = words
         .slice(1)
         .filter((w) => !w.startsWith("-") && !redirects.includes(w) && isLocked(w))
       if (!named.length) continue
       const name = (words[0] ?? "").toLowerCase().replace(/\.exe$/, "")
       const readOnly = READ_ONLY.has(name) || READ_ONLY_PAIRS.test(words.join(" "))
-      if (!readOnly) out.push(...named.map((w) => rel(root, path.resolve(cwd, w))))
+      if (!readOnly) out.push(...named.map((w) => rel(root, realPath(path.resolve(base, w)))))
     }
     return [...new Set(out)]
   }

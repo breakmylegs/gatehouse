@@ -12,7 +12,7 @@ import type { Verdict } from "@gatehouse/shared"
 import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
-import { lockedReason, type TestLocks } from "./test-locks.js"
+import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**

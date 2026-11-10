@@ -92,11 +92,17 @@ describe("on real sessions (D-007)", () => {
     fs.writeFileSync(path.join(s.repo, "tests", "locked.test.ts"), "expect(1).toBe(1)\n")
     await locks.lock(s.repo, "tests/locked.test.ts")
   }, 60000)
-  afterAll(() => s.stop())
+  afterAll(async () => {
+    // Closed first, so Windows lets the stack remove its folder.
+    for (const x of s.manager.liveSessions()) await x.close()
+    await s.stop()
+  })
 
   it("extreme_locked_tests: an Extreme session cannot change a locked test without a person", async () => {
     let r: ToolCallResult | undefined
-    s.sdk.turn = async (api) => {
+    s.sdk.turn = async (api, text) => {
+      // Extreme approval carries on by itself after the turn; the queue is empty then.
+      if (text !== "change it") return api.say("QUEUE EMPTY")
       const call = api.callTool("Edit", {
         file_path: path.join(s.repo, "tests", "locked.test.ts"),
         old_string: "toBe(1)",
@@ -117,6 +123,7 @@ describe("on real sessions (D-007)", () => {
     const events = s.records().map((x) => x.event)
     expect(events).toContain("locked_test_escalated")
     expect(events).not.toContain("test_lock_repinned")
+    await session.close()
   })
 
   it("is asked in Auto, where Claude Code would otherwise approve it by itself", async () => {
