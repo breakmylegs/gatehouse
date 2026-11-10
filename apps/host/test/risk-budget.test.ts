@@ -1,7 +1,7 @@
 // D-018, the risk budget: opt-in; an allow given without a person spends it (Moderate 1, High 3); at zero an Extreme
 // session pauses and any other goes back to Manual; your own message fills it again.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { LimitPauser } from "../src/limit-pause.js"
+import { LimitPauser, type PauseTarget } from "../src/limit-pause.js"
 import type { ToolCallResult } from "./fake-sdk.js"
 import { buildStack, type Stack } from "./stack.js"
 
@@ -40,11 +40,33 @@ describe("the risk budget (D-018)", () => {
     })
     await pauser.check()
     expect(session.info().paused).toMatchObject({ reason: "risk" })
+    // Nor does the session itself, asked by anything but you.
+    expect(await session.resume("limit-reset")).toBe(false)
+    expect(session.info().paused).toMatchObject({ reason: "risk" })
     // You do, and its budget is full again.
     await session.resume("you")
     expect(session.info().paused).toBeUndefined()
     expect(session.info().riskBudget).toBe(3)
     await session.close()
+  })
+
+  it("is never asked to start again by the limit pauser, below the limit or after its reset", async () => {
+    const resumed: string[] = []
+    const target = (id: string, reason?: "risk"): PauseTarget => ({
+      id,
+      account: "a",
+      paused: { percent: 0, wasRunning: true, until: "2000-01-01T00:00:00Z", ...(reason ? { reason } : {}) },
+      pause: async () => undefined,
+      resume: async () => (resumed.push(id), true),
+      endBypass: async () => undefined,
+    })
+    const pauser = new LimitPauser({
+      sessions: () => [target("plan"), target("risk", "risk")],
+      planUsage: async () => ({ limits: [{ label: "5-hour limit", percent: 1, group: "session" }], at: "" }),
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(resumed).toEqual(["plan"])
   })
 
   it("sends an Auto session back to Manual once spent, so the next Moderate call asks", async () => {
