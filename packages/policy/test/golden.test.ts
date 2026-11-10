@@ -236,6 +236,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "19-lockfiles": 6,
   "20-installers": 7,
   "21-config-tamper": 10,
+  "22-licences": 8,
 }
 
 for (const { category, cases } of corpus) {

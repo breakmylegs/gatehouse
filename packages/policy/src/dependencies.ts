@@ -27,6 +27,9 @@ export interface DependencyFinding {
 
 const norm = (eco: Ecosystem, n: string) => (eco === "pypi" ? n.toLowerCase().replace(/[-_.]+/g, "-") : eco === "nuget" ? n.toLowerCase() : n)
 
+/** How a dependency is kept in knownDependencies' set: "pypi:my-package". */
+export const dependencyKey = (d: AddedDependency) => `${d.ecosystem}:${norm(d.ecosystem, d.name)}`
+
 /** The name a spec names: "lodash@4" is lodash, "@scope/x@1" is @scope/x, "requests==2.1" is requests. */
 function nameOf(eco: Ecosystem, spec: string): string | undefined {
   const s = spec.trim()

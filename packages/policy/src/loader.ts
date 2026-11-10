@@ -289,7 +289,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
   }
 
   const workspaceRootKeys = roots.map((r) => resolvePath(r, process.cwd()).key)
-  const hash = sha256Hex(canonicalize({ rules, overlays, remember, ...(approvedDependencies.length ? { approvedDependencies } : {}) }))
+  const hash = sha256Hex(canonicalize({ rules, overlays, remember, ...(approvedDependencies.length ? { approvedDependencies } : {}), ...(managed?.licences ? { managedLicences: managed.licences } : {}) }))
   return {
     rules,
     sources: merged.sources,
@@ -297,6 +297,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
     overlays,
     remember,
     ...(approvedDependencies.length ? { approvedDependencies } : {}),
+    ...(managed?.licences ? { managedLicences: managed.licences } : {}),
     hash,
     workspaceRootKeys: workspaceRootKeys.map(toKey),
   }

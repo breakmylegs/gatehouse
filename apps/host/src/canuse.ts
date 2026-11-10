@@ -1,5 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
-import { INSTALLER_RULE, INTEGRITY_PREFIX } from "@gatehouse/policy"
+import { INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
@@ -283,6 +283,23 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (!written)
           return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
       }
+      // D-055: a dependency whose licence is not allowed, or cannot be read, is recorded before anything is decided.
+      if (verdict.ruleId === LICENCE_NOT_ALLOWED || verdict.ruleId === LICENCE_UNKNOWN) {
+        const written = await deps.audit.record({
+          session: deps.sessionId,
+          event: "licence_escalated",
+          channel: "host",
+          tool: toolName,
+          toolUseId: toolUseID,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { reason: verdict.reason },
+          verdict,
+          latencyMs: 0,
+        })
+        if (!written)
+          return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+      }
       if (deps.extreme?.() === true && weakens && deps.strictTests?.()) {
         // D-001, strict for this project: a weakening waits for a person even in Extreme approval.
         return await escalate(
@@ -350,6 +367,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   LOCKED_TEST_RULE,
   // D-096: installing software on Windows runs a publisher's installer with your rights.
   INSTALLER_RULE,
+  // D-055: whether a project may use a licence is a person's decision.
+  LICENCE_NOT_ALLOWED,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

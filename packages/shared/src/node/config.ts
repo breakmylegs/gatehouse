@@ -318,6 +318,12 @@ function build(loose: boolean) {
       .optional(),
     /** D-015: files whose words are not the project's own (globs); absent: README and Markdown files, dependencies. */
     untrustedFiles: z.array(z.string().max(260)).max(100).optional(),
+    /**
+     * D-055: SPDX licences a new dependency may have without asking, and "npm:name" entries accepted whatever their
+     * licence. Absent: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD and Unlicense. A managed policy's list
+     * is used instead when it sets one.
+     */
+    allowedLicences: z.array(z.string().max(120)).max(200).optional(),
     memoryGovernor: z
       .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
       .passthrough()

@@ -3,7 +3,8 @@ import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkCallFloor } from "./floor.js"
-import { admit, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
+import { DEFAULT_LICENCES, licenceFindings } from "./licences.js"
+import { admit, dependencyKey, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
 import { installerCall } from "./installers.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
@@ -120,6 +121,8 @@ export interface EngineOptions {
   pwsh?: PwshWorker
   /** Your redaction list: a web search or address holding one of these is refused (W1-10). */
   sensitiveTerms?: () => readonly string[]
+  /** D-055: the licences allowed without asking, from Settings. Undefined: the permissive default. */
+  allowedLicences?: () => readonly string[] | undefined
 }
 
 /** What a call would send out to the web: a search's query, a fetched page's address. Nothing else is checked. */
@@ -144,12 +147,14 @@ export class PolicyEngine {
   readonly #getPolicy: () => Policy | undefined
   readonly #pwsh: PwshWorker | undefined
   readonly #sensitive: () => readonly string[]
+  readonly #licences: () => readonly string[] | undefined
   readonly #effectiveCache = new Map<string, Effective>()
 
   constructor(opts: EngineOptions) {
     this.#getPolicy = opts.getPolicy
     this.#pwsh = opts.pwsh
     this.#sensitive = opts.sensitiveTerms ?? (() => [])
+    this.#licences = opts.allowedLicences ?? (() => undefined)
   }
 
   async evaluate(call: ToolCall, ctx: EvalContext): Promise<Verdict> {
@@ -207,14 +212,18 @@ export class PolicyEngine {
     return withShown(v)
   }
 
-  /** D-053: what the call adds to the project's dependencies that it does not already use, judged. */
+  /**
+   * D-053: what the call adds to the project's dependencies that it does not already use, judged. D-055: and each one's
+   * licence, against the managed policy's list, or yours, or the permissive default; a licence finding carries what
+   * D-053 said too, so the card says both.
+   */
   #dependencies(
     call: ToolCall,
     input: Record<string, unknown>,
     ctx: EvalContext,
     root: string,
     policy: Policy,
-  ): DependencyFinding[] {
+  ): Array<DependencyFinding | Candidate> {
     let added: AddedDependency[] = []
     let dirs = [root, ctx.cwd]
     const change = fileChange(call, input, ctx.cwd)
@@ -225,7 +234,18 @@ export class PolicyEngine {
       added = fromManifestEdit(change.file, change.before, change.after)
     }
     if (!added.length) return []
-    return admit(added, knownDependencies(dirs), new Set(policy.approvedDependencies ?? []))
+    const known = knownDependencies(dirs)
+    const found: Array<DependencyFinding | Candidate> = admit(added, known, new Set(policy.approvedDependencies ?? []))
+    if (found.some((d) => d.outcome === "deny")) return found
+    const fresh = added.filter((d) => !known.has(dependencyKey(d)))
+    const allowed = policy.managedLicences ?? this.#licences() ?? DEFAULT_LICENCES
+    const lic = licenceFindings(fresh, [...new Set(dirs)], allowed)
+    if (!lic.length) return found
+    const also = (xs: Array<{ reason: string }>) => xs.map((d) => d.reason).join(" ")
+    return [
+      ...found.map((d) => ({ ...d, reason: `${d.reason} ${also(lic)}` })),
+      ...lic.map((l) => ({ ruleId: l.ruleId, risk: l.risk, reason: found.length ? `${l.reason} ${also(found)}` : l.reason })),
+    ]
   }
 
   #verdict(
@@ -304,7 +324,7 @@ export class PolicyEngine {
 
     // D-053: a dependency the project does not use yet goes to a person; one models are known to invent is refused.
     const deps = this.#dependencies(call, input, ctx, rootKeyPath, policy)
-    const refused = deps.find((d) => d.outcome === "deny")
+    const refused = deps.find((d): d is DependencyFinding => "outcome" in d && d.outcome === "deny")
     if (refused) return this.#verdict("deny", refused, hash, "rules")
 
     if (f.parseError) return this.#verdict("escalate", BUILTIN.parseError, hash, "rules")

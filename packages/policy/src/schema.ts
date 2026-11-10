@@ -99,6 +99,7 @@ export const overlaySchema = {
     deny: { type: "array", items: ruleSchema },
     escalate: { type: "array", items: ruleSchema },
     removeAllow: { type: "array", items: { type: "string" } },
+    licences: { type: "array", items: { type: "string" } },
   },
 } as const
 

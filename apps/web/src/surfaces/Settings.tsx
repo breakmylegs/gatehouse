@@ -62,6 +62,7 @@ interface Config {
   memoryGovernor?: { percent: number; off?: boolean }
   testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
   riskBudget?: { points: number; off?: boolean }
+  allowedLicences?: string[]
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
@@ -128,6 +129,8 @@ interface Values {
   /** D-018: points of the risk budget, or "" for none. */
   rbPoints: string
   tiProjects: string
+  /** D-055: the licences allowed without asking, one to a line; empty is the permissive default. */
+  licences: string
   effortCap: string
   maxSessions: string
   spendCap: string
@@ -187,6 +190,7 @@ function valuesOf(d: SettingsData): Values {
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
+    licences: (c.allowedLicences ?? []).join("\n"),
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
@@ -280,6 +284,10 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     body.riskBudget = v.rbPoints
       ? { ...(d.saved.riskBudget ?? {}), points: Number(v.rbPoints), off: undefined }
       : { ...(d.saved.riskBudget ?? { points: 10 }), off: true }
+  // D-055: absent is the permissive default, so nothing is written until the list is changed.
+  const licences = lines(v.licences)
+  if (licences.length) body.allowedLicences = licences
+  else delete body.allowedLicences
   // D-001: absent is no project strict, so nothing is written until one is.
   const strictProjects = v.tiProjects
     .split(/\r?\n/)
@@ -381,6 +389,7 @@ export const DEFAULT_VALUES: Values = {
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
+  licences: "",
   effortCap: "",
   maxSessions: "",
   spendCap: "",
@@ -654,6 +663,7 @@ export function Settings() {
   const memChanged = differs(v, ["memPoint"])
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
+  const licChanged = differs(v, ["licences"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
@@ -1177,6 +1187,26 @@ export function Settings() {
                   value={v.tiProjects}
                   disabled={v.tiAll}
                   onChange={(e) => change({ tiProjects: e.target.value }, "Test integrity")}
+                />
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Licences" gap="gap-2" changed={licChanged}>
+              <p className="m-0 text-[13px] text-mut">
+                A dependency a session adds that the project does not use yet has its licence read
+                from this computer (the project's packages, and the NuGet, Cargo and Python
+                folders). A licence that is not on this list comes to you, even in Extreme
+                approval, and so does one Codehouse cannot read. Your organisation's managed policy,
+                when it sets a list, is used instead of this one.
+              </p>
+              <Field
+                label="Licences allowed without asking, one to a line"
+                help="SPDX names, such as MIT or Apache-2.0. A line such as npm:left-pad accepts that package whatever its licence. Empty: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD and Unlicense."
+              >
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.licences}
+                  onChange={(e) => change({ licences: e.target.value }, "Licences")}
                 />
               </Field>
             </Group>

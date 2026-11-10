@@ -190,6 +190,7 @@ export function createHost(opts: HostOptions = {}): Host {
     getPolicy: () => store.current,
     pwsh,
     sensitiveTerms: () => config.redactTerms ?? [],
+    allowedLicences: () => config.allowedLicences,
   })
   const dir = auditDir(env)
   const audit = new HostAudit(

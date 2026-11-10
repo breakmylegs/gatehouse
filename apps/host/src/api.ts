@@ -1509,6 +1509,7 @@ const LIVE_SETTINGS = [
   "memoryGovernor",
   "testIntegrity",
   "untrustedFiles",
+  "allowedLicences",
   "riskBudget",
   "outputStyle",
   "worktreeLocation",
