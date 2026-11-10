@@ -234,6 +234,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "17-effects-expand": 30,
   "18-dependencies": 12,
   "19-lockfiles": 6,
+  "20-installers": 7,
 }
 
 for (const { category, cases } of corpus) {

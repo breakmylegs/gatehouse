@@ -240,6 +240,10 @@ A call that adds a dependency is judged by name, with no network (`dependencies.
 
 An agent's edit of a lockfile (package-lock.json, npm-shrinkwrap.json, yarn.lock, pnpm-lock.yaml, bun.lockb, poetry.lock, uv.lock, Pipfile.lock, packages.lock.json, Cargo.lock, go.sum, composer.lock, Gemfile.lock), by a file tool or from the shell (sed -i, a redirect, Set-Content and the like), escalates as `lockfile-edited`: a lockfile is written by the package manager from the manifest, and a hand edit changes what is installed with nothing in the manifest to explain it. The reason names packages that gain an install script (with the script, where the package is installed in node_modules to read it) and sources other than the registry (git, a file, another host); either raises it to 80. Reading a lockfile, and the package manager writing one, are as before.
 
+### Installing software (D-096)
+
+winget install, upgrade and add, choco install and upgrade (and cinst), scoop install and update, msiexec, and PowerShell's Install-Module, Install-Package and Install-Script escalate as `installer-admission` at 80 (High, so Auto and Accept edits ask too), with the package id, the source and, for a WinGet id, its publisher part, marked as not checked since nothing is looked up. Extreme approval never approves it.
+
 ## 8. Redaction
 
 `redact()` and `redactString()` remove tokens, keys, Authorization headers, JWTs, connection strings, credentials in URLs, private key blocks and `key=value` secrets, plus any terms in the user's list (client names, internal host names). Strings under keys that look secret (`password`, `token`, `api_key` and so on) are replaced whole. Numbers are left alone. It never mutates its input. It is applied before anything is written to the audit log or sent to the relay.

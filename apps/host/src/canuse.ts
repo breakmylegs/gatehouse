@@ -1,5 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
-import { INTEGRITY_PREFIX } from "@gatehouse/policy"
+import { INSTALLER_RULE, INTEGRITY_PREFIX } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
@@ -313,7 +313,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
             ...verdict,
             // A locked test's reason already says Extreme approval does not approve it.
             reason:
-              verdict.ruleId === LOCKED_TEST_RULE
+              verdict.ruleId === LOCKED_TEST_RULE || verdict.ruleId === INSTALLER_RULE
                 ? verdict.reason
                 : `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
           },
@@ -348,6 +348,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   TAINT_RULE,
   // D-007: a locked test changes only with a person.
   LOCKED_TEST_RULE,
+  // D-096: installing software on Windows runs a publisher's installer with your rights.
+  INSTALLER_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

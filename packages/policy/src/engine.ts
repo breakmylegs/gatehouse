@@ -5,6 +5,7 @@ import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
 import { admit, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
+import { installerCall } from "./installers.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
 import { hiddenCharacters } from "./hidden.js"
 import {
@@ -343,6 +344,9 @@ export class PolicyEngine {
         ? lockfileEdit(change.file, change.before, change.after, rootKeyPath)
         : undefined
     if (lock) escalations.push(lock)
+    // D-096: installing software on Windows is High, and never approved by Extreme approval.
+    const installer = f.isShell ? installerCall(f.segments) : undefined
+    if (installer) escalations.push(installer)
     // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
     const integrity = f.isShell
       ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")

@@ -78,7 +78,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-059 | Instruction integrity pinning | todo | | | |
 | D-060 | Agent-config tamper floor | todo | | | |
 | D-064 | Install-script default deny | todo | | | |
-| D-096 | WinGet and installer admission | todo | | | |
+| D-096 | WinGet and installer admission | built | slice/D-096-installer-admission | BUILD_REPORT "Frontier D-096" | Offline: publisher from the WinGet id, unchecked |
 
 ## Wave 2: evidence
 
