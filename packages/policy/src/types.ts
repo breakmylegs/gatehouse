@@ -143,6 +143,8 @@ export interface Policy {
   /** Overlays by project name (file name without extension). */
   overlays: Record<string, Overlay>
   remember: Rule[]
+  /** D-053: dependencies the owner approved, "npm:name", "pypi:name"; beside rules.local.yaml. */
+  approvedDependencies?: string[]
   hash: string
   /** Real, lower-case, forward-slash keys of the workspace roots. */
   workspaceRootKeys: string[]

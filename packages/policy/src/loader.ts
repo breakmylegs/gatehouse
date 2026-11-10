@@ -276,14 +276,27 @@ export function loadPolicy(opts: LoadOptions): Policy {
 
   if (errors.length > 0) throw new PolicyLoadError(errors)
 
+  // D-053: the owner's approved dependencies, beside rules.local.yaml. Unreadable: none (the stricter way to fail).
+  let approvedDependencies: string[] = []
+  if (opts.localPath) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(path.join(path.dirname(opts.localPath), "dependencies.local.json"), "utf8")) as { approved?: unknown }
+      if (Array.isArray(raw.approved))
+        approvedDependencies = raw.approved.filter((x): x is string => typeof x === "string" && /^(npm|pypi|nuget|cargo|go):\S+$/.test(x))
+    } catch {
+      // Not there, or not readable: nothing is approved by it.
+    }
+  }
+
   const workspaceRootKeys = roots.map((r) => resolvePath(r, process.cwd()).key)
-  const hash = sha256Hex(canonicalize({ rules, overlays, remember }))
+  const hash = sha256Hex(canonicalize({ rules, overlays, remember, ...(approvedDependencies.length ? { approvedDependencies } : {}) }))
   return {
     rules,
     sources: merged.sources,
     ...(managed ? { managed: true } : {}),
     overlays,
     remember,
+    ...(approvedDependencies.length ? { approvedDependencies } : {}),
     hash,
     workspaceRootKeys: workspaceRootKeys.map(toKey),
   }

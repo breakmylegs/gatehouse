@@ -1,7 +1,9 @@
+import fs from "node:fs"
 import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
+import { admit, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
 import { hiddenCharacters } from "./hidden.js"
 import {
@@ -203,6 +205,44 @@ export class PolicyEngine {
     return withShown(v)
   }
 
+  /** D-053: what the call adds to the project's dependencies that it does not already use, judged. */
+  #dependencies(
+    call: ToolCall,
+    input: Record<string, unknown>,
+    ctx: EvalContext,
+    root: string,
+    policy: Policy,
+  ): DependencyFinding[] {
+    let added: AddedDependency[] = []
+    let dirs = [root, ctx.cwd]
+    if ((call.toolName === "Bash" || call.toolName === "PowerShell") && typeof input.command === "string")
+      added = fromCommand(input.command)
+    else if (typeof input.file_path === "string" && ["Write", "Edit", "MultiEdit"].includes(call.toolName)) {
+      const file = path.resolve(ctx.cwd, input.file_path)
+      dirs = [...dirs, path.dirname(file)]
+      let before = ""
+      let after = ""
+      if (call.toolName === "Write") {
+        try {
+          before = fs.readFileSync(file, "utf8")
+        } catch {
+          before = ""
+        }
+        after = typeof input.content === "string" ? input.content : ""
+      } else if (call.toolName === "Edit") {
+        before = typeof input.old_string === "string" ? input.old_string : ""
+        after = typeof input.new_string === "string" ? input.new_string : ""
+      } else if (Array.isArray(input.edits)) {
+        const edits = input.edits as Array<{ old_string?: unknown; new_string?: unknown }>
+        before = edits.map((e) => (typeof e.old_string === "string" ? e.old_string : "")).join("\n")
+        after = edits.map((e) => (typeof e.new_string === "string" ? e.new_string : "")).join("\n")
+      }
+      added = fromManifestEdit(file, before, after)
+    }
+    if (!added.length) return []
+    return admit(added, knownDependencies(dirs), new Set(policy.approvedDependencies ?? []))
+  }
+
   #verdict(
     outcome: Outcome,
     c: Candidate,
@@ -277,6 +317,11 @@ export class PolicyEngine {
     const firstSegDeny = [...segDeny.values()][0]
     if (firstSegDeny) return this.#verdict("deny", firstSegDeny, hash, "rules", segmentVerdicts(f, segDeny, new Map()))
 
+    // D-053: a dependency the project does not use yet goes to a person; one models are known to invent is refused.
+    const deps = this.#dependencies(call, input, ctx, rootKeyPath, policy)
+    const refused = deps.find((d) => d.outcome === "deny")
+    if (refused) return this.#verdict("deny", refused, hash, "rules")
+
     if (f.parseError) return this.#verdict("escalate", BUILTIN.parseError, hash, "rules")
     if (f.unavailable) return this.#verdict("escalate", BUILTIN.unavailable, hash, "rules")
 
@@ -305,6 +350,7 @@ export class PolicyEngine {
     const hidden = hiddenCharacters(call)
     if (hidden.length)
       escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
+    for (const d of deps) escalations.push(d)
     // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
     const integrity = f.isShell
       ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")
