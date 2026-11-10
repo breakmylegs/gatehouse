@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process"
+import { findEdgeMac, hasAppLinkMac } from "./handoff-mac.js" // Mac fork
 
 /**
  * Open in Claude (the owner's Chat build, CH-06): a chat or project from claude.ai opens in claude.ai itself, in a
@@ -67,6 +68,7 @@ const run: Run = (file, args) =>
 
 /** msedge.exe from the registry's App Paths key, as Windows itself finds it: never a path written here. */
 export async function findEdge(query: Run = run): Promise<string | undefined> {
+  if (process.platform === "darwin") return findEdgeMac() // Mac fork
   const key = "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe"
   for (const hive of ["HKCU", "HKLM"]) {
     try {
@@ -82,6 +84,7 @@ export async function findEdge(query: Run = run): Promise<string | undefined> {
 
 /** Whether Windows knows the claude:// link (the official app registers it when installed). */
 export async function hasAppLink(query: Run = run): Promise<boolean> {
+  if (process.platform === "darwin") return hasAppLinkMac() // Mac fork
   for (const key of ["HKCU\\Software\\Classes\\claude", "HKCR\\claude"]) {
     try {
       const out = await query("reg", ["query", key, "/v", "URL Protocol"])

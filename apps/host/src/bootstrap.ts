@@ -30,6 +30,7 @@ import { findCodehouseHelper } from "./win-helper.js"
 import { ChatStore } from "./chat/db.js"
 import { ChatRecorder } from "./chat/recorder.js"
 import { findEdge, hasAppLink, realLauncher } from "./chat/handoff.js"
+import { macLauncher } from "./chat/handoff-mac.js" // Mac fork
 import { DEFAULT_SEED } from "./chat/continue.js"
 import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
@@ -1168,7 +1169,7 @@ export function createHost(opts: HostOptions = {}): Host {
       chatHandoff: {
         store: chatStore,
         settings: () => config.chatHandoff ?? {},
-        launcher: realLauncher(helper),
+        launcher: process.platform === "darwin" ? macLauncher : realLauncher(helper), // Mac fork
         findEdge: () => findEdge(),
         hasAppLink: () => hasAppLink(),
         audit,
