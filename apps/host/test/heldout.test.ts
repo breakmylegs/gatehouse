@@ -95,8 +95,8 @@ describe("on a real session (D-002)", () => {
     for (const secret of ["zebra", "quagga", "secret_zebra_case"]) expect(elsewhere).not.toContain(secret)
     // What it was told: the counts.
     expect(events.join("\n")).toContain("Held-out checks: 2 passed, 1 failed, of 3.")
-    expect(s.records().find((r) => r.event === "sealed_check_run")).toMatchObject({ event: "sealed_check_run" })
-    expect(JSON.stringify(s.records().find((r) => r.event === "sealed_check_run"))).toContain('"failed":1')
+    const run = s.records().find((r) => r.event === "sealed_check_run") as { inputJson?: string } | undefined
+    expect(JSON.parse(run?.inputJson ?? "{}")).toMatchObject({ passed: 2, failed: 1, total: 3, ok: false })
     // And the run folder is gone.
     expect(fs.readdirSync(path.join(dir, "b", "heldout-runs"))).toEqual([])
   })
