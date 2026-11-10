@@ -256,7 +256,7 @@ export class PolicyEngine {
       escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
     // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
     const integrity = f.isShell
-      ? shellFindings(f.segments, f.targets)
+      ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")
       : fileFindings(call.toolName, input, f.targets[0]?.abs)
     for (const x of integrity)
       escalations.push({ ruleId: integrityRuleId(x.pattern), reason: x.reason, risk: INTEGRITY_RISK })

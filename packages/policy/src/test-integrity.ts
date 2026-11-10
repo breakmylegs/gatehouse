@@ -190,10 +190,15 @@ const SHELL_EDITORS = /^(sed|perl|awk|set-content|add-content|out-file|clear-con
 const TEST_RUN = /\b(npm|pnpm|yarn)\s+(run\s+)?test\b|\b(vitest|jest|mocha|pytest|dotnet\s+test|invoke-pester|go\s+test|cargo\s+test)\b/i
 
 /** What a shell command weakens: test files deleted or edited unseen, and a test run or commit made to hide failure. */
-export function shellFindings(segments: Segment[], targets: Array<{ raw: string; abs: string }>): IntegrityFinding[] {
+export function shellFindings(
+  segments: Segment[],
+  targets: Array<{ raw: string; abs: string }>,
+  /** The command as written: the segments lose the operators between them, such as || true. */
+  command = "",
+): IntegrityFinding[] {
   const out: IntegrityFinding[] = []
   const testTargets = targets.filter((t) => isTestFile(t.abs) || isTestFile(t.raw))
-  const text = segments.map((s) => s.text).join(" ; ")
+  const text = `${command} ; ${segments.map((s) => s.text).join(" ; ")}`
   for (const s of segments) {
     const name = s.name.toLowerCase()
     const tests = s.args.filter((a) => isTestFile(a))

@@ -34,7 +34,7 @@
 - { t: Edit, in: { file_path: "${WS}/tests/math.test.ts", old_string: "it.skip(\"adds\", () => {", new_string: "it(\"adds\", () => {" }, o: allow, r: edit-workspace-source, note: "a skip taken off" }
 - { t: Edit, in: { file_path: "${WS}/tests/cart.test.ts", old_string: "const cart = new Cart()", new_string: "const cart = makeCart()" }, o: allow, r: edit-workspace-source, note: "setup refactored" }
 - { t: Write, in: { file_path: "${WS}/tests/new.test.ts", content: "import { add } from \"../src/math\"\n\ntest(\"adds\", () => {\n  expect(add(1, 1)).toBe(2)\n})\n" }, o: allow, r: edit-workspace-source, note: "a new test file" }
-- { t: Edit, in: { file_path: "${WS}/vitest.config.ts", old_string: "thresholds: { lines: 80 }", new_string: "thresholds: { lines: 90 }" }, o: allow, r: edit-workspace-source, note: "a coverage threshold raised" }
+- { t: Edit, in: { file_path: "${WS}/vitest.config.ts", old_string: "thresholds: { lines: 80 }", new_string: "thresholds: { lines: 90 }" }, o: escalate, r: no-rule, note: "a coverage threshold raised: the guard says nothing, and config edits need approval anyway" }
 - { t: Edit, in: { file_path: "${WS}/src/math.ts", old_string: "expect(a).toBe(1)", new_string: "return a + b" }, o: allow, r: edit-workspace-source, note: "not a test file" }
 - { t: Bash, cmd: "npm test", o: allow, r: safe-shell, note: "running the tests" }
 - { t: Edit, in: { file_path: "${WS}/tests/math.test.ts", old_string: "expect(x).toBeTruthy()", new_string: "expect(x).toBe(true)" }, o: allow, r: edit-workspace-source, note: "a looser matcher made stricter" }
@@ -44,7 +44,7 @@
 - { t: Edit, in: { file_path: "${WS}/tests/test_api.py", old_string: "    assert resp.status == 200", new_string: "    assert resp.status == 200\n    assert resp.headers[\"x\"]" }, o: allow, r: edit-workspace-source, note: "an assert added" }
 - { t: Edit, in: { file_path: "${WS}/tests/test_api.py", old_string: "def client():", new_string: "def api_client():" }, o: allow, r: edit-workspace-source, note: "a fixture renamed" }
 - { t: Write, in: { file_path: "${WS}/tests/test_new.py", content: "def test_adds():\n    assert 1 + 1 == 2\n" }, o: allow, r: edit-workspace-source, note: "a new test module" }
-- { t: Edit, in: { file_path: "${WS}/pyproject.toml", old_string: "fail_under = 80", new_string: "fail_under = 85" }, o: allow, r: edit-workspace-source, note: "fail_under raised" }
+- { t: Edit, in: { file_path: "${WS}/pyproject.toml", old_string: "fail_under = 80", new_string: "fail_under = 85" }, o: escalate, r: no-rule, note: "fail_under raised: the guard says nothing, and config edits need approval anyway" }
 # Legitimate (C#)
 - { t: Edit, in: { file_path: "${WS}/tests/CartTests.cs", old_string: "Assert.Equal(3, cart.Count);", new_string: "Assert.Equal(3, cart.Count);\n        Assert.True(cart.IsValid);" }, o: allow, r: edit-workspace-source, note: "an Assert added" }
 - { t: Edit, in: { file_path: "${WS}/tests/CartTests.cs", old_string: "[Fact(Skip = \"later\")]", new_string: "[Fact]" }, o: allow, r: edit-workspace-source, note: "a Skip taken off" }
