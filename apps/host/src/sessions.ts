@@ -1374,6 +1374,14 @@ export class Session extends EventEmitter<SessionEvents> {
     const m = msg as unknown as Record<string, unknown>
     // O16: anything from Claude means the turn is alive.
     this.#stuck.seen()
+    // Owner, 10 Nov ("the details on the current activity being performed and the spinning circle in the left menu
+    // arent showing"): after an Interrupt, Claude takes the message it already had and starts a turn by itself. That
+    // is a turn like any other, so the session is working again though nothing was sent just now.
+    if (!this.#running && this.#state === "idle" && (msg.type === "assistant" || (msg.type as string) === "stream_event")) {
+      this.#running = true
+      this.#stuck.start()
+      this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
+    }
     if (typeof m.session_id === "string" && m.session_id !== this.#sdkSessionId) {
       this.#sdkSessionId = m.session_id
       this.emit("state", this.info())
