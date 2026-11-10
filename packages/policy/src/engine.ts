@@ -5,6 +5,7 @@ import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
 import { admit, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
+import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
 import { hiddenCharacters } from "./hidden.js"
 import {
   fileFindings,
@@ -215,29 +216,12 @@ export class PolicyEngine {
   ): DependencyFinding[] {
     let added: AddedDependency[] = []
     let dirs = [root, ctx.cwd]
+    const change = fileChange(call, input, ctx.cwd)
     if ((call.toolName === "Bash" || call.toolName === "PowerShell") && typeof input.command === "string")
       added = fromCommand(input.command)
-    else if (typeof input.file_path === "string" && ["Write", "Edit", "MultiEdit"].includes(call.toolName)) {
-      const file = path.resolve(ctx.cwd, input.file_path)
-      dirs = [...dirs, path.dirname(file)]
-      let before = ""
-      let after = ""
-      if (call.toolName === "Write") {
-        try {
-          before = fs.readFileSync(file, "utf8")
-        } catch {
-          before = ""
-        }
-        after = typeof input.content === "string" ? input.content : ""
-      } else if (call.toolName === "Edit") {
-        before = typeof input.old_string === "string" ? input.old_string : ""
-        after = typeof input.new_string === "string" ? input.new_string : ""
-      } else if (Array.isArray(input.edits)) {
-        const edits = input.edits as Array<{ old_string?: unknown; new_string?: unknown }>
-        before = edits.map((e) => (typeof e.old_string === "string" ? e.old_string : "")).join("\n")
-        after = edits.map((e) => (typeof e.new_string === "string" ? e.new_string : "")).join("\n")
-      }
-      added = fromManifestEdit(file, before, after)
+    else if (change) {
+      dirs = [...dirs, path.dirname(change.file)]
+      added = fromManifestEdit(change.file, change.before, change.after)
     }
     if (!added.length) return []
     return admit(added, knownDependencies(dirs), new Set(policy.approvedDependencies ?? []))
@@ -351,6 +335,14 @@ export class PolicyEngine {
     if (hidden.length)
       escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
     for (const d of deps) escalations.push(d)
+    // D-054: a lockfile edited by hand goes to a person, with what in it matters most.
+    const change = fileChange(call, input, ctx.cwd)
+    const lock = f.isShell
+      ? lockfileShellEdit(f.segments)
+      : change
+        ? lockfileEdit(change.file, change.before, change.after, rootKeyPath)
+        : undefined
+    if (lock) escalations.push(lock)
     // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
     const integrity = f.isShell
       ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")
@@ -448,6 +440,37 @@ export class PolicyEngine {
     }
     const known = BUILTIN_KNOWN_TOOLS.has(f.tool) || eff.all.some((r) => r.tools && matchAnyWildcard(r.tools, f.tool, false))
     return this.#verdict("escalate", known ? BUILTIN.noRule : BUILTIN.unknownTool, hash, "rules", segments)
+  }
+}
+
+/** What a Write, Edit or MultiEdit changes in a file: a Write against the file as it is. */
+function fileChange(
+  call: ToolCall,
+  input: Record<string, unknown>,
+  cwd: string,
+): { file: string; before: string; after: string } | undefined {
+  if (typeof input.file_path !== "string" || !["Write", "Edit", "MultiEdit"].includes(call.toolName)) return undefined
+  const file = path.resolve(cwd, input.file_path)
+  if (call.toolName === "Write") {
+    let before = ""
+    try {
+      before = fs.readFileSync(file, "utf8")
+    } catch {
+      before = ""
+    }
+    return { file, before, after: typeof input.content === "string" ? input.content : "" }
+  }
+  if (call.toolName === "Edit")
+    return {
+      file,
+      before: typeof input.old_string === "string" ? input.old_string : "",
+      after: typeof input.new_string === "string" ? input.new_string : "",
+    }
+  const edits = Array.isArray(input.edits) ? (input.edits as Array<{ old_string?: unknown; new_string?: unknown }>) : []
+  return {
+    file,
+    before: edits.map((e) => (typeof e.old_string === "string" ? e.old_string : "")).join("\n"),
+    after: edits.map((e) => (typeof e.new_string === "string" ? e.new_string : "")).join("\n"),
   }
 }
 
