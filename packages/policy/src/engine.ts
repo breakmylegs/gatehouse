@@ -8,6 +8,7 @@ import { admit, dependencyKey, fromCommand, fromManifestEdit, knownDependencies,
 import { expandEffects } from "./expand.js"
 import { installerCall } from "./installers.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
+import { INSTALL_SCRIPTS_RULE, installScriptsFinding, withoutScripts } from "./install-scripts.js"
 import { hiddenCharacters } from "./hidden.js"
 import {
   fileFindings,
@@ -165,9 +166,12 @@ export class PolicyEngine {
       policyHash = policy.hash
       const v = await this.#evaluate(call, ctx, policy)
       // D-013: a shell call is judged with everything it would run besides what it says.
-      return call.toolName === "Bash" || call.toolName === "PowerShell"
-        ? await this.#withEffects(call, ctx, policy, v)
-        : v
+      const judged = call.toolName === "Bash" || call.toolName === "PowerShell" ? await this.#withEffects(call, ctx, policy, v) : v
+      // D-064: the command "Run without scripts" would send instead, for the card to offer as an edited input.
+      const command = (call.input as { command?: unknown } | undefined)?.command
+      return judged.ruleId === INSTALL_SCRIPTS_RULE && typeof command === "string"
+        ? { ...judged, withoutScripts: withoutScripts(command) }
+        : judged
     } catch {
       // Invariant 1: any failure escalates. It never allows and never throws.
       return this.#verdict("escalate", BUILTIN.engineError, policyHash, "rules")
@@ -367,6 +371,9 @@ export class PolicyEngine {
     // D-096: installing software on Windows is High, and never approved by Extreme approval.
     const installer = f.isShell ? installerCall(f.segments) : undefined
     if (installer) escalations.push(installer)
+    // D-064: an install that would run install scripts goes to a person, with each script's text.
+    const scripts = f.isShell && typeof input.command === "string" ? installScriptsFinding(input.command, ctx.cwd) : undefined
+    if (scripts) escalations.push(scripts)
     // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
     const integrity = f.isShell
       ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")

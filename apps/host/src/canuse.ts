@@ -1,6 +1,6 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
-import { INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
+import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
@@ -407,6 +407,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   INSTALLER_RULE,
   // D-059: what a project tells Claude changes only with a person.
   INSTRUCTIONS_RULE,
+  // D-064: install scripts run with your rights; Run without scripts is a person's choice too.
+  INSTALL_SCRIPTS_RULE,
   // D-055: whether a project may use a licence is a person's decision.
   LICENCE_NOT_ALLOWED,
   "evaluator-unavailable",

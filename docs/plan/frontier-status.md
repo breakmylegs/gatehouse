@@ -77,7 +77,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-058 | Secret commit block | built | slice/D-058-secret-commit | BUILD_REPORT "Frontier D-058" | Extends G22: pushes are read too, findings name the line; golden lines in apps/host/test/golden |
 | D-059 | Instruction integrity pinning | built | slice/D-059-instruction-pins | BUILD_REPORT "Frontier D-059" | Pins per project, sealed; outside changes block start, messages and Extreme turns until approved with a diff |
 | D-060 | Agent-config tamper floor | built | slice/D-060-config-tamper | BUILD_REPORT "Frontier D-060" | Built into the floor; content-aware for Claude and VS Code settings |
-| D-064 | Install-script default deny | todo | | | |
+| D-064 | Install-script default deny | built | slice/D-064-install-scripts | BUILD_REPORT "Frontier D-064" | npm, pnpm, yarn and bun; Run without scripts is an edited input, re-checked; never approved by Extreme |
 | D-096 | WinGet and installer admission | built | slice/D-096-installer-admission | BUILD_REPORT "Frontier D-096" | Offline: publisher from the WinGet id, unchecked |
 
 ## Wave 2: evidence

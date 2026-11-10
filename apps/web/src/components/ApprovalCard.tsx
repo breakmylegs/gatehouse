@@ -166,6 +166,14 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     return allowNow()
   }
 
+  /** D-064: the same install with --ignore-scripts, sent as an edited input, so the Host checks it again. */
+  async function runWithoutScripts() {
+    const command = req.verdict.withoutScripts
+    if (!command || !ready) return
+    if (await run({ type: "approve", requestId: req.id, updatedInput: { ...view.rawInput, command } }))
+      toast("Allowed without install scripts. The changed command was checked against the policy again.")
+  }
+
   async function allowEdited() {
     if (severe && confirming !== "edited") {
       setConfirming("edited")
@@ -654,6 +662,15 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </button>
             {req.kind === "permission" ? (
               <>
+                {req.verdict.withoutScripts && isShell(req.toolName) ? (
+                  <button
+                    className="btn"
+                    disabled={busy || !connected || !ready}
+                    onClick={() => void runWithoutScripts()}
+                  >
+                    Run without scripts
+                  </button>
+                ) : null}
                 <button
                   className="btn"
                   disabled={busy || !connected}
