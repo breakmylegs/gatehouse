@@ -39,6 +39,8 @@ interface Case {
   note?: string
   /** D-001: a file put in the workspace first (its path under ${WS}), for a Write compared with the file as it is. */
   file?: { path: string; content: string }
+  /** D-013: files put in place first (paths under ${WS}), removed after: a package.json, a hook, a Makefile. */
+  files?: Array<{ path: string; content: string }>
 }
 
 interface Loaded {
@@ -168,6 +170,19 @@ async function runCase(c: Case): Promise<{ outcome?: string; ruleId?: string; lo
       }
     })
   }
+  if (c.files) {
+    const made = c.files.map((f) => ({ at: subst(f.path), content: f.content }))
+    for (const f of made) {
+      fs.mkdirSync(path.dirname(f.at), { recursive: true })
+      fs.writeFileSync(f.at, f.content)
+    }
+    try {
+      const v = await shared.engine.evaluate(call, ctx)
+      return { outcome: v.outcome, ruleId: v.ruleId }
+    } finally {
+      for (const f of made) fs.rmSync(f.at, { force: true })
+    }
+  }
   if (c.file) {
     const at = subst(c.file.path)
     fs.mkdirSync(path.dirname(at), { recursive: true })
@@ -183,13 +198,18 @@ async function runCase(c: Case): Promise<{ outcome?: string; ruleId?: string; lo
   return { outcome: v.outcome, ruleId: v.ruleId }
 }
 
+// D-013: PowerShell calls expand the user's profile; the golden cases must not depend on the machine's.
+const realProfile = process.env.USERPROFILE
+
 beforeAll(async () => {
+  process.env.USERPROFILE = fx.root
   await pwsh.start()
   shared = makeEngine(fx, pwsh)
   env8 = shortNameOf(path.join(fx.ws, ".env"))
 }, 60000)
 
 afterAll(() => {
+  process.env.USERPROFILE = realProfile
   pwsh.close()
   fx.dispose()
 })
@@ -211,6 +231,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "14-hidden-unicode": 8,
   "15-test-integrity": 40,
   "16-sealed-checks": 12,
+  "17-effects-expand": 30,
 }
 
 for (const { category, cases } of corpus) {

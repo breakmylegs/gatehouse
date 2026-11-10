@@ -607,6 +607,25 @@ function Detail({
               </dd>
             </>
           ) : null}
+          {o.payload.verdict.expanded?.length || o.payload.verdict.unknownEffects?.length ? (
+            <>
+              {/* D-013: what it would also run. */}
+              <dt className="text-mut">Also runs</dt>
+              <dd className="m-0 grid gap-1" aria-label="What this would also run">
+                {(o.payload.verdict.expanded ?? []).map((e, i) => (
+                  <span key={i} className="grid">
+                    <span className="text-[14px] text-mut">{e.from}</span>
+                    <code className="mono text-[14px] [overflow-wrap:anywhere]">{e.line}</code>
+                  </span>
+                ))}
+                {(o.payload.verdict.unknownEffects ?? []).map((u, i) => (
+                  <span key={`u${i}`} className="font-semibold">
+                    Unknown effects: {u}
+                  </span>
+                ))}
+              </dd>
+            </>
+          ) : null}
           <dt className="text-mut">Rule</dt>
           <dd className="m-0 mono text-[15px]">{o.payload.verdict.ruleId}</dd>
           <dt className="text-mut">Why</dt>

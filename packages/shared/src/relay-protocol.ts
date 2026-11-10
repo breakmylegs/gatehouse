@@ -170,6 +170,9 @@ export const PhonePayload = z.object({
     segments: z
       .array(z.object({ text: z.string(), ruleId: z.string(), outcome: z.string() }))
       .optional(),
+    /** D-013: what the shell call would also run, and what of it cannot be read. */
+    expanded: z.array(z.object({ from: z.string(), line: z.string() })).optional(),
+    unknownEffects: z.array(z.string()).optional(),
   }),
   createdAt: z.string(),
   expiresAt: z.string(),

@@ -65,7 +65,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-007 | Locked acceptance tests | built | slice/D-007-locked-tests | BUILD_REPORT "Frontier D-007" | Whole files; single cases after C-031 (outline) |
 | D-008 | Pinned counterexamples | built | slice/D-008-pinned-counterexamples | BUILD_REPORT "Frontier D-008" | fast-check and Hypothesis written by Codehouse; FsCheck by Claude; fuzz inputs locked |
 | D-009 | Done-claim verifier | built | slice/D-009-done-claims | BUILD_REPORT "Frontier section 6 ... D-009" | Section 6 runner built with it, and D-002 moved onto it; recap stamp and evidence pack later |
-| D-013 | Effect-complete approval cards | todo | | | G20 effects exist for deletes and git discards |
+| D-013 | Effect-complete approval cards | built | slice/D-013-effect-cards | BUILD_REPORT "Frontier D-013" | Decision for the owner to confirm: a line no rule speaks of does not by itself make the call ask |
 | D-015 | Allow-rule provenance lock | todo | | | |
 | D-018 | Risk budget per session | todo | | | Opt-in, off by default |
 | D-021 | Rubber-stamp detector | todo | | | |

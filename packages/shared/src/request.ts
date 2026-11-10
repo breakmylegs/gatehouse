@@ -26,6 +26,9 @@ export function phonePayload(req: Omit<EscalationRequest, "payloadHash">) {
       reason: req.verdict.reason,
       risk: req.verdict.risk,
       segments: req.verdict.segments,
+      // D-013: only when there is something to say, so a request without them hashes as it always did.
+      ...(req.verdict.expanded?.length ? { expanded: req.verdict.expanded } : {}),
+      ...(req.verdict.unknownEffects?.length ? { unknownEffects: req.verdict.unknownEffects } : {}),
     },
     // G20: only when there is something to say, so a request without effects hashes as it always did.
     ...(req.effects ? { effects: req.effects } : {}),

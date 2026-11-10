@@ -2,6 +2,7 @@ import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkFloor } from "./floor.js"
+import { expandEffects } from "./expand.js"
 import { hiddenCharacters } from "./hidden.js"
 import {
   fileFindings,
@@ -58,6 +59,13 @@ const BUILTIN = {
   },
 } as const
 
+/** D-013: what a shell call would run that Codehouse cannot read: an npx fetch, a hook that is a program. */
+export const UNKNOWN_EFFECTS = {
+  ruleId: "unknown-effects",
+  reason: "It would also run something Codehouse cannot read, so what it does is not known in advance:",
+  risk: 60,
+} as const
+
 /** Backlog G21: a call carrying characters you cannot see goes to a person, whatever rule would allow it. */
 export const HIDDEN_UNICODE = {
   ruleId: "hidden-unicode",
@@ -76,6 +84,7 @@ export interface BuiltInRule {
 export const BUILTIN_RULES: readonly BuiltInRule[] = [
   ...Object.values(BUILTIN),
   HIDDEN_UNICODE,
+  UNKNOWN_EFFECTS,
   {
     ruleId: "shell-obfuscation",
     reason: "The command uses an encoded, dynamic or piped-to-shell form.",
@@ -145,11 +154,53 @@ export class PolicyEngine {
       const policy = this.#getPolicy()
       if (!policy) return this.#verdict("escalate", BUILTIN.noPolicy, policyHash, "rules")
       policyHash = policy.hash
-      return await this.#evaluate(call, ctx, policy)
+      const v = await this.#evaluate(call, ctx, policy)
+      // D-013: a shell call is judged with everything it would run besides what it says.
+      return call.toolName === "Bash" || call.toolName === "PowerShell"
+        ? await this.#withEffects(call, ctx, policy, v)
+        : v
     } catch {
       // Invariant 1: any failure escalates. It never allows and never throws.
       return this.#verdict("escalate", BUILTIN.engineError, policyHash, "rules")
     }
+  }
+
+  /**
+   * D-013: the lines a shell call would run besides itself (npm scripts, Makefile recipes, git hooks, wrappers, local
+   * tools, the PowerShell profile), each judged like the call. A deny on any line denies the call; a line a rule
+   * escalates, or an effect that cannot be read, makes it ask; the strictest wins. A line no rule speaks of does not by
+   * itself make the call ask, so an ordinary test script does not turn every npm test into a question.
+   */
+  async #withEffects(call: ToolCall, ctx: EvalContext, policy: Policy, v: Verdict): Promise<Verdict> {
+    const command = typeof (call.input as { command?: unknown })?.command === "string" ? String((call.input as { command: string }).command) : ""
+    if (!command) return v
+    const exp = expandEffects(command, call.toolName === "PowerShell" ? "pwsh" : "bash", ctx.cwd)
+    if (!exp.lines.length && !exp.unknown.length) return v
+    const shown = exp.lines.slice(0, 20).map((l) => ({ from: l.from, line: l.line.slice(0, 300) }))
+    const withShown = (x: Verdict): Verdict => ({
+      ...x,
+      ...(shown.length ? { expanded: shown } : {}),
+      ...(exp.unknown.length ? { unknownEffects: exp.unknown.slice(0, 10) } : {}),
+    })
+    if (v.outcome === "deny") return withShown(v)
+    let worst: Verdict | undefined
+    for (const l of exp.lines) {
+      const lv = await this.#evaluate(
+        { toolName: l.shell === "pwsh" ? "PowerShell" : "Bash", input: { command: l.line } },
+        ctx,
+        policy,
+      )
+      const said = (x: string) => `${l.from} runs "${l.line.slice(0, 120)}": ${x}`
+      if (lv.outcome === "deny") return withShown({ ...lv, reason: said(lv.reason) })
+      if (lv.outcome === "escalate" && lv.ruleId !== BUILTIN.noRule.ruleId && lv.ruleId !== BUILTIN.unknownTool.ruleId)
+        if (!worst || lv.risk > worst.risk) worst = { ...lv, reason: said(lv.reason) }
+    }
+    if (exp.unknown.length) {
+      const u = this.#verdict("escalate", { ...UNKNOWN_EFFECTS, reason: `${UNKNOWN_EFFECTS.reason} ${exp.unknown[0]}.` }, policy.hash, "rules")
+      if (!worst || u.risk > worst.risk) worst = u
+    }
+    if (worst && (v.outcome === "allow" || worst.risk > v.risk)) return withShown({ ...worst, segments: v.segments } as Verdict)
+    return withShown(v)
   }
 
   #verdict(

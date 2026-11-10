@@ -369,6 +369,25 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 </dd>
               </>
             ) : null}
+            {req.verdict.expanded?.length || req.verdict.unknownEffects?.length ? (
+              <>
+                {/* D-013: what it would also run, each line judged like the call. */}
+                <dt className="text-mut">Also runs</dt>
+                <dd className="m-0 grid gap-0.5" aria-label="What this would also run">
+                  {(req.verdict.expanded ?? []).map((e, i) => (
+                    <span key={i} className="grid">
+                      <span className="text-[12.5px] text-mut">{e.from}</span>
+                      <code className="mono text-[12.5px] [overflow-wrap:anywhere]">{e.line}</code>
+                    </span>
+                  ))}
+                  {(req.verdict.unknownEffects ?? []).map((u, i) => (
+                    <span key={`u${i}`} className="font-semibold text-warn">
+                      Unknown effects: {u}
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
             <dt className="text-mut">Why</dt>
             <dd className="m-0">{req.verdict.reason}</dd>
             <dt className="text-mut">Status</dt>

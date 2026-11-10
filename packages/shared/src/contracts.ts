@@ -23,6 +23,10 @@ export const Verdict = z.object({
     "evaluator-unavailable",
   ]),
   policyHash: z.string(),
+  /** D-013: what the shell call would also run (npm scripts, hooks, recipes, wrappers), for the card. */
+  expanded: z.array(z.object({ from: z.string(), line: z.string() })).max(20).optional(),
+  /** D-013: what it would run that cannot be read. */
+  unknownEffects: z.array(z.string()).max(10).optional(),
 })
 export type Verdict = z.infer<typeof Verdict>
 
