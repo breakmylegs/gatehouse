@@ -3,9 +3,14 @@ import { createRoot } from "react-dom/client"
 import { App } from "./App"
 import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./styles.css"
+import "./polish.css" // Mac fork
+import "./mac.css" // Mac fork
+import { markPlatform } from "./lib/platform-mac" // Mac fork
 import { startConnection, useStore } from "./store"
 import { Quick } from "./surfaces/Quick"
 import { PanePage } from "./surfaces/PanePage"
+
+markPlatform() // Mac fork
 
 // The quick prompt's small window (W1-15) loads the same page with ?view=quick: only that page, no start-up picture.
 const params = new URLSearchParams(location.search)

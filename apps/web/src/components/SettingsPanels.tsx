@@ -11,6 +11,7 @@ import {
 import { readKinds, saveKinds, type NotifyKinds } from "../lib/notifyKinds"
 import { useNow } from "../lib/useNow"
 import { useStore } from "../store"
+import { isMac, systemName } from "../lib/platform-mac" // Mac fork
 import { ago, money, PLAN_HIGH, readPlan, resets, type PlanUsage } from "./PlanMeter"
 
 /**
@@ -53,7 +54,7 @@ export function AppearancePanel() {
   }
   return (
     <div className="grid gap-1">
-      <Row label="Theme" help="Following Windows changes with it while Codehouse runs.">
+      <Row label="Theme" help={`Following ${systemName()} changes with it while Codehouse runs.`}>
         {(id) => (
           <select
             id={id}
@@ -65,7 +66,7 @@ export function AppearancePanel() {
               else useStore.getState().setTheme(v as "light" | "dark")
             }}
           >
-            <option value="system">Follow Windows</option>
+            <option value="system">Follow {systemName()}</option>
             <option value="light">Codehouse light</option>
             <option value="dark">Codehouse dark</option>
           </select>
@@ -119,7 +120,10 @@ export function AppearancePanel() {
           </select>
         )}
       </Row>
-      <Row label="Motion" help="Reduce turns off movement and animation, whatever Windows says.">
+      <Row
+        label="Motion"
+        help={`Reduce turns off movement and animation, whatever ${systemName()} says.`}
+      >
         {(id) => (
           <select
             id={id}
@@ -127,7 +131,7 @@ export function AppearancePanel() {
             value={a.motion}
             onChange={(e) => set({ motion: e.target.value as Appearance["motion"] })}
           >
-            <option value="system">Follow Windows</option>
+            <option value="system">Follow {systemName()}</option>
             <option value="reduced">Reduce</option>
           </select>
         )}
@@ -140,7 +144,7 @@ export function AppearancePanel() {
           <input
             id={id}
             className="field mono w-56"
-            placeholder="Cascadia Mono"
+            placeholder={isMac() ? "SF Mono" : "Cascadia Mono"} // Mac fork
             value={font}
             maxLength={60}
             onChange={(e) => setFont(e.target.value)}

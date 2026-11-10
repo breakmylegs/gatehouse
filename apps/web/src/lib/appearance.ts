@@ -69,7 +69,7 @@ export function applyAppearance(a: Appearance, root: HTMLElement = document.docu
   if (font)
     root.style.setProperty(
       "--font-code",
-      `"${font}", "Cascadia Mono", Consolas, ui-monospace, monospace`,
+      `"${font}", "Cascadia Mono", Consolas, ui-monospace, "SF Mono", Menlo, monospace`, // Mac fork: SF Mono, Menlo
     )
   else root.style.removeProperty("--font-code")
   if (a.codeSize) root.style.setProperty("--code-size", `${a.codeSize}px`)

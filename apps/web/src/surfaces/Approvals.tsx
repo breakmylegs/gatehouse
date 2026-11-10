@@ -47,7 +47,8 @@ export function Approvals() {
   // Ctrl+Shift+A moves focus into the card on purpose. Nothing else ever does.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a") {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "a") {
+        // Mac fork: Command too
         e.preventDefault()
         card.current?.querySelector<HTMLElement>("[data-approval-card]")?.focus()
       }

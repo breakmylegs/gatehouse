@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { keyLabel } from "../lib/platform-mac" // Mac fork
 
 export type MenuItem =
   | {
@@ -157,7 +158,7 @@ export function Menu({
                     }}
                   >
                     <span>{it.label}</span>
-                    {it.hint ? <span className="menu-hint">{it.hint}</span> : null}
+                    {it.hint ? <span className="menu-hint">{keyLabel(it.hint)}</span> : null}
                   </button>
                 ),
               )}

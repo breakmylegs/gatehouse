@@ -26,11 +26,31 @@ npm start -- --relay      also the phone Relay (docs/relay-local.md)
 | Show in folder | Finder, with the file selected |
 | Terminal pane | `/bin/zsh -f`; Stop ends the command's whole process group |
 | Keep the computer awake while a session works | `caffeinate -i`, started by `npm start` when the Host asks (on Windows the window app does it) |
+| Held-out checks and locked tests, sealed | The Keychain, through the same `sealerFor()` |
+| Open in Claude, and the browser tools' page look | Edge from `/Applications` with the same `--app` arguments, or `open` for your default browser and the Claude app (`chat/handoff-mac.ts`). Upstream found Edge in the Windows registry and opened addresses through `Codehouse-Helper.exe`, so all three failed on a Mac. |
 | Starting it | `npm start` |
 
 Before this, away from Windows the Host kept those secrets with `PlainProtector`, in the clear.
 
-All of it was written and unit tested on Windows. None of it has run on a Mac yet. The first time you run it there, check: a phone pairing survives a restart (the Keychain key is read back), the folder window opens in front, Stop ends a `sleep 100 & sleep 100` in the terminal pane, and `pmset -g assertions` shows `caffeinate` while a session works.
+### The interface on a Mac
+
+`apps/web/src/lib/platform-mac.ts` marks the page `data-platform="mac"` from the browser's user agent, and `apps/web/src/mac.css` applies only under it:
+
+- **Type:** SF Pro for the interface and SF Mono for code. Upstream names Segoe UI and Cascadia Mono, and in Chrome its fallback reached the generic monospace. The system font brings Apple's optical sizing and tracking, so no letter-spacing is set. The page title is not narrowed (upstream's `font-stretch` picks a condensed SF cut).
+- **Scrollbars:** the Mac's own, which show while you scroll. Upstream's thin coloured bars made Chrome draw permanent classic ones.
+- **Pointer:** the arrow on buttons, tabs, menu and palette items, as Mac apps do; the hand stays on links.
+- **Shortcuts:** shown as a Mac shows them, `⌘K`, `⇧⌘K`, `⌥↑`, in Apple's modifier order, in menus, the palette, the shortcut sheet and the sidebar. Every Ctrl shortcut also answers to Command (two that did not now do). `⌘,` opens Settings.
+- **Copy:** the theme and motion choices say "Follow macOS".
+
+`apps/web/src/polish.css` holds the design audit's fixes for every platform: buttons give a little under the press (`scale(0.97)`, 160ms, not when motion is reduced), the load bars settle in 240ms instead of 400ms, and Increased contrast strengthens lines and secondary text.
+
+All of it was written and unit tested on Windows. None of it has run on a Mac yet. The first time you run it there, check: a phone pairing survives a restart (the Keychain key is read back), the folder window opens in front, Stop ends a `sleep 100 & sleep 100` in the terminal pane, `pmset -g assertions` shows `caffeinate` while a session works, the interface is in SF Pro with overlay scrollbars, the profile menu says `⌘K`, and `⌘,` opens Settings.
+
+### Known gaps
+
+- **The memory governor** reads Windows' commit charge through `Codehouse-Helper.exe`. On a Mac it has no reading, and by its own rule refuses nothing, so it is off. A Mac version could read memory pressure (`memory_pressure`, or `vm.memory_pressure` from `sysctl`).
+- **Browser shortcuts:** in Chrome on a Mac, `⌘1` to `⌘9` switch the browser's tabs and `⇧⌘C` opens the inspector before the page sees them. The native window will not have this.
+- **Copy deeper in Settings** still names Windows in places: the commit charge, temporary files, voice typing, the installer, "sealed for your Windows account". Voice typing and the screen-capture quick prompt need the native window.
 
 ## Still to do
 
@@ -63,6 +83,8 @@ When a merge conflicts, take upstream's code as it is and put back the `Mac fork
 
 Merge, do not rebase, so upstream's commit hashes stay the same as in its release notes and `changes.json`.
 
-The hooks in upstream's files: `packages/shared/src/node/paths.ts`, `apps/host/src/relay/protector.ts` (in `sealerFor()`), `apps/host/src/bootstrap.ts` (the pickers), `apps/host/src/terminal.ts`, `apps/host/src/files-api.ts`, `apps/web/src/components/TerminalPane.tsx`, `apps/host/test/helper-exe.test.ts`, and the `start` and `sync:upstream` lines in `package.json`.
+The hooks in upstream's files: `packages/shared/src/node/paths.ts`, `apps/host/src/relay/protector.ts` (in `sealerFor()`), `apps/host/src/bootstrap.ts` (the pickers and the hand-off launcher), `apps/host/src/chat/handoff.ts` (`findEdge()`, `hasAppLink()`), `apps/host/src/terminal.ts`, `apps/host/src/files-api.ts`, `apps/host/test/helper-exe.test.ts`, and the `start` and `sync:upstream` lines in `package.json`. In the interface: `main.tsx` (the two stylesheets and the platform mark), `App.tsx` (`⌘,`), `Menu.tsx`, `CommandPalette.tsx`, `ShortcutSheet.tsx`, `CommandDeck.tsx`, `Rail.tsx` (shortcut labels), `SettingsPanels.tsx` and `lib/appearance.ts` (copy and the code font), `Approvals.tsx` and `Workspace.tsx` (Command as well as Ctrl), and `TerminalPane.tsx`.
+
+Do not run Prettier over upstream's files: upstream does not keep them formatted, and rewrapping its lines turns every later change near them into a conflict. Format only the fork's own files, or the lines you add.
 
 The repository has no licence. Forking is allowed by GitHub's terms, but changing and sharing the code is not granted; ask the owner before you share the Mac version.

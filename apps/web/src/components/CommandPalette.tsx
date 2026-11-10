@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { api } from "../lib/api"
 import { type AppCommand, buildCommands, rankCommands } from "../lib/commands"
 import { openConversation } from "../lib/redo"
+import { keyLabel } from "../lib/platform-mac" // Mac fork
 import { readHideEnded } from "../lib/rail"
 import { usePending, useSessionList, useStore } from "../store"
 import { EmptyState } from "./EmptyState"
@@ -197,8 +198,8 @@ export function CommandPalette() {
           </Command.Group>
         </Command.List>
         <p className="m-0 border-t border-line px-3 py-1.5 text-[13px] text-mut">
-          <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes, <kbd>Ctrl /</kbd> lists the keys. Decisions
-          are made on the card, not here.
+          <kbd>{keyLabel("Enter")}</kbd> opens, <kbd>Esc</kbd> closes,{" "}
+          <kbd>{keyLabel("Ctrl /")}</kbd> lists the keys. Decisions are made on the card, not here.
         </p>
       </Command>
     </div>
@@ -257,7 +258,7 @@ function Item({
       className="flex cursor-pointer items-center justify-between gap-3 rounded px-3 py-1.5 text-tx data-[selected=true]:bg-s2 data-[selected=true]:font-semibold"
     >
       <span>{children}</span>
-      {keys ? <kbd className="text-[12px]">{keys}</kbd> : null}
+      {keys ? <kbd className="text-[12px]">{keyLabel(keys)}</kbd> : null}
     </Command.Item>
   )
 }

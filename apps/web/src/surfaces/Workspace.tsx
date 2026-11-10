@@ -810,7 +810,8 @@ function SessionPane({
               aria-label="Transcript"
               className="pane-transcript relative min-h-0"
               onKeyDown={(e) => {
-                if (e.ctrlKey && e.shiftKey && e.key === "End") {
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "End") {
+                  // Mac fork: Command too
                   e.preventDefault()
                   toLatest()
                 }
