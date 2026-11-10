@@ -6,6 +6,7 @@ import type { FastifyInstance, FastifyReply } from "fastify"
 import { secretGlobs } from "@gatehouse/policy"
 import { createCheckpoint, writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
+import { languageOf, outline } from "./outline.js"
 import {
   applyReplace,
   previewReplace,
@@ -384,6 +385,23 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
       // G33: what the file was when shown, so a save can tell if it changed outside since.
       hash: sha256(fs.readFileSync(where.abs)),
     }
+  })
+
+  // C-031: a file's outline (its functions, classes, methods, types, test cases, JSON keys) with their lines, for the
+  // file view and go to symbol. The same checks as reading it.
+  app.get("/api/files/outline", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const where = locate(q, root)
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    const lang = languageOf(where.abs)
+    if (!lang) return { symbols: [], language: null }
+    const st = fs.statSync(where.abs)
+    if (!st.isFile() || st.size > MAX_TEXT) return { symbols: [], language: lang }
+    if (await blocked(where.abs, root)) return { symbols: [], language: lang }
+    const symbols = await outline(fs.readFileSync(where.abs, "utf8"), lang).catch(() => [])
+    return { symbols, language: lang }
   })
 
   // G33: your own edit to a file in the session's folder, saved only if the file is still as it was when you opened

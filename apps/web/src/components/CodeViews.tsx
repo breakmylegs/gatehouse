@@ -95,13 +95,34 @@ export function CodeEditor({
 }
 
 /** A file's text, read only, with line numbers and search. */
-export function CodeView({ text, label }: { text: string; label: string }) {
+export function CodeView({
+  text,
+  label,
+  goTo,
+}: {
+  text: string
+  label: string
+  /** C-031: a line to show and put the cursor on; `n` changes each time, so the same line can be gone to again. */
+  goTo?: { line: number; n: number }
+}) {
   const host = useRef<HTMLDivElement>(null)
+  const viewRef = useRef<EditorView | undefined>(undefined)
   useEffect(() => {
     if (!host.current) return
     const view = new EditorView({ doc: text, extensions: base(label), parent: host.current })
-    return () => view.destroy()
+    viewRef.current = view
+    return () => {
+      viewRef.current = undefined
+      view.destroy()
+    }
   }, [text, label])
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view || !goTo) return
+    const line = view.state.doc.line(Math.min(Math.max(1, goTo.line), view.state.doc.lines))
+    view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: "start" }) })
+    view.focus()
+  }, [goTo])
   return <div ref={host} className="code-view" data-testid="code-view" />
 }
 

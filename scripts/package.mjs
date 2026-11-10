@@ -151,9 +151,15 @@ if (!exeOnly) {
     "@anthropic-ai/claude-agent-sdk/package.json",
     "fastify/package.json",
     "web-tree-sitter/package.json",
+    "@vscode/tree-sitter-wasm/wasm/tree-sitter-typescript.wasm",
   ])
     if (!fs.existsSync(path.join(app, "node_modules", must)))
       throw new Error(`node_modules/${must} was not installed`)
+  // C-031: VS Code's grammars, less the ones the outline does not read (about 13 MB off every update).
+  const grammars = path.join(app, "node_modules", "@vscode", "tree-sitter-wasm", "wasm")
+  const kept = new Set(["typescript", "tsx", "javascript", "python", "c-sharp", "powershell"].map((g) => `tree-sitter-${g}.wasm`))
+  for (const f of fs.readdirSync(grammars))
+    if (f.endsWith(".wasm") && !kept.has(f)) fs.rmSync(path.join(grammars, f), { force: true })
 
   // npm links the workspace packages into node_modules with junctions, which hold absolute paths. Record them as
   // relative pairs; scripts/links.mjs makes them point at wherever the folder is now, on every start.

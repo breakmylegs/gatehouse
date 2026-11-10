@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { CodeEditor, CodeView } from "./CodeViews"
+import { Outline } from "./Outline"
 import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -224,6 +225,8 @@ export function Viewer({
   const [frameKey, setFrameKey] = useState(0)
   // G33: your edit, kept here until saved; saved only over the version opened.
   const [editing, setEditing] = useState(false)
+  // C-031: the line the outline last sent the view to.
+  const [goTo, setGoTo] = useState<{ line: number; n: number }>()
   const [draft, setDraft] = useState("")
   const [saving, setSaving] = useState(false)
 
@@ -443,7 +446,13 @@ export function Viewer({
             <Markdown remarkPlugins={[remarkGfm]}>{read.text}</Markdown>
           </div>
         ) : (
-          <CodeView text={read.text} label={`${rel}, read only`} />
+          // C-031: the file's outline beside it, and go to symbol.
+          <div className="grid min-h-0 grid-cols-[1fr_auto]">
+            <CodeView text={read.text} label={`${rel}, read only`} {...(goTo ? { goTo } : {})} />
+            <div className="max-h-[80vh] w-56 overflow-auto">
+              <Outline sessionId={sessionId} rel={rel} onGo={(line) => setGoTo((g) => ({ line, n: (g?.n ?? 0) + 1 }))} />
+            </div>
+          </div>
         )}
         {read?.kind === "text" && read.truncated ? (
           <p className="m-0 px-4 pb-3 text-xs text-mut">Only the first 1 MB is shown.</p>
