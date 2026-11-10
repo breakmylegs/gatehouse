@@ -1,3 +1,5 @@
+import type { ActionRequest, ActionResult } from "./codehouse-action.js"
+import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
 import type { HeavyJob } from "./memory-governor.js"
@@ -265,6 +267,8 @@ export interface SessionInfo {
   suspended?: boolean
   /** D-001: how many weakenings of the tests Extreme approval approved in this session. */
   testsWeakened?: number
+  /** D-009: claims that the work is done, as checked, newest last. */
+  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string }>
   /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
   counterexamples?: Array<{ id: string; framework: string; example: string; writesItself: boolean; test?: string }>
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
@@ -324,6 +328,7 @@ export interface SessionEvents {
         | "tests_weakened"
         | "heldout_result"
         | "counterexample_pinned"
+        | "claim_checked"
       data: Record<string, unknown>
     },
   ]
@@ -405,6 +410,8 @@ export interface SessionDeps {
   grants?: GrantUses
   /** D-007: the locked tests. */
   locks?: TestLocks
+  /** Section 6: runs a command as Codehouse's own action (D-009's claim checks). */
+  codehouseAction?: (r: ActionRequest) => Promise<ActionResult>
   account: AccountMonitor
   /** Owner, 9 Nov: one look at the limits now, so a bypass that has run out pauses the session at once. */
   limitCheck?: () => Promise<void>
@@ -736,6 +743,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
       ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
+      ...(this.#claims.length ? { claims: this.#claims.map((c) => ({ ...c })) } : {}),
       ...(this.#pins.list().length
         ? {
             counterexamples: this.#pins.list().map((p) => ({
@@ -919,6 +927,10 @@ export class Session extends EventEmitter<SessionEvents> {
       },
       // G19: the same failure three times in a row with nothing changed stops the turn.
       onToolOutcome: (tool, input, error) => {
+        // D-009: the turn's commands, for what a claim that the work is done rests on.
+        const command = (input as { command?: unknown } | undefined)?.command
+        if ((tool === "Bash" || tool === "PowerShell") && typeof command === "string")
+          this.#turnCommands.push(command.slice(0, 2000))
         if (error === undefined) return this.#loop.succeeded(tool, input)
         if (this.#loop.failed(tool, input, error)) void this.#stopForLoop(tool)
       },
@@ -1214,6 +1226,8 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#stuck.stop()
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      // D-009: a claim that the work is done is checked by running its command again.
+      if (typeof m.result === "string" && m.is_error !== true) void this.#checkClaims(m.result)
       // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
       if (typeof m.result === "string" && m.is_error !== true && saysQueueEmpty(m.result))
         this.emit("event", { type: "queue_empty", data: {} })
@@ -1286,6 +1300,83 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#send(text)
     this.emit("prompted", text)
     this.#carry.started(this.#lastCost)
+  }
+
+  /** D-009: the turn's shell commands, kept from its start. */
+  #turnCommands: string[] = []
+  /** D-009: the claims checked in this session, newest last. */
+  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string }> = []
+
+  /**
+   * D-009: each claim in a reply is stamped Verified, Contradicted or Unverified, by running what it rests on again as a
+   * Codehouse action (section 6). With the tests weakened in this session (D-001), a claim about them is Unverified.
+   */
+  async #checkClaims(text: string): Promise<void> {
+    const run = this.#deps.codehouseAction
+    const claims = findClaims(text)
+    const commands = this.#turnCommands
+    this.#turnCommands = []
+    if (!claims.length || !run) return
+    const root = findProjectRoot(this.cwd)
+    const runs = new Map<string, Promise<ActionResult>>()
+    for (const c of claims) {
+      let outcome: ClaimOutcome = "unverified"
+      let why: string
+      const cmd = commandFor(c, commands, this.cwd, root)
+      if ((c.kind === "tests" || c.kind === "fixed") && this.#testsWeakened)
+        why = "the tests were weakened in this session"
+      else if (!cmd) why = "there is no command to check it with"
+      else {
+        const key = `${cmd.cwd}|${cmd.command}`
+        if (!runs.has(key))
+          runs.set(
+            key,
+            run({
+              sessionId: this.id,
+              cwd: cmd.cwd,
+              project: this.project,
+              command: cmd.command,
+              why: `checking Claude's claim: ${c.quote.slice(0, 80)}`,
+              level: this.#resources,
+            }),
+          )
+        const r = await runs.get(key)!
+        if (!r.ran) why = `it was not run: ${r.refused}`
+        else if (r.killed) why = "the kill switch stopped the check"
+        else if (r.timedOut) why = "the check did not finish in time"
+        else if (r.exitCode === 0) {
+          outcome = "verified"
+          why = `${cmd.command} passed when Codehouse ran it`
+        } else {
+          outcome = "contradicted"
+          why = `${cmd.command} failed when Codehouse ran it (exit ${r.exitCode})`
+        }
+      }
+      const entry = { kind: c.kind, quote: c.quote, outcome, why, ...(cmd ? { command: cmd.command } : {}) }
+      this.#claims = [...this.#claims, entry].slice(-10)
+      await this.#deps.audit
+        .record({
+          session: this.id,
+          event: "claim_verified",
+          channel: "host",
+          tool: "claims",
+          cwd: this.cwd,
+          project: this.project,
+          input: entry,
+          verdict: {
+            outcome: outcome === "contradicted" ? "deny" : "allow",
+            ruleId: "done-claim",
+            reason: `${CLAIM_WORDS[outcome]}: ${why}.`,
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: this.#deps.policy()?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+        .catch(() => undefined)
+      this.emit("event", { type: "claim_checked", data: entry })
+    }
+    this.emit("state", this.info())
   }
 
   #send(text: string): void {

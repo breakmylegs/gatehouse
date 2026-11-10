@@ -18,8 +18,9 @@ import { PromptStore } from "./prompts.js"
 import { chatMemoryClient } from "./memory-client.js"
 import { MemoryStore } from "./memory.js"
 import { ProjectStore } from "./projects.js"
-import { findLimitsExe, limitedCommand, limiter } from "./limits.js"
-import { HeldOutChecks } from "./heldout.js"
+import { findLimitsExe, limiter } from "./limits.js"
+import { HeldOutChecks, type HeldOutExec } from "./heldout.js"
+import { runCodehouseAction } from "./codehouse-action.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
@@ -528,13 +529,42 @@ export function createHost(opts: HostOptions = {}): Host {
     dataDir: gatehouseDataDir(env),
     log,
   })
-  const heldOut = new HeldOutChecks({
-    dataDir: gatehouseDataDir(env),
-    sealer: () => sealer(),
-    ...(limitsExe
-      ? { spawnLimited: (command: string, cwd: string) => limitedCommand(limitsExe, `codeh-heldout-${Date.now()}`, command, cwd) }
-      : {}),
-  })
+  const heldOut = new HeldOutChecks({ dataDir: gatehouseDataDir(env), sealer: () => sealer() })
+  // D-009: a claim's check runs as Codehouse's own action, for the session it was made in.
+  deps.codehouseAction = (r) =>
+    runCodehouseAction(r, {
+      approver: deps.approver,
+      broker,
+      audit,
+      kill,
+      extreme: () => manager.get(r.sessionId)?.info().extreme === true,
+      ...(limitsExe ? { limitsExe } : {}),
+    })
+  // Section 6: what Codehouse runs itself is judged, run without credentials in a job at the session's level, and
+  // stopped by the kill switch.
+  const actionFor = (sessionId: string): HeldOutExec => async (command, cwd, timeoutMs) => {
+    const s = manager.get(sessionId)
+    const r = await runCodehouseAction(
+      {
+        sessionId,
+        cwd,
+        project: s?.project ?? "",
+        command,
+        why: "this project's held-out checks",
+        level: s?.info().resources ?? "high",
+        timeoutMs,
+      },
+      {
+        approver: deps.approver,
+        broker,
+        audit,
+        kill,
+        extreme: () => s?.info().extreme === true,
+        ...(limitsExe ? { limitsExe } : {}),
+      },
+    )
+    return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
+  }
   // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
   const chatStore = new ChatStore({
     file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
@@ -851,7 +881,9 @@ export function createHost(opts: HostOptions = {}): Host {
       if (s)
         void heldOut
           .summary(s.project)
-          .then((x) => (x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty") : undefined))
+          .then((x) =>
+            x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty", actionFor(s.id)) : undefined,
+          )
           .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
     } else if (type === "carry_on_end" || type === "stuck") {
       // O16: the end of an Extreme run, and a turn that may be stuck, reach your phone too. A run that ended because
@@ -1014,6 +1046,7 @@ export function createHost(opts: HostOptions = {}): Host {
     account,
     limits: limitPauser,
     heldOut,
+    heldOutExec: actionFor,
     locks,
     governor,
     audit,

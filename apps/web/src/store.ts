@@ -795,6 +795,11 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       if (data.reason === "spend")
         return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
+    case "claim_checked": {
+      // D-009: a claim that the work is done, stamped.
+      const word = data.outcome === "verified" ? "Verified" : data.outcome === "contradicted" ? "Contradicted" : "Unverified"
+      return `${word}: "${str(data.quote) ?? ""}" (${str(data.why) ?? ""}).`
+    }
     case "counterexample_pinned":
       return `A counterexample is pinned as a locked regression test: ${str(data.file) ?? ""}.`
     case "heldout_result":

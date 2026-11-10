@@ -1,5 +1,5 @@
 import { TestLockError, type TestLocks } from "./test-locks.js"
-import { HeldOutError, type HeldOutChecks } from "./heldout.js"
+import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
 import { MemoryRefusedError, type MemoryGovernor } from "./memory-governor.js"
@@ -63,6 +63,8 @@ export interface HostApp {
   locks?: TestLocks
   /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
   heldOut?: HeldOutChecks
+  /** Section 6: the command that runs them, as a Codehouse action for the session. */
+  heldOutExec?: (sessionId: string) => HeldOutExec
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -577,7 +579,7 @@ export class HostServer {
         const h = a.heldOut
         if (!h) throw new CommandError("unavailable", "Held-out checks are not available here")
         try {
-          return await runHeldOutFor(s, h, a.audit, "you")
+          return await runHeldOutFor(s, h, a.audit, "you", a.heldOutExec?.(s.id))
         } catch (e) {
           if (e instanceof HeldOutError) throw new CommandError("invalid", e.message)
           throw e

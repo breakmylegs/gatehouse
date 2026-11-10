@@ -4,7 +4,7 @@
  * only to the desktop that asked. Used by the desktop's Run now and when a session says its build queue is empty.
  */
 import type { HostAudit } from "./hostaudit.js"
-import { countsLine, type HeldOutChecks, type HeldOutDetail } from "./heldout.js"
+import { countsLine, type HeldOutChecks, type HeldOutDetail, type HeldOutExec } from "./heldout.js"
 
 export interface HeldOutTarget {
   id: string
@@ -18,8 +18,10 @@ export async function runHeldOutFor(
   checks: HeldOutChecks,
   audit: Pick<HostAudit, "record">,
   why: "you" | "queue-empty",
+  /** Section 6: the command run as a Codehouse action. Absent: a plain child process (tests). */
+  exec?: HeldOutExec,
 ): Promise<HeldOutDetail> {
-  const detail = await checks.run(s.project, s.cwd)
+  const detail = await checks.run(s.project, s.cwd, exec)
   // The names and the output stay in `detail`, for the desktop; nothing below carries them.
   const counts = detail.counts
   await audit

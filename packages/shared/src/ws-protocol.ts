@@ -357,6 +357,18 @@ export const SessionInfo = z.object({
       }),
     )
     .optional(),
+  /** D-009: claims that the work is done, as Codehouse checked them, newest last. Absent from older Hosts. */
+  claims: z
+    .array(
+      z.object({
+        kind: z.string(),
+        quote: z.string(),
+        outcome: z.enum(["verified", "contradicted", "unverified"]),
+        why: z.string(),
+        command: z.string().optional(),
+      }),
+    )
+    .optional(),
   /** D-001: how many weakenings of the tests Extreme approval approved in this session. Absent from older Hosts. */
   testsWeakened: z.number().int().min(0).optional(),
   /** How much of this computer the session may use. Absent where Codehouse cannot limit it. */

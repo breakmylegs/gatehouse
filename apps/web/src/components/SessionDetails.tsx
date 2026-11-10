@@ -136,6 +136,23 @@ export function SessionDetails({
               <dd className="m-0">{session.model}</dd>
             </>
           ) : null}
+          {session.claims?.length ? (
+            <>
+              <dt className="text-mut">Claims</dt>
+              <dd className="m-0 grid gap-0.5">
+                {session.claims.slice(-3).map((c, i) => (
+                  <span
+                    key={i}
+                    className={
+                      c.outcome === "verified" ? "text-ok" : c.outcome === "contradicted" ? "font-semibold text-sev" : "text-warn"
+                    }
+                  >
+                    {c.outcome === "verified" ? "Verified" : c.outcome === "contradicted" ? "Contradicted" : "Unverified"}: {c.quote} ({c.why})
+                  </span>
+                ))}
+              </dd>
+            </>
+          ) : null}
           {session.testsWeakened ? (
             <>
               <dt className="text-mut">Tests</dt>

@@ -30,6 +30,8 @@ export interface StackOptions {
   config?: Record<string, unknown>
   /** D-007: the locked tests, where a test needs them. */
   locks?: SessionDeps["locks"]
+  /** D-009: stands in for Codehouse's own actions. */
+  codehouseAction?: SessionDeps["codehouseAction"]
 }
 
 export interface Stack {
@@ -168,6 +170,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
   const hooks: Stack["hooks"] = {}
   const deps: SessionDeps = {
     ...(opts.locks ? { locks: opts.locks } : {}),
+    ...(opts.codehouseAction ? { codehouseAction: opts.codehouseAction } : {}),
     limitCheck: async () => {
       await hooks.limitCheck?.()
     },

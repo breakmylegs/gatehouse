@@ -9,7 +9,7 @@
  * (passed, failed, total) leave this module for a session; the names and the output are for the desktop's detail
  * view alone, and are never logged, audited, sent to the phone or a push channel.
  */
-import { spawn, type ChildProcess } from "node:child_process"
+import { spawn } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -139,11 +139,41 @@ interface Index {
 export interface HeldOutDeps {
   dataDir: string
   sealer: () => Protector
-  /** Runs a command under a job object where one can be had. Absent: a plain child process (tests). */
-  spawnLimited?: (command: string, cwd: string) => ChildProcess
   /** The longest a run may take. */
   timeoutMs?: number
 }
+
+/** Runs the project's command; `refused` when it was not run (the rules, a person or the kill switch said no). */
+export type HeldOutExec = (
+  command: string,
+  cwd: string,
+  timeoutMs: number,
+) => Promise<{ exitCode: number | null; output: string; timedOut: boolean; refused?: string }>
+
+/** A plain child process, for tests; a session's runs go through runCodehouseAction. */
+const plainExec: HeldOutExec = (command, cwd, timeoutMs) =>
+  new Promise((resolve) => {
+    const child = spawn(command, { cwd, shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+    let output = ""
+    const keep = (d: Buffer) => {
+      if (output.length < 400_000) output += d.toString("utf8")
+    }
+    child.stdout?.on("data", keep)
+    child.stderr?.on("data", keep)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      child.kill()
+    }, timeoutMs)
+    child.on("close", (code) => {
+      clearTimeout(timer)
+      resolve({ exitCode: code, output, timedOut })
+    })
+    child.on("error", () => {
+      clearTimeout(timer)
+      resolve({ exitCode: null, output, timedOut })
+    })
+  })
 
 export class HeldOutChecks {
   readonly #d: HeldOutDeps
@@ -226,8 +256,11 @@ export class HeldOutChecks {
     await this.#saveIndex(project, { ...i, checks: i.checks.filter((x) => x !== c) })
   }
 
-  /** Runs the checks in the project's folder. The detail is the desktop's; give a session only `result.counts`. */
-  async run(project: string, cwd: string): Promise<HeldOutDetail> {
+  /**
+   * Runs the checks in the project's folder, through `exec`: for a session, a Codehouse action (section 6), judged,
+   * at the session's level, stopped by the kill switch. The detail is the desktop's; give a session only the counts.
+   */
+  async run(project: string, cwd: string, exec: HeldOutExec = plainExec): Promise<HeldOutDetail> {
     const i = await this.#index(project)
     if (!i.checks.length) throw new HeldOutError("This project has no held-out tests yet.")
     if (!i.command) throw new HeldOutError("Set the command that runs this project's held-out tests first.")
@@ -240,25 +273,9 @@ export class HeldOutChecks {
         fs.writeFileSync(path.join(runDir, c.name), Buffer.from(bytes))
       }
       const command = i.command.replaceAll("{dir}", `"${runDir}"`)
-      const child = this.#d.spawnLimited
-        ? this.#d.spawnLimited(command, cwd)
-        : spawn(command, { cwd, shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
-      let output = ""
-      const keep = (d: Buffer) => {
-        if (output.length < 400_000) output += d.toString("utf8")
-      }
-      child.stdout?.on("data", keep)
-      child.stderr?.on("data", keep)
-      let timedOut = false
-      const timer = setTimeout(() => {
-        timedOut = true
-        child.kill()
-      }, this.#d.timeoutMs ?? 10 * 60_000)
-      const exitCode = await new Promise<number | null>((resolve) => {
-        child.on("close", (code) => resolve(code))
-        child.on("error", () => resolve(null))
-      })
-      clearTimeout(timer)
+      const r = await exec(command, cwd, this.#d.timeoutMs ?? 10 * 60_000)
+      if (r.refused) throw new HeldOutError(`The held-out checks were not run: ${r.refused}.`)
+      const { exitCode, output, timedOut } = r
       const counts = countsOf(output)
       return {
         ...(counts ? { counts } : {}),
