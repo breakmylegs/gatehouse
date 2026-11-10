@@ -136,6 +136,8 @@ export interface State {
   compare?: { ids: string[]; at: number }
   /** G31: an audit record to open when the Audit page next shows, by its number. */
   auditOpen?: number
+  /** C-010: a call from a session's timeline to try against the live policy when the Approver page next shows. */
+  tryRequest?: { tool: string; text: string; cwd: string }
   theme: "light" | "dark"
   /** No choice of yours is kept, so the window follows the Windows theme as it changes. */
   themeFollows: boolean

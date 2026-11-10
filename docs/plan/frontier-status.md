@@ -42,7 +42,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-002 | Gate refuses --skip-tests | Wave 1 | built | slice/C-002-skip-tests-override | BUILD_REPORT "Frontier C-002" | Signed per-version override, audited |
 | C-004 | Memory governor | Wave 1 | built | slice/C-004-memory-governor | BUILD_REPORT "Frontier C-004" | 85% commit by default; new sessions, chats and page looks refused with a card; idle sessions offered for suspension |
 | C-013 | Grant lifetimes | Wave 1 | built | slice/C-013-grant-lifetimes | BUILD_REPORT "Frontier C-013" | Expiry (30 days by default), folder scope, use limits; a sidecar file so older versions still read the rules |
-| C-010 | Audit-backed session timeline | Wave 2 | todo | | | Walkthrough (G31) and audit by session exist |
+| C-010 | Audit-backed session timeline | Wave 2 | built | slice/C-010-timeline | BUILD_REPORT "Frontier C-010" | Timeline... in a session's menu; replay is Try a request with the call filled in |
 | C-011 | Signed timeline export | Wave 2 | todo | | | Audit bundle (G30) exists, not signed |
 | C-012 | Policy dry run | Wave 2 | todo | | | policy:replay exists |
 | C-016 | Verified data-boundary card per model | Wave 2 | todo | | | "Where your words go" cards exist; no stale refusal |

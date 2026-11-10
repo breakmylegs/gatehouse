@@ -65,6 +65,7 @@ import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
 import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
 import { Walkthrough } from "../components/Walkthrough"
+import { Timeline } from "../components/Timeline"
 import { SearchPane } from "../components/SearchPane"
 import { GitPane } from "../components/GitPane"
 import { PictureViewer } from "../components/PictureViewer"
@@ -346,6 +347,8 @@ function SessionPane({
   const [bypassOpen, setBypassOpen] = useState(false)
   // G31: the evidence for this session's work, above its transcript.
   const [walkthrough, setWalkthrough] = useState(false)
+  // C-010: every call of the session from the audit log, in order.
+  const [timeline, setTimeline] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -579,6 +582,7 @@ function SessionPane({
         }),
     },
     ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
+    ...(chat ? [] : [{ label: "Timeline...", onSelect: () => setTimeline(true) }]),
     { kind: "separator" },
     {
       label: "Larger text",
@@ -782,6 +786,11 @@ function SessionPane({
       {walkthrough ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Walkthrough sessionId={session.id} onClose={() => setWalkthrough(false)} />
+        </div>
+      ) : null}
+      {timeline ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Timeline sessionId={session.id} onClose={() => setTimeline(false)} />
         </div>
       ) : null}
       {goalOpen ? (

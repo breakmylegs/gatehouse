@@ -31,6 +31,8 @@ import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
 import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
 import { makeAuditBundle } from "./audit-bundle.js"
+import { sessionRecords, sessionTimeline } from "./timeline.js"
+import { listCheckpoints } from "@gatehouse/shared/node"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
@@ -367,6 +369,16 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const q = req.query as Record<string, string | undefined>
     const account = q.account && /^[a-z0-9-]{1,20}$/.test(q.account) ? q.account : "main"
     return { usage: (await ctx.planUsage?.(account, q.fresh === "1")) ?? null }
+  })
+
+  // C-010: a session's timeline, every call in audit order, with the checkpoints taken in its folder.
+  app.get("/api/timeline", async (req, reply) => {
+    const session = String((req.query as { session?: string }).session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    const records = sessionRecords(ctx.auditDir, session)
+    const cwd = records.find((r) => r.cwd)?.cwd
+    const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
+    return { entries: sessionTimeline(records, checkpoints) }
   })
 
   app.get("/api/audit/verify", async () => {
