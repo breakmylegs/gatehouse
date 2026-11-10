@@ -73,6 +73,11 @@ export function makeFixture(): Fixture {
   ]) {
     write(path.join(ws, f))
   }
+  // D-013: the workspace looks like a real project: a package.json that is JSON (with no scripts), and its tools
+  // installed, so npm and npx in it expand to nothing more than they say.
+  write(path.join(ws, "package.json"), '{ "name": "ws" }\n')
+  for (const bin of ["tsc", "vitest", "eslint", "prettier", "jest"])
+    write(path.join(ws, "node_modules", ".bin", bin), "#!/bin/sh\n")
   write(path.join(out, "secret.txt"))
   write(path.join(out, ".env"))
   write(path.join(out, "notes.md"))

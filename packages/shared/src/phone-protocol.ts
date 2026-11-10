@@ -51,6 +51,9 @@ export interface OpenedRequest {
       reason: string
       risk: number
       segments?: Array<{ text: string; ruleId: string; outcome: string }>
+      /** D-013: what the shell call would also run, and what of it cannot be read. */
+      expanded?: Array<{ from: string; line: string }>
+      unknownEffects?: string[]
     }
     /** G20: what the call would delete or throw away, when it would. */
     effects?: {
