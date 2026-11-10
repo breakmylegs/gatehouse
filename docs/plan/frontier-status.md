@@ -44,7 +44,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-013 | Grant lifetimes | Wave 1 | built | slice/C-013-grant-lifetimes | BUILD_REPORT "Frontier C-013" | Expiry (30 days by default), folder scope, use limits; a sidecar file so older versions still read the rules |
 | C-010 | Audit-backed session timeline | Wave 2 | built | slice/C-010-timeline | BUILD_REPORT "Frontier C-010" | Timeline... in a session's menu; replay is Try a request with the call filled in |
 | C-011 | Signed timeline export | Wave 2 | built | slice/C-011-signed-timeline | BUILD_REPORT "Frontier C-011" | ECDSA P-256 (Windows PowerShell 5.1 has no Ed25519); both verifiers check it |
-| C-012 | Policy dry run | Wave 2 | todo | | | policy:replay exists |
+| C-012 | Policy dry run | Wave 2 | built | slice/C-012-policy-dry-run | BUILD_REPORT "Frontier C-012" | On the plan's card and in its record; calls read from code blocks, backticks and named files |
 | C-016 | Verified data-boundary card per model | Wave 2 | todo | | | "Where your words go" cards exist; no stale refusal |
 | C-031 | Tree-sitter outline and navigation (WASM) | Wave 2 | todo | | | |
 | C-032 | TypeScript language service worker | Wave 3 | todo | | | |

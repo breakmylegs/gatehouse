@@ -1,5 +1,6 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
+import { dryRunPlan, estimateWords } from "./plan-dry-run.js"
 import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
 import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
@@ -715,17 +716,24 @@ async function ask(
 ): Promise<PermissionResult> {
   const toolUseID = options.toolUseID
   const toolName = kind === "question" ? "AskUserQuestion" : "ExitPlanMode"
+  // C-012: what the plan's steps would meet under the rules now, judged with nothing run. A failure leaves it out.
+  const estimate =
+    kind === "plan" && typeof input.plan === "string"
+      ? await dryRunPlan(input.plan, deps.cwd, deps.engine).catch(() => undefined)
+      : undefined
+  const words = estimate ? estimateWords(estimate) : ""
   const verdict: Verdict = {
     outcome: "escalate",
     ruleId: kind === "question" ? "ask-user-question" : "exit-plan-mode",
     reason:
       kind === "question"
         ? "Claude is asking you a question."
-        : "Claude wants to leave plan mode and start work.",
+        : `Claude wants to leave plan mode and start work.${words ? ` ${words}` : ""}`,
     risk: 0,
     decidedBy: "rules",
     policyHash: deps.policy()?.hash ?? "none",
   }
+  const counts = estimate ? { estimate: { allow: estimate.allow, escalate: estimate.escalate, deny: estimate.deny } } : {}
   // Extreme approval never waits on you (owner, 30 Oct): the recommended answer, or the plan approved, recorded first.
   const answers = kind === "question" ? recommendedAnswers(input) : {}
   if (deps.extreme?.() === true && answers) {
@@ -737,7 +745,7 @@ async function ask(
       toolUseId: toolUseID,
       cwd: deps.cwd,
       project: deps.project,
-      input: kind === "question" ? { ...input, answers } : input,
+      input: kind === "question" ? { ...input, answers } : { ...input, ...counts },
       verdict: {
         ...verdict,
         outcome: "allow",
@@ -776,7 +784,7 @@ async function ask(
     toolUseId: toolUseID,
     cwd: deps.cwd,
     project: deps.project,
-    input,
+    input: { ...input, ...counts },
     verdict: recorded,
     latencyMs: resolution.waitedMs,
   })

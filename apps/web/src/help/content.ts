@@ -239,6 +239,8 @@ While a turn runs, a line above the composer says what Claude is doing and for h
 
 Open beside, in a session's name menu or its ... button in the sidebar, shows another session next to it; up to four fit, two by two when there are four. The pane you last clicked or typed in has focus, marked by a line along its top: choosing a session in the sidebar that is not on screen shows it in that pane, and one already on screen just takes focus. Each has its own transcript, files and composer. Close this pane removes one. When a pane is narrow, Plan and Files open over it, and an open file takes the transcript's place until you close it.
 
+**A plan's card** says, before you approve it, how many of the commands and file changes the plan names your rules would allow, would ask you about and would refuse. It is an estimate: nothing in the plan is run to work it out, and every call is still judged when Claude makes it.
+
 **Timeline...** in the same menu lists everything the session did, from the audit log, in its order: each call with how it was decided (the rule, the risk, and who: your rules, you, your phone or Extreme approval), and things like a pause or a mode change. Each call has **Open record**, **Try in policy** (Try a request on the Approver page, with the call filled in), and where there is one, the checkpoint taken while it waited and the diff of the file it changed.
 
 **Export, signed** in the Timeline saves it as a zip with the audit records it was made from, signed with a key made on this computer, and a note on how to check it with Windows PowerShell. Changing one byte of it makes the check fail. Codehouse shows the key's fingerprint when you export; the note in the zip names it too.
