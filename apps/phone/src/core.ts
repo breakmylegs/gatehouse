@@ -351,6 +351,13 @@ export async function answer(
   await call("POST", "/api/phone/envelopes", { requestId: item.relayId, sealed }, session.token)
 }
 
+/** D-025: "I'm still here", for a session's dead-man timer, signed with this phone's passkey. */
+export async function stillHere(session: Session, device: DeviceInfo): Promise<void> {
+  const envelope = newEnvelope({ type: "heartbeat", deviceId: device.phoneId, now: Date.now(), ttlMs: ttl.kill })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, "kill")
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
 export async function kill(session: Session, device: DeviceInfo): Promise<void> {
   const envelope = newEnvelope({
     type: "kill",

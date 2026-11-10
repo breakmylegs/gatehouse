@@ -13,6 +13,7 @@ import {
   register,
   sendToSession,
   startTemplate,
+  stillHere,
   unlock,
   type PendingItem,
   type Session,
@@ -1021,6 +1022,21 @@ function SettingsScreen({
             </span>
           </span>
         </label>
+      </section>
+
+      <section className="grid gap-2" aria-label="Still here">
+        <h2 className="m-0 text-[22px] font-semibold">Still here</h2>
+        <p className="m-0 text-mut">
+          A session with a dead-man timer pauses if Codehouse hears nothing from you in time. Anything you do here counts;
+          so does this.
+        </p>
+        <button
+          className="btn"
+          disabled={busy}
+          onClick={() => void run(async () => stillHere(session, device), "Codehouse knows you are there.")}
+        >
+          {busy ? "Waiting for Face ID…" : "I'm still here"}
+        </button>
       </section>
 
       <section className="grid gap-2" aria-label="Kill switch">

@@ -90,6 +90,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("heldout_list"), sessionId: Id }),
   /** D-007: the session's project's locked tests; locking and unlocking one; accepting ones changed outside Codehouse. */
   z.object({ type: z.literal("locks_state"), sessionId: Id }),
+  /** D-025: a dead-man timer for an Extreme session, in minutes, or off. */
+  z.object({ type: z.literal("set_deadman"), sessionId: Id, minutes: z.number().int().min(1).max(240).nullable() }),
   /** D-008: pins a counterexample as a locked regression test, or puts it away. */
   z.object({ type: z.literal("pin_counterexample"), sessionId: Id, id: z.string().max(40) }),
   z.object({ type: z.literal("dismiss_counterexample"), sessionId: Id, id: z.string().max(40) }),
@@ -364,6 +366,8 @@ export const SessionInfo = z.object({
       }),
     )
     .optional(),
+  /** D-025: the dead-man timer, when on. Absent from older Hosts. */
+  deadman: z.object({ minutes: z.number().int(), lastHeardFrom: z.string() }).optional(),
   /** D-018: what is left of the session's risk budget; absent when it has none. Absent from older Hosts. */
   riskBudget: z.number().int().min(0).optional(),
   /** D-009: claims that the work is done, as Codehouse checked them, newest last. Absent from older Hosts. */
@@ -444,7 +448,7 @@ export const SessionInfo = z.object({
        * B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. D-018 "risk":
        * the session's risk budget is spent; it waits for you, and no limit starts it again by itself.
        */
-      reason: z.enum(["spend", "risk"]).optional(),
+      reason: z.enum(["spend", "risk", "heartbeat"]).optional(),
     })
     .optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */

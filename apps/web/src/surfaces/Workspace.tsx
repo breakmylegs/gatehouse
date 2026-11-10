@@ -539,6 +539,15 @@ function SessionPane({
     session.bypass
       ? { label: "End the limit bypass", onSelect: () => void setBypass(session.id, null) }
       : { label: "Bypass the limits...", onSelect: () => setBypassOpen(true) },
+    // D-025: a dead-man timer for Extreme approval: it pauses if nothing is heard from you in time.
+    ...(session.extreme
+      ? session.deadman
+        ? [{ label: `Dead-man timer off (now ${session.deadman.minutes} min)`, onSelect: () => void send({ type: "set_deadman", sessionId: session.id, minutes: null }) }]
+        : [5, 15, 30, 60].map((m) => ({
+            label: `Dead-man timer: ${m} minutes`,
+            onSelect: () => void send({ type: "set_deadman", sessionId: session.id, minutes: m }),
+          }))
+      : []),
     // B25: carry on until a check passes, while Extreme approval carries on.
     ...(chat
       ? []
@@ -1620,7 +1629,13 @@ function PausedLine({
   const [busy, setBusy] = useState(false)
   return (
     <div role="status" className="pane-stopped flex-wrap">
-      {paused.reason === "risk" ? (
+      {paused.reason === "heartbeat" ? (
+        // D-025: nothing was heard from you in time.
+        <span>
+          <strong>Paused.</strong> Nothing was heard from you within this session's dead-man timer, so
+          Extreme approval stopped it. Start it again when you are back.
+        </span>
+      ) : paused.reason === "risk" ? (
         // D-018: the session's risk budget is spent.
         <span>
           <strong>Paused.</strong> This session's risk budget is spent: Extreme approval approved as much

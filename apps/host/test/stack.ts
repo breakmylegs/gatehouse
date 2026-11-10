@@ -32,6 +32,8 @@ export interface StackOptions {
   locks?: SessionDeps["locks"]
   /** D-009: stands in for Codehouse's own actions. */
   codehouseAction?: SessionDeps["codehouseAction"]
+  /** D-025: a shorter dead-man minute and look, for tests. */
+  deadman?: { minuteMs: number; lookMs: number }
 }
 
 export interface Stack {
@@ -171,6 +173,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
   const deps: SessionDeps = {
     ...(opts.locks ? { locks: opts.locks } : {}),
     ...(opts.codehouseAction ? { codehouseAction: opts.codehouseAction } : {}),
+    ...(opts.deadman ? { deadmanMinuteMs: opts.deadman.minuteMs, deadmanLookMs: opts.deadman.lookMs } : {}),
     limitCheck: async () => {
       await hooks.limitCheck?.()
     },

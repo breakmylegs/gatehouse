@@ -272,6 +272,8 @@ export interface SessionInfo {
   testsWeakened?: number
   /** D-018: what is left of the session's risk budget; absent when it has none. */
   riskBudget?: number
+  /** D-025: the dead-man timer, when on. */
+  deadman?: { minutes: number; lastHeardFrom: string }
   /** D-009: claims that the work is done, as checked, newest last. */
   claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string }>
   /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
@@ -336,6 +338,7 @@ export interface SessionEvents {
         | "claim_checked"
         | "remember_refused"
         | "risk_budget_exhausted"
+        | "heartbeat_missed"
       data: Record<string, unknown>
     },
   ]
@@ -417,6 +420,9 @@ export interface SessionDeps {
   grants?: GrantUses
   /** D-007: the locked tests. */
   locks?: TestLocks
+  /** D-025, tests only: how long a minute of the dead-man timer is, and how often it is looked at. */
+  deadmanMinuteMs?: number
+  deadmanLookMs?: number
   /** Section 6: runs a command as Codehouse's own action (D-009's claim checks). */
   codehouseAction?: (r: ActionRequest) => Promise<ActionResult>
   account: AccountMonitor
@@ -635,6 +641,52 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** D-018: what is left of the session's risk budget, or undefined when there is none (the default). */
   #budget: number | undefined
+  /** D-025: the dead-man timer, off unless you set it: how often you must be heard from, and when you last were. */
+  #deadman: { minutes: number; last: number } | undefined
+  #deadmanTimer: NodeJS.Timeout | undefined
+
+  /**
+   * D-025: in Extreme approval, a session with the timer on wants a sign of you every so many minutes: anything you do
+   * on the desktop or sign on the phone, or "I'm still here" on the phone. Without one it pauses until you start it.
+   */
+  async setDeadman(minutes: number | null): Promise<void> {
+    clearInterval(this.#deadmanTimer)
+    this.#deadmanTimer = undefined
+    this.#deadman = minutes === null ? undefined : { minutes: Math.min(Math.max(Math.round(minutes), 1), 240), last: Date.now() }
+    await this.#auditLimit(
+      "deadman_set",
+      "dead-man",
+      minutes === null ? { off: true } : { minutes: this.#deadman!.minutes },
+      minutes === null ? "You turned the dead-man timer off for this session." : `You set a dead-man timer of ${this.#deadman!.minutes} minutes on this session.`,
+      "human-desktop",
+    )
+    if (this.#deadman) {
+      this.#deadmanTimer = setInterval(() => void this.#deadmanLook(), this.#deps.deadmanLookMs ?? 5_000)
+      this.#deadmanTimer.unref()
+    }
+    this.emit("state", this.info())
+  }
+
+  /** D-025: you were heard from. */
+  heartbeat(): void {
+    if (this.#deadman) this.#deadman.last = Date.now()
+  }
+
+  async #deadmanLook(): Promise<void> {
+    const d = this.#deadman
+    if (!d || !this.#extreme || this.#paused || !this.live) return
+    const unit = this.#deps.deadmanMinuteMs ?? 60_000
+    if (Date.now() - d.last < d.minutes * unit) return
+    await this.#auditLimit(
+      "extreme_heartbeat_missed",
+      "dead-man",
+      { minutes: d.minutes, lastHeardFrom: new Date(d.last).toISOString() },
+      `Nothing was heard from you for ${d.minutes} minute${d.minutes === 1 ? "" : "s"}, so Codehouse paused this Extreme session.`,
+      "rules",
+    )
+    this.emit("event", { type: "heartbeat_missed", data: { minutes: d.minutes } })
+    await this.pause(0, undefined, "heartbeat")
+  }
 
   /**
    * D-018, the risk budget (opt-in; Settings, Sessions): an allow given without a person, by Extreme approval or by
@@ -794,6 +846,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#paused ? { paused: this.#paused } : {}),
       ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
       ...(this.#budget !== undefined ? { riskBudget: this.#budget } : {}),
+      ...(this.#deadman ? { deadman: { minutes: this.#deadman.minutes, lastHeardFrom: new Date(this.#deadman.last).toISOString() } } : {}),
       ...(this.#claims.length ? { claims: this.#claims.map((c) => ({ ...c })) } : {}),
       ...(this.#pins.list().length
         ? {
@@ -1650,7 +1703,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
    * when you start it.
    */
-  async pause(percent: number, until?: string, reason?: "spend" | "risk"): Promise<void> {
+  async pause(percent: number, until?: string, reason?: "spend" | "risk" | "heartbeat"): Promise<void> {
     if (!this.live || this.#paused) return
     const wasRunning = this.#running || this.#background.size > 0
     this.#paused = {
@@ -1667,7 +1720,9 @@ export class Session extends EventEmitter<SessionEvents> {
         wasRunning,
         ...(until ? { until } : {}),
       },
-      reason === "risk"
+      reason === "heartbeat"
+        ? "Nothing was heard from you in time, so Codehouse paused this Extreme session until you start it again."
+        : reason === "risk"
         ? "The session's risk budget is spent, so Codehouse paused this Extreme session until you start it again."
         : reason === "spend"
           ? "Today's extra spending beyond the plan reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
@@ -1689,10 +1744,12 @@ export class Session extends EventEmitter<SessionEvents> {
   async resume(by: "you" | "limit-reset"): Promise<boolean> {
     const p = this.#paused
     if (!p) return false
-    // D-018: a session its risk budget paused starts again only when you start it, with its budget full.
-    if (p.reason === "risk") {
+    // D-018: a session its risk budget paused starts again only when you start it, with its budget full. D-025: one
+    // the dead-man timer paused, only when you start it, and that is hearing from you.
+    if (p.reason === "risk" || p.reason === "heartbeat") {
       if (by !== "you") return false
-      this.#fillBudget()
+      if (p.reason === "risk") this.#fillBudget()
+      this.heartbeat()
     }
     if (p.wasRunning) {
       // Sent first: if it cannot be (the kill switch), it stays paused and is tried again.
@@ -1999,6 +2056,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   async close(): Promise<void> {
     this.#stuck.stop()
+    clearInterval(this.#deadmanTimer)
     this.#deps.broker.cancelSession(this.id, "The session was closed")
     this.#input.end()
     this.#q?.close()
@@ -2524,6 +2582,11 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       })
     this.#plan.set(account, { ...(c ?? { at: 0 }), pending })
     return pending
+  }
+
+  /** D-025: you were heard from, on the desktop or the phone: every session's dead-man timer starts again. */
+  heartbeat(): void {
+    for (const s of this.#sessions.values()) s.heartbeat()
   }
 
   /** The kill switch: every turn and every background task stops. */

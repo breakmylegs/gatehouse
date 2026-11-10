@@ -642,6 +642,8 @@ export function createHost(opts: HostOptions = {}): Host {
     store: phoneStore,
     broker,
     kill,
+    // D-025: anything signed on the phone starts the dead-man timers again.
+    heartbeat: () => manager.heartbeat(),
     audit,
     log,
     // G32: a signed message or Interrupt from the phone reaches only a session open here, as the phone was shown it.
@@ -885,6 +887,11 @@ export function createHost(opts: HostOptions = {}): Host {
             x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty", actionFor(s.id)) : undefined,
           )
           .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
+    } else if (type === "heartbeat_missed") {
+      // D-025: nothing was heard from you, so an Extreme session paused: the phone and push channels are told.
+      const body = "Nothing was heard from you in time, so Extreme approval paused it. Start it again on the desktop."
+      void phone.notify("notify", { title: "Paused: are you there?", body, project }).catch(() => undefined)
+      void ntfy.note("paused, are you there?", body, project)
     } else if (type === "risk_budget_exhausted") {
       // D-018: the risk budget is spent: the phone and push channels are told.
       const body = data.extreme

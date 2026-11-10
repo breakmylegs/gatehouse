@@ -124,7 +124,7 @@ export const SignedDecision = z.object({
   envelope: z.object({
     v: z.literal(1),
     /** G32 (owner 30 Oct): prompt and interrupt reach an open session; signed like a decision, never tied to one. */
-    type: z.enum(["decision", "answer", "kill", "prompt", "interrupt", "start"]),
+    type: z.enum(["decision", "answer", "kill", "prompt", "interrupt", "start", "heartbeat"]),
     requestId: z.string().optional(),
     sessionId: z.string().min(1).max(100).optional(),
     /** G32: start names a routine you allowed for the phone; never a folder or free instructions. */

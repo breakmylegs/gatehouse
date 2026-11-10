@@ -453,7 +453,12 @@ export class HostServer {
 
   async #handle(cmd: ClientCommand): Promise<unknown> {
     const a = this.#opts.app
+    // D-025: anything you do on the desktop shows you are there.
+    a.manager.heartbeat()
     switch (cmd.type) {
+      case "set_deadman":
+        await this.#session(cmd.sessionId).setDeadman(cmd.minutes)
+        return undefined
       case "create_session": {
         const s = await a.manager.start({
           cwd: cmd.cwd,

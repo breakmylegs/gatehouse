@@ -59,6 +59,8 @@ export interface PhoneServiceDeps {
   store: PhoneStore
   broker: Broker
   kill: HostKillSwitch
+  /** D-025: you did something on the phone, so the dead-man timers start again. */
+  heartbeat?: () => void
   audit: HostAudit
   log: (line: string) => void
   now?: () => number
@@ -547,6 +549,27 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     await this.#d.store.useNonce(result.nonce, result.nonceExpiresAtMs, this.#now)
     await this.#d.store.setCounter(phone.id, result.newCounter)
     const a = result.action
+    // D-025: anything you sign on the phone shows you are there.
+    this.#d.heartbeat?.()
+    if (a.type === "heartbeat") {
+      await this.#d.audit.record({
+        session: "phone",
+        event: "phone_heartbeat",
+        channel: "phone",
+        tool: "phone",
+        input: { phone: phone.id },
+        verdict: {
+          outcome: "allow",
+          ruleId: "dead-man",
+          reason: `You told Codehouse you are still there, from ${phone.name}, signed with its passkey.`,
+          risk: 0,
+          decidedBy: "human-phone",
+          policyHash: "n/a",
+        },
+        latencyMs: 0,
+      })
+      return
+    }
     if (a.type === "kill") {
       await this.#d.kill.engage("phone", `Kill switch from ${phone.name}`)
       return
