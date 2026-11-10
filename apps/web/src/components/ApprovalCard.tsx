@@ -82,7 +82,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [lasts, setLasts] = useState("30")
   const [where, setWhere] = useState("here")
   const [uses, setUses] = useState("")
-  const [typed, setTyped] = useState("")
+  const [siteTyped, setSiteTyped] = useState("")
   const command = useMemo(
     () => commandText(req.toolName, view.rawInput),
     [req.toolName, view.rawInput],
@@ -503,8 +503,8 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                       </span>
                       <input
                         className="field mono"
-                        value={typed}
-                        onChange={(e) => setTyped(e.target.value)}
+                        value={siteTyped}
+                        onChange={(e) => setSiteTyped(e.target.value)}
                         aria-label={`Type ${remember.typeToConfirm} to confirm`}
                       />
                     </label>
@@ -515,7 +515,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                       disabled={
                         busy ||
                         (remember.typeToConfirm !== undefined &&
-                          typed.trim().toLowerCase() !== remember.typeToConfirm)
+                          siteTyped.trim().toLowerCase() !== remember.typeToConfirm)
                       }
                       onClick={() =>
                         void run({
@@ -526,7 +526,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                             days: lasts === "never" ? null : Number(lasts),
                             ...(where === "anywhere" ? { anywhere: true } : {}),
                             ...(uses ? { maxUses: Number(uses) } : {}),
-                            ...(remember.typeToConfirm ? { confirmScope: typed.trim() } : {}),
+                            ...(remember.typeToConfirm ? { confirmScope: siteTyped.trim() } : {}),
                           },
                         })
                       }
