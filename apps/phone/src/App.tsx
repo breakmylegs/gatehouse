@@ -18,11 +18,15 @@ import {
   type PendingItem,
   type Session,
 } from "./core"
-import type { PhoneSessions } from "@gatehouse/shared/phone-protocol"
+import { describeActivity, type Activity } from "@gatehouse/shared/activity"
+import type { PhoneActivity, PhoneSessions } from "@gatehouse/shared/phone-protocol"
 import { storage, type DeviceInfo, type KeyMaterial, type Settings } from "./storage"
 
 type Route =
-  { name: "home" } | { name: "detail"; id: string } | { name: "settings" } | { name: "sessions" }
+  | { name: "home" }
+  | { name: "detail"; id: string }
+  | { name: "settings" }
+  | { name: "sessions"; open?: string }
 
 const bandOf = (r: number) => (r >= 85 ? "Severe" : r >= 70 ? "High" : r >= 40 ? "Moderate" : "Low")
 /** The Stitch risk shapes, as on the desktop: a diamond, a triangle, a hexagon and a solid square. */
@@ -184,9 +188,13 @@ export function App() {
 
   if (route.name === "sessions")
     return (
-      <Frame title="Sessions" back={() => setRoute({ name: "home" })}>
-        <SessionsScreen session={session} keys={keys} device={device} />
-      </Frame>
+      <SessionsScreen
+        session={session}
+        keys={keys}
+        device={device}
+        open={route.open}
+        go={(open) => setRoute(open === null ? { name: "home" } : { name: "sessions", ...(open ? { open } : {}) })}
+      />
     )
 
   if (route.name === "detail") {
@@ -738,178 +746,321 @@ const STATE_WORDS: Record<string, string> = {
   paused: "Paused",
 }
 
+/** How often the sessions are fetched while the screen is in front of you, and when a snapshot counts as old. */
+const SESSIONS_EVERY_MS = 3_000
+const OLD_AFTER_MS = 90_000
+
+type PhoneSession = PhoneSessions["sessions"][number]
+
+/** The desktop's live line, from what the computer shared: "Running a shell command (npm test)", "12 s". */
+function liveLine(a: PhoneActivity, now: number): { label: string; detail: string } {
+  const since = Date.parse(a.since)
+  const base = { since: Number.isFinite(since) ? Math.min(since, now) : now }
+  const act: Activity =
+    a.phase === "preparing"
+      ? { phase: "preparing", ...base, tool: a.tool ?? "a tool", chars: a.chars ?? 0, head: "", ...(a.target ? { target: a.target } : {}) }
+      : a.phase === "running"
+        ? { phase: "running", ...base, tool: a.tool ?? "a tool", toolUseId: "", ...(a.target ? { target: a.target } : {}) }
+        : { phase: a.phase as "sent" | "thinking" | "replying", ...base }
+  const { label, detail } = describeActivity(act, now)
+  return { label, detail }
+}
+
+function ago(ms: number): string {
+  const s = Math.max(0, Math.round(ms / 1000))
+  return s < 60 ? `${s} s ago` : `${Math.round(s / 60)} min ago`
+}
+
+function Working() {
+  return <span className="spinner" aria-hidden="true" />
+}
+
 /**
- * G32 (O18, owner 30 Oct): the sessions open on your computer and the latest of what was said in each, sent end to end
- * encrypted and opened here with this phone's key. A message to a session, and Interrupt, are each signed with Face ID
- * and checked and recorded on the computer before they reach the session.
+ * G32 (O18, owner 30 Oct), and the owner on 11 Nov ("a way to actually see the sessions remotely and be able to send
+ * prompts and see the ongoing status of the session"): the sessions open on your computer, what each is doing now and
+ * its conversation, sent end to end encrypted and opened here with this phone's key, fetched every few seconds while
+ * the screen is in front of you. A message to a session, and Interrupt, are each signed with Face ID and checked and
+ * recorded on the computer before they reach the session.
  */
 function SessionsScreen({
   session,
   keys,
   device,
+  open,
+  go,
 }: {
   session: Session
   keys: KeyMaterial | undefined
   device: DeviceInfo
+  open: string | undefined
+  /** A session's id opens it, undefined is the list, null is the home screen. */
+  go: (open: string | undefined | null) => void
 }) {
   const [data, setData] = useState<PhoneSessions>()
   const [error, setError] = useState<string>()
-  const [open, setOpen] = useState<string>()
-  const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)
   const [said, setSaid] = useState<string>()
-  async function send(what: Parameters<typeof sendToSession>[2]) {
-    setBusy(true)
-    setSaid(undefined)
-    try {
-      await sendToSession(session, device, what)
-      setSaid(
-        "interrupt" in what
-          ? "Sent. The session stops once your computer checks the signature."
-          : "Sent. It reaches the session once your computer checks the signature.",
-      )
-      if (!("interrupt" in what)) setMessage("")
-    } catch (e) {
-      setSaid(friendly(e))
-    } finally {
-      setBusy(false)
-    }
-  }
+  const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     if (!keys) return
     let gone = false
-    const load = () =>
+    const load = () => {
+      if (document.visibilityState === "hidden") return
       loadSessions(session, keys).then(
         (d) => !gone && (setData(d), setError(undefined)),
         (e: unknown) => !gone && setError(friendly(e)),
       )
-    void load()
-    const t = setInterval(() => void load(), 15_000)
+    }
+    load()
+    const t = setInterval(load, SESSIONS_EVERY_MS)
+    const tick = setInterval(() => setNow(Date.now()), 1000)
+    document.addEventListener("visibilitychange", load)
     return () => {
       gone = true
       clearInterval(t)
+      clearInterval(tick)
+      document.removeEventListener("visibilitychange", load)
     }
   }, [session, keys])
+  useEffect(() => setSaid(undefined), [open])
+  async function act(run: () => Promise<void>, done: string): Promise<boolean> {
+    setBusy(true)
+    setSaid(undefined)
+    try {
+      await run()
+      setSaid(done)
+      return true
+    } catch (e) {
+      setSaid(friendly(e))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+  const chosen = open ? data?.sessions.find((s) => s.id === open) : undefined
+  const old = data?.at && now - Date.parse(data.at) > OLD_AFTER_MS ? (
+    <p role="status" className="m-0 px-4 pt-3 text-[15px] text-warn">
+      Your computer last shared its sessions {ago(now - Date.parse(data.at))}. It may be asleep, or Codehouse may be
+      closed.
+    </p>
+  ) : null
+  let body: React.ReactNode
   if (error)
-    return (
+    body = (
       <p role="alert" className="m-0 p-5 font-semibold text-sev">
         {error}
       </p>
     )
-  if (!data) return <p className="m-0 p-5 text-mut">Loading…</p>
-  const starts = data.templates?.length ? (
-    <section aria-label="Start" className="grid gap-2 px-4 pt-4">
-      <h2 className="m-0 text-[17px] font-semibold">Start</h2>
-      {data.templates.map((t) => (
-        <button
-          key={t.id}
-          className="btn justify-self-start"
-          disabled={busy}
-          aria-label={`Start ${t.name} with Face ID`}
-          onClick={async () => {
-            setBusy(true)
-            setSaid(undefined)
-            try {
-              await startTemplate(session, device, t.id)
-              setSaid(`${t.name} starts once your computer checks the signature.`)
-            } catch (e) {
-              setSaid(friendly(e))
-            } finally {
-              setBusy(false)
-            }
-          }}
-        >
-          {t.name}
-        </button>
-      ))}
-      {said && !open && data.sessions.length ? (
-        <p role="status" className="m-0 text-[15px]">
-          {said}
-        </p>
-      ) : null}
-    </section>
-  ) : null
-  if (!data.sessions.length)
-    return (
+  else if (!data) body = <p className="m-0 p-5 text-mut">Loading…</p>
+  else if (open)
+    body = chosen ? (
+      <SessionView
+        s={chosen}
+        now={now}
+        busy={busy}
+        said={said}
+        old={old}
+        onSend={(text) =>
+          act(
+            () => sendToSession(session, device, { sessionId: chosen.id, text }),
+            "Sent. It shows here once your computer checks the signature.",
+          )
+        }
+        onInterrupt={() =>
+          void act(
+            () => sendToSession(session, device, { sessionId: chosen.id, interrupt: true }),
+            "Sent. The session stops once your computer checks the signature.",
+          )
+        }
+        onRequests={() => go(null)}
+      />
+    ) : (
+      <p className="m-0 p-5 text-mut">This session is no longer open on your computer.</p>
+    )
+  else
+    body = (
       <>
-        {starts}
+        {old}
+        {data.templates?.length ? (
+          <section aria-label="Start" className="grid gap-2 px-4 pt-4">
+            <h2 className="m-0 text-[17px] font-semibold">Start</h2>
+            {data.templates.map((t) => (
+              <button
+                key={t.id}
+                className="btn justify-self-start"
+                disabled={busy}
+                aria-label={`Start ${t.name} with Face ID`}
+                onClick={() =>
+                  void act(() => startTemplate(session, device, t.id), `${t.name} starts once your computer checks the signature.`)
+                }
+              >
+                {t.name}
+              </button>
+            ))}
+          </section>
+        ) : null}
         {said ? (
           <p role="status" className="m-0 px-4 pt-2 text-[15px]">
             {said}
           </p>
         ) : null}
-        <p className="m-0 p-5 text-mut">
-          No sessions to show yet. They appear here a moment after your computer shares them.
-        </p>
+        {data.sessions.length ? (
+          <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
+            {data.sessions.map((s) => (
+              <li key={s.id}>
+                <button
+                  className="panel grid w-full gap-1 p-4 text-left text-[inherit]"
+                  onClick={() => go(s.id)}
+                >
+                  <span className="font-semibold [overflow-wrap:anywhere]">{s.title ?? s.project}</span>
+                  <StateLine s={s} now={now} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="m-0 p-5 text-mut">
+            No sessions to show yet. They appear here a moment after your computer shares them.
+          </p>
+        )}
       </>
     )
   return (
-    <>
-      {starts}
-      <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
-        {data.sessions.map((s) => (
-          <li key={s.id} className="panel grid gap-1.5 p-4">
-            <button
-              className="grid gap-1 border-0 bg-transparent p-0 text-left"
-              aria-expanded={open === s.id}
-              onClick={() => setOpen(open === s.id ? undefined : s.id)}
-            >
-              <span className="font-semibold">{s.title ?? s.project}</span>
-              <span className="text-[15px] text-mut">
-                {STATE_WORDS[s.state] ?? s.state}
-                {s.waiting
-                  ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you`
-                  : ""}
-              </span>
-            </button>
-            {open === s.id ? (
-              <>
-                {s.latest ? (
-                  <pre className="m-0 max-h-[50vh] overflow-auto whitespace-pre-wrap text-[14px] [overflow-wrap:anywhere]">
-                    {s.latest}
-                  </pre>
-                ) : (
-                  <p className="m-0 text-[15px] text-mut">Nothing has been said in it yet.</p>
+    <Frame title={chosen ? (chosen.title ?? chosen.project) : "Sessions"} back={() => go(open ? undefined : null)}>
+      {body}
+    </Frame>
+  )
+}
+
+/** How a session stands: its state, how many requests wait on you, and, while it works, what it is doing. */
+function StateLine({ s, now }: { s: PhoneSession; now: number }) {
+  const working = s.state === "running"
+  const live = s.activity && (working || s.state === "waiting") ? liveLine(s.activity, now) : undefined
+  return (
+    <span className="grid gap-0.5 text-[15px] text-mut">
+      <span className="flex items-center gap-2">
+        {working ? <Working /> : null}
+        <span>
+          {STATE_WORDS[s.state] ?? s.state}
+          {s.waiting ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you` : ""}
+          {s.mode && MODE_WORDS[s.mode] ? `, ${MODE_WORDS[s.mode]}` : ""}
+        </span>
+      </span>
+      {live ? (
+        <span className="[overflow-wrap:anywhere] text-tx">
+          {live.label}
+          {live.detail ? <span className="text-mut">, {live.detail}</span> : null}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+const MODE_WORDS: Record<string, string> = {
+  default: "Manual",
+  plan: "Plan",
+  acceptEdits: "Accept edits",
+  auto: "Auto",
+  extreme: "Extreme approval",
+}
+
+/** One session: how it stands, its conversation, and a message box. New steps keep it scrolled to the end. */
+function SessionView({
+  s,
+  now,
+  busy,
+  said,
+  old,
+  onSend,
+  onInterrupt,
+  onRequests,
+}: {
+  s: PhoneSession
+  now: number
+  busy: boolean
+  said: string | undefined
+  old: React.ReactNode
+  onSend: (text: string) => Promise<boolean>
+  onInterrupt: () => void
+  onRequests: () => void
+}) {
+  const [message, setMessage] = useState("")
+  const end = useRef<HTMLDivElement>(null)
+  const steps = s.recent ?? []
+  const last = steps.at(-1)
+  useEffect(() => {
+    end.current?.scrollIntoView?.({ block: "end" })
+  }, [steps.length, last?.text])
+  return (
+    <div className="grid min-h-full grid-rows-[auto_1fr_auto]">
+      <section aria-label="Status" className="grid gap-2 border-b border-line px-4 py-3">
+        <StateLine s={s} now={now} />
+        {s.waiting ? (
+          <button className="btn justify-self-start" onClick={onRequests}>
+            {s.waiting === 1 ? "Answer the request" : `Answer ${s.waiting} requests`}
+          </button>
+        ) : null}
+      </section>
+      <div className="min-h-0">
+        {old}
+        {steps.length ? (
+          <ol className="m-0 grid list-none gap-3 p-4" aria-label="Conversation">
+            {steps.map((e, i) => (
+              <li
+                key={i}
+                className={clsx(
+                  "[overflow-wrap:anywhere] whitespace-pre-wrap",
+                  e.who === "you" && "ml-8 justify-self-end rounded-lg bg-s2 px-3 py-2",
+                  e.who === "tool" && "font-code text-[14px] text-mut",
                 )}
-                <label className="grid gap-1">
-                  <span className="font-semibold">Message to this session</span>
-                  <textarea
-                    className="field"
-                    rows={3}
-                    maxLength={4000}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                  />
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    className="btn btn-primary"
-                    disabled={busy || !message.trim()}
-                    onClick={() => void send({ sessionId: s.id, text: message })}
-                  >
-                    {busy ? "Waiting for Face ID…" : "Send with Face ID"}
-                  </button>
-                  {s.state === "running" || s.state === "waiting" ? (
-                    <button
-                      className="btn"
-                      disabled={busy}
-                      onClick={() => void send({ sessionId: s.id, interrupt: true })}
-                    >
-                      Interrupt…
-                    </button>
-                  ) : null}
-                </div>
-                {said ? (
-                  <p role="status" className="m-0 text-[15px]">
-                    {said}
-                  </p>
-                ) : null}
-              </>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </>
+              >
+                <span className="sr-only">{e.who === "you" ? "You: " : e.who === "claude" ? "Claude: " : "Tool: "}</span>
+                {e.text}
+              </li>
+            ))}
+          </ol>
+        ) : s.latest ? (
+          <pre className="m-0 whitespace-pre-wrap p-4 text-[14px] [overflow-wrap:anywhere]">{s.latest}</pre>
+        ) : (
+          <p className="m-0 p-4 text-[15px] text-mut">Nothing has been said in it yet.</p>
+        )}
+        <div ref={end} />
+      </div>
+      <form
+        className="safe-bottom sticky bottom-0 grid gap-2 border-t border-line bg-s1 px-4 pt-3"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!message.trim()) return
+          void onSend(message).then((ok) => ok && setMessage(""))
+        }}
+      >
+        <label className="grid gap-1">
+          <span className="font-semibold">Message to this session</span>
+          <textarea
+            className="field"
+            rows={2}
+            maxLength={4000}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <button type="submit" className="btn btn-primary" disabled={busy || !message.trim()}>
+            {busy ? "Waiting for Face ID…" : "Send with Face ID"}
+          </button>
+          {s.state === "running" || s.state === "waiting" ? (
+            <button type="button" className="btn" disabled={busy} onClick={onInterrupt}>
+              Interrupt…
+            </button>
+          ) : null}
+        </div>
+        {said ? (
+          <p role="status" className="m-0 text-[15px]">
+            {said}
+          </p>
+        ) : null}
+      </form>
+    </div>
   )
 }
 

@@ -32,6 +32,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | O22 | Limits in Settings always hold; a bypass per session with a time, a spending limit or both (owner, 9 Nov) | built | fix/plan-limit-extra | BUILD_REPORT "Fix, limits in Settings always hold" | Released in 2.0.148 |
 | O23 | Extreme approval asked about a plain rmdir (owner, 9 Nov) | built | fix/rmdir-empty-only | BUILD_REPORT "Fix, Extreme approval asked about an rmdir" | |
 | O24 | ntfy 429 while listening (a user's report, 9 Nov) | built | fix/ntfy-429 | BUILD_REPORT "Fix, ntfy 429 while listening" | Released in 2.0.147 |
+| O25 | See sessions remotely, send prompts, see their status as it goes (owner, 11 Nov, the priority) | built | slice/G32-live-sessions | BUILD_REPORT "Sessions on the phone, live" | Through the passkey phone app (invariant 11 as amended 30 Oct); shared within 3 s of a change |
 
 ## Prerequisites (C-backlog)
 

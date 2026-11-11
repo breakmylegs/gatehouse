@@ -10,7 +10,7 @@ import { Telemetry } from "./telemetry.js"
 import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
 import { BoardStore } from "./board.js"
-import { buildPhoneSessions, PhoneSessionsSharer } from "./phone-sessions.js"
+import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -924,9 +924,13 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   // G32 (O18, owner 30 Oct): the sessions on the phone, read only, redacted and sealed to each phone; only while one
   // is paired.
+  // Owner, 11 Nov (see sessions remotely, with their status): each session's conversation and what it is doing now,
+  // kept from its stream, so the phone is told within a few seconds.
+  const phoneLive = new PhoneLive()
   const phoneSessions = new PhoneSessionsSharer({
     build: () =>
       buildPhoneSessions({
+        live: phoneLive,
         list: () => manager.list(),
         messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
         redact: (t) => redactString(t, { terms: config.redactTerms }),
@@ -939,8 +943,16 @@ export function createHost(opts: HostOptions = {}): Host {
     share: (s) => phone.shareSessions(s),
     wanted: () => phoneStore.relay() !== undefined && phoneStore.phones().length > 0,
     log,
+    minGapMs: 3_000,
   })
   manager.on("session", () => phoneSessions.poke())
+  manager.on("message", ({ sessionId, message }) => {
+    if (phoneLive.message(sessionId, message)) phoneSessions.poke()
+  })
+  manager.on("prompted", ({ sessionId, text }) => {
+    phoneLive.prompted(sessionId, text)
+    phoneSessions.poke()
+  })
   phoneSessions.start()
 
   const health = (): Health => {

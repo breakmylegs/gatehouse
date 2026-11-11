@@ -15,6 +15,7 @@
     "./relay-protocol": "./src/relay-protocol.ts",
     "./phone-protocol": "./src/phone-protocol.ts",
     "./highlight": "./src/highlight.ts",
+    "./activity": "./src/activity.ts",
     "./project-name": "./src/project-name.ts"
   },
   "scripts": {

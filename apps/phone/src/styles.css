@@ -169,6 +169,27 @@ mark.seg {
 .safe-bottom {
   padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
+/* A session that is working (11 Nov): the ring the desktop's sidebar shows. Reduced motion stops it turning. */
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid color-mix(in oklch, var(--c-acc) 30%, transparent);
+  border-top-color: var(--c-acc);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-color: var(--c-acc);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
