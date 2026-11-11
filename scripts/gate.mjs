@@ -102,6 +102,9 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   // its own output, or the run fails with nothing to go on (30 Oct: "72 passed (73)" and no FAIL line).
   if (r.status !== 0 && !summary.some((l) => /FAIL|error TS|✖|problems?\)/.test(l)))
     console.log(out.slice(-4000))
+  // A file that failed twice in its own process: what it said, or there is nothing to go on (10 Nov, six such files
+  // in the release passed on their own minutes later, and their errors were not kept).
+  else if (r.status !== 0 && summary.some((l) => /\[shards\] FAILED/.test(l))) console.log(out.slice(-12000))
   lastOutput = out
   return r.status ?? 1
 }
