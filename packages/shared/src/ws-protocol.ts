@@ -222,6 +222,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-062: what the local analysis finds on the lines changed since the checkpoint. Read only. */
+  z.object({
+    type: z.literal("change_findings"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
   /** D-056: what the changes since the checkpoint do to the dependencies, as a CycloneDX 1.6 document. Read only. */
   z.object({
     type: z.literal("change_sbom"),

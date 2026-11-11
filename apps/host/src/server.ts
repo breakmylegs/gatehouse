@@ -17,6 +17,7 @@ import Fastify, { type FastifyInstance } from "fastify"
 import type { WebSocket } from "ws"
 import { checkRemember, isLockfile, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
 import { lockfileChanges, sbomDiff, type DependencyChange } from "./sbom.js"
+import { addedLines, scanSource, type SastFinding } from "./sast.js"
 import {
   ClientMessage,
   WS_SUBPROTOCOL,
@@ -888,6 +889,20 @@ export class HostServer {
       case "changes": {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+      }
+      case "change_findings": {
+        // D-062: the lines each changed file adds, parsed as they are now; nothing runs.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) return { findings: [] }
+        const findings: SastFinding[] = []
+        for (const x of c.files.filter((x) => x.change !== "deleted" && !x.binary).slice(0, 60)) {
+          const lines = [...addedLines(x.diff).values()][0]
+          if (!lines?.size) continue
+          const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined)
+          if (v?.after !== undefined) findings.push(...(await scanSource(x.path, v.after, lines)))
+        }
+        return { findings }
       }
       case "change_sbom": {
         // D-056: from the lockfiles as they were at the checkpoint and as they are now; nothing runs or is fetched.

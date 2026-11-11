@@ -1,4 +1,6 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { SAST_RULE, sastReason, type SastCommitGuard, type SastFinding } from "./sast.js"
+import { makesCommit } from "./commit-scan.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
 import { dryRunPlan, estimateWords } from "./plan-dry-run.js"
 import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
@@ -56,6 +58,8 @@ export interface CanUseDeps {
   onRememberRefused?: (why: string) => void
   /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
   locks?: Pick<TestLocks, "touched">
+  /** D-062: the Severe findings in what a commit would add. */
+  sast?: Pick<SastCommitGuard, "severe">
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
   instructions?: Pick<InstructionPins, "touched">
@@ -242,6 +246,22 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           deps.lockedCalls?.set(toolUseID, files)
         }
       }
+      // D-062: a commit that adds code the local analysis rates Severe goes to a person, whatever the rules said, unless
+      // they denied it. A commit that cannot be read is treated as one (fail closed).
+      if (deps.sast && verdict.outcome !== "deny" && makesCommit(toolName, input)) {
+        const severe: SastFinding[] = await deps.sast
+          .severe(deps.cwd, String(input.command))
+          .catch(() => [{ file: "(the commit could not be read)", line: 0, kind: "eval" as const, severity: "Severe" as const, title: "Not checked" }])
+        if (severe.length)
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: SAST_RULE,
+            reason: sastReason(severe),
+            risk: Math.max(verdict.risk, 85),
+            decidedBy: "rules",
+          }
+      }
       // D-059: an agent's change to what the project tells Claude goes to a person the same way, with the change shown.
       if (deps.instructions && verdict.outcome !== "deny" && verdict.ruleId !== LOCKED_TEST_RULE) {
         let files: string[]
@@ -414,6 +434,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   INSTALL_SCRIPTS_RULE,
   // D-055: whether a project may use a licence is a person's decision.
   LICENCE_NOT_ALLOWED,
+  // D-062: a commit of code rated Severe is looked at by a person.
+  SAST_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

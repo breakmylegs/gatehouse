@@ -24,6 +24,15 @@ import { send, useStore } from "../store"
 const LOCKFILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
 
+/** D-062: one finding of the local analysis, as apps/host/src/sast.ts gives it. */
+interface Finding {
+  file: string
+  line: number
+  kind: string
+  severity: "Severe" | "High"
+  title: string
+}
+
 interface Checkpoint {
   ref: string
   createdAt: string
@@ -70,6 +79,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [comments, setComments] = useState<Comments>({})
   const said = Object.values(comments).filter((c) => c.text.trim())
 
+  const [findings, setFindings] = useState<Finding[]>([])
   const load = useCallback(async () => {
     const r = await send({ type: "changes", sessionId, ...(ref ? { ref } : {}) })
     if (!r.ok) {
@@ -78,6 +88,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     }
     setError(undefined)
     setData(r.data as Changes)
+    // D-062: what the local analysis finds on the changed lines. A failure only leaves the list empty.
+    const f = await send({ type: "change_findings", sessionId, ...(ref ? { ref } : {}) })
+    setFindings(f.ok ? ((f.data as { findings: Finding[] }).findings ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
@@ -145,6 +158,28 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
         <p className="m-0 text-[13.5px] text-mut">Nothing has changed since then.</p>
       ) : (
         <>
+          {findings.length ? (
+            <section aria-label="Findings" className="panel grid gap-1.5 p-2.5">
+              <h3 className="m-0 text-[13.5px] font-semibold">
+                {findings.length === 1 ? "1 thing to look at" : `${findings.length} things to look at`} in the changed lines
+              </h3>
+              <ul className="m-0 grid list-none gap-1 p-0 text-[13px]">
+                {findings.map((x) => (
+                  <li key={`${x.file}:${x.line}:${x.kind}`} className="grid grid-cols-[auto_1fr] gap-2">
+                    <span className={clsx("sign font-semibold", x.severity === "Severe" ? "text-sev" : "text-warn")}>
+                      {x.severity}
+                    </span>
+                    <span className="[overflow-wrap:anywhere]">
+                      {x.title}, <span className="mono">{x.file}</span> line {x.line}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {findings.some((x) => x.severity === "Severe") ? (
+                <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
+              ) : null}
+            </section>
+          ) : null}
           <ul className="m-0 grid list-none gap-1 p-0" aria-label="Changed files">
             {files.map((f) => (
               <li key={f.path} className="panel overflow-hidden">

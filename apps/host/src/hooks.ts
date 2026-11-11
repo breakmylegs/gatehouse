@@ -23,6 +23,7 @@ import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { sastReason, type SastCommitGuard } from "./sast.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
 import { quarantined, scanForInjection, type InjectionFinding } from "./injection-scan.js"
 import type { HostAudit } from "./hostaudit.js"
@@ -104,6 +105,8 @@ export interface SessionHookDeps {
   grants?: GrantUses
   /** D-007: the locked tests, and the calls a person approved that touched them. */
   locks?: Pick<TestLocks, "touched" | "repin">
+  /** D-062: the Severe findings in what a commit would add; in Auto and Accept edits such a commit is asked about. */
+  sast?: Pick<SastCommitGuard, "severe">
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls a person approved that changed it. */
   instructions?: Pick<InstructionPins, "touched" | "repin">
@@ -275,6 +278,13 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
+        // D-062: a commit of code rated Severe reaches canUseTool, which sends it to a person.
+        if (deps.sast && makesCommit(input.tool_name, toolInput)) {
+          const severe = await deps.sast
+            .severe(cwd, String(toolInput.command))
+            .catch(() => [{ file: "(the commit could not be read)", line: 0, kind: "eval" as const, severity: "Severe" as const, title: "Not checked" }])
+          if (severe.length) return askOutput(sastReason(severe))
+        }
         // C-013: a remembered rule that has used its allowed number of calls asks instead.
         if (deps.grants?.spent(verdict, input.tool_use_id))
           return askOutput(deps.grants.reason(verdict.ruleId))

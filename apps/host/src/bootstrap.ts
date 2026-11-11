@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { SastCommitGuard } from "./sast.js"
 import { InstructionPins } from "./instruction-pins.js"
 import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
@@ -1088,6 +1089,8 @@ export function createHost(opts: HostOptions = {}): Host {
     heldOut,
     heldOutExec: actionFor,
     locks,
+    // D-062: a commit of code the local analysis rates Severe goes to a person.
+    sast: new SastCommitGuard(),
     instructions,
     governor,
     audit,

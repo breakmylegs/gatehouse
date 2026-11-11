@@ -50,7 +50,8 @@ function wasmFor(lang: Exclude<OutlineLanguage, "json">): string {
 let init: Promise<void> | undefined
 const parsers = new Map<OutlineLanguage, Promise<Parser>>()
 
-function parserFor(lang: Exclude<OutlineLanguage, "json">): Promise<Parser> {
+/** The parser for a language, loaded once. D-062 reads with the same. */
+export function parserFor(lang: Exclude<OutlineLanguage, "json">): Promise<Parser> {
   let p = parsers.get(lang)
   if (!p) {
     p = (async () => {

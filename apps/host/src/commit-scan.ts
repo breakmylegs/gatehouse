@@ -83,9 +83,9 @@ export function secretsInFile(file: string, text: string): Found[] {
   })
 }
 
-type Git = (cwd: string, args: string[]) => Promise<string>
+export type Git = (cwd: string, args: string[]) => Promise<string>
 
-const git: Git = (cwd, args) =>
+export const git: Git = (cwd, args) =>
   new Promise((resolve, reject) => {
     execFile(
       "git",
@@ -127,9 +127,19 @@ export async function scanCommit(cwd: string, command: string, run: Git = git): 
   return found
 }
 
-async function scanStaged(cwd: string, command: string, run: Git): Promise<Found[]> {
-  const adds = /\bgit\b[^;&|\n]*\badd\b/.test(command)
-  const all = adds || /\bcommit\b[^;&|\n]*(?:\s-[A-Za-z]*a[A-Za-z]*\b|\s--all\b)/.test(command)
+/**
+ * What the commit in `command` would add: the diff (-U0, paths from the repository's top) and, when the same command
+ * also runs `git add`, the untracked files git would pick up (paths from cwd). D-062 reads the same.
+ */
+export async function commitAdditions(
+  cwd: string,
+  command: string,
+  run: Git = git,
+): Promise<{ diff: string; untracked: string[] }> {
+  const adds = /git[^;&|
+]*add/.test(command)
+  const all = adds || /commit[^;&|
+]*(?:s-[A-Za-z]*a[A-Za-z]*|s--all)/.test(command)
   const base = ["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-U0"]
   let diff: string
   if (all) {
@@ -140,22 +150,27 @@ async function scanStaged(cwd: string, command: string, run: Git): Promise<Found
     )
     diff = await run(cwd, [...base, ...(hasHead ? ["HEAD"] : ["--cached"])])
   } else diff = await run(cwd, [...base, "--cached"])
+  const untracked = adds
+    ? (await run(cwd, ["ls-files", "--others", "--exclude-standard", "-z"]))
+        .split("\0")
+        .filter(Boolean)
+        .slice(0, MAX_NEW_FILES)
+    : []
+  return { diff, untracked }
+}
+
+async function scanStaged(cwd: string, command: string, run: Git): Promise<Found[]> {
+  const { diff, untracked } = await commitAdditions(cwd, command, run)
   const found = secretsInDiff(diff)
-  if (adds) {
-    const untracked = (await run(cwd, ["ls-files", "--others", "--exclude-standard", "-z"]))
-      .split("\0")
-      .filter(Boolean)
-      .slice(0, MAX_NEW_FILES)
-    for (const rel of untracked) {
-      const abs = path.join(cwd, rel)
-      try {
-        const st = fs.lstatSync(abs)
-        if (!st.isFile() || st.size > MAX_NEW_FILE) continue
-        for (const f of secretsInFile(rel, fs.readFileSync(abs, "utf8")))
-          if (!found.some((x) => x.file === f.file && x.kind === f.kind)) found.push(f)
-      } catch {
-        // gone, or not readable: not something this commit can take either
-      }
+  for (const rel of untracked) {
+    const abs = path.join(cwd, rel)
+    try {
+      const st = fs.lstatSync(abs)
+      if (!st.isFile() || st.size > MAX_NEW_FILE) continue
+      for (const f of secretsInFile(rel, fs.readFileSync(abs, "utf8")))
+        if (!found.some((x) => x.file === f.file && x.kind === f.kind)) found.push(f)
+    } catch {
+      // gone, or not readable: not something this commit can take either
     }
   }
   return found

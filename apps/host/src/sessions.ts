@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import type { SastCommitGuard } from "./sast.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
 import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
@@ -465,6 +466,8 @@ export interface SessionDeps {
   grants?: GrantUses
   /** D-007: the locked tests. */
   locks?: TestLocks
+  /** D-062: the local analysis of what a session's commit would add. */
+  sast?: SastCommitGuard
   /** D-059: the pins of what each project tells Claude. */
   instructions?: InstructionPins
   /** D-025, tests only: how long a minute of the dead-man timer is, and how often it is looked at. */
@@ -1090,6 +1093,7 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
+      ...(d.sast && this.#opts.kind !== "chat" ? { sast: d.sast } : {}),
       ...(d.instructions && this.#opts.kind !== "chat"
         ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
         : {}),
@@ -1181,6 +1185,7 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
+      ...(d.sast && this.#opts.kind !== "chat" ? { sast: d.sast } : {}),
       ...(d.instructions && this.#opts.kind !== "chat"
         ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
         : {}),
