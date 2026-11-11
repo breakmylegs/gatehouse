@@ -25,8 +25,9 @@ export class TimelineSigner {
   readonly #sealer: () => Protector
   #key: crypto.KeyObject | undefined
 
-  constructor(o: { dir: string; sealer: () => Protector }) {
-    this.#file = path.join(o.dir, "timeline-key.sealed")
+  /** file: the sealed key's name in dir; D-029's anchors keep a key of their own. */
+  constructor(o: { dir: string; sealer: () => Protector; file?: string }) {
+    this.#file = path.join(o.dir, o.file ?? "timeline-key.sealed")
     this.#sealer = o.sealer
   }
 

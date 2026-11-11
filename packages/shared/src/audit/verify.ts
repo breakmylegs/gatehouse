@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { AuditRecord, GENESIS_HASH, hashRecord, type AuditHead } from "./record.js"
 import { headPath, listAuditFiles } from "./writer.js"
+import { verifyAnchors } from "./anchors.js"
 
 export interface AuditProblem {
   file: string
@@ -16,6 +17,8 @@ export interface AuditVerifyResult {
   files: number
   records: number
   head?: { seq: number; hash: string }
+  /** D-029: how many anchors were checked, when a folder of them was given. */
+  anchors?: number
   problems: AuditProblem[]
 }
 
@@ -25,8 +28,9 @@ export interface AuditVerifyResult {
  * month, and head.json agrees with the end of the log. Reports every problem, then keeps going from
  * the record's own values so one bad record does not hide the rest.
  */
-export function verifyAudit(dir: string): AuditVerifyResult {
+export function verifyAudit(dir: string, o: { anchorsDir?: string } = {}): AuditVerifyResult {
   const problems: AuditProblem[] = []
+  const hashes = new Map<number, string>()
   const files = listAuditFiles(dir)
   let prev: { seq: number; hash: string } = { seq: 0, hash: GENESIS_HASH }
   let records = 0
@@ -101,6 +105,7 @@ export function verifyAudit(dir: string): AuditVerifyResult {
         })
       }
       prev = { seq: rec.seq, hash: rec.hash }
+      hashes.set(rec.seq, rec.hash)
     })
   }
 
@@ -137,7 +142,11 @@ export function verifyAudit(dir: string): AuditVerifyResult {
     }
   }
 
+  // D-029: each anchor still matches the record it names.
+  const anchored = o.anchorsDir ? verifyAnchors(o.anchorsDir, hashes) : undefined
+  if (anchored) problems.push(...anchored.problems)
   return {
+    ...(anchored ? { anchors: anchored.anchors } : {}),
     ok: problems.length === 0,
     files: files.length,
     records,

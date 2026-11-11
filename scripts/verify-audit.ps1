@@ -8,7 +8,9 @@
 # PowerShell 5.1 built into Windows (owner, 4 Nov: no PowerShell version is a hard dependency).
 param(
     [string]$Dir = $(if ($env:GATEHOUSE_AUDIT_DIR) { $env:GATEHOUSE_AUDIT_DIR } elseif ($env:GATEHOUSE_DATA_DIR) { Join-Path $env:GATEHOUSE_DATA_DIR 'audit' } else { Join-Path $env:LOCALAPPDATA 'Gatehouse\audit' }),
-    [switch]$Json
+    [switch]$Json,
+    # D-029: the anchors; by default the anchors folder beside the audit folder, when there is one.
+    [string]$Anchors = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -248,9 +250,61 @@ if (Test-Path -LiteralPath $timelineFile) {
     }
 }
 
+# D-029: each anchor's signature (ECDSA P-256, SHA-256, IEEE P1363) over its plain text, with the key in key.json,
+# and that the record it names still has the hash it anchored. The same check as anchors.ts.
+if ($Anchors -eq '') { $Anchors = Join-Path (Split-Path -Parent ([System.IO.Path]::GetFullPath($Dir))) 'anchors' }
+$anchorCount = 0
+if (Test-Path -LiteralPath $Anchors) {
+    $anchorFiles = @(Get-ChildItem -LiteralPath $Anchors -File | Where-Object { $_.Name -match '^anchor-\d+\.json$' } | Sort-Object Name)
+    if ($anchorFiles.Count -gt 0) {
+        $aec = $null
+        try {
+            $ajwk = Read-Json ([System.IO.File]::ReadAllText((Join-Path $Anchors 'key.json')))
+            $b64u = {
+                param([string]$s)
+                $b = $s.Replace('-', '+').Replace('_', '/')
+                switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+                [Convert]::FromBase64String($b)
+            }
+            $aq = New-Object System.Security.Cryptography.ECPoint
+            $aq.X = & $b64u $ajwk['x']
+            $aq.Y = & $b64u $ajwk['y']
+            $ap = New-Object System.Security.Cryptography.ECParameters
+            $ap.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+            $ap.Q = $aq
+            $aec = [System.Security.Cryptography.ECDsa]::Create($ap)
+        } catch {
+            Add-Problem 'anchors/key.json' 0 $null "the anchors' key could not be read, so no anchor could be checked"
+        }
+        foreach ($af in $anchorFiles) {
+            $anchorCount++
+            $where = "anchors/$($af.Name)"
+            $a = $null
+            try { $a = Read-Json ([System.IO.File]::ReadAllText($af.FullName)) } catch { $a = $null }
+            if ($null -eq $a -or [long]$a['v'] -ne 1 -or -not (Test-IsInteger $a['seq']) -or $a['hash'] -isnot [string] -or $a['sig'] -isnot [string]) {
+                Add-Problem $where 0 $null 'not an anchor'
+                continue
+            }
+            $aSeq = [long]$a['seq']
+            if ($null -ne $aec) {
+                $ok1 = $false
+                try {
+                    $msg = [System.Text.Encoding]::UTF8.GetBytes("codehouse-anchor-v1`n$aSeq`n$($a['hash'])`n$($a['ts'])")
+                    $ok1 = $aec.VerifyData($msg, [Convert]::FromBase64String($a['sig']), [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+                } catch { $ok1 = $false }
+                if (-not $ok1) { Add-Problem $where 0 $aSeq "the anchor's signature does not verify, so the anchor was changed" }
+            }
+            $r = $bySeq[$aSeq]
+            if ($null -eq $r) { Add-Problem $where 0 $aSeq "record $aSeq, which was anchored, is not in the log" }
+            elseif ($r['hash'] -ne $a['hash']) { Add-Problem $where 0 $aSeq "record $aSeq was changed after it was anchored on $($a['ts'])" }
+        }
+    }
+}
+
 $ok = ($problems.Count -eq 0)
 if ($Json) {
     $result = [ordered]@{ ok = $ok; files = $files.Count; records = $records; problems = $problems.ToArray() }
+    if ($anchorCount -gt 0) { $result['anchors'] = $anchorCount }
     if ($records -gt 0) { $result['head'] = [ordered]@{ seq = $prevSeq; hash = $prevHash } }
     [Console]::Out.WriteLine(($result | ConvertTo-Json -Depth 6 -Compress))
 } elseif ($ok) {

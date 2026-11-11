@@ -34,6 +34,16 @@ interface Verify {
   records: number
   problems: Array<{ file: string; line: number; reason: string }>
   moreProblems: number
+  /** D-029: the anchors checked with it. */
+  anchors?: number
+}
+
+/** D-029: one anchor, as the Host keeps it. */
+interface Anchor {
+  seq: number
+  ts: string
+  strength: string
+  fingerprint: string
 }
 
 const AuditTable = (props: React.ComponentProps<"table">) => (
@@ -106,11 +116,20 @@ export function Audit() {
     void load(applied)
   }, [applied, load])
 
+  // D-029: the newest anchor, and one made now on request.
+  const [anchor, setAnchor] = useState<Anchor>()
   async function check() {
     setVerify(undefined)
     const r = await api<Verify>("GET", "/api/audit/verify")
     if (r.ok && r.data) setVerify(r.data)
     else setError(r.error ?? "The chain could not be checked")
+    const a = await api<{ anchors: Anchor[] }>("GET", "/api/audit/anchors")
+    setAnchor(a.ok ? a.data?.anchors[0] : undefined)
+  }
+  async function anchorNow() {
+    const r = await api<{ anchor: Anchor }>("POST", "/api/audit/anchor")
+    if (!r.ok) return setError(r.error ?? "The log could not be anchored")
+    await check()
   }
 
   useEffect(() => {
@@ -150,6 +169,7 @@ export function Audit() {
               <span aria-hidden="true">✓</span>
               Chain intact: {verify.records.toLocaleString("en-GB")} records in {verify.files} file
               {verify.files === 1 ? "" : "s"}
+              {verify.anchors ? `, ${verify.anchors} anchor${verify.anchors === 1 ? "" : "s"} matching` : ""}
             </span>
           ) : (
             <span className="font-semibold text-sev">
@@ -162,6 +182,15 @@ export function Audit() {
           )}
         </p>
         <span className="ml-auto" />
+        {anchor ? (
+          <span className="text-[13px] text-mut">
+            Last anchored at record {anchor.seq.toLocaleString("en-GB")}, {new Date(anchor.ts).toLocaleString("en-GB")}
+            {anchor.strength === "weaker" ? " (signed on this computer)" : ""}
+          </span>
+        ) : null}
+        <button className="btn" onClick={() => void anchorNow()}>
+          Anchor now
+        </button>
         <button className="btn" onClick={() => void check()}>
           Check again
         </button>

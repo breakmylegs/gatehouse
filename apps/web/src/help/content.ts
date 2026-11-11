@@ -402,6 +402,7 @@ Its last 25 decisions, newest first, with the rule, the reason and how long it t
 - Filter by decision, channel, rule or text.
 - Each record shows the tool, the input (with secrets and your redaction list hidden), the rule and who decided.
 - The log is a hash chain, so a changed or deleted record shows up. The chain is checked when you open this page, and **Check again** checks it once more.
+- Once a day, and when you choose **Anchor now**, the end of the chain is signed and kept apart from the log (an anchor). Someone who rewrote an old record and every hash after it would still be found, because the anchored record would no longer match. The page says when the last anchor was made; anchors signed on this computer are marked as such, since anyone who can use this Windows account could sign one.
 - **Export** saves a zip of the log that anyone can check: its month files, the last record it holds, a note saying how to check it, and the checker, which runs in the Windows PowerShell built into Windows or in PowerShell 7. Changing a single character of a record makes the check fail. The log is already redacted, so the zip is too, and each export is itself recorded.
 - Export saves the filtered records to a file.
 

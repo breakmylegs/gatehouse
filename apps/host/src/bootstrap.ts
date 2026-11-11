@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { AnchorService } from "./anchors.js"
 import { SastCommitGuard } from "./sast.js"
 import { InstructionPins } from "./instruction-pins.js"
 import { TimelineSigner } from "./timeline-export.js"
@@ -933,6 +934,15 @@ export function createHost(opts: HostOptions = {}): Host {
   // is paired.
   // Owner, 11 Nov (see sessions remotely, with their status): each session's conversation and what it is doing now,
   // kept from its stream, so the phone is told within a few seconds.
+  // D-029: the audit chain's head, signed once a day and on demand, kept apart from the log.
+  const anchors = new AnchorService({
+    dir: path.join(gatehouseDataDir(env), "anchors"),
+    auditDir: dir,
+    signer: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer(), file: "anchor-key.sealed" }),
+    audit,
+    log,
+  })
+  anchors.start()
   const phoneLive = new PhoneLive()
   const phoneSessions = new PhoneSessionsSharer({
     build: () =>
@@ -1232,6 +1242,7 @@ export function createHost(opts: HostOptions = {}): Host {
       auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
       // C-011: the key timeline exports are signed with, sealed for this Windows user.
       timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
+      anchors,
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,

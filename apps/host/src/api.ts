@@ -57,7 +57,8 @@ import {
   type PwshWorker,
   type ReplayRecord,
 } from "@gatehouse/policy"
-import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
+import { anchorsDirFor, AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
+import type { AnchorService } from "./anchors.js"
 import {
   configPath,
   GatehouseConfig,
@@ -178,6 +179,8 @@ export interface AdminContext {
   auditVerifier?: string
   /** C-011: the key a session's timeline export is signed with. */
   timelineSigner?: TimelineSigner
+  /** D-029: the audit anchors. */
+  anchors?: AnchorService
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -488,8 +491,19 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return { entries: sessionTimeline(records, checkpoints) }
   })
 
+  // D-029: the anchors so far, and one now.
+  app.get("/api/audit/anchors", async () => ({ anchors: ctx.anchors?.list().slice(0, 30) ?? [] }))
+  app.post("/api/audit/anchor", async (_req, reply) => {
+    if (!ctx.anchors) return bad(reply, 501, "Anchoring is not available on this Host.")
+    const anchor = await ctx.anchors.anchor("on demand")
+    if (!anchor) return bad(reply, 409, "There is nothing in the audit log to anchor yet.")
+    return { anchor }
+  })
+
   app.get("/api/audit/verify", async () => {
-    const r = verifyAudit(ctx.auditDir)
+    // D-029: and each anchor against the record it names.
+    const anchorsDir = anchorsDirFor(ctx.auditDir)
+    const r = verifyAudit(ctx.auditDir, fs.existsSync(anchorsDir) ? { anchorsDir } : {})
     return {
       ...r,
       problems: r.problems.slice(0, 50),
