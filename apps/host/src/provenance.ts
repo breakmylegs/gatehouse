@@ -75,6 +75,13 @@ export class Provenance {
   /** D-017: how many untrusted reads there have been, and that count when each subagent started, by its tool use id. */
   #reads = 0
   readonly #subagents = new Map<string, number>()
+  /** D-061: why the session's taint was raised (a result that looked like prompt injection), if it was. */
+  #raised: string | undefined
+
+  /** D-061: a result held what looks like prompt injection: from now on every network call asks. */
+  raise(why: string): void {
+    this.#raised ??= why
+  }
 
   /** D-017: a subagent (the Task or Agent tool) is starting. */
   subagentStarted(toolUseId: string): void {
@@ -160,6 +167,9 @@ export class Provenance {
    * it came from.
    */
   egress(tool: string, input: Record<string, unknown>, cwd: string | undefined): string | undefined {
+    // D-061: after a result that looked like prompt injection, any network call asks, whatever it carries.
+    if (this.#raised && ((SHELL.has(tool) && typeof input.command === "string" && NETWORK.test(input.command)) || tool === "WebFetch"))
+      return `This is a network call after ${this.#raised}, so it is yours to decide.`
     if (!this.#values.size) return undefined
     let carried = ""
     let what = ""

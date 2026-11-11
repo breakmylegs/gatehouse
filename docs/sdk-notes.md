@@ -282,3 +282,12 @@ While a tool runs the SDK sends `tool_progress` (`tool_use_id`, `tool_name`, `el
 ## /btw side questions (6 Nov, sdk.d.ts 0.3.310)
 
 The bundled `sdk.mjs` has an `askSideQuestion` on the query object (Claude Code's own /btw), but `sdk.d.ts` does not declare it, so Codehouse does not use it. A /btw question is a separate one-turn `query()` instead, with the recap's options: `tools: []`, `permissionMode: "default"`, a `canUseTool` that denies, `maxTurns: 1`, `settingSources: []`, `persistSession: false`, `cwd` the temp folder, a sanitised `env` and an `outputFormat` json_schema. If `askSideQuestion` is typed in a later SDK it can replace this, once checked to run with no tools and nothing written to the session.
+
+## Post hook outputs (11 Nov, D-075 and D-061)
+
+Checked in the pinned SDK's `sdk.d.ts` (PostToolUseHookSpecificOutput, PostToolUseFailureHookSpecificOutput):
+
+- `additionalContext` (PostToolUse and PostToolUseFailure): words added to what Claude reads with the call's result. Used by D-075 to tell Claude it is repeating itself.
+- `updatedToolOutput` (PostToolUse): "Replaces the tool output before it is sent to the model", for every tool; `updatedMCPToolOutput` is the older MCP-only form. Used by D-061 to hand Claude a result with what looked like prompt injection taken out. Section 10's condition (replace only where the SDK supports it for that tool) is met for every tool by these types.
+
+Neither decides anything (no permissionDecision), so invariant 2 is unchanged. Checked against the types and the test SDK, not yet against a live session.

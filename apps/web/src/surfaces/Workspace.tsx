@@ -2,6 +2,7 @@ import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
 import { InstructionsReview } from "../components/InstructionsReview"
+import { InjectionFlags } from "../components/InjectionFlags"
 import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
@@ -1020,6 +1021,7 @@ function SessionPane({
         {!session.paused && session.bypass ? <BypassLine session={session} /> : null}
         <CounterexampleCards session={session} />
         {session.kind === "chat" ? null : <InstructionsFor session={session} />}
+        <InjectionFlags session={session} />
         {!session.paused && !session.bypass && bypassOpen ? (
           <div className="pane-stopped">
             <BypassForm session={session} onClose={() => setBypassOpen(false)} />

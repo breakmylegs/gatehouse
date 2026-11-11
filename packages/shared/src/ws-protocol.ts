@@ -424,6 +424,17 @@ export const SessionInfo = z.object({
   localLabel: z.string().max(120).optional(),
   /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */
   instructionsChanged: z.boolean().optional(),
+  /** D-061: results that looked like prompt injection, newest last, with what was found. */
+  flagged: z
+    .array(
+      z.object({
+        tool: z.string(),
+        at: z.string(),
+        findings: z.array(z.object({ kind: z.string(), sample: z.string() })).max(10),
+      }),
+    )
+    .max(20)
+    .optional(),
   /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */
   historyUntil: z.string().max(100).optional(),
   /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */

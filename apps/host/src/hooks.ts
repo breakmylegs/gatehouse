@@ -24,6 +24,7 @@ import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
+import { quarantined, scanForInjection, type InjectionFinding } from "./injection-scan.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -138,6 +139,8 @@ export interface SessionHookDeps {
   /** D-008: what a shell command printed, read for counterexamples. */
   onToolOutput?: (tool: string, output: string) => void
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
+  /** D-061: a result that looked like prompt injection, for the screen and the record. */
+  onInjection?: (tool: string, findings: InjectionFinding[]) => void
   /** G19, D-075: how each call ended; words returned go to Claude with the call's result (a warning it is repeating). */
   onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => string | undefined
   /** G22: commits are checked for secrets unless this is false (tests only). */
@@ -313,6 +316,22 @@ const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
   // D-075: words for Claude about the call just ended (it is repeating itself), by tool use id, for the hook's answer.
   const notes = new Map<string, string>()
+  // D-061: a result with prompt injection in it, as Claude is to read it instead, by tool use id.
+  const replacements = new Map<string, string>()
+  /** D-061: a result from an untrusted source, scanned; a finding raises the taint, is told, and replaces what Claude reads. */
+  const scan = (id: string, tool: string, response: unknown, where: string) => {
+    let text: string
+    try {
+      text = typeof response === "string" ? response : JSON.stringify(response)
+    } catch {
+      return
+    }
+    const findings = scanForInjection(text.slice(0, 400_000))
+    if (!findings.length) return
+    deps.provenance?.raise(`${where} that held what looks like prompt injection`)
+    deps.onInjection?.(tool, findings)
+    replacements.set(id, quarantined(text.slice(0, 400_000), findings))
+  }
   const inner: HookCallback = async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
       return NO_DECISION
@@ -331,6 +350,8 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
         deps.provenance?.subagentFinished(String(input.tool_use_id), input.tool_response)
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
+        scan(String(input.tool_use_id), input.tool_name, input.tool_response, input.tool_name === "WebFetch" ? "a fetched page" : `a result from ${input.tool_name}`)
+      if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(
           input.tool_response,
           input.tool_name === "WebFetch" && typeof asRecord(input.tool_input).url === "string"
@@ -342,6 +363,7 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
         const file = asRecord(input.tool_input).file_path
         if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
           deps.provenance.addUntrustedFile(input.tool_response, file)
+          scan(String(input.tool_use_id), input.tool_name, input.tool_response, `the file ${file}`)
       }
       // D-030: a commit the session made gets a note of its approvals' lineage.
       if (input.hook_event_name === "PostToolUse" && makesCommit(input.tool_name, asRecord(input.tool_input)))
@@ -432,13 +454,16 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
     const out = await inner(input, toolUseId, options)
     const id = String((input as { tool_use_id?: unknown }).tool_use_id ?? "")
     const note = notes.get(id)
-    if (!note) return out
+    const replaced = replacements.get(id)
+    if (!note && !replaced) return out
     notes.delete(id)
-    // It decides nothing: it only adds what Claude reads with the call's result.
+    replacements.delete(id)
+    // It decides nothing: it only adds to, or (D-061) cleans, what Claude reads with the call's result.
     return {
       hookSpecificOutput: {
         hookEventName: input.hook_event_name as "PostToolUse" | "PostToolUseFailure",
-        additionalContext: note,
+        ...(note ? { additionalContext: note } : {}),
+        ...(replaced && input.hook_event_name === "PostToolUse" ? { updatedToolOutput: replaced } : {}),
       },
     }
   }

@@ -38,6 +38,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 - **Remember** adds one narrow rule to your own rules so the same request is allowed next time. It shows the exact rule first, and you choose how long it lasts (30 days unless you choose otherwise), whether it holds in this folder only (the default) or any folder, and how many times it may allow. When it ends or is used up, Codehouse asks you again. For a web page it remembers the site, for this project only: its sessions then read pages there without asking, over https only, and your redaction list still applies.
 - **Run without scripts** appears when an install would run install scripts, which the card lists. It allows the same install with --ignore-scripts; the changed command is checked again by the floor and the rules first.
 - A call that would send on an address, an email or a token Claude read in a web page, a README or a dependency's code (curl to that address, a push to a remote it names, a file written outside the project with it) comes to you, even in Extreme approval, and the card says where the value came from.
+- A web page, a server's tool or a README that holds what looks like instructions aimed at Claude, hidden text or an encoded payload is cleaned before Claude reads it, and the session's pane says what was found; the session's next network call then comes to you.
 - **Stop session** denies and ends the session.
 
 **Keyboard**

@@ -6,6 +6,7 @@ import { freshSeed, seedEnv, seededCommand } from "./seeds.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
 import { InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
+import type { InjectionFinding } from "./injection-scan.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
@@ -335,6 +336,8 @@ export interface SessionInfo {
   localLabel?: string
   /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */
   instructionsChanged?: boolean
+  /** D-061: results that looked like prompt injection, newest last. */
+  flagged?: Array<{ tool: string; at: string; findings: Array<{ kind: string; sample: string }> }>
   /** A fork from a point: its earlier conversation is shown up to this message only. */
   historyUntil?: string
   /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
@@ -376,6 +379,7 @@ export interface SessionEvents {
         | "remember_refused"
         | "risk_budget_exhausted"
         | "thrash_warned"
+        | "injection_flagged"
         | "thrash_paused"
         | "instructions_changed"
         | "heartbeat_missed"
@@ -768,6 +772,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #lockedCalls = new Map<string, string[]>()
   /** D-059: the same for instruction files; and the change outside Codehouse last recorded, so it is recorded once. */
   readonly #instructionCalls = new Map<string, string[]>()
+  /** D-061: results that looked like prompt injection, newest last, for the quarantine view. */
+  #flagged: Array<{ tool: string; at: string; findings: InjectionFinding[] }> = []
   #instructionsSeen: string | undefined
 
   /**
@@ -953,6 +959,7 @@ export class Session extends EventEmitter<SessionEvents> {
         : {}),
       // D-059: what the project tells Claude changed outside Codehouse and waits for your review.
       ...(this.#instructionsSeen !== undefined ? { instructionsChanged: true } : {}),
+      ...(this.#flagged.length ? { flagged: this.#flagged } : {}),
       ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
         ? { carryOn: this.#carry.status() }
         : {}),
@@ -1109,6 +1116,19 @@ export class Session extends EventEmitter<SessionEvents> {
         void noteCommit({ sessionId: this.id, cwd, project: this.project, audit: d.audit, log: d.log }).then(
           (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
         ),
+      // D-061: a result that looked like prompt injection: recorded (what kind, never the result) and shown.
+      onInjection: (tool, findings) => {
+        this.#flagged = [...this.#flagged, { tool, at: new Date().toISOString(), findings }].slice(-20)
+        void this.#auditLimit(
+          "injection_flagged",
+          "injection-scan",
+          { tool, kinds: [...new Set(findings.map((f) => f.kind))] },
+          `A result from ${tool} held what looks like prompt injection, so it was cleaned before Claude read it and the next network call asks.`,
+          "rules",
+        ).catch(() => undefined)
+        this.emit("event", { type: "injection_flagged", data: { tool, findings } })
+        this.emit("state", this.info())
+      },
       onToolOutput: (_tool, output) => {
         if (this.#pins.noteOutput(output)) this.emit("state", this.info())
       },
