@@ -1573,6 +1573,7 @@ const LIVE_SETTINGS = [
   "testIntegrity",
   "untrustedFiles",
   "allowedLicences",
+  "dataClassification",
   "riskBudget",
   "outputStyle",
   "worktreeLocation",

@@ -1,7 +1,7 @@
 import { RubberStamp } from "./rubber-stamp.js"
 import { TestLockError, type TestLocks } from "./test-locks.js"
 import { approveInstructions, InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
-import { BoundaryStaleError, refuseStaleSend, type Boundaries } from "./boundary.js"
+import { BoundaryStaleError, classificationOf, refuseHandoff, refuseStaleSend, type Boundaries } from "./boundary.js"
 import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
@@ -969,6 +969,15 @@ export class HostServer {
           throw new Error(
             "That gateway's provider may keep more than Claude does, so a chat is not carried on there.",
           )
+        // D-085: and only content the target model's card allows: confidential content needs a card in date that says so.
+        const config = a.admin?.config()
+        const classification = classificationOf(config?.dataClassification as Parameters<typeof classificationOf>[0], from.project)
+        const refused = await refuseHandoff(
+          { session: cmd.from, from: from.model ?? "default", to: cmd.model, local: true, classification },
+          config?.providers?.boundaries as Boundaries | undefined,
+          this.#opts.app.audit,
+        )
+        if (refused) throw new CommandError("handoff-denied", refused)
         const recorded = await this.#opts.app.audit.record({
           session: cmd.from,
           event: "fallback_used",

@@ -1,7 +1,7 @@
 // C-016, a verified data-boundary card per model: each card is dated, a model's own card says more than its
 // provider's, and a send is refused, and recorded, when the card it goes by is stale.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { BoundaryStaleError, cardFor, checkBoundary, refuseStaleSend, staleness, type Boundaries } from "../src/boundary.js"
+import { BoundaryStaleError, cardFor, checkBoundary, classificationOf, refuseHandoff, refuseStaleSend, staleness, type Boundaries } from "../src/boundary.js"
 import { buildStack, type Stack } from "./stack.js"
 
 const NOW = new Date("2026-11-10T12:00:00Z")
@@ -27,6 +27,36 @@ describe("data-boundary cards (C-016)", () => {
     // No card at all: not refused (older versions kept none).
     expect(() => checkBoundary(undefined, false, "x", NOW)).not.toThrow()
     expect(() => checkBoundary({ claude: {} }, false, "x", NOW)).not.toThrow()
+  })
+})
+
+describe("the hand-off check (D-085)", () => {
+  const audit = () => {
+    const records: Array<Record<string, unknown>> = []
+    return { records, record: async (r: Record<string, unknown>) => (records.push(r), true) }
+  }
+
+  it("goes by each project's classification, or the default, or internal", () => {
+    const c = { default: "public" as const, projects: { Payroll: "confidential" as const } }
+    expect(classificationOf(c, "payroll")).toBe("confidential")
+    expect(classificationOf(c, "site")).toBe("public")
+    expect(classificationOf(undefined, "site")).toBe("internal")
+  })
+
+  it("denies confidential content to a model with an unverified card, with the reason, and records it", async () => {
+    const a = audit()
+    const why = await refuseHandoff({ session: "s", from: "claude", to: "llama3", local: true, classification: "confidential" }, { local: card("2025-01-01") }, a as never, NOW)
+    expect(why).toMatch(/confidential.*not in date.*only internal content may go there/)
+    expect(a.records[0]).toMatchObject({ event: "handoff_denied", verdict: { outcome: "deny", ruleId: "handoff-boundary" } })
+    // With no card at all, the same.
+    expect(await refuseHandoff({ session: "s", from: "claude", to: "llama3", local: true, classification: "confidential" }, undefined, audit() as never, NOW)).toMatch(/no card/)
+  })
+
+  it("lets internal content go anywhere it went before, and confidential where a card in date allows it", async () => {
+    expect(await refuseHandoff({ session: "s", from: "c", to: "llama3", local: true, classification: "internal" }, undefined, audit() as never, NOW)).toBeUndefined()
+    const fresh = { local: { ...card("2026-11-01"), maxClassification: "confidential" } }
+    expect(await refuseHandoff({ session: "s", from: "c", to: "llama3", local: true, classification: "confidential" }, fresh, audit() as never, NOW)).toBeUndefined()
+    expect(await refuseHandoff({ session: "s", from: "c", to: "llama3", local: true, classification: "restricted" }, fresh, audit() as never, NOW)).toMatch(/allows confidential at most/)
   })
 })
 

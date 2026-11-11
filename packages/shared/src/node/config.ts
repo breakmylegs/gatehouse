@@ -33,6 +33,8 @@ function build(loose: boolean) {
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     source: z.string().max(200).optional(),
+    /** D-085: the most sensitive content this model or provider may be handed, when the card is in date. Absent: internal. */
+    maxClassification: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
   })
   const Checkpoints = obj({
     /** Take a checkpoint before any call that is escalated to a person. */
@@ -321,6 +323,17 @@ function build(loose: boolean) {
      */
     riskBudget: z
       .object({ points: z.number().int().min(1).max(1000), off: z.boolean().optional() })
+      .passthrough()
+      .optional(),
+    /**
+     * D-085: how sensitive each project's content is, by folder name, for a hand-off to another model. Absent: every
+     * project is internal.
+     */
+    dataClassification: z
+      .object({
+        default: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
+        projects: z.record(z.string().max(120), z.enum(["public", "internal", "confidential", "restricted"])).optional(),
+      })
       .passthrough()
       .optional(),
     /** D-015: files whose words are not the project's own (globs); absent: README and Markdown files, dependencies. */

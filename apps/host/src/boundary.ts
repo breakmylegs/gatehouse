@@ -17,6 +17,8 @@ export interface BoundaryCard {
   zdr?: string
   checkedAt?: string
   source?: string
+  /** D-085: the most sensitive content it may be handed. */
+  maxClassification?: string
 }
 
 export interface Boundaries {
@@ -75,6 +77,63 @@ export async function refuseStaleSend(
       .catch(() => false)
     throw e
   }
+}
+
+/** D-085: how sensitive content is, least first. */
+export const LEVELS = ["public", "internal", "confidential", "restricted"] as const
+export type Classification = (typeof LEVELS)[number]
+
+/** A project's classification: its own, or the default from Settings, or internal. */
+export function classificationOf(
+  c: { default?: Classification; projects?: Record<string, Classification> } | undefined,
+  project: string | undefined,
+): Classification {
+  const own = project ? Object.entries(c?.projects ?? {}).find(([k]) => k.toLowerCase() === project.toLowerCase())?.[1] : undefined
+  return own ?? c?.default ?? "internal"
+}
+
+/**
+ * D-085: why content of this classification may not be handed to this model, or undefined when it may. A model whose
+ * card is in date may receive what its card allows (internal unless it says); one with no card, or a stale one, may
+ * receive internal content at most, so confidential and restricted content goes only where a person has checked.
+ */
+export function handoffRefusal(
+  b: Boundaries | undefined,
+  local: boolean,
+  model: string | undefined,
+  classification: Classification,
+  now = new Date(),
+): string | undefined {
+  const found = cardFor(b, local, model)
+  const stale = found ? staleness(found.card, b?.maxAgeDays ?? BOUNDARY_MAX_AGE_DAYS, now) : "it has no card"
+  const allowed = (!stale && (found?.card as { maxClassification?: Classification } | undefined)?.maxClassification) || "internal"
+  if (LEVELS.indexOf(classification) <= LEVELS.indexOf(allowed)) return undefined
+  return stale
+    ? `This project's content is ${classification}, and the card saying where your words go for ${model ?? "that model"} is not in date (${stale}), so only internal content may go there. Check its terms and update its card in Settings first.`
+    : `This project's content is ${classification}, and the card for ${found?.of ?? model} allows ${allowed} at most.`
+}
+
+/** D-085: refuses a hand-off the target model's card does not allow, recorded as handoff_denied. The reason, or none. */
+export async function refuseHandoff(
+  o: { session: string; from: string; to: string; local: boolean; classification: Classification },
+  b: Boundaries | undefined,
+  audit: Pick<HostAudit, "record">,
+  now = new Date(),
+): Promise<string | undefined> {
+  const refused = handoffRefusal(b, o.local, o.to, o.classification, now)
+  if (!refused) return undefined
+  await audit
+    .record({
+      session: o.session,
+      event: "handoff_denied",
+      channel: "desktop",
+      tool: "handoff",
+      input: { from: o.from, to: o.to, classification: o.classification },
+      verdict: { outcome: "deny", ruleId: "handoff-boundary", reason: refused, risk: 0, decidedBy: "rules", policyHash: "" },
+      latencyMs: 0,
+    })
+    .catch(() => false)
+  return refused
 }
 
 /** Refuses a send to this model when its card is stale. */

@@ -63,6 +63,7 @@ interface Config {
   testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
   riskBudget?: { points: number; off?: boolean }
   allowedLicences?: string[]
+  dataClassification?: { default?: string; projects?: Record<string, string> }
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
   pullRequests?: { branchPrefix?: string; create?: boolean; draft?: boolean; fixChecks?: boolean }
@@ -131,6 +132,9 @@ interface Values {
   tiProjects: string
   /** D-055: the licences allowed without asking, one to a line; empty is the permissive default. */
   licences: string
+  /** D-085: each project's classification, one "folder: level" to a line, and the default. */
+  dcProjects: string
+  dcDefault: string
   effortCap: string
   maxSessions: string
   spendCap: string
@@ -191,6 +195,10 @@ function valuesOf(d: SettingsData): Values {
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
     licences: (c.allowedLicences ?? []).join("\n"),
+    dcProjects: Object.entries(c.dataClassification?.projects ?? {})
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n"),
+    dcDefault: c.dataClassification?.default ?? "internal",
     effortCap: c.effortCap ?? "",
     maxSessions: c.maxSessions ? String(c.maxSessions) : "",
     spendCap: c.spendCapUsd ? String(c.spendCapUsd) : "",
@@ -284,6 +292,15 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     body.riskBudget = v.rbPoints
       ? { ...(d.saved.riskBudget ?? {}), points: Number(v.rbPoints), off: undefined }
       : { ...(d.saved.riskBudget ?? { points: 10 }), off: true }
+  // D-085: absent is every project internal, so nothing is written until a project or the default is set.
+  const dcProjects = Object.fromEntries(
+    lines(v.dcProjects)
+      .map((l) => /^(.+?)\s*:\s*(public|internal|confidential|restricted)$/i.exec(l))
+      .filter((m): m is RegExpExecArray => m !== null)
+      .map((m) => [m[1]!.trim(), m[2]!.toLowerCase()]),
+  )
+  if (!Object.keys(dcProjects).length && v.dcDefault === "internal" && !d.saved.dataClassification) delete body.dataClassification
+  else body.dataClassification = { ...(d.saved.dataClassification ?? {}), default: v.dcDefault, projects: dcProjects }
   // D-055: absent is the permissive default, so nothing is written until the list is changed.
   const licences = lines(v.licences)
   if (licences.length) body.allowedLicences = licences
@@ -390,6 +407,8 @@ export const DEFAULT_VALUES: Values = {
   rbPoints: "",
   tiProjects: "",
   licences: "",
+  dcProjects: "",
+  dcDefault: "internal",
   effortCap: "",
   maxSessions: "",
   spendCap: "",
@@ -664,6 +683,7 @@ export function Settings() {
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
   const licChanged = differs(v, ["licences"])
+  const dcChanged = differs(v, ["dcProjects", "dcDefault"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
   const worktreeChanged = differs(v, ["wtWhere", "wtFolder"])
@@ -1187,6 +1207,29 @@ export function Settings() {
                   value={v.tiProjects}
                   disabled={v.tiAll}
                   onChange={(e) => change({ tiProjects: e.target.value }, "Test integrity")}
+                />
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Data classification" gap="gap-2" changed={dcChanged}>
+              <p className="m-0 text-[13px] text-mut">
+                How sensitive each project's content is. Carrying a chat on with another model is
+                refused when that model's card, under Where your words go, does not allow it: a model
+                with no card, or one not checked recently, may be handed internal content at most.
+              </p>
+              <Field label="Every other project is">
+                <select className="field" value={v.dcDefault} onChange={(e) => change({ dcDefault: e.target.value }, "Data classification")}>
+                  <option value="public">Public</option>
+                  <option value="internal">Internal</option>
+                  <option value="confidential">Confidential</option>
+                  <option value="restricted">Restricted</option>
+                </select>
+              </Field>
+              <Field label="Projects, one to a line" help="The folder name, a colon, and public, internal, confidential or restricted. For example: payroll: confidential">
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.dcProjects}
+                  onChange={(e) => change({ dcProjects: e.target.value }, "Data classification")}
                 />
               </Field>
             </Group>

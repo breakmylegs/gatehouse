@@ -10,6 +10,8 @@ export interface Boundary {
   zdr?: "yes" | "no" | "unknown"
   checkedAt?: string
   source?: string
+  /** D-085: the most sensitive content it may be handed, while the card is in date. */
+  maxClassification?: "public" | "internal" | "confidential" | "restricted"
 }
 export type BoundaryProvider = "claude" | "local"
 
@@ -207,6 +209,19 @@ function Card({
             value={b.checkedAt ?? ""}
             onChange={(e) => set("checkedAt", e.target.value)}
           />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span>The most sensitive content it may be handed</span>
+          <select
+            className="field"
+            value={b.maxClassification ?? "internal"}
+            onChange={(e) => set("maxClassification", e.target.value)}
+          >
+            <option value="public">Public</option>
+            <option value="internal">Internal</option>
+            <option value="confidential">Confidential</option>
+            <option value="restricted">Restricted</option>
+          </select>
         </label>
         <label className="grid gap-1 text-sm">
           <span>Where you checked (a page, or who told you)</span>
