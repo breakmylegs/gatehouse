@@ -901,6 +901,11 @@ export function createHost(opts: HostOptions = {}): Host {
       const body = "Nothing was heard from you in time, so Extreme approval paused it. Start it again on the desktop."
       void phone.notify("notify", { title: "Paused: are you there?", body, project }).catch(() => undefined)
       void ntfy.note("paused, are you there?", body, project)
+    } else if (type === "thrash_paused") {
+      // D-075: Claude was told it was repeating itself and did it again, so the turn stopped: the phone is told.
+      const body = "It kept repeating the same thing after it was told, so Codehouse stopped the turn. Look at it on the desktop."
+      void phone.notify("notify", { title: "Stopped: going round in circles", body, project }).catch(() => undefined)
+      void ntfy.note("stopped, repeating itself", body, project)
     } else if (type === "risk_budget_exhausted") {
       // D-018: the risk budget is spent: the phone and push channels are told.
       const body = data.extreme

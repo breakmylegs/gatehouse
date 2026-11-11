@@ -43,7 +43,7 @@ import { pluginsWithMods } from "./marketplace.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
 import type { Worktrees } from "./worktrees.js"
 import type { SessionLink } from "./about-session.js"
-import { LoopGuard, LOOP_REPEATS } from "./loop-guard.js"
+import { LoopGuard, LOOP_REPEATS, warnText } from "./loop-guard.js"
 import { STUCK_MS, StuckWatch } from "./stuck-watch.js"
 import {
   assertSafeOptions,
@@ -375,6 +375,8 @@ export interface SessionEvents {
         | "claim_checked"
         | "remember_refused"
         | "risk_budget_exhausted"
+        | "thrash_warned"
+        | "thrash_paused"
         | "instructions_changed"
         | "heartbeat_missed"
         | "commit_noted"
@@ -1110,14 +1112,28 @@ export class Session extends EventEmitter<SessionEvents> {
       onToolOutput: (_tool, output) => {
         if (this.#pins.noteOutput(output)) this.emit("state", this.info())
       },
-      // G19: the same failure three times in a row with nothing changed stops the turn.
+      // G19 and D-075: the same failure three times in a row with nothing changed, or an edit undone twice, is first
+      // told to Claude (the hook passes the words on); doing it again stops the turn.
       onToolOutcome: (tool, input, error) => {
         // D-009: the turn's commands, for what a claim that the work is done rests on.
         const command = (input as { command?: unknown } | undefined)?.command
         if ((tool === "Bash" || tool === "PowerShell") && typeof command === "string")
           this.#turnCommands.push(command.slice(0, 2000))
-        if (error === undefined) return this.#loop.succeeded(tool, input)
-        if (this.#loop.failed(tool, input, error)) void this.#stopForLoop(tool)
+        const r = error === undefined ? this.#loop.succeeded(tool, input) : this.#loop.failed(tool, input, error)
+        if (!r) return undefined
+        if (r.act === "stop") {
+          void this.#stopForLoop(tool, r.what)
+          return undefined
+        }
+        void this.#auditLimit(
+          "thrash_warned",
+          "loop-guard",
+          { tool, what: r.what },
+          `Claude did the same thing again with the same result (${r.what}), so Codehouse told it to try something else.`,
+          "rules",
+        ).catch(() => undefined)
+        this.emit("event", { type: "thrash_warned", data: { tool } })
+        return warnText(r.what)
       },
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
@@ -1725,15 +1741,17 @@ export class Session extends EventEmitter<SessionEvents> {
    * G19: the same call failed the same way LOOP_REPEATS times in a row with nothing changed in between, so the turn
    * stops (and Extreme stops carrying on), recorded, and the screen says why. Your next message starts afresh.
    */
-  async #stopForLoop(tool: string): Promise<void> {
+  async #stopForLoop(tool: string, what: string): Promise<void> {
     if (!this.#running) return
+    // D-075: recorded as thrash_paused, and the phone is told.
     await this.#auditLimit(
-      "loop_stopped",
+      "thrash_paused",
       "loop-guard",
-      { tool, repeats: LOOP_REPEATS },
-      `The same ${tool} call failed the same way ${LOOP_REPEATS} times in a row with nothing changed in between, so Codehouse stopped the turn.`,
+      { tool, what, repeats: LOOP_REPEATS },
+      `Claude was told it was repeating itself (${what}) and did it again, so Codehouse stopped the turn.`,
       "rules",
     ).catch(() => undefined)
+    this.emit("event", { type: "thrash_paused", data: { tool } })
     await this.interrupt("loop").catch((e: Error) => this.#deps.log(`loop stop: ${e.message}`))
   }
 

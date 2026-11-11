@@ -19,6 +19,8 @@ export interface ToolCallResult {
   input?: Record<string, unknown>
   permission?: PermissionResult
   canUseToolCalled: boolean
+  /** What a post hook added for Claude to read with the result (D-075). */
+  told?: string
 }
 
 export interface TurnApi {
@@ -240,9 +242,12 @@ export class FakeSdk {
           finalInput = permission.updatedInput ?? input
         }
         // A tool that fails (o.error) reaches PostToolUseFailure with its error, as in Claude Code.
-        if (o.error !== undefined)
-          await hook("PostToolUseFailure", toolName, finalInput, id, signal, o.error)
-        else await hook("PostToolUse", toolName, finalInput, id, signal, o.response)
+        const post =
+          o.error !== undefined
+            ? await hook("PostToolUseFailure", toolName, finalInput, id, signal, o.error)
+            : await hook("PostToolUse", toolName, finalInput, id, signal, o.response)
+        // What a post hook adds for Claude to read with the result (D-075), as Claude Code passes it on.
+        const told = (post as { hookSpecificOutput?: { additionalContext?: string } } | undefined)?.hookSpecificOutput?.additionalContext
         push({
           type: "user",
           message: {
@@ -257,7 +262,7 @@ export class FakeSdk {
             ],
           },
         })
-        return { executed: true, input: finalInput, permission, canUseToolCalled: called }
+        return { executed: true, input: finalInput, permission, canUseToolCalled: called, ...(told ? { told } : {}) }
       },
     })
 

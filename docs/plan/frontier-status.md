@@ -99,7 +99,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-057 | Offline vulnerability snapshot | todo | | | Safe variant; connector per conflict 1 |
 | D-061 | Untrusted content scanner | todo | | | |
 | D-062 | Local SAST on agent diffs | todo | | | |
-| D-075 | Loop and thrash detector | todo | | | G19 loop guard stops the turn; needs tell-first |
+| D-075 | Loop and thrash detector | built | slice/D-075-thrash | BUILD_REPORT "Frontier D-075" | Told first, in the failed call's result; stopped and the phone told on a repeat; no progress for N turns is Extreme's two idle turns |
 | D-085 | Data-boundary hand-off check | todo | | | |
 
 ## Wave 3: intent and architecture

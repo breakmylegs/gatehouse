@@ -138,7 +138,8 @@ export interface SessionHookDeps {
   /** D-008: what a shell command printed, read for counterexamples. */
   onToolOutput?: (tool: string, output: string) => void
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
-  onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => void
+  /** G19, D-075: how each call ended; words returned go to Claude with the call's result (a warning it is repeating). */
+  onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => string | undefined
   /** G22: commits are checked for secrets unless this is false (tests only). */
   scanCommits?: boolean
   /** Tests only: stands in for reading the commit. */
@@ -308,18 +309,21 @@ const SELF_APPROVED: Omit<Verdict, "policyHash"> = {
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
 
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
-  return async (input) => {
+  // D-075: words for Claude about the call just ended (it is repeating itself), by tool use id, for the hook's answer.
+  const notes = new Map<string, string>()
+  const inner: HookCallback = async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
       return NO_DECISION
     try {
       // G19: the loop guard hears how each call ended.
-      deps.onToolOutcome?.(
+      const note = deps.onToolOutcome?.(
         input.tool_name,
         input.tool_input,
         input.hook_event_name === "PostToolUseFailure" && input.is_interrupt !== true
           ? String(input.error ?? "")
           : undefined,
       )
+      if (note) notes.set(String(input.tool_use_id), note)
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(input.tool_response)
@@ -413,6 +417,20 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       deps.log(`post-tool audit failed (${(e as Error).name})`)
     }
     return NO_DECISION
+  }
+  return async (input, toolUseId, options) => {
+    const out = await inner(input, toolUseId, options)
+    const id = String((input as { tool_use_id?: unknown }).tool_use_id ?? "")
+    const note = notes.get(id)
+    if (!note) return out
+    notes.delete(id)
+    // It decides nothing: it only adds what Claude reads with the call's result.
+    return {
+      hookSpecificOutput: {
+        hookEventName: input.hook_event_name as "PostToolUse" | "PostToolUseFailure",
+        additionalContext: note,
+      },
+    }
   }
 }
 
