@@ -381,6 +381,11 @@ export const SessionInfo = z.object({
         outcome: z.enum(["verified", "contradicted", "unverified"]),
         why: z.string(),
         command: z.string().optional(),
+        /** D-010: the seed the check ran with. */
+        seed: z.number().int().optional(),
+        /** D-011: a failing run's reruns, each with its seed, and whether the mix of passes and failures made it flaky. */
+        runs: z.array(z.object({ seed: z.number().int(), passed: z.boolean() })).max(5).optional(),
+        flaky: z.boolean().optional(),
       }),
     )
     .optional(),

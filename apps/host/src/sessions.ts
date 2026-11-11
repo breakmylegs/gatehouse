@@ -310,7 +310,7 @@ export interface SessionInfo {
   /** D-025: the dead-man timer, when on. */
   deadman?: { minutes: number; lastHeardFrom: string }
   /** D-009: claims that the work is done, as checked, newest last. */
-  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string }>
+  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean }>
   /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
   counterexamples?: Array<{ id: string; framework: string; example: string; writesItself: boolean; test?: string }>
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
@@ -1505,12 +1505,36 @@ export class Session extends EventEmitter<SessionEvents> {
   /** D-009: the turn's shell commands, kept from its start. */
   #turnCommands: string[] = []
   /** D-009: the claims checked in this session, newest last. */
-  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string }> = []
+  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean }> = []
 
   /**
    * D-009: each claim in a reply is stamped Verified, Contradicted or Unverified, by running what it rests on again as a
    * Codehouse action (section 6). With the tests weakened in this session (D-001), a claim about them is Unverified.
    */
+  /** D-011: the failing run, then up to four more, each with a fresh seed; stops early if one cannot be run. */
+  async #rerunForFlakes(
+    run: NonNullable<SessionDeps["codehouseAction"]>,
+    found: { command: string; cwd: string },
+    firstSeed: number,
+  ): Promise<Array<{ seed: number; passed: boolean }>> {
+    const tries = [{ seed: firstSeed, passed: false }]
+    for (let i = 0; i < 4; i++) {
+      const seed = freshSeed()
+      const r = await run({
+        sessionId: this.id,
+        cwd: found.cwd,
+        project: this.project,
+        command: seededCommand(found.command, found.cwd, seed),
+        why: "checking whether a failing test run is flaky",
+        level: this.#resources,
+        env: seedEnv(seed),
+      })
+      if (!r.ran || r.killed || r.timedOut) break
+      tries.push({ seed, passed: r.exitCode === 0 })
+    }
+    return tries
+  }
+
   async #checkClaims(text: string): Promise<void> {
     const run = this.#deps.codehouseAction
     const claims = findClaims(text)
@@ -1521,9 +1545,11 @@ export class Session extends EventEmitter<SessionEvents> {
     const runs = new Map<string, Promise<ActionResult>>()
     // D-010: the tests are run again with a fresh seed, the same one for every claim of this reply, and it is recorded.
     const seed = freshSeed()
+    const flakes = new Map<string, Promise<Array<{ seed: number; passed: boolean }>>>()
     for (const c of claims) {
       let outcome: ClaimOutcome = "unverified"
       let why: string
+      let tries: Array<{ seed: number; passed: boolean }> | undefined
       const found = commandFor(c, commands, this.cwd, root)
       const seeded = found && (c.kind === "tests" || c.kind === "fixed")
       const cmd = found && seeded ? { ...found, command: seededCommand(found.command, found.cwd, seed) } : found
@@ -1555,15 +1581,25 @@ export class Session extends EventEmitter<SessionEvents> {
         } else {
           outcome = "contradicted"
           why = `${cmd.command} failed when Codehouse ran it (exit ${r.exitCode})`
+          // D-011: a failing test run is run up to four more times, each with its own seed; passes and failures mixed
+          // mean the tests are flaky, which the claim then says, with every seed as the evidence.
+          if (seeded && found) {
+            if (!flakes.has(key)) flakes.set(key, this.#rerunForFlakes(run, found, seed))
+            tries = await flakes.get(key)!
+          }
         }
       }
+      const flaky = tries !== undefined && tries.some((t) => t.passed)
+      if (flaky) why = `${why}; it passed ${tries!.filter((t) => t.passed).length} of ${tries!.length} runs, so the tests are flaky`
       const entry = {
         kind: c.kind,
         quote: c.quote,
         outcome,
-        why: seeded && outcome === "contradicted" ? `${why}, with the fresh seed ${seed}` : why,
+        why: seeded && outcome === "contradicted" && !flaky ? `${why}, with the fresh seed ${seed}` : why,
         ...(cmd ? { command: cmd.command } : {}),
         ...(seeded ? { seed } : {}),
+        ...(tries ? { runs: tries } : {}),
+        ...(flaky ? { flaky: true } : {}),
       }
       this.#claims = [...this.#claims, entry].slice(-10)
       await this.#deps.audit

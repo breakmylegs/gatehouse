@@ -26,6 +26,62 @@ describe("check seeds (D-010)", () => {
   })
 })
 
+describe("flake quarantine on a real session (D-011)", () => {
+  let s: Stack
+  let calls = 0
+  let always = false
+  beforeAll(async () => {
+    s = await buildStack({
+      hardTimeoutMs: 1500,
+      phoneExpiryMs: 800,
+      // Fails the first run and every other one after: a flaky test. With `always`, it never passes.
+      codehouseAction: async (): Promise<ActionResult> => {
+        calls++
+        return { ran: true, exitCode: always || calls % 2 === 1 ? 1 : 0, output: "", timedOut: false, killed: false, ms: 5 }
+      },
+    })
+  }, 60000)
+  afterAll(async () => {
+    for (const x of s.manager.liveSessions()) await x.close()
+    await s.stop()
+  })
+
+  async function claim(): Promise<Record<string, unknown>> {
+    s.sdk.turn = async (api) => {
+      await api.callTool("Bash", { command: "npm test" }, { selfApproved: false })
+      api.say("All tests pass now.")
+    }
+    const session = await s.manager.start({ cwd: s.repo })
+    const events: Array<Record<string, unknown>> = []
+    session.on("event", (e) => e.type === "claim_checked" && events.push(e.data))
+    session.prompt("go")
+    await vi.waitFor(() => expect(events.length).toBeGreaterThan(0), { timeout: 20_000 })
+    await session.close()
+    return events[0]!
+  }
+
+  it("labels a test run that passes and fails across five seeds as flaky, with every seed", async () => {
+    calls = 0
+    const e = await claim()
+    expect(calls).toBe(5)
+    expect(e).toMatchObject({ outcome: "contradicted", flaky: true })
+    const runs = e.runs as Array<{ seed: number; passed: boolean }>
+    expect(runs.map((r) => r.passed)).toEqual([false, true, false, true, false])
+    expect(new Set(runs.map((r) => r.seed)).size).toBe(5)
+    expect(String(e.why)).toContain("passed 2 of 5 runs, so the tests are flaky")
+    expect(JSON.parse(s.records().filter((r) => r.event === "claim_verified").at(-1)!.inputJson)).toMatchObject({ flaky: true })
+  })
+
+  it("does not call a test that always fails flaky", async () => {
+    always = true
+    calls = 0
+    const e = await claim()
+    expect(calls).toBe(5)
+    expect(e).toMatchObject({ outcome: "contradicted" })
+    expect(e.flaky).toBeUndefined()
+  })
+})
+
 describe("on a real session (D-010)", () => {
   let s: Stack
   const runs: ActionRequest[] = []
