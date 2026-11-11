@@ -97,7 +97,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-029 | Audit anchoring | todo | | | |
 | D-056 | SBOM per change | todo | | | |
 | D-057 | Offline vulnerability snapshot | todo | | | Safe variant; connector per conflict 1 |
-| D-061 | Untrusted content scanner | built | slice/D-061-injection-scan | BUILD_REPORT "Frontier D-061" | updatedToolOutput, which the SDK's types give for every tool (recorded in sdk-notes); 0 of 20 benign fixtures flagged |
+| D-061 | Untrusted content scanner | built | slice/D-061-injection-scan | BUILD_REPORT "Frontier D-061" | updatedToolOutput, which the SDK's types give for every tool (recorded in sdk-notes); fewer than 2 of 20 benign fixtures flagged, to be run |
 | D-062 | Local SAST on agent diffs | todo | | | |
 | D-075 | Loop and thrash detector | built | slice/D-075-thrash | BUILD_REPORT "Frontier D-075" | Told first, in the failed call's result; stopped and the phone told on a repeat; no progress for N turns is Extreme's two idle turns |
 | D-085 | Data-boundary hand-off check | built | slice/D-085-handoff-boundary | BUILD_REPORT "Frontier D-085" | Carrying a chat on with another model; internal by default goes anywhere it went before; confidential needs a card in date that allows it |
