@@ -50,6 +50,7 @@ import {
   readRememberEntries,
   removeRemember,
   replay,
+  type ReplayChange,
   type LoadOptions,
   type Policy,
   type PolicyStore,
@@ -281,9 +282,14 @@ export function queryAudit(
   return { records: out }
 }
 
-export function replayRecords(dir: string): ReplayRecord[] {
+/** D-026: how far back a save of the rules is checked against the decisions really made. */
+export const REGRESSION_DAYS = 90
+
+export function replayRecords(dir: string, opts: { since?: number } = {}): ReplayRecord[] {
   const records: ReplayRecord[] = []
+  let old = false
   for (const file of listAuditFiles(dir).reverse()) {
+    if (old) break
     const lines = fs.readFileSync(path.join(dir, file), "utf8").split("\n")
     for (let i = lines.length - 1; i >= 0 && records.length < MAX_REPLAY; i--) {
       const raw = lines[i]
@@ -292,6 +298,10 @@ export function replayRecords(dir: string): ReplayRecord[] {
         const parsed = AuditRecord.safeParse(JSON.parse(raw))
         if (!parsed.success) continue
         const r = parsed.data
+        if (opts.since !== undefined && Date.parse(r.ts) < opts.since) {
+          old = true
+          break
+        }
         if (!r.cwd || r.event === "policy_activated" || r.event === "settings_changed") continue
         const input: unknown = JSON.parse(r.inputJson)
         if (!input || typeof input !== "object" || Array.isArray(input)) continue
@@ -309,6 +319,100 @@ export function replayRecords(dir: string): ReplayRecord[] {
     if (records.length >= MAX_REPLAY) break
   }
   return records
+}
+
+/**
+ * D-026: the past refusals and escalations (from the last REGRESSION_DAYS days of the audit log) that the candidate
+ * rules would allow and the rules in force would not. Only these block a save; a change that only tightens saves at
+ * once.
+ */
+export async function regressionsOf(
+  ctx: Pick<AdminContext, "auditDir" | "engine" | "pwsh">,
+  candidate: Policy,
+  now = Date.now(),
+): Promise<{ total: number; flipped: ReplayChange[] }> {
+  const records = replayRecords(ctx.auditDir, { since: now - REGRESSION_DAYS * 86_400_000 }).filter(
+    (r) => r.before.outcome !== "allow",
+  )
+  const engine = new PolicyEngine({
+    getPolicy: () => candidate,
+    ...(ctx.pwsh ? { pwsh: ctx.pwsh } : {}),
+  })
+  const byLine = new Map(records.map((r) => [r.line, r]))
+  const flipped: ReplayChange[] = []
+  for (const c of (await replay(engine, records)).changes) {
+    const r = byLine.get(c.line)
+    if (c.after.outcome !== "allow" || !r) continue
+    const today = await ctx.engine.evaluate({ toolName: r.toolName, input: r.input }, { cwd: r.cwd })
+    if (today.outcome !== "allow") flipped.push(c)
+  }
+  return { total: records.length, flipped }
+}
+
+/** D-026: what you type to save rules that would allow what was refused or escalated before. */
+export const regressionPhrase = (n: number) => `allow ${n}`
+
+/**
+ * D-026, for every save of the rules (the rules file, the Library and Your choices): replays the last 90 days of
+ * real decisions. Nothing would be allowed that was refused or asked about: the save goes ahead. Otherwise it goes
+ * ahead only when confirm is the phrase you typed on the desktop (the admin API is the desktop's alone, invariant 7),
+ * recorded first as policy_regression_accepted; a save without it is refused and recorded as policy_regression_blocked.
+ */
+export async function regressionGate(
+  ctx: AdminContext,
+  candidate: Policy,
+  confirm: unknown,
+  change: { from: string; to: string },
+): Promise<{ error: string; regression?: { total: number; phrase: string; changes: ReplayChange[] } } | undefined> {
+  const { total, flipped } = await regressionsOf(ctx, candidate)
+  if (!flipped.length) return undefined
+  const phrase = regressionPhrase(flipped.length)
+  const input = {
+    from: change.from.slice(0, 12),
+    to: change.to.slice(0, 12),
+    flipped: flipped.length,
+    records: flipped.slice(0, 50).map((c) => c.line),
+  }
+  const policyHash = ctx.store.current?.hash ?? "n/a"
+  if (confirm !== phrase) {
+    await ctx.audit.record({
+      session: "desktop",
+      event: "policy_regression_blocked",
+      channel: "desktop",
+      tool: "policy",
+      input,
+      verdict: {
+        outcome: "deny",
+        ruleId: "policy-regression",
+        reason: `The new rules would allow ${flipped.length} past calls that were refused or asked about, so they were not saved.`,
+        risk: 0,
+        decidedBy: "rules",
+        policyHash,
+      },
+      latencyMs: 0,
+    })
+    return {
+      error: `These rules would allow ${flipped.length} of the ${total} calls refused or asked about in the last ${REGRESSION_DAYS} days, so they were not saved. Type "${phrase}" to save them anyway.`,
+      regression: { total, phrase, changes: flipped.slice(0, 100) },
+    }
+  }
+  const accepted = await ctx.audit.record({
+    session: "desktop",
+    event: "policy_regression_accepted",
+    channel: "desktop",
+    tool: "policy",
+    input,
+    verdict: {
+      outcome: "allow",
+      ruleId: "policy-regression",
+      reason: `You typed the confirmation to save rules that allow ${flipped.length} past calls that were refused or asked about.`,
+      risk: 0,
+      decidedBy: "human-desktop",
+      policyHash,
+    },
+    latencyMs: 0,
+  })
+  return accepted ? undefined : { error: "Your confirmation could not be recorded, so nothing was saved." }
 }
 
 /** Loads a candidate rules file with the live overlays, without installing it. */
@@ -547,6 +651,9 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       return bad(reply, 422, "The rules do not load, so nothing was saved.", {
         errors: cand.errors,
       })
+    // D-026: a change that would allow what was refused or asked about is saved only with your typed phrase.
+    const refused = await regressionGate(ctx, cand.policy, b.confirm, { from: sha(current), to: sha(b.yaml) })
+    if (refused) return bad(reply, 409, refused.error, { regression: refused.regression })
     await writeFileAtomic(file, b.yaml)
     ctx.store.load()
     const hash = ctx.store.current?.hash ?? cand.policy.hash

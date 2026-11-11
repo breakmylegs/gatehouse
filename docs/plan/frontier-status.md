@@ -92,7 +92,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-011 | Flake quarantine | built | slice/D-011-flake-quarantine | BUILD_REPORT "Frontier D-011" | Five runs with their seeds; flaky is a mark on a contradicted claim (older screens read it); skipping goes through D-001 |
 | D-016 | Taint-tracked egress guard | built | slice/D-016-taint-egress | BUILD_REPORT "Frontier D-016" | Addresses, hosts, emails and long tokens from pages, servers and untrusted files; network calls and writes outside the project; never approved by Extreme |
 | D-017 | Subagent boundary labels | built | slice/D-017-subagent-labels | BUILD_REPORT "Frontier D-017" | A subagent's report carries the taint of what it read; one that read nothing untrusted taints nothing |
-| D-026 | Policy regression from real history | todo | | | |
+| D-026 | Policy regression from real history | built | slice/D-026-policy-regression | BUILD_REPORT "Frontier D-026" | Every save of the rules (file, Library, Your choices); typed phrase names the count; compared with the rules in force |
 | D-027 | Step-exact reconstruction | todo | | | |
 | D-029 | Audit anchoring | todo | | | |
 | D-056 | SBOM per change | todo | | | |

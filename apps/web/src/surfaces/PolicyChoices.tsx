@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
+import { RegressionConfirm, regressionIn, type Regression } from "../components/RegressionConfirm"
 import { api } from "../lib/api"
 import {
   applyChoices,
@@ -142,10 +143,23 @@ export function PolicyChoices({ onAdvanced }: { onAdvanced: () => void }) {
     }
   }, [lib, roots])
 
-  async function save(next: UserRulesShape, said: string, before: UserRulesShape) {
+  // D-026: a choice that would allow what was refused or asked about waits here for the typed phrase.
+  const [pending, setPending] = useState<{
+    regression: Regression
+    next: UserRulesShape
+    said: string
+    before: UserRulesShape
+  }>()
+  async function save(next: UserRulesShape, said: string, before: UserRulesShape, confirm?: string) {
     setBusy(true)
-    const r = await api("PUT", "/api/library", next)
+    const r = await api(
+      "PUT",
+      confirm ? `/api/library?confirm=${encodeURIComponent(confirm)}` : "/api/library",
+      next,
+    )
     setBusy(false)
+    const reg = r.ok ? undefined : regressionIn(r.detail)
+    setPending(reg ? { regression: reg, next, said, before } : undefined)
     if (!r.ok) {
       toast.error(`Not saved: ${r.errors?.[0] ?? r.error ?? "the Host refused it"}`, {
         id: "policy",
@@ -199,6 +213,13 @@ export function PolicyChoices({ onAdvanced }: { onAdvanced: () => void }) {
 
   return (
     <div className="grid max-w-[920px] gap-8">
+      {pending ? (
+        <RegressionConfirm
+          regression={pending.regression}
+          busy={busy}
+          onConfirm={(p) => void save(pending.next, pending.said, pending.before, p)}
+        />
+      ) : null}
       {lib.errors.length ? (
         <ul role="alert" className="m-0 text-sev">
           {lib.errors.map((e) => (

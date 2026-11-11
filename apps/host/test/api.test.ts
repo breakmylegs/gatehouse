@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { appendRemember, PolicyEngine, PolicyStore, redact } from "@gatehouse/policy"
 import { AuditWriter } from "@gatehouse/shared/audit"
 import { GatehouseConfig } from "@gatehouse/shared/node"
-import { registerApi, queryAudit, type AdminContext } from "../src/api.js"
+import { registerApi, queryAudit, regressionsOf, type AdminContext } from "../src/api.js"
 import { HostAudit } from "../src/hostaudit.js"
 import { AI_MARK, ArtifactStore } from "../src/artifacts.js"
 import { MemoryStore } from "../src/memory.js"
@@ -233,6 +233,51 @@ describe("policy endpoints", () => {
     expect(fs.readFileSync(rulesPath, "utf8")).toBe(edited)
     const last = (await get("/api/audit?limit=1")).records[0]
     expect(last).toMatchObject({ event: "policy_activated", channel: "desktop" })
+    expect((await get("/api/audit/verify")).ok).toBe(true)
+  })
+
+  it("refuses rules that would allow what was refused or asked about until you type the phrase, and saves a tightening at once (D-026)", async () => {
+    await ctx.audit.record({
+      session: "s1",
+      event: "decision",
+      channel: "approver",
+      tool: "Bash",
+      cwd: root,
+      project: "alpha",
+      input: { command: "echo hello" },
+      verdict: verdict("escalate", "no-rule"),
+      latencyMs: 1,
+    })
+    const put = (body: unknown) =>
+      app.inject({ method: "PUT", url: "/api/policy/rules", payload: body as object })
+    let p = await get("/api/policy")
+    const looser = p.rulesYaml.replace('"npm test*",', '"npm test*", "echo hello*",')
+    expect(looser).not.toBe(p.rulesYaml)
+    const blocked = await put({ yaml: looser, baseHash: p.rulesYamlHash })
+    expect(blocked.statusCode).toBe(409)
+    const reg = blocked.json().regression
+    expect(reg.phrase).toBe("allow 1")
+    expect(reg.changes).toMatchObject([
+      { summary: "Bash: echo hello", before: { outcome: "escalate" }, after: { outcome: "allow", ruleId: "safe-shell" } },
+    ])
+    expect(fs.readFileSync(rulesPath, "utf8")).toBe(p.rulesYaml)
+    expect((await get("/api/audit?limit=1")).records[0]).toMatchObject({ event: "policy_regression_blocked" })
+    // The wrong phrase saves nothing.
+    expect((await put({ yaml: looser, baseHash: p.rulesYamlHash, confirm: "allow 2" })).statusCode).toBe(409)
+    const ok = await put({ yaml: looser, baseHash: p.rulesYamlHash, confirm: "allow 1" })
+    expect(ok.statusCode).toBe(200)
+    expect((await get("/api/audit?limit=2")).records.map((r: { event: string }) => r.event)).toEqual([
+      "policy_activated",
+      "policy_regression_accepted",
+    ])
+    // Only the last 90 days count.
+    expect((await regressionsOf(ctx, ctx.store.current!)).total).toBeGreaterThan(0)
+    expect((await regressionsOf(ctx, ctx.store.current!, Date.now() + 91 * 86_400_000)).total).toBe(0)
+    // Taking it out again only tightens: saved at once.
+    p = await get("/api/policy")
+    const tighter = p.rulesYaml.replace(' "echo hello*",', "")
+    expect(tighter).not.toBe(p.rulesYaml)
+    expect((await put({ yaml: tighter, baseHash: p.rulesYamlHash })).statusCode).toBe(200)
     expect((await get("/api/audit/verify")).ok).toBe(true)
   })
 })
@@ -614,6 +659,32 @@ describe("insights endpoints", () => {
         }
         // A refused save writes nothing.
         expect(fs.readFileSync(t.userRulesPath, "utf8")).toBe(saved)
+      } finally {
+        t.restore()
+      }
+    })
+
+    it("saves a choice that would allow what was refused only with the typed phrase in ?confirm= (D-026)", async () => {
+      const t = swap()
+      try {
+        await ctx.audit.record({
+          session: "s1",
+          event: "decision",
+          channel: "approver",
+          tool: "Bash",
+          cwd: root,
+          input: { command: "echo library" },
+          verdict: verdict("escalate", "no-rule"),
+          latencyMs: 1,
+        })
+        const payload = { version: 1, allow: [{ id: "my-echo", commands: ["echo library*"] }] }
+        const blocked = await app.inject({ method: "PUT", url: "/api/library", payload })
+        expect(blocked.statusCode).toBe(409)
+        const { phrase } = blocked.json().regression
+        expect(fs.existsSync(t.userRulesPath)).toBe(false)
+        const ok = await app.inject({ method: "PUT", url: `/api/library?confirm=${encodeURIComponent(phrase)}`, payload })
+        expect(ok.statusCode).toBe(200)
+        expect(ctx.store.current?.rules.allow.some((r) => r.id === "my-echo")).toBe(true)
       } finally {
         t.restore()
       }

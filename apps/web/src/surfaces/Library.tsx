@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { RegressionConfirm, regressionIn, type Regression } from "../components/RegressionConfirm"
 import { api } from "../lib/api"
 
 type Section = "floor" | "deny" | "escalate" | "allow"
@@ -167,6 +168,8 @@ export function Library() {
     })
   }
 
+  // D-026: rules that would allow what was refused or asked about, and the phrase that saves them anyway.
+  const [regression, setRegression] = useState<Regression>()
   async function runPreview() {
     setBusy(true)
     setErrors(undefined)
@@ -175,15 +178,21 @@ export function Library() {
     if (r.ok && r.data) setPreview(r.data)
     else setErrors(r.errors ?? [r.error ?? "The preview did not run"])
   }
-  async function save() {
+  async function save(confirm?: string) {
     setBusy(true)
     setErrors(undefined)
-    const r = await api<{ changed: string[] }>("PUT", "/api/library", clean(draft))
+    const r = await api<{ changed: string[] }>(
+      "PUT",
+      confirm ? `/api/library?confirm=${encodeURIComponent(confirm)}` : "/api/library",
+      clean(draft),
+    )
     setBusy(false)
     if (!r.ok) {
+      setRegression(regressionIn(r.detail))
       setErrors(r.errors ?? [r.error ?? "Not saved"])
       return
     }
+    setRegression(undefined)
     toast("Rules saved and in force")
     setPreview(undefined)
     await load()
@@ -385,6 +394,9 @@ export function Library() {
               <li key={e}>{e}</li>
             ))}
           </ul>
+        ) : null}
+        {regression ? (
+          <RegressionConfirm regression={regression} busy={busy} onConfirm={(p) => void save(p)} />
         ) : null}
         {preview ? (
           <div role="status" className="panel grid gap-1 px-4 py-3">

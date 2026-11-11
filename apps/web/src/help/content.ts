@@ -336,7 +336,7 @@ The list on the right is Claude's own plan for the turn, ticked off as it goes.`
 
 **Library** holds ready-made packs of rules (Git, Node, Python, .NET, Rust and Go, containers, cloud, editing, extra caution on Windows). Switch a pack on to use it, switch off a built-in allow or ask rule you do not want, or copy any rule into your own rules and change it. **Preview what changes** shows which past decisions would come out differently before you save. The floor and the deny rules always apply and cannot be switched off.
 
-Rules are files on this computer. Changes are picked up straight away.`,
+Rules are files on this computer. Changes are picked up straight away. Before any change to the rules is saved, from here, the Library or Your choices, it is checked against your last 90 days of decisions: one that would allow something that was refused or asked about is not saved. The page lists those calls, and you can save it anyway by typing the phrase it shows, which is recorded.`,
   },
   dashboard: {
     id: "dashboard",

@@ -5,6 +5,8 @@ export interface ApiResult<T> {
   data?: T
   error?: string
   errors?: string[]
+  /** The whole reply of a refusal, for the callers that show more of it. */
+  detail?: unknown
 }
 
 export async function api<T = unknown>(
@@ -45,6 +47,7 @@ export async function api<T = unknown>(
       status: res.status,
       error: j.error ?? `The Host answered ${res.status}.`,
       ...(j.errors ? { errors: j.errors } : {}),
+      ...(json !== undefined ? { detail: json } : {}),
     }
   }
   return { ok: true, status: res.status, data: json as T }
