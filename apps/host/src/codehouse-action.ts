@@ -16,6 +16,7 @@ import type { Broker } from "./broker.js"
 import { NEVER_AUTO_APPROVED } from "./canuse.js"
 import type { HostAudit } from "./hostaudit.js"
 import { levelArgs } from "./limits.js"
+import { macActionShell } from "./limits-mac.js" // Mac fork
 
 /** Names in the environment that hold, or may hold, a credential. None reaches a Codehouse action. */
 const CREDENTIAL = /TOKEN|SECRET|PASSW(OR)?D|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL|^ANTHROPIC_|^CLAUDE_CODE_OAUTH|^AWS_SESSION|^AZURE_CLIENT|^NPM_CONFIG__AUTH|_AUTH$/i
@@ -72,7 +73,8 @@ function startCommand(
   if (d.limitsExe)
     return spawn(
       d.limitsExe,
-      ["--name", `codeh-action-${crypto.randomBytes(4).toString("hex")}`, ...levelArgs(level), "--", "cmd.exe", "/d", "/s", "/c", command],
+      // Mac fork: through sh on a Mac (macActionShell).
+      ["--name", `codeh-action-${crypto.randomBytes(4).toString("hex")}`, ...levelArgs(level), "--", ...(macActionShell(command) ?? ["cmd.exe", "/d", "/s", "/c", command])],
       { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
     )
   return spawn(command, { cwd, env, shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })

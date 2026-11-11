@@ -109,29 +109,37 @@ if (!has("--swift-only")) {
 if (!fs.existsSync(path.join(resources, "app")))
   throw new Error(`${appBundle} has not been built. Run without --swift-only.`)
 
-say("compiling the window")
+say("compiling the window and the limits helper")
 const swiftDir = path.join(root, "packaging", "mac")
-run("/usr/bin/swiftc", [
-  "-O",
-  "-swift-version",
-  "5",
-  "-target",
-  `${arch === "x64" ? "x86_64" : "arm64"}-apple-macos${MIN_MACOS}`,
-  "-o",
+const swiftc = (out, files) =>
+  run("/usr/bin/swiftc", [
+    "-O",
+    "-swift-version",
+    "5",
+    "-target",
+    `${arch === "x64" ? "x86_64" : "arm64"}-apple-macos${MIN_MACOS}`,
+    "-o",
+    out,
+    ...files,
+  ])
+// Every .swift file beside main.swift; the helper and the test have their own main in limits/ and test/.
+swiftc(
   path.join(contents, "MacOS", "Codehouse"),
-  // Every .swift file beside main.swift; the test's own main is in packaging/mac/test.
-  ...fs
+  fs
     .readdirSync(swiftDir)
     .filter((f) => f.endsWith(".swift"))
     .sort()
     .map((f) => path.join(swiftDir, f)),
-])
+)
+const limitsHelper = path.join(contents, "MacOS", "codehouse-limits")
+swiftc(limitsHelper, [path.join(swiftDir, "limits", "main.swift")])
 fs.writeFileSync(path.join(contents, "Info.plist"), infoPlist())
 fs.writeFileSync(path.join(contents, "PkgInfo"), "APPL????")
 
 // Ad hoc: enough for this Mac to run it, and it seals every file inside, so a changed file shows. Node and Claude
-// Code keep their makers' own signatures (no --deep).
+// Code keep their makers' own signatures (no --deep); the helper beside the program is signed first, as nested code.
 say("signing for this Mac (ad hoc)")
+run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", limitsHelper])
 run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", appBundle])
 run("/usr/bin/codesign", ["--verify", "--strict", appBundle])
 

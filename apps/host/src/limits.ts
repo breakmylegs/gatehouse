@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process"
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk"
 import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
+import { findLimitsMac } from "./limits-mac.js" // Mac fork
 import { findWindowsHelper, type HelperPlace } from "./win-helper.js"
 
 /**
@@ -141,6 +142,7 @@ export function limiter(exe: string): Limiter {
 
 /** Codehouse-Limits.exe (packaging/Limits.cs), found or built as every helper is (win-helper.ts). */
 export function findLimitsExe(o: HelperPlace): string | undefined {
+  if (process.platform === "darwin") return findLimitsMac() // Mac fork: codehouse-limits in Codehouse.app
   return findWindowsHelper({
     ...o,
     exe: "Codehouse-Limits.exe",

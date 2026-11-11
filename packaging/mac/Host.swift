@@ -128,6 +128,10 @@ final class HostProcess {
     env["GATEHOUSE_EXIT_ON_STDIN_CLOSE"] = "1"
     env["GATEHOUSE_CAN_RESTART"] = "1"
     env["GATEHOUSE_MAC_APP_VERSION"] = version
+    // The resource limits per session (packaging/mac/limits), beside this program.
+    if let dir = Bundle.main.executableURL?.deletingLastPathComponent() {
+      env["GATEHOUSE_MAC_LIMITS"] = dir.appendingPathComponent("codehouse-limits").path
+    }
     if env["NODE_COMPILE_CACHE"] == nil { env["NODE_COMPILE_CACHE"] = data.appendingPathComponent("node-cache").path }
     if env["GATEHOUSE_LOCAL_RULES"] == nil {
       env["GATEHOUSE_LOCAL_RULES"] = policy.appendingPathComponent("rules.local.yaml").path
