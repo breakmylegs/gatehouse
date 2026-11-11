@@ -162,6 +162,8 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
     try {
       const toolInput = asRecord(input.tool_input)
       const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
+      // D-017: a subagent is starting; what it reads while it runs taints what it reports.
+      if (input.tool_name === "Task" || input.tool_name === "Agent") deps.provenance?.subagentStarted(String(input.tool_use_id))
       if (deps.kill())
         return denyOutput(
           "The Codehouse kill switch is engaged. Everything is denied until the user re-arms it.",
@@ -324,6 +326,9 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
           : undefined,
       )
       if (note) notes.set(String(input.tool_use_id), note)
+      // D-017: a subagent's report carries the taint of what it read.
+      if (input.hook_event_name === "PostToolUse" && (input.tool_name === "Task" || input.tool_name === "Agent"))
+        deps.provenance?.subagentFinished(String(input.tool_use_id), input.tool_response)
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(

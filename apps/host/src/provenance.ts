@@ -72,6 +72,26 @@ export class Provenance {
   readonly #texts: string[] = []
   /** D-016: each value from an untrusted source, and where it came from. */
   readonly #values = new Map<string, string>()
+  /** D-017: how many untrusted reads there have been, and that count when each subagent started, by its tool use id. */
+  #reads = 0
+  readonly #subagents = new Map<string, number>()
+
+  /** D-017: a subagent (the Task or Agent tool) is starting. */
+  subagentStarted(toolUseId: string): void {
+    this.#subagents.set(toolUseId, this.#reads)
+    if (this.#subagents.size > 200) this.#subagents.delete(this.#subagents.keys().next().value as string)
+  }
+
+  /**
+   * D-017: a subagent finished. If anything untrusted was read while it ran (it reads through the same hooks), what it
+   * reports carries that taint too: its words count as read from outside, and its values keep that as their source.
+   */
+  subagentFinished(toolUseId: string, result: unknown): void {
+    const since = this.#subagents.get(toolUseId)
+    this.#subagents.delete(toolUseId)
+    if (since === undefined || this.#reads === since) return
+    this.add(result, "the report of a subagent that read untrusted content")
+  }
 
   #remember(text: string, source: string): void {
     for (const v of valuesIn(text)) {
@@ -92,6 +112,7 @@ export class Provenance {
       return
     }
     if (!text) return
+    this.#reads++
     this.#remember(text.slice(0, MAX_TEXT), file ? `the file ${file}` : "a file that is not the project's own words")
     this.#files.push(norm(text.slice(0, MAX_TEXT)))
     if (this.#files.length > MAX_TEXTS) this.#files.shift()
@@ -127,6 +148,7 @@ export class Provenance {
       return
     }
     if (!text) return
+    this.#reads++
     this.#remember(text.slice(0, MAX_TEXT), source ?? "something read from outside")
     this.#texts.push(norm(text.slice(0, MAX_TEXT)))
     if (this.#texts.length > MAX_TEXTS) this.#texts.shift()
