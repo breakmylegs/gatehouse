@@ -145,10 +145,17 @@ const depsChanged = (f) => {
   const now = fs.existsSync(path.join(root, f)) ? fs.readFileSync(path.join(root, f), "utf8") : ""
   return before.status !== 0 || installs(before.stdout) !== installs(now)
 }
+// 11 Nov: with memory short, the related tests' two long-lived workers died part way, and so did whatever came after
+// them, five releases in a row. Every file, each in a process of its own as memory allows (C-001), is slower and gets
+// through, so the gate goes that way when less than this is free.
+const SHORT_OF_MEMORY = 4 * 1024 ** 3
+const memoryReason =
+  os.freemem() < SHORT_OF_MEMORY ? `only ${(os.freemem() / 1024 ** 3).toFixed(1)} GB of memory is free` : undefined
 const fullReason = has("--full")
   ? "asked for"
   : (changed.find((f) => FULL_IF.some((re) => re.test(f))) ??
-    changed.filter((f) => /(^|\/)package\.json$/.test(f)).find((f) => depsChanged(f)))
+    changed.filter((f) => /(^|\/)package\.json$/.test(f)).find((f) => depsChanged(f)) ??
+    memoryReason)
 say(`${changed.length} file${changed.length === 1 ? "" : "s"} changed since ${base}`)
 
 // Workspaces and who depends on whom, from their package.json files.
