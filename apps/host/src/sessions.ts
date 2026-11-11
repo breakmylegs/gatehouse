@@ -2,6 +2,7 @@ import { noteCommit } from "./lineage.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
 import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
+import { freshSeed, seedEnv, seededCommand } from "./seeds.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
 import { InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
@@ -1518,10 +1519,14 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!claims.length || !run) return
     const root = findProjectRoot(this.cwd)
     const runs = new Map<string, Promise<ActionResult>>()
+    // D-010: the tests are run again with a fresh seed, the same one for every claim of this reply, and it is recorded.
+    const seed = freshSeed()
     for (const c of claims) {
       let outcome: ClaimOutcome = "unverified"
       let why: string
-      const cmd = commandFor(c, commands, this.cwd, root)
+      const found = commandFor(c, commands, this.cwd, root)
+      const seeded = found && (c.kind === "tests" || c.kind === "fixed")
+      const cmd = found && seeded ? { ...found, command: seededCommand(found.command, found.cwd, seed) } : found
       if ((c.kind === "tests" || c.kind === "fixed") && this.#testsWeakened)
         why = "the tests were weakened in this session"
       else if (!cmd) why = "there is no command to check it with"
@@ -1537,6 +1542,7 @@ export class Session extends EventEmitter<SessionEvents> {
               command: cmd.command,
               why: `checking Claude's claim: ${c.quote.slice(0, 80)}`,
               level: this.#resources,
+              ...(seeded ? { env: seedEnv(seed) } : {}),
             }),
           )
         const r = await runs.get(key)!
@@ -1551,7 +1557,14 @@ export class Session extends EventEmitter<SessionEvents> {
           why = `${cmd.command} failed when Codehouse ran it (exit ${r.exitCode})`
         }
       }
-      const entry = { kind: c.kind, quote: c.quote, outcome, why, ...(cmd ? { command: cmd.command } : {}) }
+      const entry = {
+        kind: c.kind,
+        quote: c.quote,
+        outcome,
+        why: seeded && outcome === "contradicted" ? `${why}, with the fresh seed ${seed}` : why,
+        ...(cmd ? { command: cmd.command } : {}),
+        ...(seeded ? { seed } : {}),
+      }
       this.#claims = [...this.#claims, entry].slice(-10)
       await this.#deps.audit
         .record({

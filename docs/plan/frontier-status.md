@@ -88,7 +88,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-003 | Change evidence pack | todo | | | |
 | D-004 | Diff-scoped mutation gate | todo | | | |
 | D-005 | Surviving-mutant tasks | todo | | | |
-| D-010 | Randomised check seeds | todo | | | |
+| D-010 | Randomised check seeds | built | slice/D-010-check-seeds | BUILD_REPORT "Frontier D-010" | CODEHOUSE_SEED, and Vitest's and Jest's own seed flags; recorded with the claim |
 | D-011 | Flake quarantine | todo | | | |
 | D-016 | Taint-tracked egress guard | todo | | | Provenance labels (B32) exist |
 | D-017 | Subagent boundary labels | todo | | | |

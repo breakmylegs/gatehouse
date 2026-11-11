@@ -34,6 +34,8 @@ export interface ActionRequest {
   why: string
   level: ResourceLevel
   timeoutMs?: number
+  /** D-010: more for its environment (a check's seed); credentials are taken out of these too. */
+  env?: Record<string, string>
 }
 
 export interface ActionResult {
@@ -145,7 +147,7 @@ export async function runCodehouseAction(r: ActionRequest, d: ActionDeps): Promi
   }
   if (d.kill.isEngaged()) return await notRun("the kill switch is engaged")
 
-  const child = startCommand(d, r.command, r.cwd, withoutCredentials(d.env ?? process.env), r.level)
+  const child = startCommand(d, r.command, r.cwd, withoutCredentials({ ...(d.env ?? process.env), ...(r.env ?? {}) }), r.level)
   let output = ""
   const keep = (b: Buffer) => {
     if (output.length < 400_000) output += b.toString("utf8")
