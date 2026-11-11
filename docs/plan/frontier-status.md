@@ -90,7 +90,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-005 | Surviving-mutant tasks | todo | | | |
 | D-010 | Randomised check seeds | built | slice/D-010-check-seeds | BUILD_REPORT "Frontier D-010" | CODEHOUSE_SEED, and Vitest's and Jest's own seed flags; recorded with the claim |
 | D-011 | Flake quarantine | built | slice/D-011-flake-quarantine | BUILD_REPORT "Frontier D-011" | Five runs with their seeds; flaky is a mark on a contradicted claim (older screens read it); skipping goes through D-001 |
-| D-016 | Taint-tracked egress guard | todo | | | Provenance labels (B32) exist |
+| D-016 | Taint-tracked egress guard | built | slice/D-016-taint-egress | BUILD_REPORT "Frontier D-016" | Addresses, hosts, emails and long tokens from pages, servers and untrusted files; network calls and writes outside the project; never approved by Extreme |
 | D-017 | Subagent boundary labels | todo | | | |
 | D-026 | Policy regression from real history | todo | | | |
 | D-027 | Step-exact reconstruction | todo | | | |

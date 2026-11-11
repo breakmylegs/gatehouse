@@ -265,7 +265,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           },
         )
         // B32: a command copied from what Claude read goes to a person, even in these modes.
-        const verdict = withProvenance(judged, input.tool_name, toolInput, deps.provenance)
+        const verdict = withProvenance(judged, input.tool_name, toolInput, deps.provenance, cwd)
         deps.verdicts?.set(input.tool_use_id, verdict)
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
@@ -326,12 +326,17 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       if (note) notes.set(String(input.tool_use_id), note)
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
-        deps.provenance?.add(input.tool_response)
+        deps.provenance?.add(
+          input.tool_response,
+          input.tool_name === "WebFetch" && typeof asRecord(input.tool_input).url === "string"
+            ? `the page ${String(asRecord(input.tool_input).url).slice(0, 120)}`
+            : `what ${input.tool_name} returned`,
+        )
       // D-015: a file that is not the project's own words (a README, a dependency's code), read in the session.
       if (input.hook_event_name === "PostToolUse" && input.tool_name === "Read" && deps.provenance) {
         const file = asRecord(input.tool_input).file_path
         if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
-          deps.provenance.addUntrustedFile(input.tool_response)
+          deps.provenance.addUntrustedFile(input.tool_response, file)
       }
       // D-030: a commit the session made gets a note of its approvals' lineage.
       if (input.hook_event_name === "PostToolUse" && makesCommit(input.tool_name, asRecord(input.tool_input)))

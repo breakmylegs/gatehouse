@@ -2,7 +2,7 @@ import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
 import { dryRunPlan, estimateWords } from "./plan-dry-run.js"
 import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
-import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
+import { EGRESS_RULE, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
@@ -209,7 +209,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           },
         ))
       // B32: the hook already applied it to an early verdict; applying it again changes nothing.
-      let verdict = withProvenance(judged, toolName, input, deps.provenance)
+      let verdict = withProvenance(judged, toolName, input, deps.provenance, deps.cwd)
       // D-007: a call that would change a locked test goes to a person, whatever the rules said, unless they denied it.
       // Locks that cannot be read count as touched (fail closed). Recorded before anything is decided.
       if (deps.locks && verdict.outcome !== "deny") {
@@ -402,6 +402,8 @@ export const PLAN_EDIT_TOOLS: ReadonlySet<string> = new Set([
 export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   // B32: a command copied from a web page is always a person's decision.
   TAINT_RULE,
+  // D-016: so is one that sends on a value from an untrusted source.
+  EGRESS_RULE,
   // D-007: a locked test changes only with a person.
   LOCKED_TEST_RULE,
   // D-096: installing software on Windows runs a publisher's installer with your rights.
