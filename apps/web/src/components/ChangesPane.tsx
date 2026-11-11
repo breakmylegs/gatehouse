@@ -20,6 +20,10 @@ interface Hunk {
 }
 import { send, useStore } from "../store"
 
+/** D-056: the lockfiles Codehouse reads for an SBOM (as packages/policy/src/lockfiles.ts names them). */
+const LOCKFILE =
+  /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
+
 interface Checkpoint {
   ref: string
   createdAt: string
@@ -261,6 +265,27 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
             >
               Undo all of these
             </button>
+            {files.some((f) => LOCKFILE.test(f.path)) ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  void send({ type: "change_sbom", sessionId, ref: since.ref }).then((r) => {
+                    if (!r.ok) return void toast.error(r.error?.message ?? "The SBOM could not be made")
+                    const blob = new Blob([JSON.stringify((r.data as { bom: unknown }).bom, null, 2)], {
+                      type: "application/vnd.cyclonedx+json",
+                    })
+                    const a = document.createElement("a")
+                    a.href = URL.createObjectURL(blob)
+                    a.download = "dependency-changes.cdx.json"
+                    a.click()
+                    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+                  })
+                }
+              >
+                Download the SBOM of these changes
+              </button>
+            ) : null}
           </div>
         </>
       )}

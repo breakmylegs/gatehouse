@@ -95,7 +95,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-026 | Policy regression from real history | built | slice/D-026-policy-regression | BUILD_REPORT "Frontier D-026" | Every save of the rules (file, Library, Your choices); typed phrase names the count; compared with the rules in force |
 | D-027 | Step-exact reconstruction | todo | | | |
 | D-029 | Audit anchoring | todo | | | |
-| D-056 | SBOM per change | todo | | | |
+| D-056 | SBOM per change | built | slice/D-056-sbom | BUILD_REPORT "Frontier D-056" | Made by Codehouse from the lockfiles' text, no tool; ten lockfile kinds; ajv only to test it against the schema; D-003 will carry it |
 | D-057 | Offline vulnerability snapshot | todo | | | Safe variant; connector per conflict 1 |
 | D-061 | Untrusted content scanner | built | slice/D-061-injection-scan | BUILD_REPORT "Frontier D-061" | updatedToolOutput, which the SDK's types give for every tool (recorded in sdk-notes); fewer than 2 of 20 benign fixtures flagged, to be run |
 | D-062 | Local SAST on agent diffs | todo | | | |

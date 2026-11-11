@@ -15,7 +15,8 @@ import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify, { type FastifyInstance } from "fastify"
 import type { WebSocket } from "ws"
-import { checkRemember, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { checkRemember, isLockfile, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { lockfileChanges, sbomDiff, type DependencyChange } from "./sbom.js"
 import {
   ClientMessage,
   WS_SUBPROTOCOL,
@@ -887,6 +888,25 @@ export class HostServer {
       case "changes": {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+      }
+      case "change_sbom": {
+        // D-056: from the lockfiles as they were at the checkpoint and as they are now; nothing runs or is fetched.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        const locks = c.since ? ("files" in c ? c.files : []).filter((x) => isLockfile(x.path)).slice(0, 20) : []
+        const all: DependencyChange[] = []
+        for (const x of locks) {
+          const v = await a.checkpoints.versions(s.cwd, c.since!.ref, x.path)
+          all.push(...lockfileChanges(x.path, v.before, v.after))
+        }
+        return {
+          lockfiles: locks.map((x) => x.path),
+          bom: sbomDiff(all, {
+            project: s.project,
+            version: a.updates?.status().current ?? "unknown",
+            ...(c.since ? { describe: `changes since ${c.since.label} (${c.since.ref})` } : {}),
+          }),
+        }
       }
       case "change_versions": {
         const s = this.#session(cmd.sessionId)

@@ -222,6 +222,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-056: what the changes since the checkpoint do to the dependencies, as a CycloneDX 1.6 document. Read only. */
+  z.object({
+    type: z.literal("change_sbom"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
   /** One changed file as it was at the checkpoint and as it is now, for the side-by-side diff (B11). Read only. */
   z.object({
     type: z.literal("change_versions"),
