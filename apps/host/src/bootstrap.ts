@@ -762,7 +762,8 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   const updates = new UpdateService({
     installDir,
-    sourceVersion: installDir ? "0.0.0-source" : sourceVersion(),
+    // Mac fork: Codehouse.app says its own version (packaging/mac/Host.swift).
+    sourceVersion: installDir ? "0.0.0-source" : (env.GATEHOUSE_MAC_APP_VERSION ?? sourceVersion()),
     dir: path.join(gatehouseDataDir(env), "updates"),
     source: updateSource,
     ...(testKey ? { keys: [testKey] } : {}),

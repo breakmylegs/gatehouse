@@ -15,6 +15,7 @@ import { UpdateError, type UpdateSource } from "./source.js"
 import { readInstalled, stageRelease, type StageProgress } from "./stage.js"
 import { MANIFEST_FILE, MOVE_OVER_FILE, STAGED_MARKER } from "./tree.js"
 import { compareVersions, isNewer, parseVersion } from "./version.js"
+import { macAppWhy } from "./why-mac.js" // Mac fork
 
 export interface UpdateSettings {
   checkEveryMinutes: number
@@ -141,7 +142,7 @@ export class UpdateService extends EventEmitter<{
 
   #whyNot(): string | undefined {
     if (!this.#o.installDir || !this.#installed)
-      return "Codehouse is running from its source folder. Update it with git pull, or install it with Codehouse-Setup.exe."
+      return macAppWhy() ?? "Codehouse is running from its source folder. Update it with git pull, or install it with Codehouse-Setup.exe."
     try {
       const probe = `${this.#o.installDir}.write-check`
       fs.mkdirSync(probe, { recursive: true })
