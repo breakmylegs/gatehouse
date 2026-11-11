@@ -82,3 +82,10 @@ export function voiceCopy(mac = isMac()): {
       "Voice typing is part of the Codehouse window, so there is no microphone button in a browser. Win+H still starts Windows voice typing in any text box.",
   }
 }
+
+/**
+ * Upstream's words on Windows, the Mac's own on a Mac. Each hook keeps upstream's sentence where it was, wrapped in
+ * this, so a change upstream makes to it shows as a conflict on that one line.
+ */
+export const onMac = (windows: string, mac: string, onAMac = isMac()): string =>
+  onAMac ? mac : windows

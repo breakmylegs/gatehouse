@@ -3,6 +3,7 @@
 // (the Dock icon bounces and a notification says so, never what the request is). Quit stops the Host and the Approver.
 import AppKit
 import IOKit.pwr_mgt
+import ServiceManagement
 import UserNotifications
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
@@ -410,7 +411,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     q.target = self
     quickItem = q
     menu.addItem(.separator())
+    let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    login.target = self
+    loginItem = login
+    menu.addItem(.separator())
     menu.addItem(withTitle: "Quit Codehouse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+    menu.delegate = self
     item.menu = menu
     status = item
     setStatusImage(attention: false)
@@ -438,6 +444,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
   @objc private func showData() {
     NSWorkspace.shared.open(Paths.dataDir)
+  }
+
+  // MARK: open at login
+
+  private var loginItem: NSMenuItem?
+
+  /// The tick shows what macOS has now, read each time the menu opens: you can also change it in System Settings,
+  /// General, Login Items.
+  func menuWillOpen(_ menu: NSMenu) {
+    loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
+  }
+
+  @objc private func toggleLogin() {
+    let service = SMAppService.mainApp
+    do {
+      if service.status == .enabled { try service.unregister() } else { try service.register() }
+    } catch {
+      let a = NSAlert()
+      a.messageText = "Codehouse could not change whether it opens at login"
+      a.informativeText =
+        "\(error.localizedDescription)\n\nYou can add it yourself in System Settings, General, Login Items."
+      a.runModal()
+    }
+    if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
   }
 
   private func buildMenu() {

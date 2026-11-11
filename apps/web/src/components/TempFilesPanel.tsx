@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { onMac } from "../lib/platform-mac" // Mac fork
 
 const mb = (bytes: number) =>
   bytes >= 1024 ** 3
@@ -42,7 +43,7 @@ export function TempFilesPanel() {
   return (
     <div className="grid gap-2">
       <p className="m-0 text-xs text-mut">
-        Temporary files Codehouse and its checks leave in the Windows temp folder when a run is cut
+        Temporary files Codehouse and its checks leave in {onMac("the Windows temp folder", "the Mac's temporary folder")} when a run is cut
         off. Codehouse clears those an hour old or more when it starts and once a day, and asks
         every coding session to delete the temporary files it makes. Nothing else in the temp folder
         is touched.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { onMac } from "../lib/platform-mac" // Mac fork
 import { send } from "../store"
 
 /**
@@ -31,9 +32,10 @@ export function MemoryCard({ onRetry }: { onRetry?: () => void }) {
       <strong>Not started: this computer is short of memory</strong>
       <p className="m-0">
         {st?.reading && st.percent !== undefined
-          ? `Memory is ${st.percent}% committed (${gb(st.reading.commitUsed)} of ${gb(st.reading.commitLimit)}), over the ${st.point ?? 85}% set in Settings, Sessions, Memory. `
-          : "Memory is committed past the point set in Settings, Sessions, Memory. "}
-        Starting more now could make Windows run out and stop the sessions you have. Suspend one you
+          ? // Mac fork: a Mac's reading is a share out of 100, not bytes (memory-governor-mac.ts).
+            onMac(`Memory is ${st.percent}% committed (${gb(st.reading.commitUsed)} of ${gb(st.reading.commitLimit)}), over the ${st.point ?? 85}% set in Settings, Sessions, Memory. `, `Memory is ${st.percent}% in use, over the ${st.point ?? 85}% set in Settings, Sessions, Memory. `)
+          : onMac("Memory is committed past the point set in Settings, Sessions, Memory. ", "Memory in use is past the point set in Settings, Sessions, Memory. ")}
+        {onMac("Starting more now could make Windows run out and stop the sessions you have.", "Starting more now could leave macOS short of memory, which slows or stops the sessions you have.")} Suspend one you
         are not using, close other programs, or change the point in Settings.
       </p>
       {st?.idle.length ? (

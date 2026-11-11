@@ -4,6 +4,7 @@ import {
   isMac,
   keyLabel,
   markPlatform,
+  onMac,
   systemName,
   trayName,
   voiceCopy,
@@ -54,5 +55,15 @@ describe("the interface on a Mac", () => {
     expect(voiceCopy(false).title).toBe("Speak: Windows types what you say here (Win+H)")
     expect(trayName(true)).toBe("menu bar")
     expect(trayName(false)).toBe("tray")
+  })
+
+  it("keeps upstream's sentence on Windows and gives the Mac's own on a Mac", () => {
+    expect(onMac("in the Windows temp folder", "in the Mac's temporary folder", false)).toBe(
+      "in the Windows temp folder",
+    )
+    expect(onMac("in the Windows temp folder", "in the Mac's temporary folder", true)).toBe(
+      "in the Mac's temporary folder",
+    )
+    expect(onMac("a", "b", isMac(SAFARI))).toBe("b")
   })
 })
