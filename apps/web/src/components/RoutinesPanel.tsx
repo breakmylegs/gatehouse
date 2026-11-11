@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { clock, money } from "../lib/format"
 import { send, useStore } from "../store"
+import { isMac } from "../lib/platform-mac" // Mac fork
 
 interface Routine {
   id: string
@@ -241,7 +242,7 @@ export function RoutinesPanel() {
             <span>Folder</span>
             <input
               className="field mono"
-              placeholder="C:\dev\shop"
+              placeholder={isMac() ? "/Users/you/dev/shop" : "C:\\dev\\shop"} // Mac fork
               value={draft.folder}
               onChange={(e) => setDraft({ ...draft, folder: e.target.value })}
             />

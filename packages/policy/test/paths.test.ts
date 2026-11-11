@@ -24,9 +24,10 @@ afterAll(() => fx.dispose())
 describe("normaliseRaw and toKey", () => {
   it("turns separators and Git Bash drives into drive-letter paths", () => {
     expect(normaliseRaw("C:\\dev\\x")).toBe("C:/dev/x")
-    expect(normaliseRaw("/c/dev/x")).toBe("C:/dev/x")
-    expect(normaliseRaw("/c")).toBe("C:/")
-    expect(normaliseRaw("/mnt/d/x")).toBe("D:/x")
+    // Mac fork: Windows named, since on a Mac /c and /mnt/d are folders (paths-mac.test.ts).
+    expect(normaliseRaw("/c/dev/x", "win32")).toBe("C:/dev/x")
+    expect(normaliseRaw("/c", "win32")).toBe("C:/")
+    expect(normaliseRaw("/mnt/d/x", "win32")).toBe("D:/x")
     expect(normaliseRaw("/usr/bin")).toBe("/usr/bin")
   })
   it("lower-cases and drops trailing separators but keeps a drive root", () => {

@@ -6,6 +6,7 @@ import { parse as parseYaml } from "yaml"
 import { canonicalize, sha256Hex } from "@gatehouse/shared"
 import { FILE_TOOLS, SHELL_TOOLS } from "./analyse.js"
 import { realKey, resolvePath, toKey } from "./paths.js"
+import { isLocalAbsolute } from "./paths-mac.js" // Mac fork
 import { checkOverlay, checkRememberFile, checkRulesFile } from "./schema.js"
 import { loadLibrary, mergeRules, readUserRules } from "./library.js"
 import type { GrantLimits, Overlay, Policy, RememberFile, Rule, RulesFile } from "./types.js"
@@ -174,7 +175,7 @@ function rememberToRules(
         errors.push(`remember/${entry.id}: a path rule needs a file tool (Read, Edit, Write, MultiEdit, NotebookEdit)`)
         continue
       }
-      if (!/^[a-zA-Z]:[\\/]/.test(entry.path)) {
+      if (!isLocalAbsolute(entry.path)) { // Mac fork: a Mac's /Users/... too
         errors.push(`remember/${entry.id}: a path rule needs an absolute path`)
         continue
       }

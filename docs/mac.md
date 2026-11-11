@@ -15,6 +15,8 @@ npm start -- --relay      also the phone Relay (docs/relay-local.md)
 
 `npm start` is `scripts/start.mjs`, which does what `scripts/start.ps1` does with Node alone.
 
+**Set your workspace first.** The shipped rules file names Windows folders (`C:/dev`, `C:/Users/<you>/source`) as your workspace, and on a Mac those are nowhere, so until you set one, every edit is denied as outside your folders and every read waits for you. In **Settings, Account and plan**, set **Where new projects go** to a folder such as `/Users/you/dev` (it counts as a workspace folder), or list your folders under **Workspace roots**, one per line. Then restart Codehouse.
+
 ## What is ported
 
 | Part | On a Mac |
@@ -26,6 +28,7 @@ npm start -- --relay      also the phone Relay (docs/relay-local.md)
 | Show in folder | Finder, with the file selected |
 | Terminal pane | `/bin/zsh -f`; Stop ends the command's whole process group |
 | Keep the computer awake while a session works | `caffeinate -i`, started by `npm start` when the Host asks (on Windows the window app does it) |
+| Project folders | Mac paths such as `/Users/you/dev` for the projects folder, routines, task board cards and remembered file rules (`packages/shared/src/node/folders-mac.ts`, `packages/policy/src/paths-mac.ts`). Upstream accepted only drive paths such as `C:\dev`, so on a Mac the projects folder could not be set and nothing counted as your workspace. The projects folder may not be `/` or a system folder (`/System`, `/Library`, `/Applications`, `/usr` and the like). `/c/...` and `/mnt/c/...` stay Mac folders, where on Windows the policy reads them as Git Bash's and WSL's names for drive C. |
 | Held-out checks and locked tests, sealed | The Keychain, through the same `sealerFor()` |
 | The memory governor | The share of memory in use from `sysctl kern.memorystatus_level`, macOS's memory pressure figure (`memory-governor-mac.ts`). A Mac has no commit limit, so the point in Settings is the share in use: at the default 85%, nothing heavy starts while less than 15% is free or reclaimable. Upstream read Windows' commit charge through `Codehouse-Helper.exe`, so on a Mac it had no reading and refused nothing. Its messages still say "committed". |
 | Open in Claude, and the browser tools' page look | Edge from `/Applications` with the same `--app` arguments, or `open` for your default browser and the Claude app (`chat/handoff-mac.ts`). Upstream found Edge in the Windows registry and opened addresses through `Codehouse-Helper.exe`, so all three failed on a Mac. |
@@ -83,7 +86,7 @@ When a merge conflicts, take upstream's code as it is and put back the `Mac fork
 
 Merge, do not rebase, so upstream's commit hashes stay the same as in its release notes and `changes.json`.
 
-The hooks in upstream's files: `packages/shared/src/node/paths.ts`, `apps/host/src/relay/protector.ts` (in `sealerFor()`), `apps/host/src/bootstrap.ts` (the pickers, the hand-off launcher and the memory reader), `apps/host/src/chat/handoff.ts` (`findEdge()`, `hasAppLink()`), `apps/host/src/terminal.ts`, `apps/host/src/files-api.ts`, `apps/host/test/helper-exe.test.ts`, and the `start` and `sync:upstream` lines in `package.json`. In the interface: `main.tsx` (the two stylesheets and the platform mark), `App.tsx` (`⌘,`), `Menu.tsx`, `CommandPalette.tsx`, `ShortcutSheet.tsx`, `CommandDeck.tsx`, `Rail.tsx` (shortcut labels), `SettingsPanels.tsx` and `lib/appearance.ts` (copy and the code font), `Approvals.tsx` and `Workspace.tsx` (Command as well as Ctrl), and `TerminalPane.tsx`.
+The hooks in upstream's files: `packages/shared/src/node/paths.ts`, `apps/host/src/relay/protector.ts` (in `sealerFor()`), `apps/host/src/bootstrap.ts` (the pickers, the hand-off launcher and the memory reader), `apps/host/src/chat/handoff.ts` (`findEdge()`, `hasAppLink()`), `packages/shared/src/node/config.ts` (the projects folder), `apps/host/src/board.ts`, `routines.ts` and `sessions.ts` (folder paths), `packages/policy/src/paths.ts` (`normaliseRaw()`), `loader.ts` and `host-helpers.ts` (remembered file rules), `packages/policy/test/paths.test.ts`, `apps/web/src/lib/choices.ts` and `RoutinesPanel.tsx`, `apps/host/src/terminal.ts`, `apps/host/src/files-api.ts`, `apps/host/test/helper-exe.test.ts`, and the `start` and `sync:upstream` lines in `package.json`. In the interface: `main.tsx` (the two stylesheets and the platform mark), `App.tsx` (`⌘,`), `Menu.tsx`, `CommandPalette.tsx`, `ShortcutSheet.tsx`, `CommandDeck.tsx`, `Rail.tsx` (shortcut labels), `SettingsPanels.tsx` and `lib/appearance.ts` (copy and the code font), `Approvals.tsx` and `Workspace.tsx` (Command as well as Ctrl), and `TerminalPane.tsx`.
 
 Do not run Prettier over upstream's files: upstream does not keep them formatted, and rewrapping its lines turns every later change near them into a conflict. Format only the fork's own files, or the lines you add.
 

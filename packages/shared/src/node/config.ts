@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { z } from "zod"
 import { gatehouseDataDir } from "./paths.js"
+import { MAC_PROJECTS_FOLDER } from "./folders-mac.js" // Mac fork
 
 /** How often Codehouse looks for a new version, in minutes. 0 means never. */
 /** A folder on a drive, below its root, outside Windows and Program Files. */
@@ -70,8 +71,10 @@ function build(loose: boolean) {
       .string()
       .max(240)
       .regex(
-        PROJECTS_FOLDER,
-        "must be a full folder path, not a drive, a network path or a Windows folder",
+        process.platform === "darwin" ? MAC_PROJECTS_FOLDER : PROJECTS_FOLDER, // Mac fork
+        process.platform === "darwin"
+          ? "must be a full folder path such as /Users/you/dev, not / or a system folder"
+          : "must be a full folder path, not a drive, a network path or a Windows folder",
       )
       .optional(),
     /** Replaces the quiet hours in the rules file. Absent means use the rules file. */

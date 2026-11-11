@@ -22,6 +22,7 @@ import {
 } from "@gatehouse/policy"
 import { projectName, sanitiseEnv, uuidv7 } from "@gatehouse/shared"
 import type { GatehouseConfig } from "@gatehouse/shared/node"
+import { folderExample } from "@gatehouse/shared/node" // Mac fork
 import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
@@ -121,7 +122,7 @@ export class ChatModeError extends Error {
 export function ensureFolder(cwd: string, log: (line: string) => void = () => undefined): void {
   if (!path.isAbsolute(cwd))
     throw new SessionFolderError(
-      `"${cwd}" is not a full folder path. Type the whole path, for example C:\\dev\\my-project.`,
+      `"${cwd}" is not a full folder path. Type the whole path, for example ${folderExample("my-project")}.`, // Mac fork
     )
   let stat: fs.Stats | undefined
   try {

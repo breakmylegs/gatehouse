@@ -17,8 +17,10 @@ export interface ResolvedPath {
 export const DYNAMIC_PLACEHOLDER = "__dyn__"
 
 /** Forward slashes, Git Bash drive prefixes (/c/dev) turned into C:/dev, no trailing separator. */
-export function normaliseRaw(raw: string): string {
+export function normaliseRaw(raw: string, platform: NodeJS.Platform = process.platform): string {
   let p = raw.replace(/\\/g, "/")
+  // Mac fork: /c/... and /mnt/c/... are Git Bash's and WSL's names for drive C on Windows; on a Mac they are folders.
+  if (platform === "darwin") return p
   const gitBash = /^\/([a-zA-Z])(\/|$)/.exec(p)
   if (gitBash && gitBash[1]) p = `${gitBash[1].toUpperCase()}:/${p.slice(3)}`
   const mnt = /^\/mnt\/([a-zA-Z])(\/|$)/.exec(p)

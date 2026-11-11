@@ -1,7 +1,7 @@
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
-import { writeFileAtomic } from "@gatehouse/shared/node"
+import { folderExample, isFullFolder, writeFileAtomic } from "@gatehouse/shared/node" // Mac fork: folders
 import type { Trigger } from "./routine-triggers.js"
 
 /**
@@ -61,8 +61,8 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
   const prompt = String(r.prompt ?? "").trim()
   if (!name || name.length > 60)
     throw new RoutineError("A routine needs a name of up to 60 characters.")
-  if (!/^[A-Za-z]:[\\/]/.test(folder))
-    throw new RoutineError("A routine needs a full folder path, such as C:\\dev\\shop.")
+  if (!isFullFolder(folder)) // Mac fork: a Mac's /Users/... too
+    throw new RoutineError(`A routine needs a full folder path, such as ${folderExample("shop")}.`)
   if (!prompt || prompt.length > 8000)
     throw new RoutineError("A routine needs a prompt of up to 8,000 characters.")
   const kind = (r.trigger as { kind?: unknown } | undefined)?.kind

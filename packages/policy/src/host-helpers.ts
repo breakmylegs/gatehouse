@@ -8,6 +8,7 @@ import { checkFloor, type FloorHit } from "./floor.js"
 import { checkRememberFile } from "./schema.js"
 import type { PwshWorker } from "./pwsh.js"
 import { findProjectRoot } from "./paths.js"
+import { isLocalAbsolute } from "./paths-mac.js" // Mac fork
 import type { EvalContext, GrantLimits, Policy, RememberEntry, ToolCall } from "./types.js"
 import { grantLimitsPath } from "./loader.js"
 
@@ -127,7 +128,7 @@ export async function checkRemember(
     if (features.targets.length !== 1 || !target) {
       return { ok: false, reason: "Only a single file path can be remembered." }
     }
-    if (target.unc || target.device || !/^[a-zA-Z]:[\\/]/.test(target.abs)) {
+    if (target.unc || target.device || !isLocalAbsolute(target.abs)) { // Mac fork: a Mac's /Users/... too
       return { ok: false, reason: "Only a local path on a drive can be remembered." }
     }
     return {
