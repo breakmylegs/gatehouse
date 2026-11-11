@@ -344,6 +344,11 @@ function build(loose: boolean) {
      * is used instead when it sets one.
      */
     allowedLicences: z.array(z.string().max(120)).max(200).optional(),
+    /** D-003: how long change evidence packs are kept. Absent: 90 days. */
+    evidence: z
+      .object({ retentionDays: z.number().int().min(1).max(3650) })
+      .passthrough()
+      .optional(),
     memoryGovernor: z
       .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
       .passthrough()

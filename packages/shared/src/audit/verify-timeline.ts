@@ -101,5 +101,54 @@ export function verifyTimelineExport(dir: string): AuditProblem[] {
     )
       add("timeline.json", "the entry does not say what its last record says", e.seq)
   }
+  problems.push(...verifyEvidence(dir, head, bySeq, t.session))
+  return problems
+}
+
+/** Every { seq, hash } in an evidence pack, wherever it is. */
+function linksIn(v: unknown, out: Array<{ seq: number; hash: string }> = []): Array<{ seq: number; hash: string }> {
+  if (Array.isArray(v)) for (const x of v) linksIn(x, out)
+  else if (v && typeof v === "object") {
+    const o = v as Record<string, unknown>
+    if (typeof o.seq === "number" && typeof o.hash === "string") out.push({ seq: o.seq, hash: o.hash })
+    for (const x of Object.values(o)) if (x && typeof x === "object") linksIn(x, out)
+  }
+  return out
+}
+
+/**
+ * D-003: an evidence pack in the export (evidence.json, signed in evidence.sig over its bytes and head.json's, with the
+ * timeline's key). The signature must hold, the pack must be this session's, and every audit record it links to must
+ * be in the export with the hash it gives, except the chain's head at the time, which may be later than the export.
+ */
+function verifyEvidence(dir: string, head: Buffer, bySeq: ReadonlyMap<number, AuditRecord>, session: string): AuditProblem[] {
+  const file = path.join(dir, "evidence.json")
+  if (!fs.existsSync(file)) return []
+  const problems: AuditProblem[] = []
+  const add = (reason: string, seq?: number) => problems.push({ file: "evidence.json", line: 0, ...(seq !== undefined ? { seq } : {}), reason })
+  const bytes = fs.readFileSync(file)
+  try {
+    const jwk = JSON.parse(fs.readFileSync(path.join(dir, "timeline-key.json"), "utf8")) as crypto.JsonWebKey
+    const key = crypto.createPublicKey({ key: jwk, format: "jwk" })
+    const sig = Buffer.from(fs.readFileSync(path.join(dir, "evidence.sig"), "utf8").trim(), "base64")
+    if (!crypto.verify("sha256", signedBytes(bytes, head), { key, dsaEncoding: "ieee-p1363" }, sig))
+      add("the signature does not match evidence.json and head.json, so one of them was changed")
+  } catch {
+    add("the evidence's signature or its key could not be read")
+  }
+  let pack: { v?: number; session?: string; head?: unknown }
+  try {
+    pack = JSON.parse(bytes.toString("utf8")) as typeof pack
+  } catch {
+    add("evidence.json is not an evidence pack")
+    return problems
+  }
+  if (pack.v !== 1 || pack.session !== session) add("evidence.json is not this session's evidence pack")
+  const { head: _h, ...rest } = pack
+  for (const l of linksIn(rest)) {
+    const r = bySeq.get(l.seq)
+    if (!r) add(`record ${l.seq} is not in this export`, l.seq)
+    else if (r.hash !== l.hash) add(`record ${l.seq} is not the one the evidence names`, l.seq)
+  }
   return problems
 }

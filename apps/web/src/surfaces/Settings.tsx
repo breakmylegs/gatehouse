@@ -63,6 +63,7 @@ interface Config {
   testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
   riskBudget?: { points: number; off?: boolean }
   allowedLicences?: string[]
+  evidence?: { retentionDays: number }
   dataClassification?: { default?: string; projects?: Record<string, string> }
   outputStyle?: string
   worktreeLocation?: { where: "beside" | "inside" | "folder"; folder?: string }
@@ -132,6 +133,8 @@ interface Values {
   tiProjects: string
   /** D-055: the licences allowed without asking, one to a line; empty is the permissive default. */
   licences: string
+  /** D-003: the days evidence packs are kept. */
+  evDays: string
   /** D-085: each project's classification, one "folder: level" to a line, and the default. */
   dcProjects: string
   dcDefault: string
@@ -195,6 +198,7 @@ function valuesOf(d: SettingsData): Values {
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
     licences: (c.allowedLicences ?? []).join("\n"),
+    evDays: String(c.evidence?.retentionDays ?? 90),
     dcProjects: Object.entries(c.dataClassification?.projects ?? {})
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n"),
@@ -305,6 +309,10 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   const licences = lines(v.licences)
   if (licences.length) body.allowedLicences = licences
   else delete body.allowedLicences
+  // D-003: absent is 90 days, so nothing is written until it is changed.
+  const evDays = Math.round(Number(v.evDays))
+  if (Number.isFinite(evDays) && evDays >= 1 && evDays <= 3650 && (evDays !== 90 || d.saved.evidence))
+    body.evidence = { ...(d.saved.evidence ?? {}), retentionDays: evDays }
   // D-001: absent is no project strict, so nothing is written until one is.
   const strictProjects = v.tiProjects
     .split(/\r?\n/)
@@ -407,6 +415,7 @@ export const DEFAULT_VALUES: Values = {
   rbPoints: "",
   tiProjects: "",
   licences: "",
+  evDays: "90",
   dcProjects: "",
   dcDefault: "internal",
   effortCap: "",
@@ -683,6 +692,7 @@ export function Settings() {
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
   const licChanged = differs(v, ["licences"])
+  const evChanged = differs(v, ["evDays"])
   const dcChanged = differs(v, ["dcProjects", "dcDefault"])
   const effortChanged = differs(v, ["effortCap"])
   const styleChanged = differs(v, ["style"])
@@ -1250,6 +1260,20 @@ export function Settings() {
                   className="field mono min-h-[4.5rem]"
                   value={v.licences}
                   onChange={(e) => change({ licences: e.target.value }, "Licences")}
+                />
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Evidence" gap="gap-2" changed={evChanged}>
+              <Field
+                label="Keep each change's evidence pack for this many days"
+                help="A pack gathers what shows a change was done properly: the decisions and approvals, the commands and how they ended, the checked claims, the dependency changes and what the local analysis found. Older packs are removed when Codehouse starts. 90 by default."
+              >
+                <input
+                  className="field w-28"
+                  inputMode="numeric"
+                  value={v.evDays}
+                  onChange={(e) => change({ evDays: e.target.value.replace(/[^0-9]/g, "") }, "Evidence")}
                 />
               </Field>
             </Group>

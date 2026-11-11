@@ -46,6 +46,8 @@ export async function noteCommit(o: {
   project: string
   audit: Pick<HostAudit, "recordWithHash">
   log: (line: string) => void
+  /** D-003: makes the commit's evidence pack and gives its hash, for the note. */
+  evidence?: (commit: string) => Promise<string | undefined>
 }): Promise<LineageNote | undefined> {
   let commit: string
   try {
@@ -76,7 +78,18 @@ export async function noteCommit(o: {
     o.log("commit lineage: the audit record could not be written, so no note was made")
     return undefined
   }
-  const note: LineageNote = { codehouse: 1, session: o.sessionId, auditSeq: rec.seq, auditHash: rec.hash, at: rec.ts }
+  const evidence = await o.evidence?.(commit).catch((e: Error) => {
+    o.log(`commit lineage: no evidence pack (${e.message.slice(0, 120)})`)
+    return undefined
+  })
+  const note: LineageNote = {
+    codehouse: 1,
+    session: o.sessionId,
+    auditSeq: rec.seq,
+    auditHash: rec.hash,
+    at: rec.ts,
+    ...(evidence ? { evidence } : {}),
+  }
   try {
     await git(o.cwd, ["notes", `--ref=${NOTES_REF}`, "add", "-f", "-m", JSON.stringify(note), commit])
     return note

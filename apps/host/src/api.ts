@@ -59,6 +59,7 @@ import {
 } from "@gatehouse/policy"
 import { anchorsDirFor, AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
 import type { AnchorService } from "./anchors.js"
+import type { EvidenceStore } from "./evidence.js"
 import {
   configPath,
   GatehouseConfig,
@@ -181,6 +182,8 @@ export interface AdminContext {
   timelineSigner?: TimelineSigner
   /** D-029: the audit anchors. */
   anchors?: AnchorService
+  /** D-003: the evidence packs. */
+  evidence?: EvidenceStore
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -545,10 +548,22 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   })
 
   // C-011: one session's timeline, signed, in the audit bundle, with what both verifiers said of it.
+  // D-003: a session's evidence packs, newest first.
+  app.get("/api/evidence", async (req, reply) => {
+    const session = String((req.query as { session?: string }).session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    return { packs: (ctx.evidence?.packs(session) ?? []).slice(0, 20) }
+  })
+
   app.get("/api/timeline/export", async (req, reply) => {
     const session = String((req.query as { session?: string }).session ?? "")
     if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
     if (!ctx.timelineSigner || !ctx.auditVerifier) return bad(reply, 503, "Signed exports are not available here.")
+    // D-003: with an evidence pack of this session's, when one is named.
+    const sha = String((req.query as { evidence?: string }).evidence ?? "")
+    const evidence = sha ? ctx.evidence?.text(sha) : undefined
+    if (sha && (!evidence || (JSON.parse(evidence) as { session?: string }).session !== session))
+      return bad(reply, 404, "That evidence pack is not this session's, or it is no longer kept.")
     const records = sessionRecords(ctx.auditDir, session)
     const cwd = records.find((r) => r.cwd)?.cwd
     const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
@@ -559,13 +574,14 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       entries,
       signer: ctx.timelineSigner,
       verifier: ctx.auditVerifier,
+      ...(evidence !== undefined ? { evidence } : {}),
     })
     const written = await ctx.audit.record({
       session,
       event: "timeline_exported",
       channel: "desktop",
       tool: "audit",
-      input: { entries: entries.length, bytes: zip.length, fingerprint, verified: ok },
+      input: { entries: entries.length, bytes: zip.length, fingerprint, verified: ok, ...(sha ? { evidence: sha } : {}) },
       verdict: {
         outcome: "allow",
         ruleId: "timeline-exported",
@@ -1694,6 +1710,7 @@ const LIVE_SETTINGS = [
   "testIntegrity",
   "untrustedFiles",
   "allowedLicences",
+  "evidence",
   "dataClassification",
   "riskBudget",
   "outputStyle",

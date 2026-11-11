@@ -250,6 +250,65 @@ if (Test-Path -LiteralPath $timelineFile) {
     }
 }
 
+# D-003: an evidence pack in a timeline export: evidence.json signed with the timeline's key over its bytes followed by
+# head.json's, this session's, and every { seq, hash } it links to (except the head when it was made) a record here
+# with that hash. The same check as verify-timeline.ts.
+$evidenceFile = Join-Path $Dir 'evidence.json'
+if ((Test-Path -LiteralPath $evidenceFile) -and (Test-Path -LiteralPath $timelineFile)) {
+    $eBytes = [System.IO.File]::ReadAllBytes($evidenceFile)
+    $hBytes2 = if (Test-Path -LiteralPath $headFile) { [System.IO.File]::ReadAllBytes($headFile) } else { New-Object byte[] 0 }
+    try {
+        $ejwk = Read-Json ([System.IO.File]::ReadAllText((Join-Path $Dir 'timeline-key.json')))
+        $u = {
+            param([string]$s)
+            $b = $s.Replace('-', '+').Replace('_', '/')
+            switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+            [Convert]::FromBase64String($b)
+        }
+        $eq = New-Object System.Security.Cryptography.ECPoint
+        $eq.X = & $u $ejwk['x']
+        $eq.Y = & $u $ejwk['y']
+        $epar = New-Object System.Security.Cryptography.ECParameters
+        $epar.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+        $epar.Q = $eq
+        $eec = [System.Security.Cryptography.ECDsa]::Create($epar)
+        $esig = [Convert]::FromBase64String(([System.IO.File]::ReadAllText((Join-Path $Dir 'evidence.sig'))).Trim())
+        $edata = New-Object byte[] ($eBytes.Length + $hBytes2.Length)
+        [Array]::Copy($eBytes, 0, $edata, 0, $eBytes.Length)
+        [Array]::Copy($hBytes2, 0, $edata, $eBytes.Length, $hBytes2.Length)
+        if (-not $eec.VerifyData($edata, $esig, [System.Security.Cryptography.HashAlgorithmName]::SHA256)) {
+            Add-Problem 'evidence.json' 0 $null 'the signature does not match evidence.json and head.json, so one of them was changed'
+        }
+    } catch {
+        Add-Problem 'evidence.json' 0 $null "the evidence's signature or its key could not be read"
+    }
+    $ev = $null
+    try { $ev = Read-Json ([System.Text.Encoding]::UTF8.GetString($eBytes)) } catch { $ev = $null }
+    if ($null -eq $ev) { Add-Problem 'evidence.json' 0 $null 'evidence.json is not an evidence pack' }
+    else {
+        $tl = $null
+        try { $tl = Read-Json ([System.IO.File]::ReadAllText($timelineFile)) } catch { $tl = $null }
+        if ([long]$ev['v'] -ne 1 -or $null -eq $tl -or $ev['session'] -ne $tl['session']) { Add-Problem 'evidence.json' 0 $null "evidence.json is not this session's evidence pack" }
+        $links = New-Object System.Collections.ArrayList
+        $collect = $null
+        $collect = {
+            param($v)
+            if ($v -is [System.Collections.IDictionary]) {
+                if ((Test-IsInteger $v['seq']) -and $v['hash'] -is [string]) { [void]$links.Add(@([long]$v['seq'], [string]$v['hash'])) }
+                foreach ($k in @($v.Keys)) { $x = $v[$k]; if ($x -is [System.Collections.IDictionary] -or ($x -is [System.Collections.IEnumerable] -and $x -isnot [string])) { & $collect $x } }
+            } elseif ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) {
+                foreach ($x in $v) { & $collect $x }
+            }
+        }
+        foreach ($k in @($ev.Keys)) { if ($k -ne 'head') { $x = $ev[$k]; if ($x -is [System.Collections.IDictionary] -or ($x -is [System.Collections.IEnumerable] -and $x -isnot [string])) { & $collect $x } } }
+        foreach ($l in $links) {
+            $r = $bySeq[[long]$l[0]]
+            if ($null -eq $r) { Add-Problem 'evidence.json' 0 $l[0] "record $($l[0]) is not in this export" }
+            elseif ($r['hash'] -ne $l[1]) { Add-Problem 'evidence.json' 0 $l[0] "record $($l[0]) is not the one the evidence names" }
+        }
+    }
+}
+
 # D-029: each anchor's signature (ECDSA P-256, SHA-256, IEEE P1363) over its plain text, with the key in key.json,
 # and that the record it names still has the hash it anchored. The same check as anchors.ts.
 if ($Anchors -eq '') { $Anchors = Join-Path (Split-Path -Parent ([System.IO.Path]::GetFullPath($Dir))) 'anchors' }

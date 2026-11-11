@@ -222,6 +222,12 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-003: gathers the change since the checkpoint (the first, by default) into an evidence pack, kept and recorded. */
+  z.object({
+    type: z.literal("evidence_build"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
   /** D-062: what the local analysis finds on the lines changed since the checkpoint. Read only. */
   z.object({
     type: z.literal("change_findings"),

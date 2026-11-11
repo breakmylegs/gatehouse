@@ -102,6 +102,8 @@ interface ExportInput {
   entries: TimelineEntry[]
   signer: TimelineSigner
   verifier: string
+  /** D-003: an evidence pack's text, signed in the same way and checked by both verifiers. */
+  evidence?: string
 }
 
 /** The export as a zip, made in a folder of its own under the temp folder and removed straight after. */
@@ -130,6 +132,11 @@ export async function stageTimelineExport(
   const head = fs.readFileSync(path.join(stage, "head.json"))
   fs.writeFileSync(path.join(stage, "timeline.sig"), (await o.signer.sign(signedBytes(timeline, head))) + "\n")
   fs.writeFileSync(path.join(stage, "timeline-key.json"), JSON.stringify(await o.signer.publicJwk()) + "\n")
+  if (o.evidence !== undefined) {
+    const ev = Buffer.from(o.evidence, "utf8")
+    fs.writeFileSync(path.join(stage, "evidence.json"), ev)
+    fs.writeFileSync(path.join(stage, "evidence.sig"), (await o.signer.sign(signedBytes(ev, head))) + "\n")
+  }
   const fingerprint = await o.signer.fingerprint()
   fs.writeFileSync(path.join(stage, "VERIFY.txt"), TIMELINE_NOTE(fingerprint).replace(/\n/g, "\r\n"))
   // Both verifiers, on the export as it will be.
@@ -139,7 +146,7 @@ export async function stageTimelineExport(
   const powershell = await runPowerShellVerifier(path.join(stage, "verify-audit.ps1"), stage)
   fs.writeFileSync(path.join(stage, "verified.json"), JSON.stringify({ at: new Date().toISOString(), node, powershell }, null, 1) + "\n")
   return {
-    files: [...files, "timeline.json", "timeline.sig", "timeline-key.json", "verified.json"],
+    files: [...files, "timeline.json", "timeline.sig", "timeline-key.json", ...(o.evidence !== undefined ? ["evidence.json", "evidence.sig"] : []), "verified.json"],
     fingerprint,
     ok: node.ok && powershell.ok !== false,
   }

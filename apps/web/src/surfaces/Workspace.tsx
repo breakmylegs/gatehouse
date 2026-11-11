@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { Evidence } from "../components/Evidence"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
 import { InstructionsReview } from "../components/InstructionsReview"
@@ -350,6 +351,8 @@ function SessionPane({
   const [walkthrough, setWalkthrough] = useState(false)
   // C-010: every call of the session from the audit log, in order.
   const [timeline, setTimeline] = useState(false)
+  // D-003: the change's evidence pack.
+  const [evidence, setEvidence] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -584,6 +587,7 @@ function SessionPane({
     },
     ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
     ...(chat ? [] : [{ label: "Timeline...", onSelect: () => setTimeline(true) }]),
+    ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
     { kind: "separator" },
     {
       label: "Larger text",
@@ -792,6 +796,11 @@ function SessionPane({
       {timeline ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Timeline sessionId={session.id} onClose={() => setTimeline(false)} />
+        </div>
+      ) : null}
+      {evidence ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Evidence sessionId={session.id} onClose={() => setEvidence(false)} />
         </div>
       ) : null}
       {goalOpen ? (

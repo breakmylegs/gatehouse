@@ -69,6 +69,8 @@ export interface HostApp {
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
+  /** D-003: the change evidence packs. Absent where they cannot be kept (tests). */
+  evidence?: import("./evidence.js").EvidenceService
   /** D-059: the pins of what each project tells Claude. Absent where they cannot be kept (tests). */
   instructions?: InstructionPins
   /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
@@ -889,6 +891,13 @@ export class HostServer {
       case "changes": {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+      }
+      case "evidence_build": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.evidence) throw new CommandError("unavailable", "Evidence packs are not available here.")
+        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project }, cmd.ref ? { ref: cmd.ref } : {})
+        if (!got) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to gather.")
+        return got
       }
       case "change_findings": {
         // D-062: the lines each changed file adds, parsed as they are now; nothing runs.

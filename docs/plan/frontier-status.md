@@ -85,7 +85,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
-| D-003 | Change evidence pack | todo | | | |
+| D-003 | Change evidence pack | built | slice/D-003-evidence-pack | BUILD_REPORT "Frontier D-003" | Per commit and on demand; hash in the D-030 note; inside the signed timeline export; coverage and mutation deltas only once a run records them |
 | D-004 | Diff-scoped mutation gate | todo | | | |
 | D-005 | Surviving-mutant tasks | todo | | | |
 | D-010 | Randomised check seeds | built | slice/D-010-check-seeds | BUILD_REPORT "Frontier D-010" | CODEHOUSE_SEED, and Vitest's and Jest's own seed flags; recorded with the claim |

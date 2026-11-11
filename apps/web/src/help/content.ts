@@ -243,6 +243,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **A plan's card** says, before you approve it, how many of the commands and file changes the plan names your rules would allow, would ask you about and would refuse. It is an estimate: nothing in the plan is run to work it out, and every call is still judged when Claude makes it.
 
+**Evidence...** in the same menu gathers what shows a change was done properly into one pack: the decisions and approvals, the commands and how each ended, the checked claims and sealed checks, the dependency changes and what Codehouse's own analysis found, each tied to its audit record. One is made with each commit a session makes; **Gather now** makes one for what changed since the session's first checkpoint, and **Export, signed** saves it inside the session's signed timeline, which the checker that comes with it verifies. Packs are kept for 90 days unless you change it in Settings.
+
 **Timeline...** in the same menu lists everything the session did, from the audit log, in its order: each call with how it was decided (the rule, the risk, and who: your rules, you, your phone or Extreme approval), and things like a pause or a mode change. Each call has **Open record**, **Try in policy** (Try a request on the Approver page, with the call filled in), and where there is one, the checkpoint taken while it waited and the diff of the file it changed.
 
 **Export, signed** in the Timeline saves it as a zip with the audit records it was made from, signed with a key made on this computer, and a note on how to check it with Windows PowerShell. Changing one byte of it makes the check fail. Codehouse shows the key's fingerprint when you export; the note in the zip names it too.

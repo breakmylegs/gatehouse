@@ -144,6 +144,8 @@ export interface SessionHookDeps {
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
   /** D-061: a result that looked like prompt injection, for the screen and the record. */
   onInjection?: (tool: string, findings: InjectionFinding[]) => void
+  /** D-003: how a shell command ended (the error when it failed), for the change's evidence. */
+  onCommandEnded?: (toolUseId: string, error: string | undefined) => void
   /** G19, D-075: how each call ended; words returned go to Claude with the call's result (a warning it is repeating). */
   onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => string | undefined
   /** G22: commits are checked for secrets unless this is false (tests only). */
@@ -355,6 +357,11 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
           : undefined,
       )
       if (note) notes.set(String(input.tool_use_id), note)
+      if ((input.tool_name === "Bash" || input.tool_name === "PowerShell") && input.is_interrupt !== true)
+        deps.onCommandEnded?.(
+          String(input.tool_use_id),
+          input.hook_event_name === "PostToolUseFailure" ? String(input.error ?? "failed") : undefined,
+        )
       // D-017: a subagent's report carries the taint of what it read.
       if (input.hook_event_name === "PostToolUse" && (input.tool_name === "Task" || input.tool_name === "Agent"))
         deps.provenance?.subagentFinished(String(input.tool_use_id), input.tool_response)

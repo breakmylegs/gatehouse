@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import type { EvidenceService } from "./evidence.js"
 import type { SastCommitGuard } from "./sast.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
@@ -468,6 +469,8 @@ export interface SessionDeps {
   locks?: TestLocks
   /** D-062: the local analysis of what a session's commit would add. */
   sast?: SastCommitGuard
+  /** D-003: the change evidence packs. */
+  evidence?: EvidenceService
   /** D-059: the pins of what each project tells Claude. */
   instructions?: InstructionPins
   /** D-025, tests only: how long a minute of the dead-man timer is, and how often it is looked at. */
@@ -1116,8 +1119,18 @@ export class Session extends EventEmitter<SessionEvents> {
       // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
+      ...(d.evidence ? { onCommandEnded: (id: string, error: string | undefined) => (error === undefined ? d.evidence!.results.succeeded(id) : d.evidence!.results.failed(id, error)) } : {}),
       onCommitted: (cwd) =>
-        void noteCommit({ sessionId: this.id, cwd, project: this.project, audit: d.audit, log: d.log }).then(
+        void noteCommit({
+          sessionId: this.id,
+          cwd,
+          project: this.project,
+          audit: d.audit,
+          log: d.log,
+          ...(d.evidence
+            ? { evidence: async (commit: string) => (await d.evidence!.build({ id: this.id, cwd, project: this.project }, { commit }))?.sha }
+            : {}),
+        }).then(
           (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
         ),
       // D-061: a result that looked like prompt injection: recorded (what kind, never the result) and shown.

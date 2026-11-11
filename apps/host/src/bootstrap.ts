@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { EvidenceService, EvidenceStore } from "./evidence.js"
 import { AnchorService } from "./anchors.js"
 import { SastCommitGuard } from "./sast.js"
 import { InstructionPins } from "./instruction-pins.js"
@@ -527,6 +528,8 @@ export function createHost(opts: HostOptions = {}): Host {
   // D-007: the locked tests, their pins sealed by a key DPAPI keeps for this Windows user.
   const locks = new TestLocks({ dir: path.join(gatehouseDataDir(env), "locks"), sealer: () => sealer() })
   deps.locks = locks
+  // D-062: a commit of code the local analysis rates Severe goes to a person.
+  deps.sast = new SastCommitGuard()
   // D-059: what each project tells Claude, pinned the same way.
   const instructions = new InstructionPins({
     dir: path.join(gatehouseDataDir(env), "instruction-pins"),
@@ -934,6 +937,18 @@ export function createHost(opts: HostOptions = {}): Host {
   // is paired.
   // Owner, 11 Nov (see sessions remotely, with their status): each session's conversation and what it is doing now,
   // kept from its stream, so the phone is told within a few seconds.
+  // D-003: each change's evidence, kept 90 days by default, redacted first.
+  const evidence = new EvidenceService({
+    store: new EvidenceStore({ dir: path.join(gatehouseDataDir(env), "evidence"), redact: (t) => redactString(t, { terms: config.redactTerms }) }),
+    auditDir: dir,
+    checkpoints,
+    audit,
+    version: () => updates.status().current,
+    retentionDays: () => config.evidence?.retentionDays ?? 90,
+    log,
+  })
+  evidence.prune()
+  deps.evidence = evidence
   // D-029: the audit chain's head, signed once a day and on demand, kept apart from the log.
   const anchors = new AnchorService({
     dir: path.join(gatehouseDataDir(env), "anchors"),
@@ -1099,8 +1114,7 @@ export function createHost(opts: HostOptions = {}): Host {
     heldOut,
     heldOutExec: actionFor,
     locks,
-    // D-062: a commit of code the local analysis rates Severe goes to a person.
-    sast: new SastCommitGuard(),
+    evidence,
     instructions,
     governor,
     audit,
@@ -1243,6 +1257,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // C-011: the key timeline exports are signed with, sealed for this Windows user.
       timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
       anchors,
+      evidence: evidence.store,
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,
