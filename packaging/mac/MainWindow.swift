@@ -1,48 +1,29 @@
-// The Codehouse window on a Mac: the interface in the Mac's own WebKit, with the start-up picture while the Host starts.
-// Only Codehouse's own page is shown (NavGuard.swift); a web link opens in your default browser.
+// The Codehouse window on a Mac: the interface, with the start-up picture while the Host starts. What it shares with
+// the other windows (the guard, the Mac's own dialogs, the messages with the page) is in Page.swift.
 import AppKit
 import WebKit
 
-final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
-  let window: NSWindow
-  private let web: WKWebView
+final class MainWindow: PageWindow {
   private let splash = NSView()
   private let splashText = NSTextField(wrappingLabelWithString: "")
   private let spinner = NSProgressIndicator()
-  private var url: String?
-  private var origin: String?
   private var loaded = false
   private let check: Bool
   /// Called once the page has loaded (and, in check mode, with what it showed).
   var onLoaded: (_ ok: Bool, _ detail: String) -> Void = { _, _ in }
 
-  // The night sky from docs/brand/palette.json, so the window does not flash white before the page paints.
-  static let night = NSColor(srgbRed: 0x0a / 255, green: 0x0b / 255, blue: 0x1e / 255, alpha: 1)
-
   init(check: Bool) {
     self.check = check
-    let config = WKWebViewConfiguration()
-    config.preferences.javaScriptCanOpenWindowsAutomatically = false
-    config.preferences.isElementFullscreenEnabled = true
-    web = WKWebView(frame: .zero, configuration: config)
-    web.allowsMagnification = true
-    web.allowsBackForwardNavigationGestures = false
-    web.isHidden = true
-    window = NSWindow(
+    let window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1320, height: 860),
       styleMask: [.titled, .closable, .miniaturizable, .resizable],
       backing: .buffered, defer: false)
-    super.init()
+    super.init(window: window)
     window.title = "Codehouse"
     window.minSize = NSSize(width: 900, height: 600)
-    window.backgroundColor = Self.night
-    window.isReleasedWhenClosed = false
-    window.tabbingMode = .disallowed
-    window.delegate = self
     window.center()
     if !check { window.setFrameAutosaveName("Codehouse main window") }
-    web.navigationDelegate = self
-    web.uiDelegate = self
+    web.isHidden = true
 
     let content = NSView()
     content.wantsLayer = true
@@ -114,12 +95,10 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDe
     say(text)
   }
 
-  func load(_ readyUrl: String) {
-    url = readyUrl
-    origin = HostClient.parts(readyUrl)?.base
+  func open(_ ready: String) {
     loaded = false
     say("Opening the window")
-    if let u = URL(string: readyUrl) { web.load(URLRequest(url: u)) }
+    load(ready)
   }
 
   /// After a restart: the start-up picture until the new Host is ready.
@@ -137,57 +116,7 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDe
     web.pageZoom = step.map { min(3, max(0.5, web.pageZoom + $0)) } ?? 1
   }
 
-  // MARK: navigation guard
-
-  private func refused(_ target: URL?, where place: String) -> Bool {
-    let uri = target?.absoluteString
-    let action = NavGuard.decide(uri, origin: origin, where: place)
-    if action == .allow { return false }
-    if action == .external, let target { NSWorkspace.shared.open(target) }
-    if let url { HostClient.post(url, route: "/api/shell/navigation", json: NavGuard.report(where: place, uri: uri, action: action)) }
-    return true
-  }
-
-  func webView(
-    _ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
-    decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
-  ) {
-    let target = action.request.url
-    // A file the page saves (a blob or data address, or one of the Host's own) is a download, never a page.
-    if action.shouldPerformDownload {
-      let s = target?.scheme?.lowercased()
-      let own = NavGuard.sameOrigin(target?.absoluteString ?? "", origin)
-      return decisionHandler(s == "blob" || s == "data" || own ? .download : .cancel)
-    }
-    let place = action.targetFrame?.isMainFrame == false ? "frame" : "window"
-    decisionHandler(refused(target, where: place) ? .cancel : .allow)
-  }
-
-  func webView(
-    _ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
-    decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
-  ) {
-    decisionHandler(response.canShowMIMEType ? .allow : .download)
-  }
-
-  func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
-    download.delegate = self
-  }
-
-  func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
-    download.delegate = self
-  }
-
-  /// A link that would open a new window: never a window of ours. A web page goes to your browser.
-  func webView(
-    _ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction,
-    windowFeatures: WKWindowFeatures
-  ) -> WKWebView? {
-    _ = refused(action.request.url, where: "new-window")
-    return nil
-  }
-
-  func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+  override func pageLoaded() {
     guard !loaded else { return }
     loaded = true
     if check { return checkPage() }
@@ -197,119 +126,53 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDe
     onLoaded(true, "")
   }
 
-  func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-    failed(error)
-  }
-
-  func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-    failed(error)
-  }
-
-  private func failed(_ error: Error) {
-    let e = error as NSError
-    // Cancelled by the guard or by a newer navigation: not a failure.
-    if e.code == NSURLErrorCancelled || (e.domain == "WebKitErrorDomain" && e.code == 102) { return }
+  override func pageFailed(_ why: String) {
     if loaded { return }
-    fail("The window could not load the Codehouse interface (\(e.localizedDescription)).")
-    onLoaded(false, e.localizedDescription)
-  }
-
-  /// WebKit's page process ended (out of memory, a crash): load the interface again.
-  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-    if let url { load(url) }
+    fail("The window could not load the Codehouse interface (\(why)).")
+    onLoaded(false, why)
   }
 
   private func checkPage() {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
       web.evaluateJavaScript(
-        "JSON.stringify({title: document.title, children: (document.getElementById('root')||{children:[]}).children.length, text: document.body.innerText.slice(0,80)})"
+        "JSON.stringify({title: document.title, children: (document.getElementById('root')||{children:[]}).children.length, text: document.body.innerText.slice(0,80), shell: !!(window.chrome && window.chrome.webview)})"
       ) { [self] result, error in
         let text = (result as? String) ?? "error: \(error?.localizedDescription ?? "no result")"
-        let ok = text.contains("Codehouse") && !text.contains("\"children\":0")
-        onLoaded(ok, text)
+        let ok = text.contains("Codehouse") && !text.contains("\"children\":0") && text.contains("\"shell\":true")
+        if !ok { return onLoaded(false, text) }
+        checkBridge { [self] bridgeOk, said in onLoaded(bridgeOk, text + "\n" + said) }
       }
     }
   }
 
-  // MARK: what the page asks of the window
-
-  func webView(
-    _ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
-    completionHandler: @escaping () -> Void
-  ) {
-    let a = NSAlert()
-    a.messageText = message
-    a.addButton(withTitle: "OK")
-    a.beginSheetModal(for: window) { _ in completionHandler() }
-  }
-
-  func webView(
-    _ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo,
-    completionHandler: @escaping (Bool) -> Void
-  ) {
-    let a = NSAlert()
-    a.messageText = message
-    a.addButton(withTitle: "OK")
-    a.addButton(withTitle: "Cancel")
-    a.beginSheetModal(for: window) { r in completionHandler(r == .alertFirstButtonReturn) }
-  }
-
-  func webView(
-    _ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?,
-    initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void
-  ) {
-    let a = NSAlert()
-    a.messageText = prompt
-    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
-    field.stringValue = defaultText ?? ""
-    a.accessoryView = field
-    a.addButton(withTitle: "OK")
-    a.addButton(withTitle: "Cancel")
-    a.window.initialFirstResponder = field
-    a.beginSheetModal(for: window) { r in completionHandler(r == .alertFirstButtonReturn ? field.stringValue : nil) }
-  }
-
-  /// A file field in the page (attaching files): the Mac's own open window.
-  func webView(
-    _ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo,
-    completionHandler: @escaping ([URL]?) -> Void
-  ) {
-    let panel = NSOpenPanel()
-    panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-    panel.canChooseDirectories = parameters.allowsDirectories
-    panel.canChooseFiles = true
-    panel.beginSheetModal(for: window) { r in completionHandler(r == .OK ? panel.urls : nil) }
-  }
-
-  /// The microphone and camera: only the voice button could want them, and it is a Windows feature for now.
-  func webView(
-    _ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo,
-    type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void
-  ) {
-    decisionHandler(.deny)
-  }
-
-  // MARK: downloads
-
-  func download(
-    _ download: WKDownload, decideDestinationUsing response: URLResponse, suggestedFilename: String,
-    completionHandler: @escaping (URL?) -> Void
-  ) {
-    let panel = NSSavePanel()
-    panel.nameFieldStringValue = suggestedFilename
-    panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
-    panel.beginSheetModal(for: window) { r in
-      guard r == .OK, let dest = panel.url else { return completionHandler(nil) }
-      // The save window has already asked about replacing a file of that name.
-      try? FileManager.default.removeItem(at: dest)
-      completionHandler(dest)
+  /// The bridge answers the top frame of Codehouse's own page and nothing else: a frame in the page gets no
+  /// `chrome.webview`, and a message it sends through WebKit's handler directly is dropped.
+  private func checkBridge(done: @escaping (Bool, String) -> Void) {
+    var heard: [String] = []
+    let before = onMessage
+    onMessage = { m in heard.append(m) }
+    let js = """
+      const f = document.createElement("iframe");
+      f.srcdoc = "<p>frame</p>";
+      document.body.append(f);
+      await new Promise((r) => f.addEventListener("load", r));
+      const frameBridge = !!(f.contentWindow.chrome && f.contentWindow.chrome.webview);
+      f.contentWindow.webkit.messageHandlers.codehouse.postMessage("check-frame");
+      window.chrome.webview.postMessage("check-main");
+      f.remove();
+      return frameBridge;
+      """
+    web.callAsyncJavaScript(js, arguments: [:], in: nil, in: .page) { [self] result in
+      let frameBridge: Bool
+      switch result {
+      case .success(let v): frameBridge = (v as? Bool) ?? true
+      case .failure(let e): return done(false, "Bridge check failed: \(e.localizedDescription)")
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [self] in
+        onMessage = before
+        let ok = !frameBridge && heard == ["check-main"]
+        done(ok, "Bridge: the frame has chrome.webview \(frameBridge); heard \(heard)")
+      }
     }
-  }
-
-  func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
-    let a = NSAlert()
-    a.messageText = "The file was not saved"
-    a.informativeText = error.localizedDescription
-    a.beginSheetModal(for: window)
   }
 }

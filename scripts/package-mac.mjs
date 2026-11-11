@@ -119,9 +119,12 @@ run("/usr/bin/swiftc", [
   `${arch === "x64" ? "x86_64" : "arm64"}-apple-macos${MIN_MACOS}`,
   "-o",
   path.join(contents, "MacOS", "Codehouse"),
-  ...["main.swift", "AppDelegate.swift", "MainWindow.swift", "Host.swift", "NavGuard.swift"].map(
-    (f) => path.join(swiftDir, f),
-  ),
+  // Every .swift file beside main.swift; the test's own main is in packaging/mac/test.
+  ...fs
+    .readdirSync(swiftDir)
+    .filter((f) => f.endsWith(".swift"))
+    .sort()
+    .map((f) => path.join(swiftDir, f)),
 ])
 fs.writeFileSync(path.join(contents, "Info.plist"), infoPlist())
 fs.writeFileSync(path.join(contents, "PkgInfo"), "APPL????")

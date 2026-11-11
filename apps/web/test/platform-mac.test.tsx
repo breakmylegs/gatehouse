@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest"
-import { isMac, keyLabel, markPlatform, systemName } from "../src/lib/platform-mac"
+import {
+  isMac,
+  keyLabel,
+  markPlatform,
+  systemName,
+  trayName,
+  voiceCopy,
+} from "../src/lib/platform-mac"
 
 const SAFARI =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)"
@@ -39,5 +46,13 @@ describe("the interface on a Mac", () => {
     const win = document.createElement("html")
     markPlatform(win, false)
     expect(win.dataset.platform).toBeUndefined()
+  })
+
+  it("names the Mac's Dictation and menu bar in the Mac app, and keeps Windows' words on Windows", () => {
+    expect(voiceCopy(true).label).toBe("Speak (Dictation)")
+    for (const text of Object.values(voiceCopy(true))) expect(text).not.toMatch(/Windows|Win\+H/)
+    expect(voiceCopy(false).title).toBe("Speak: Windows types what you say here (Win+H)")
+    expect(trayName(true)).toBe("menu bar")
+    expect(trayName(false)).toBe("tray")
   })
 })

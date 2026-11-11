@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { trayName } from "../lib/platform-mac" // Mac fork
 import { chooseHotkey, savedHotkey, useHotkeyState } from "../lib/quickKey"
 import { inShell } from "../lib/shell"
 
@@ -19,7 +20,7 @@ export function QuickKeyPanel() {
     state.kind === "ok"
       ? `${state.text} opens the quick prompt, from any program.`
       : state.kind === "off"
-        ? "No shortcut. The quick prompt is still in the tray menu."
+        ? `No shortcut. The quick prompt is still in the ${trayName()} menu.` // Mac fork
         : state.kind === "bad"
           ? state.error
           : state.kind === "clash"
@@ -29,7 +30,8 @@ export function QuickKeyPanel() {
     <>
       <p className="m-0 text-xs text-mut">
         A small window over whatever you are doing: start a chat, or message the coding session you
-        started last. Esc puts it away and gives the focus back. It is in the tray menu too.
+        started last. Esc puts it away and gives the focus back. It is in the {trayName()} menu too.
+        {/* Mac fork: trayName */}
       </p>
       <form
         className="flex flex-wrap items-end gap-2"

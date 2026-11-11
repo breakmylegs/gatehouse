@@ -19,6 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   private var stage = "Starting Codehouse"
   private var stageSince = Date()
   private var clock: Timer?
+  private var quick: QuickPanel?
+  private var quickItem: NSMenuItem?
+  private let hotkey = GlobalHotkey()
+  private var popouts: [String: PopoutWindow] = [:]
   /// The exit code for --check.
   private(set) var exitCode: Int32 = 0
 
@@ -32,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   func applicationDidFinishLaunching(_ notification: Notification) {
     main = MainWindow(check: check)
     main.onLoaded = { [weak self] ok, detail in self?.pageLoaded(ok, detail) }
+    main.onMessage = { [weak self] m in self?.pageSaid(m) }
+    GlobalHotkey.onPress = { [weak self] in self?.openQuick() }
     if check {
       say("Codehouse \(version) check")
       DispatchQueue.main.asyncAfter(deadline: .now() + 240) { [weak self] in
@@ -79,10 +85,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         HostClient.check(u) { [self] ok, message in
           if !ok { return finish(1, "Check failed: \(message).") }
           say("Host check passed: \(message).")
-          main.load(u)
+          main.open(u)
         }
       } else {
-        main.load(u)
+        main.open(u)
       }
     case .attention: attention()
     case .restart: restart("Starting again")
@@ -101,11 +107,88 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         ok ? 0 : 1,
         ok
           ? "Check passed: the window loaded the interface from the packaged Host."
-          : "Check failed: the window did not show the interface.")
+          : "Check failed: the window did not show the interface, or its bridge to the page answered something other than Codehouse's own page.")
     }
     clock?.invalidate()
     clock = nil
-    if ok { sayIfRestarted() }
+    guard ok else { return }
+    sayIfRestarted()
+    prepareQuick()
+  }
+
+  // MARK: what the page asks of the window
+
+  private func pageSaid(_ m: String) {
+    if m == "attention" {
+      attention()
+    } else if m == "voice" {
+      // The Mac's own dictation, in the box that has the focus (the page focuses the prompt box first), as Win+H
+      // does on Windows. macOS types the words; Codehouse hears nothing.
+      NSApp.perform(Selector(("startDictation:")), with: nil)
+    } else if m.hasPrefix("hotkey:") {
+      setHotkey(String(m.dropFirst("hotkey:".count)))
+    } else if m.hasPrefix("popout:") {
+      popOut(String(m.dropFirst("popout:".count)))
+    }
+  }
+
+  // MARK: a session in its own window (B16)
+
+  /// Opens a session in a window of its own, or brings its window forward if it has one. Only a session id becomes
+  /// part of the address. When the window closes, the main window is told, and shows the session again.
+  private func popOut(_ session: String) {
+    guard let url, PopoutWindow.isSessionId(session) else { return }
+    if let open = popouts[session] {
+      open.window.makeKeyAndOrderFront(nil)
+      return
+    }
+    let w = PopoutWindow(session: session)
+    popouts[session] = w
+    w.onClose = { [weak self] in
+      self?.popouts.removeValue(forKey: session)
+      self?.main.tell("popin:\(session)")
+    }
+    w.open(url)
+  }
+
+  // MARK: the quick prompt (W1-15)
+
+  private func prepareQuick() {
+    guard let url else { return }
+    let q = quick ?? QuickPanel()
+    q.onSent = { [weak self] sent in
+      // What the quick prompt sent: the main window on that session, with your words in it.
+      self?.showWindow()
+      self?.main.tell("open-session:\(sent)")
+    }
+    quick = q
+    q.prepare(url)
+  }
+
+  /// The shortcut or the menu bar: the quick prompt over what you are doing, or the window if it is not ready yet.
+  @objc private func openQuick() {
+    if let quick, quick.ready { quick.open() } else { showWindow() }
+  }
+
+  /// The page asks for a shortcut (or none, with an empty text) and is told how that went, as on Windows.
+  private func setHotkey(_ text: String) {
+    if text.trimmingCharacters(in: .whitespaces).isEmpty {
+      hotkey.release()
+      quickItem?.title = "Quick Prompt"
+      return main.tell("hotkey-off")
+    }
+    switch Shortcut.parse(text) {
+    case .failure(let e):
+      main.tell("hotkey-bad:\(e.message)")
+    case .success(let s):
+      if hotkey.hold(s) {
+        quickItem?.title = "Quick Prompt (\(s.text))"
+        main.tell("hotkey-ok:\(s.text)")
+      } else {
+        let free = s.alternatives { [hotkey] in hotkey.isFree($0) }
+        main.tell("hotkey-clash:" + ([s.text] + free).joined(separator: "|"))
+      }
+    }
   }
 
   // MARK: the start-up picture
@@ -187,6 +270,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     stage = text
     stageSince = Date()
     clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.showStage() }
+    // The new Host has a new token, so the other windows' pages would be refused: they open again from the new one.
+    for w in popouts.values { w.window.close() }
+    quick?.putAway()
     let again = { [weak self] in
       self?.url = nil
       self?.startHost()
@@ -320,6 +406,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     item.button?.toolTip = "Codehouse"
     let menu = NSMenu()
     menu.addItem(withTitle: "Open Codehouse", action: #selector(showWindow), keyEquivalent: "").target = self
+    let q = menu.addItem(withTitle: "Quick Prompt", action: #selector(openQuick), keyEquivalent: "")
+    q.target = self
+    quickItem = q
     menu.addItem(.separator())
     menu.addItem(withTitle: "Quit Codehouse", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
     item.menu = menu
