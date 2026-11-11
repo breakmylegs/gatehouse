@@ -23,6 +23,7 @@
       "@gatehouse/shared/highlight": ["./packages/shared/src/highlight.ts"],
       "@gatehouse/shared/node": ["./packages/shared/src/node/index.ts"],
       "@gatehouse/shared/phone-protocol": ["./packages/shared/src/phone-protocol.ts"],
+      "@gatehouse/shared/activity": ["./packages/shared/src/activity.ts"],
       "@gatehouse/shared/project-name": ["./packages/shared/src/project-name.ts"],
       "@gatehouse/shared/relay-protocol": ["./packages/shared/src/relay-protocol.ts"],
       "@gatehouse/shared/ws-protocol": ["./packages/shared/src/ws-protocol.ts"]
