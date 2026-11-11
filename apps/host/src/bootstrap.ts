@@ -1,5 +1,6 @@
 import { TestLocks } from "./test-locks.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
+import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
@@ -358,7 +359,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // C-004: above the commit charge in Settings, nothing heavy of Codehouse's own starts. Read through the helper, found
   // when first needed (below); a reading it cannot have refuses nothing.
   const governor = new MemoryGovernor({
-    read: helperReader(() => helper()),
+    read: process.platform === "darwin" ? macMemoryReader() : helperReader(() => helper()), // Mac fork
     point: () => memoryPoint(config.memoryGovernor),
     audit,
     log,

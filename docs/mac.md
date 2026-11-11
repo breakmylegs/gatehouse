@@ -27,6 +27,7 @@ npm start -- --relay      also the phone Relay (docs/relay-local.md)
 | Terminal pane | `/bin/zsh -f`; Stop ends the command's whole process group |
 | Keep the computer awake while a session works | `caffeinate -i`, started by `npm start` when the Host asks (on Windows the window app does it) |
 | Held-out checks and locked tests, sealed | The Keychain, through the same `sealerFor()` |
+| The memory governor | The share of memory in use from `sysctl kern.memorystatus_level`, macOS's memory pressure figure (`memory-governor-mac.ts`). A Mac has no commit limit, so the point in Settings is the share in use: at the default 85%, nothing heavy starts while less than 15% is free or reclaimable. Upstream read Windows' commit charge through `Codehouse-Helper.exe`, so on a Mac it had no reading and refused nothing. Its messages still say "committed". |
 | Open in Claude, and the browser tools' page look | Edge from `/Applications` with the same `--app` arguments, or `open` for your default browser and the Claude app (`chat/handoff-mac.ts`). Upstream found Edge in the Windows registry and opened addresses through `Codehouse-Helper.exe`, so all three failed on a Mac. |
 | Starting it | `npm start` |
 
@@ -48,7 +49,6 @@ All of it was written and unit tested on Windows. None of it has run on a Mac ye
 
 ### Known gaps
 
-- **The memory governor** reads Windows' commit charge through `Codehouse-Helper.exe`. On a Mac it has no reading, and by its own rule refuses nothing, so it is off. A Mac version could read memory pressure (`memory_pressure`, or `vm.memory_pressure` from `sysctl`).
 - **Browser shortcuts:** in Chrome on a Mac, `⌘1` to `⌘9` switch the browser's tabs and `⇧⌘C` opens the inspector before the page sees them. The native window will not have this.
 - **Copy deeper in Settings** still names Windows in places: the commit charge, temporary files, voice typing, the installer, "sealed for your Windows account". Voice typing and the screen-capture quick prompt need the native window.
 
@@ -83,7 +83,7 @@ When a merge conflicts, take upstream's code as it is and put back the `Mac fork
 
 Merge, do not rebase, so upstream's commit hashes stay the same as in its release notes and `changes.json`.
 
-The hooks in upstream's files: `packages/shared/src/node/paths.ts`, `apps/host/src/relay/protector.ts` (in `sealerFor()`), `apps/host/src/bootstrap.ts` (the pickers and the hand-off launcher), `apps/host/src/chat/handoff.ts` (`findEdge()`, `hasAppLink()`), `apps/host/src/terminal.ts`, `apps/host/src/files-api.ts`, `apps/host/test/helper-exe.test.ts`, and the `start` and `sync:upstream` lines in `package.json`. In the interface: `main.tsx` (the two stylesheets and the platform mark), `App.tsx` (`⌘,`), `Menu.tsx`, `CommandPalette.tsx`, `ShortcutSheet.tsx`, `CommandDeck.tsx`, `Rail.tsx` (shortcut labels), `SettingsPanels.tsx` and `lib/appearance.ts` (copy and the code font), `Approvals.tsx` and `Workspace.tsx` (Command as well as Ctrl), and `TerminalPane.tsx`.
+The hooks in upstream's files: `packages/shared/src/node/paths.ts`, `apps/host/src/relay/protector.ts` (in `sealerFor()`), `apps/host/src/bootstrap.ts` (the pickers, the hand-off launcher and the memory reader), `apps/host/src/chat/handoff.ts` (`findEdge()`, `hasAppLink()`), `apps/host/src/terminal.ts`, `apps/host/src/files-api.ts`, `apps/host/test/helper-exe.test.ts`, and the `start` and `sync:upstream` lines in `package.json`. In the interface: `main.tsx` (the two stylesheets and the platform mark), `App.tsx` (`⌘,`), `Menu.tsx`, `CommandPalette.tsx`, `ShortcutSheet.tsx`, `CommandDeck.tsx`, `Rail.tsx` (shortcut labels), `SettingsPanels.tsx` and `lib/appearance.ts` (copy and the code font), `Approvals.tsx` and `Workspace.tsx` (Command as well as Ctrl), and `TerminalPane.tsx`.
 
 Do not run Prettier over upstream's files: upstream does not keep them formatted, and rewrapping its lines turns every later change near them into a conflict. Format only the fork's own files, or the lines you add.
 
