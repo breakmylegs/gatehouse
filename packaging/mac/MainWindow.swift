@@ -20,9 +20,11 @@ final class MainWindow: PageWindow {
       backing: .buffered, defer: false)
     super.init(window: window)
     window.title = "Codehouse"
-    window.minSize = NSSize(width: 900, height: 600)
-    window.center()
+    startSize(NSSize(width: 1320, height: 860), minimum: NSSize(width: 900, height: 600))
+    // The size and place you left it at, then kept on one screen (Page.swift).
     if !check { window.setFrameAutosaveName("Codehouse main window") }
+    fitToScreen()
+    web.pageZoom = Self.savedZoom
     web.isHidden = true
 
     let content = NSView()
@@ -49,6 +51,12 @@ final class MainWindow: PageWindow {
       let picture = NSImageView(image: image)
       picture.imageScaling = .scaleProportionallyUpOrDown
       picture.translatesAutoresizingMaskIntoConstraints = false
+      // The picture gives way to the window, never the window to the picture: at its own size (1672 by 941) and at
+      // most 70% by 60% of the window, it made the window 2389 by 1601, larger than the screen.
+      for axis in [NSLayoutConstraint.Orientation.horizontal, .vertical] {
+        picture.setContentCompressionResistancePriority(.defaultLow, for: axis)
+        picture.setContentHuggingPriority(.defaultLow, for: axis)
+      }
       splash.addSubview(picture)
       NSLayoutConstraint.activate([
         picture.centerXAnchor.constraint(equalTo: splash.centerXAnchor),
@@ -114,6 +122,7 @@ final class MainWindow: PageWindow {
 
   func zoom(by step: CGFloat?) {
     web.pageZoom = step.map { min(3, max(0.5, web.pageZoom + $0)) } ?? 1
+    Self.savedZoom = web.pageZoom
   }
 
   override func pageLoaded() {

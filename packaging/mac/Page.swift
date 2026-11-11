@@ -99,6 +99,49 @@ class PageWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate
 
   /// When the page has loaded, and when it could not load. For the windows built on this one.
   func pageLoaded() {}
+
+  // MARK: fitting the screen
+
+  /// The usable part of the screen the window is mostly on (without the menu bar and the Dock), or the main screen's.
+  var screenArea: NSRect? { (window.screen ?? NSScreen.main)?.visibleFrame }
+
+  /// A first size for a new window: `wanted`, made smaller where the screen is, and centred on it.
+  func startSize(_ wanted: NSSize, minimum: NSSize) {
+    guard let area = screenArea else { return }
+    let w = min(wanted.width, area.width - 40)
+    let h = min(wanted.height, area.height - 40)
+    window.setFrame(NSRect(x: area.midX - w / 2, y: area.midY - h / 2, width: w, height: h), display: false)
+    window.minSize = NSSize(width: min(minimum.width, area.width), height: min(minimum.height, area.height))
+  }
+
+  /// Keeps the window on one screen: no larger than its usable area, and inside it. A remembered size from a bigger
+  /// screen, or a window dragged across two, would otherwise open hanging off the edges.
+  func fitToScreen() {
+    guard let area = screenArea else { return }
+    let f = window.frame
+    var r = f
+    r.size.width = min(r.width, area.width)
+    r.size.height = min(r.height, area.height)
+    r.origin.x = min(max(r.minX, area.minX), area.maxX - r.width)
+    r.origin.y = min(max(r.minY, area.minY), area.maxY - r.height)
+    if r != f { window.setFrame(r, display: true, animate: false) }
+  }
+
+  @objc func windowDidChangeScreen(_ notification: Notification) { fitToScreen() }
+  @objc func windowDidEndLiveResize(_ notification: Notification) { fitToScreen() }
+
+  // MARK: zoom
+
+  private static let zoomKey = "Codehouse page zoom"
+
+  /// The interface's zoom (View, Zoom In and Zoom Out), kept for next time and shared by the session windows.
+  static var savedZoom: CGFloat {
+    get {
+      let z = UserDefaults.standard.double(forKey: zoomKey)
+      return z >= 0.5 && z <= 3 ? CGFloat(z) : 1
+    }
+    set { UserDefaults.standard.set(Double(newValue), forKey: zoomKey) }
+  }
   func pageFailed(_ why: String) {}
 
   // MARK: navigation guard

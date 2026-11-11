@@ -22,9 +22,9 @@ final class PopoutWindow: PageWindow {
       backing: .buffered, defer: false)
     super.init(window: window)
     window.title = "Codehouse"
-    window.minSize = NSSize(width: 420, height: 360)
     window.contentView = web
-    window.cascadeTopLeft(from: NSPoint(x: 80, y: 80))
+    startSize(NSSize(width: 900, height: 760), minimum: NSSize(width: 420, height: 360))
+    web.pageZoom = Self.savedZoom
     titleWatch = web.observe(\.title) { [weak self] web, _ in
       if let t = web.title, !t.isEmpty { self?.window.title = t }
     }
@@ -35,7 +35,6 @@ final class PopoutWindow: PageWindow {
 
   func open(_ ready: String) {
     load(ready, query: "?view=pane&session=\(session)")
-    window.center()
     window.makeKeyAndOrderFront(nil)
   }
 
