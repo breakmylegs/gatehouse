@@ -8,7 +8,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 1. **Network connectors.** The prompt lists for IT anything that adds network access or trust in a registry (D-053 existence and age, D-057 snapshot source, D-063 npm provenance). The owner decided on 9 Nov, after IT was ruled out: "I am never going to ask IT ... it should be built to be able to connect to self hosted or online existing versions of these servers". Resolution: such lookups are built as connectors that are off until the owner switches them on and names the server, and that can only tighten (escalate or deny), never allow; with no connector the safe offline variant applies.
 2. **Releases with --skip-tests.** Earlier releases in this build ran `npm run release -- --skip-tests` (the gate ran first). From now releases run the full tests, as section 8 says, until C-002 adds the signed override.
-3. **Branches.** CLAUDE.md asks for one branch per phase fast-forwarded into main; the prompt asks for one per slice. Both hold: one branch per slice, fast-forwarded into main and pushed.
+3. **Small releases and a short test period (owner, 12 Nov).** "Make sure you build releases frequently and commit them so we dont have super releases going on when people auto update. Also look to refine the testing period as it seems to have grown very large." Resolution: merge, push and release after every few slices, not once a wave; the gate no longer runs every test when memory is short, only the files the change reaches (scripts/related-tests.mjs), eight to a process (scripts/test-shards.mjs). A release still gates everything since the last release, which stays small when releases are frequent.
+4. **Branches.** CLAUDE.md asks for one branch per phase fast-forwarded into main; the prompt asks for one per slice. Both hold: one branch per slice, fast-forwarded into main and pushed.
 
 ## Owner's connector items (9 Nov), from the backlog
 
@@ -46,7 +47,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-011 | Signed timeline export | Wave 2 | built | slice/C-011-signed-timeline | BUILD_REPORT "Frontier C-011" | ECDSA P-256 (Windows PowerShell 5.1 has no Ed25519); both verifiers check it |
 | C-012 | Policy dry run | Wave 2 | built | slice/C-012-policy-dry-run | BUILD_REPORT "Frontier C-012" | On the plan's card and in its record; calls read from code blocks, backticks and named files |
 | C-016 | Verified data-boundary card per model | Wave 2 | built | slice/C-016-boundary-cards | BUILD_REPORT "Frontier C-016" | Per model as well as per provider; stale after 180 days by default; no card is not refused (owner to confirm) |
-| C-031 | Tree-sitter outline and navigation (WASM) | Wave 2 | todo | | | |
+| C-031 | Tree-sitter outline and navigation (WASM) | Wave 2 | built | (commit 6d2eb89) | apps/host/test/outline.test.ts | Outline and go to symbol for TS, JS, Python, C#, PowerShell, JSON; 5,000 lines under 50 ms; row was out of date |
 | C-032 | TypeScript language service worker | Wave 3 | todo | | | |
 | C-057 | Mermaid and Markdown artifacts | Wave 3 | todo | | | Mermaid left out in G6 for want of a dependency; now asked for |
 | C-015 | Adaptive autonomy that only lowers | Wave 4 | todo | | | |

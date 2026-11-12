@@ -47,13 +47,18 @@ export function listTestFiles(base = root) {
   return out.sort()
 }
 
+/** Files a process runs together (owner, 12 Nov: each file's own start took most of the test period). */
+export const BATCH = 8
+
+/** One file, or a few together, in a process of its own. */
 function runOne(file) {
+  const files = Array.isArray(file) ? file : [file]
   const custom = process.env.GATEHOUSE_SHARD_CMD
   const [cmd, args] = custom
-    ? [process.execPath, [custom, file]]
+    ? [process.execPath, [custom, ...files]]
     : [
         process.execPath,
-        [path.join(root, "node_modules", "vitest", "vitest.mjs"), "run", "--maxWorkers=1", file],
+        [path.join(root, "node_modules", "vitest", "vitest.mjs"), "run", "--maxWorkers=1", ...files],
       ]
   return new Promise((resolve) => {
     const child = spawn(cmd, args, {
@@ -69,33 +74,42 @@ function runOne(file) {
 }
 
 /**
- * Runs the files, starting the next only while the free memory allows another, retrying each failure once. Resolves
- * with the files that failed twice and those that passed only on their retry.
+ * Runs the files, `batch` to a process (one by default), starting the next process only while the free memory allows
+ * another. A file that fails is run once more on its own; a batch that fails has each of its files run once more on
+ * its own, so a file fails the run only when it fails by itself too. Resolves with the files that failed twice and
+ * those that passed only on their retry.
  */
 export async function runShards(files, o = {}) {
   const free = o.freemem ?? (() => os.freemem())
   const log = o.log ?? ((l) => console.log(l))
   const run = o.run ?? runOne
-  const queue = [...files]
+  const size = Math.max(1, o.batch ?? 1)
+  const queue = []
+  for (let i = 0; i < files.length; i += size) queue.push(files.slice(i, i + size))
   const failed = []
   const retried = []
   let running = 0
+  const alone = async (file) => {
+    log(`[shards] retry once: ${file}`)
+    retried.push(file)
+    const r = await run(file)
+    if (!r.ok) {
+      failed.push(file)
+      log(`[shards] FAILED: ${file}\n${r.out.slice(-3000)}`)
+    }
+  }
   await new Promise((done) => {
     const next = () => {
       if (!queue.length && running === 0) return done()
       while (queue.length && running < workersFor(free())) {
-        const file = queue.shift()
+        const batch = queue.shift()
         running++
         void (async () => {
-          let r = await run(file)
+          const r = await run(batch.length === 1 ? batch[0] : batch)
           if (!r.ok) {
-            log(`[shards] retry once: ${file}`)
-            retried.push(file)
-            r = await run(file)
-            if (!r.ok) {
-              failed.push(file)
-              log(`[shards] FAILED: ${file}\n${r.out.slice(-3000)}`)
-            }
+            // The files vitest names as failing; when it names none of them (a crash), all of them.
+            const named = batch.filter((f) => new RegExp(`FAIL\\b[^\\n]*${f.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`).test(r.out))
+            for (const file of named.length ? named : batch) await alone(file)
           }
           running--
           next()
@@ -114,7 +128,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   console.log(
     `[shards] ${files.length} test files, at most ${workersFor(os.freemem())} at once to start with`,
   )
-  const r = await runShards(files)
+  const r = await runShards(files, { batch: BATCH })
   const secs = Math.round((Date.now() - started) / 1000)
   for (const f of r.passedOnRetry)
     console.log(`[shards] passed on its retry (logged as flaky): ${f}`)
