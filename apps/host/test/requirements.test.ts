@@ -6,7 +6,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterAll, describe, expect, it } from "vitest"
 import type { AuditRecord } from "@gatehouse/shared/audit"
-import { approvedPlan, readRequirements, scopeOf, traceMatrix, unrequested } from "../src/requirements.js"
+import { approvedPlan, impactOf, readRequirements, scopeOf, traceMatrix, unrequested } from "../src/requirements.js"
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-reqs-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
@@ -74,5 +74,26 @@ describe("the change against the plan (D-034, D-035)", () => {
     expect(scopeOf(plan, ["src/login.ts", "test/login.test.ts"]).outside).toEqual([])
     expect(scopeOf(plan, ["src/login.ts", "src/export.ts"]).outside).toEqual(["src/export.ts"])
     expect(scopeOf(undefined, ["src/export.ts"]).outside).toEqual([])
+  })
+})
+
+describe("requirement change impact (D-039)", () => {
+  it("lists the code, tests and ADRs linked to a requirement that is edited", () => {
+    put("docs/adr/0001-sessions.md", "# 0001. Sign-in sessions
+
+This decides REQ-001.
+")
+    const { requirements } = readRequirements(root)
+    const r = requirements.find((x) => x.id === "REQ-001")!
+    const [row] = traceMatrix({ root, requirements: [r], commitsFor: () => ["c1"], testFiles: ["test/login.test.ts"], evidenceFor: () => [] })
+    const impact = impactOf({ root, requirement: r, row: row!, filesOf: () => ["src/session.ts", "test/login.test.ts", "docs/requirements/REQ-001.md"] })
+    expect(impact).toEqual({
+      id: "REQ-001",
+      title: "Users can sign in",
+      file: "docs/requirements/REQ-001.md",
+      code: ["src/login.ts", "src/session.ts"],
+      tests: ["test/login.test.ts"],
+      adrs: ["docs/adr/0001-sessions.md"],
+    })
   })
 })

@@ -24,6 +24,15 @@ import { send, useStore } from "../store"
 const LOCKFILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
 
+/** D-039: a changed requirement and what it is linked to. */
+interface Impact {
+  id: string
+  title: string
+  code: string[]
+  tests: string[]
+  adrs: string[]
+}
+
 /** D-050: a draft threat model entry, as apps/host/src/threat-delta.ts gives it. */
 interface Draft {
   kind: string
@@ -119,6 +128,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [untested, setUntested] = useState<string[]>([])
   const [untraced, setUntraced] = useState<Untraced[]>([])
   const [drafts, setDrafts] = useState<Draft[]>([])
+  const [impacts, setImpacts] = useState<Impact[]>([])
   const [behaviour, setBehaviour] = useState<Record<string, { cases: number; deltas?: string[] }>>({})
   const [capturing, setCapturing] = useState<string>()
   // D-028: where each file's hunks came from, by file.
@@ -144,6 +154,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     // D-050: draft threat model entries for what the change adds.
     const td = await send({ type: "threat_delta", sessionId, ...(ref ? { ref } : {}) })
     setDrafts(td.ok ? ((td.data as { drafts: Draft[] }).drafts ?? []) : [])
+    // D-039: what a changed requirement is linked to.
+    const ri = await send({ type: "requirement_impact", sessionId, ...(ref ? { ref } : {}) })
+    setImpacts(ri.ok ? ((ri.data as { impacts: Impact[] }).impacts ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
@@ -231,6 +244,25 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               {findings.some((x) => x.severity === "Severe") ? (
                 <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
               ) : null}
+            </section>
+          ) : null}
+          {impacts.length ? (
+            <section aria-label="Requirement changes" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <h3 className="m-0 text-[13.5px] font-semibold">
+                {impacts.length === 1 ? "A requirement changed" : `${impacts.length} requirements changed`}: what they are linked to
+              </h3>
+              <ul className="m-0 grid list-none gap-1.5 p-0">
+                {impacts.map((r) => (
+                  <li key={r.id} className="grid gap-0.5">
+                    <span>
+                      <strong className="mono">{r.id}</strong> {r.title}
+                    </span>
+                    <span className="text-mut">Code: {r.code.length ? <span className="mono">{r.code.join(", ")}</span> : "none linked"}</span>
+                    <span className="text-mut">Tests: {r.tests.length ? <span className="mono">{r.tests.join(", ")}</span> : "none"}</span>
+                    <span className="text-mut">Decisions: {r.adrs.length ? <span className="mono">{r.adrs.join(", ")}</span> : "none"}</span>
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
           {drafts.length ? (

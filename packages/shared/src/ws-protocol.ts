@@ -222,6 +222,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-039: for each requirement the change edits, the code, tests and ADRs linked to it. Read only. */
+  z.object({ type: z.literal("requirement_impact"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-038: the session's decisions (questions answered, plans approved) drafted as ADRs in MADR format. Read only. */
   z.object({ type: z.literal("adr_drafts"), sessionId: Id }),
   /** D-038: you accepted an ADR draft (as you edited it): the Host writes it into the project's docs/adr. */

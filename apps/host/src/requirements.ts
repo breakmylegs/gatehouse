@@ -240,3 +240,38 @@ export function unrequested(o: {
   }
   return out
 }
+
+export interface RequirementImpact {
+  id: string
+  title: string
+  file: string
+  /** Code the requirement names, and the files its commits changed. */
+  code: string[]
+  tests: string[]
+  /** ADRs (docs/adr) that mention the requirement's id. */
+  adrs: string[]
+}
+
+/**
+ * D-039: what a changed requirement touches: the code it names and its commits changed, its tests, and the ADRs that
+ * mention it. `filesOf` gives the files a commit changed.
+ */
+export function impactOf(o: {
+  root: string
+  requirement: Requirement
+  row: TraceRow
+  filesOf: (commit: string) => string[]
+}): RequirementImpact {
+  const r = o.requirement
+  const code = new Set(r.files)
+  for (const c of o.row.commits) for (const f of o.filesOf(c)) if (!f.startsWith("docs/")) code.add(f)
+  for (const t of o.row.tests) code.delete(t)
+  const adrs: string[] = []
+  try {
+    for (const n of fs.readdirSync(path.join(o.root, "docs", "adr")).filter((x) => x.endsWith(".md")).sort())
+      if (fs.readFileSync(path.join(o.root, "docs", "adr", n), "utf8").includes(r.id)) adrs.push(`docs/adr/${n}`)
+  } catch {
+    // no ADRs
+  }
+  return { id: r.id, title: r.title, file: r.file, code: [...code].sort(), tests: o.row.tests, adrs }
+}

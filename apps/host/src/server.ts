@@ -4,7 +4,7 @@ import { draftMarkdown, threatDelta } from "./threat-delta.js"
 import { fitnessCheck } from "./fitness.js"
 import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
 import { readArchRules, updateGraph } from "./architecture.js"
-import { approvedPlan, readRequirements, REQUIREMENTS_DIR, scopeOf, traceMatrix, unrequested } from "./requirements.js"
+import { approvedPlan, impactOf, readRequirements, REQUIREMENTS_DIR, scopeOf, traceMatrix, unrequested } from "./requirements.js"
 import { execFile as execFileCb } from "node:child_process"
 import { provenanceGraph } from "./provenance-graph.js"
 import { sessionRecords } from "./timeline.js"
@@ -980,6 +980,25 @@ export class HostServer {
           .map((x) => x.path)
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
+      }
+      case "requirement_impact": {
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        const changed = c.since && "files" in c ? c.files.map((x) => x.path.replace(/\\/g, "/")) : []
+        const { requirements } = readRequirements(s.cwd)
+        const touched = requirements.filter((r) => changed.includes(r.file))
+        if (!touched.length) return { impacts: [] }
+        const testFiles = await listFiles(s.cwd).then((l) => l.filter((p) => TEST_FILE.test(p))).catch(() => [] as string[])
+        const commits = new Map<string, string[]>()
+        for (const r of touched) commits.set(r.id, await gitLines(s.cwd, ["log", "--all", "--format=%H", "-F", `--grep=${r.id}`]).catch(() => []))
+        const rows = traceMatrix({ root: s.cwd, requirements: touched, commitsFor: (id) => commits.get(id) ?? [], testFiles, evidenceFor: () => [] })
+        const filesOf = new Map<string, string[]>()
+        for (const ids of commits.values())
+          for (const h of ids.slice(0, 30))
+            if (!filesOf.has(h)) filesOf.set(h, await gitLines(s.cwd, ["show", "--name-only", "--format=", h]).catch(() => []))
+        return {
+          impacts: touched.map((r, i) => impactOf({ root: s.cwd, requirement: r, row: rows[i]!, filesOf: (h) => filesOf.get(h) ?? [] })),
+        }
       }
       case "adr_drafts": {
         const s = this.#session(cmd.sessionId)
