@@ -438,12 +438,14 @@ function SessionPane({
   const [atEnd, setAtEnd] = useState(true)
   // Read by the list's own callbacks, which keep the first render's values.
   const following = useRef(true)
-  const toLatest = (smooth = false) =>
+  const toLatest = (smooth = false) => {
+    following.current = true // Mac fork: going to the latest follows it again (the list's onWheel)
     scroller.current?.scrollToIndex({
       index: "LAST",
       align: "end",
       ...(smooth ? { behavior: "smooth" } : {}),
     })
+  }
   // Find in this conversation (Ctrl+F): which lines match, and which one is shown.
   const paneRef = useRef<HTMLDivElement>(null)
   const [finding, setFinding] = useState(false)
@@ -943,7 +945,13 @@ function SessionPane({
                       ref={scroller}
                       style={{ height: "100%" }}
                       data={shownItems}
-                      followOutput="smooth"
+                      followOutput={() => (following.current ? "smooth" : false)} // Mac fork
+                      // Mac fork: a trackpad scrolls a few pixels at a time, so within the 80 px below the output kept
+                      // pulled you back down; scrolling up stops following at once, and scrolling down at the end starts it.
+                      onWheel={(e) => {
+                        if (e.deltaY < 0) following.current = false
+                        else if (e.deltaY > 0 && atEnd) following.current = true
+                      }}
                       atBottomThreshold={80}
                       atBottomStateChange={(b) => {
                         following.current = b
