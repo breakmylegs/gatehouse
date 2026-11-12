@@ -150,13 +150,13 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     setUntested(f.ok ? ((f.data as { untested?: string[] } | undefined)?.untested ?? []) : [])
     // D-034: hunks neither the plan nor a requirement accounts for.
     const sc = await send({ type: "scope", sessionId, ...(ref ? { ref } : {}) })
-    setUntraced(sc.ok ? ((sc.data as { unrequested: Untraced[] }).unrequested ?? []) : [])
+    setUntraced(sc.ok ? ((sc.data as { unrequested?: Untraced[] } | undefined)?.unrequested ?? []) : [])
     // D-050: draft threat model entries for what the change adds.
     const td = await send({ type: "threat_delta", sessionId, ...(ref ? { ref } : {}) })
-    setDrafts(td.ok ? ((td.data as { drafts: Draft[] }).drafts ?? []) : [])
+    setDrafts(td.ok ? ((td.data as { drafts?: Draft[] } | undefined)?.drafts ?? []) : [])
     // D-039: what a changed requirement is linked to.
     const ri = await send({ type: "requirement_impact", sessionId, ...(ref ? { ref } : {}) })
-    setImpacts(ri.ok ? ((ri.data as { impacts: Impact[] }).impacts ?? []) : [])
+    setImpacts(ri.ok ? ((ri.data as { impacts?: Impact[] } | undefined)?.impacts ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
