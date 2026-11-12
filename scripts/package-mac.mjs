@@ -361,8 +361,9 @@ function install() {
   say(`installed ${dest}`)
 }
 
-const waiterFile = () =>
-  path.join(
+// A declaration, not a const: install() runs at the top of the script, before a const here would be set.
+function waiterFile() {
+  return path.join(
     os.homedir(),
     "Library",
     "Application Support",
@@ -370,6 +371,7 @@ const waiterFile = () =>
     "updates",
     "mac-install.pid",
   )
+}
 
 /** Stops a waiting --when-quit from an earlier install, if one is still there: only the process it recorded. */
 function stopEarlierWaiter() {
