@@ -243,7 +243,7 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **A plan's card** says, before you approve it, how many of the commands and file changes the plan names your rules would allow, would ask you about and would refuse. It is an estimate: nothing in the plan is run to work it out, and every call is still judged when Claude makes it.
 
-**Requirements...** in the same menu reads the project's docs\requirements folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.
+**Requirements...** in the same menu reads the project's docs/requirements folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.
 
 **Evidence...** in the same menu gathers what shows a change was done properly into one pack: the decisions and approvals, the commands and how each ended, the checked claims and sealed checks, the dependency changes and what Codehouse's own analysis found, each tied to its audit record. One is made with each commit a session makes; **Gather now** makes one for what changed since the session's first checkpoint, and **Export, signed** saves it inside the session's signed timeline, which the checker that comes with it verifies. Packs are kept for 90 days unless you change it in Settings.
 
