@@ -41,6 +41,11 @@ export interface SessionReadClient {
   read(): Promise<ToolText>
 }
 
+/** D-037: the session's assumption register, kept by the Host. */
+export interface AssumptionClient {
+  declare(text: string, check?: string): Promise<ToolText>
+}
+
 export interface CompanionDeps {
   sessionId: string
   cwd: string
@@ -56,6 +61,8 @@ export interface CompanionDeps {
   pages?: PageClient
   /** The code session a chat is about. Absent: read_session is not offered. */
   about?: SessionReadClient
+  /** D-037: a coding session's assumptions. Absent: declare_assumption is not offered. */
+  assumptions?: AssumptionClient
   now?: () => number
   checkpoint?: typeof defaultCheckpoint
 }
@@ -141,6 +148,14 @@ export class CompanionHandlers {
     return await this.#deps.artifacts.save(title, kind, content)
   }
 
+  /** D-037: an assumption Claude is working on, kept and shown until the person says it holds. */
+  async declareAssumption(text: string, check?: string): Promise<ToolText> {
+    const clean = text.trim()
+    if (!clean) return { text: "Not kept: the assumption is empty.", isError: true }
+    if (!this.#deps.assumptions) return { text: "Assumptions are not kept for this session.", isError: true }
+    return this.#deps.assumptions.declare(clean.slice(0, 500), check?.trim().slice(0, 300) || undefined)
+  }
+
   async readSession(): Promise<ToolText> {
     if (!this.#deps.about) return { text: "This chat is not about a code session.", isError: true }
     return await this.#deps.about.read()
@@ -183,6 +198,7 @@ export interface CompanionToolDef {
     | "save_artifact"
     | "look_at_page"
     | "read_session"
+    | "declare_assumption"
   description: string
   shape: z.ZodRawShape
   /**
@@ -359,5 +375,25 @@ export const PAGE_TOOLS: readonly CompanionToolDef[] = [
       openWorldHint: false,
     },
     run: (h, a) => h.lookAtPage(String(a.url ?? "")),
+  },
+]
+
+/**
+ * D-037: the assumption register, offered to a coding session. Each assumption shows on the progress card and in the
+ * change's evidence until the person marks it verified.
+ */
+export const ASSUMPTION_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "declare_assumption",
+    description:
+      "Record an assumption you are making that the person has not confirmed (for example that an API returns dates in UTC, or that a file is no longer used), and how it could be checked. It is shown to the person until they verify it. Use it instead of quietly guessing.",
+    shape: { text: z.string().min(1).max(2000), how_to_check: z.string().max(1000).optional() },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    run: (h, a) => h.declareAssumption(String(a.text ?? ""), typeof a.how_to_check === "string" ? a.how_to_check : undefined),
   },
 ]

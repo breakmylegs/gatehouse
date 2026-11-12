@@ -1068,7 +1068,7 @@ function SessionPane({
         {/* The plan while there is one to follow: steps done, in progress and not started (owner, 2 Nov). */}
         {transcript.todos.length &&
         (session.state === "running" || transcript.todos.some((t) => t.status !== "completed")) ? (
-          <ProgressCard todos={transcript.todos} sessionId={session.id} />
+          <ProgressCard todos={transcript.todos} sessionId={session.id} {...(session.assumptions ? { assumptions: session.assumptions } : {})} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} starting={session.state === "starting"} />
         {/* What the session runs on, under the prompt box where you look when you send. */}

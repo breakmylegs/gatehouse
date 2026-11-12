@@ -115,7 +115,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-034 | Unrequested behaviour detector | built | slice/D-033-requirements | BUILD_REPORT "Frontier D-033, D-034 and D-035" | Hunks the approved plan and the requirements do not account for, with the reason, in Changes |
 | D-035 | Scope creep meter | built | slice/D-033-requirements | BUILD_REPORT "Frontier D-033, D-034 and D-035" | Files changed outside the plan, on the progress card |
 | D-036 | Tests-first contract mode | todo | | | |
-| D-037 | Assumption register | todo | | | |
+| D-037 | Assumption register | built | slice/D-037-assumptions | BUILD_REPORT "Frontier D-037" | declare_assumption, sdk source only (rule assumption-tools); progress card with It holds; in the pack until verified |
 | D-038 | ADR capture | todo | | | |
 | D-039 | Requirement change impact | todo | | | |
 | D-040 | Intent drift alarm | todo | | | Needs a local model |

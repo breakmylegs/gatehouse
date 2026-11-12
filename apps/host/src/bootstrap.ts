@@ -468,6 +468,19 @@ export function createHost(opts: HostOptions = {}): Host {
               }),
             }
           : {}),
+        // D-037: a coding session's assumptions, kept by its session.
+        ...(kind !== "chat"
+          ? {
+              assumptions: {
+                declare: async (text: string, check?: string) => {
+                  const s = manager.get(sessionId)
+                  if (!s) return { text: "The session is not open.", isError: true }
+                  const id = await s.declareAssumption(text, check)
+                  return { text: `Recorded as assumption ${id}. The person sees it until they verify it.` }
+                },
+              },
+            }
+          : {}),
         // notify_user reaches the desktop through the session's event stream. The phone path is added with the relay.
         host: { notify: async (m) => (manager.notify(m.sessionId, m.text), true) },
         policy: () => store.current,

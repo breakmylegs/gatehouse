@@ -43,6 +43,8 @@ export interface EvidencePack {
   dependencies: { sbom?: string; added: number; changed: number; removed: number }
   findings: SastFinding[]
   files: Array<{ path: string; change: string; added: number; removed: number }>
+  /** D-037: the assumptions Claude declared that you have not verified yet. */
+  assumptions?: Array<{ id: string; text: string; check?: string; at: string }>
   /** What this pack does not hold, said plainly. */
   notes: string[]
 }
@@ -98,6 +100,7 @@ export interface PackInput {
   dependencies: DependencyChange[]
   sbomSha?: string
   findings: SastFinding[]
+  assumptions?: Array<{ id: string; text: string; check?: string; at: string }>
   now?: () => Date
 }
 
@@ -154,6 +157,7 @@ export function buildPack(o: PackInput): EvidencePack {
     sealedChecks: { runs: sealed.length, records: sealed.map(link) },
     dependencies: { ...(o.sbomSha ? { sbom: o.sbomSha } : {}), added: count("added"), changed: count("changed"), removed: count("removed") },
     findings: o.findings,
+    ...(o.assumptions?.length ? { assumptions: o.assumptions } : {}),
     files: o.files,
     notes: [
       "Coverage and mutation deltas: none recorded for this change.",
@@ -286,7 +290,7 @@ export class EvidenceService {
   }
 
   /** The pack for what the session changed since a checkpoint (its first, by default), kept and recorded. */
-  async build(s: { id: string; cwd: string; project: string }, o: { ref?: string; commit?: string } = {}): Promise<{ sha: string; pack: EvidencePack } | undefined> {
+  async build(s: { id: string; cwd: string; project: string; assumptions?: EvidencePack["assumptions"] }, o: { ref?: string; commit?: string } = {}): Promise<{ sha: string; pack: EvidencePack } | undefined> {
     const c = await this.#o.checkpoints.changes(s.cwd, s.id, o.ref)
     const head = headOf(this.#o.auditDir)
     if (!c.since || !head) return undefined
@@ -327,6 +331,7 @@ export class EvidenceService {
       dependencies,
       ...(sbomSha ? { sbomSha } : {}),
       findings,
+      ...(s.assumptions?.length ? { assumptions: s.assumptions } : {}),
     })
     const sha = await this.store.put(pack)
     await this.#o.audit.record({

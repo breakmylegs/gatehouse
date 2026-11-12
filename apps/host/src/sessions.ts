@@ -933,6 +933,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#goal ? { goal: this.#goal } : {}),
+      ...(this.#assumptions.length ? { assumptions: this.#assumptions.map((a) => ({ ...a })) } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
@@ -1137,7 +1138,7 @@ export class Session extends EventEmitter<SessionEvents> {
           audit: d.audit,
           log: d.log,
           ...(d.evidence
-            ? { evidence: async (commit: string) => (await d.evidence!.build({ id: this.id, cwd, project: this.project }, { commit }))?.sha }
+            ? { evidence: async (commit: string) => (await d.evidence!.build({ id: this.id, cwd, project: this.project, assumptions: this.openAssumptions() }, { commit }))?.sha }
             : {}),
         }).then(
           (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
@@ -1561,6 +1562,32 @@ export class Session extends EventEmitter<SessionEvents> {
   /** What this chat was told it remembers when it started, in the words it was given (CH-03). */
   memoryGiven(): Array<{ id: string; scope: string; topic: string; text: string }> {
     return this.#memoryGiven.map((m) => ({ ...m }))
+  }
+
+  /** D-037: the assumptions Claude declared in this session. */
+  #assumptions: Array<{ id: string; text: string; check?: string; at: string; verified?: boolean }> = []
+
+  /** D-037: an assumption Claude declared: kept, recorded and shown until you verify it. */
+  async declareAssumption(text: string, check?: string): Promise<string> {
+    const id = `a${this.#assumptions.length + 1}`
+    this.#assumptions = [...this.#assumptions, { id, text, ...(check ? { check } : {}), at: new Date().toISOString() }].slice(-50)
+    await this.#auditLimit("assumption_declared", "assumption", { id, text, ...(check ? { check } : {}) }, "Claude declared an assumption for you to check.", "rules").catch(() => undefined)
+    this.emit("state", this.info())
+    return id
+  }
+
+  /** D-037: you checked it, and it holds. */
+  async verifyAssumption(id: string): Promise<void> {
+    const a = this.#assumptions.find((x) => x.id === id)
+    if (!a) throw new Error("There is no such assumption in this session.")
+    a.verified = true
+    await this.#auditLimit("assumption_verified", "assumption", { id }, "You checked an assumption Claude declared, and it holds.", "human-desktop").catch(() => undefined)
+    this.emit("state", this.info())
+  }
+
+  /** D-037: the ones not yet verified, for the evidence pack. */
+  openAssumptions() {
+    return this.#assumptions.filter((a) => !a.verified).map((a) => ({ ...a }))
   }
 
   /** D-005: the survivor a task is writing a test for; while it is set, edits outside test files ask. */

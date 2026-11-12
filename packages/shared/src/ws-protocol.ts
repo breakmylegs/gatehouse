@@ -222,6 +222,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-037: you checked an assumption Claude declared, and it holds. */
+  z.object({ type: z.literal("assumption_verify"), sessionId: Id, id: z.string().min(1).max(100) }),
   /** D-033: the project's requirements, traced to commits, tests and evidence, with the gaps. Read only. */
   z.object({ type: z.literal("requirements"), sessionId: Id }),
   /** D-034, D-035: the change against the approved plan and the requirements: files outside the plan, untraced hunks. */
@@ -460,6 +462,10 @@ export const SessionInfo = z.object({
   effortCap: Effort.optional(),
   /** B25: the check Extreme approval carries on until it passes. */
   goal: z.string().max(300).optional(),
+  /** D-037: the assumptions Claude declared, until you verify them. Absent from older Hosts. */
+  assumptions: z
+    .array(z.object({ id: z.string(), text: z.string(), check: z.string().optional(), at: z.string(), verified: z.boolean().optional() }))
+    .optional(),
   /** Where a local chat's words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel: z.string().max(120).optional(),
   /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */

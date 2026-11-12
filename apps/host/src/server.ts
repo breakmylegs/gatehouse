@@ -952,7 +952,7 @@ export class HostServer {
       case "evidence_build": {
         const s = this.#session(cmd.sessionId)
         if (!a.evidence) throw new CommandError("unavailable", "Evidence packs are not available here.")
-        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project }, cmd.ref ? { ref: cmd.ref } : {})
+        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions() }, cmd.ref ? { ref: cmd.ref } : {})
         if (!got) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to gather.")
         return got
       }
@@ -975,6 +975,11 @@ export class HostServer {
           .map((x) => x.path)
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
+      }
+      case "assumption_verify": {
+        const s = this.#session(cmd.sessionId)
+        await s.verifyAssumption(cmd.id)
+        return { ok: true }
       }
       case "requirements": {
         // D-033: read from the project's docs\requirements, linked by the ids commits and tests name.
