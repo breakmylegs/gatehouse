@@ -247,6 +247,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 When Claude works on an assumption it has not checked with you, it can record it: the progress card lists it with how to check it, until you choose **It holds**, and the change's evidence keeps the ones you have not.
 
+A project can set how it is built in .codehouse/architecture.yml: its layers (by file patterns), which layers each may use, and imports that are not allowed. An edit that adds an import breaking one of these waits for you, naming the rule, even in Extreme approval.
+
 **Requirements...** in the same menu reads the project's docs/requirements folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.
 
 **Evidence...** in the same menu gathers what shows a change was done properly into one pack: the decisions and approvals, the commands and how each ended, the checked claims and sealed checks, the dependency changes and what Codehouse's own analysis found, each tied to its audit record. One is made with each commit a session makes; **Gather now** makes one for what changed since the session's first checkpoint, and **Export, signed** saves it inside the session's signed timeline, which the checker that comes with it verifies. Packs are kept for 90 days unless you change it in Settings.

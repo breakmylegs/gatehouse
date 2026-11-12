@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { ARCH_RULE, archCheck, archReason } from "./architecture.js"
 import { TEST_FILE, TEST_SCOPE_RULE, TESTS_FIRST_RULE, testScopeReason, testsFirstReason, type Survivor } from "./mutation.js"
 import { VULN_RULE, vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { SAST_RULE, sastReason, type SastCommitGuard, type SastFinding } from "./sast.js"
@@ -277,6 +278,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (!TEST_FILE.test(file))
           verdict = { ...verdict, outcome: "escalate", ruleId: TEST_SCOPE_RULE, reason: testScopeReason(file, task), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
       }
+      // D-041: an edit that adds an import the project's architecture rules forbid goes to a person, with the rule named.
+      if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
+        const broken = await archCheck(deps.projectRoot ?? deps.cwd, toolName, input).catch(() => [])
+        if (broken.length)
+          verdict = { ...verdict, outcome: "escalate", ruleId: ARCH_RULE, reason: archReason(broken), risk: Math.max(verdict.risk, 65), decidedBy: "rules" }
+      }
       // D-036: in tests-first mode, before the tests are approved, an edit to anything but a test file goes to a person.
       if (deps.testsFirst?.() && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
         const file = String(input.file_path ?? input.notebook_path ?? "")
@@ -479,6 +486,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   TEST_SCOPE_RULE,
   // D-036: an implementation edit before the tests are approved.
   TESTS_FIRST_RULE,
+  // D-041: the project's own architecture rules are the owner's to waive.
+  ARCH_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

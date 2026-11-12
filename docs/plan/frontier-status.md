@@ -119,7 +119,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-038 | ADR capture | todo | | | |
 | D-039 | Requirement change impact | todo | | | |
 | D-040 | Intent drift alarm | todo | | | Needs a local model |
-| D-041 | Architecture rules as policy | todo | | | |
+| D-041 | Architecture rules as policy | built | slice/D-041-architecture | BUILD_REPORT "Frontier D-041" | .codehouse/architecture.yml layers, allow, forbid; Tree-sitter imports; architecture rule, never auto-approved; graph in .codehouse/arch; 11 golden cases |
 | D-042 | Living C4 diagrams | todo | | | |
 | D-043 | Architecture drift alerts | todo | | | |
 | D-044 | ADR-aware context | todo | | | |
