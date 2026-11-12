@@ -14,7 +14,7 @@ afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 const SOURCE = "export function isAdult(age) {\n  return age >= 18 && age < 150\n}\n"
 const WEAK = 'import { test } from "node:test"\nimport assert from "node:assert"\nimport { isAdult } from "../src/age.js"\ntest("adult", () => assert.equal(isAdult(30), true))\n'
 const BETTER = WEAK + 'test("too old", () => assert.equal(isAdult(200), false))\n'
-const COMMAND = "node --test test/"
+const COMMAND = "node --test"
 
 /** A plain child process, as a test stands in for a Codehouse action. */
 const exec: MutationExec = (command, cwd, timeoutMs) =>

@@ -388,6 +388,8 @@ export interface SessionEvents {
         | "instructions_changed"
         | "heartbeat_missed"
         | "commit_noted"
+        | "mutant_task_started"
+        | "mutant_rechecked"
       data: Record<string, unknown>
     },
   ]

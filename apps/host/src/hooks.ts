@@ -366,7 +366,8 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
           : undefined,
       )
       if (note) notes.set(String(input.tool_use_id), note)
-      if ((input.tool_name === "Bash" || input.tool_name === "PowerShell") && input.is_interrupt !== true)
+      const interrupted = input.hook_event_name === "PostToolUseFailure" && input.is_interrupt === true
+      if ((input.tool_name === "Bash" || input.tool_name === "PowerShell") && !interrupted)
         deps.onCommandEnded?.(
           String(input.tool_use_id),
           input.hook_event_name === "PostToolUseFailure" ? String(input.error ?? "failed") : undefined,

@@ -107,9 +107,19 @@ export async function rebuildAt(o: {
   const marks: string[] = []
   let applied = 0
   let stopped = false
+  // Windows can name one folder two ways (a short 8.3 name, and the long one git gives): compare their real paths.
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync.native(p)
+    } catch {
+      const up = path.dirname(p)
+      return up === p ? p : path.join(real(up), path.basename(p))
+    }
+  }
+  const realTop = real(top)
   const inside = (file: string): string | undefined => {
-    const abs = path.resolve(path.isAbsolute(file) ? file : path.join(o.cwd, file))
-    const rel = path.relative(top, abs)
+    const abs = real(path.resolve(path.isAbsolute(file) ? file : path.join(o.cwd, file)))
+    const rel = path.relative(realTop, abs)
     if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return undefined
     const out = path.resolve(dir, rel)
     return out.startsWith(dir + path.sep) ? out : undefined

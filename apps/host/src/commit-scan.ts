@@ -136,10 +136,8 @@ export async function commitAdditions(
   command: string,
   run: Git = git,
 ): Promise<{ diff: string; untracked: string[] }> {
-  const adds = /git[^;&|
-]*add/.test(command)
-  const all = adds || /commit[^;&|
-]*(?:s-[A-Za-z]*a[A-Za-z]*|s--all)/.test(command)
+  const adds = /\bgit\b[^;&|\n]*\badd\b/.test(command)
+  const all = adds || /\bcommit\b[^;&|\n]*(?:\s-[A-Za-z]*a[A-Za-z]*\b|\s--all\b)/.test(command)
   const base = ["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-U0"]
   let diff: string
   if (all) {

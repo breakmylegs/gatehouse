@@ -219,7 +219,7 @@ export class VulnCommitGuard {
     const changes: DependencyChange[] = []
     for (const f of locks) {
       const after = fs.readFileSync(f.abs, "utf8")
-      const before = f.fromTop ? await this.#run(top, ["show", `HEAD:${f.rel.replace(/\/g, "/")}`]).catch(() => "") : ""
+      const before = f.fromTop ? await this.#run(top, ["show", `HEAD:${f.rel.replace(/\\/g, "/")}`]).catch(() => "") : ""
       changes.push(...lockfileChanges(f.rel, before, after))
     }
     return this.#snapshot.matches(changes)
