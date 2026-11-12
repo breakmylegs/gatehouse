@@ -413,6 +413,22 @@ export async function startTemplate(
   await call("POST", "/api/phone/envelopes", { sealed }, session.token)
 }
 
+/**
+ * D-029b: anchors the audit log on the computer at the record named, signed with Face ID. The computer checks the
+ * passkey and that the record has that hash before it keeps the anchor.
+ */
+export async function signAnchor(session: Session, device: DeviceInfo, head: { seq: number; hash: string }): Promise<void> {
+  const envelope = newEnvelope({
+    type: "anchor",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    anchor: { seq: head.seq, hash: head.hash },
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
 export async function enableNotifications(session: Session): Promise<void> {
   const sub = await subscribePush()
   await call("PUT", "/api/phone/push-subscription", { subscription: sub }, session.token)

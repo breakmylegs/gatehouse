@@ -9,7 +9,8 @@
 import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
-import { anchorFile, anchorMessage, readAnchors, type Anchor, type AuditHead } from "@gatehouse/shared/audit"
+import { convertCOSEtoPKCS } from "@simplewebauthn/server/helpers"
+import { anchorFile, anchorMessage, listAuditFiles, readAnchors, type Anchor, type AuditHead, type PhoneAnchor } from "@gatehouse/shared/audit"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 import type { TimelineSigner } from "./timeline-export.js"
@@ -125,6 +126,83 @@ export class AnchorService {
     return anchor
   }
 
+  /**
+   * D-029b: an anchor you signed on your phone with its passkey. The phone relay service has already checked the
+   * assertion against the pinned passkey (invariant 8); here the record must be in the log with the hash it names.
+   * The phone's public key is kept in phones.json, so the verifiers can check it without the Host.
+   */
+  async phone(o: {
+    phoneId: string
+    phoneName: string
+    /** The pinned passkey's COSE public key, base64url. */
+    credentialPublicKey: string
+    envelope: PhoneAnchor["envelope"]
+    assertion: PhoneAnchor["assertion"]
+  }): Promise<PhoneAnchor> {
+    const { seq, hash } = o.envelope.anchor
+    if (recordHash(this.#auditDir, seq) !== hash) throw new Error(`Record ${seq} is not in the log with the hash the phone signed.`)
+    const point = convertCOSEtoPKCS(Buffer.from(o.credentialPublicKey, "base64url"))
+    if (point.length !== 65 || point[0] !== 4) throw new Error("The phone's passkey is not a P-256 key.")
+    const jwk = { kty: "EC", crv: "P-256", x: Buffer.from(point.slice(1, 33)).toString("base64url"), y: Buffer.from(point.slice(33)).toString("base64url") }
+    fs.mkdirSync(this.#dir, { recursive: true })
+    const phonesFile = path.join(this.#dir, "phones.json")
+    let phones: Record<string, unknown> = {}
+    try {
+      phones = JSON.parse(fs.readFileSync(phonesFile, "utf8")) as Record<string, unknown>
+    } catch {
+      // the first phone anchor
+    }
+    if (JSON.stringify(phones[o.phoneId]) !== JSON.stringify(jwk)) await writeFileAtomic(phonesFile, `${JSON.stringify({ ...phones, [o.phoneId]: jwk }, null, 2)}\n`)
+    const anchor: PhoneAnchor = {
+      v: 1,
+      seq,
+      hash,
+      ts: String(o.envelope.issuedAt ?? this.#now().toISOString()),
+      signer: "phone",
+      strength: "passkey",
+      phone: o.phoneId,
+      envelope: o.envelope,
+      assertion: { authenticatorData: o.assertion.authenticatorData, clientDataJSON: o.assertion.clientDataJSON, signature: o.assertion.signature },
+    }
+    const file = anchorFile(seq, true)
+    await writeFileAtomic(path.join(this.#dir, file), `${JSON.stringify(anchor, null, 2)}\n`)
+    try {
+      if (!fs.existsSync(path.join(this.#dir, ".git"))) await this.#git(this.#dir, ["init", "-q"])
+      await this.#git(this.#dir, ["add", "phones.json", file])
+      await this.#git(this.#dir, ["commit", "-q", "-m", `anchor ${seq} (signed on ${o.phoneName})`])
+      await this.#git(this.#dir, ["tag", "-a", `anchor-${seq}-phone`, "-m", JSON.stringify({ seq, hash, phone: o.phoneId })])
+    } catch (e) {
+      this.#log(`audit anchor ${seq} from the phone kept without its git tag: ${(e as Error).message.slice(0, 200)}`)
+    }
+    await this.#audit.record({
+      session: "phone",
+      event: "anchor_signed",
+      channel: "phone",
+      tool: "audit",
+      input: { seq, hash, signer: "phone", strength: "passkey", phone: o.phoneId },
+      verdict: {
+        outcome: "allow",
+        ruleId: "audit-anchor",
+        reason: `You anchored the audit log at record ${seq} on ${o.phoneName}, signed with its passkey.`,
+        risk: 0,
+        decidedBy: "human-phone",
+        policyHash: "n/a",
+      },
+      latencyMs: 0,
+    })
+    return anchor
+  }
+
+  /** The chain's head now, for the phone to sign. */
+  head(): { seq: number; hash: string } | undefined {
+    try {
+      const h = JSON.parse(fs.readFileSync(path.join(this.#auditDir, "head.json"), "utf8")) as AuditHead
+      return { seq: h.seq, hash: h.hash }
+    } catch {
+      return undefined
+    }
+  }
+
   /** Anchors at start if the last is a day old, then checks every hour. */
   start(): void {
     if (this.#timer) return
@@ -142,4 +220,26 @@ export class AnchorService {
     clearInterval(this.#timer)
     this.#timer = undefined
   }
+}
+
+/** A record's hash, read from the log by its seq. */
+function recordHash(auditDir: string, seq: number): string | undefined {
+  for (const file of listAuditFiles(auditDir).reverse()) {
+    let text: string
+    try {
+      text = fs.readFileSync(path.join(auditDir, file), "utf8")
+    } catch {
+      continue
+    }
+    for (const line of text.split("\n")) {
+      if (!line.includes(`"seq":${seq},`)) continue
+      try {
+        const r = JSON.parse(line) as { seq?: number; hash?: string }
+        if (r.seq === seq) return r.hash
+      } catch {
+        // a damaged line
+      }
+    }
+  }
+  return undefined
 }

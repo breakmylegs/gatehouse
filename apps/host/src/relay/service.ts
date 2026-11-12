@@ -61,6 +61,8 @@ export interface PhoneServiceDeps {
   kill: HostKillSwitch
   /** D-025: you did something on the phone, so the dead-man timers start again. */
   heartbeat?: () => void
+  /** D-029b: keeps an audit anchor you signed on the phone. */
+  anchors?: { phone(o: Parameters<import("../anchors.js").AnchorService["phone"]>[0]): Promise<unknown> }
   audit: HostAudit
   log: (line: string) => void
   now?: () => number
@@ -580,6 +582,24 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     }
     if (a.type === "start") {
       await this.#start(a.templateId, phone.name, phone.id)
+      return
+    }
+    if (a.type === "anchor") {
+      const r = signed.assertion as { response?: { authenticatorData?: string; clientDataJSON?: string; signature?: string } }
+      const got = r.response
+      if (!this.#d.anchors || !got?.authenticatorData || !got.clientDataJSON || !got.signature)
+        return await this.#reject("The audit log cannot be anchored from the phone here", { phoneId: phone.id })
+      try {
+        await this.#d.anchors.phone({
+          phoneId: phone.id,
+          phoneName: phone.name,
+          credentialPublicKey: phone.credentialPublicKey,
+          envelope: signed.envelope as never,
+          assertion: { authenticatorData: got.authenticatorData, clientDataJSON: got.clientDataJSON, signature: got.signature },
+        })
+      } catch (e) {
+        await this.#reject((e as Error).message, { phoneId: phone.id })
+      }
       return
     }
     const r =

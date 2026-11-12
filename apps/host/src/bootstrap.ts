@@ -673,6 +673,8 @@ export function createHost(opts: HostOptions = {}): Host {
     kill,
     // D-025: anything signed on the phone starts the dead-man timers again.
     heartbeat: () => manager.heartbeat(),
+    // D-029b: an audit anchor signed on the phone (the anchors are made further down; this runs later).
+    anchors: { phone: (o) => anchors.phone(o) },
     audit,
     log,
     // G32: a signed message or Interrupt from the phone reaches only a session open here, as the phone was shown it.
@@ -978,6 +980,7 @@ export function createHost(opts: HostOptions = {}): Host {
     build: () =>
       buildPhoneSessions({
         live: phoneLive,
+        head: () => anchors.head(),
         list: () => manager.list(),
         messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
         redact: (t) => redactString(t, { terms: config.redactTerms }),

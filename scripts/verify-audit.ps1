@@ -310,53 +310,103 @@ if ((Test-Path -LiteralPath $evidenceFile) -and (Test-Path -LiteralPath $timelin
 }
 
 # D-029: each anchor's signature (ECDSA P-256, SHA-256, IEEE P1363) over its plain text, with the key in key.json,
-# and that the record it names still has the hash it anchored. The same check as anchors.ts.
+# and that the record it names still has the hash it anchored. D-029b: an anchor signed on the phone carries the
+# passkey's WebAuthn assertion over an envelope naming the record; it is checked with the phone's key in phones.json.
+# The same checks as anchors.ts.
 if ($Anchors -eq '') { $Anchors = Join-Path (Split-Path -Parent ([System.IO.Path]::GetFullPath($Dir))) 'anchors' }
 $anchorCount = 0
+function ConvertFrom-B64Url([string]$s) {
+    $b = $s.Replace('-', '+').Replace('_', '/')
+    switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+    return [Convert]::FromBase64String($b)
+}
+function New-EcKey($jwk) {
+    $q = New-Object System.Security.Cryptography.ECPoint
+    $q.X = ConvertFrom-B64Url $jwk['x']
+    $q.Y = ConvertFrom-B64Url $jwk['y']
+    $p = New-Object System.Security.Cryptography.ECParameters
+    $p.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+    $p.Q = $q
+    return [System.Security.Cryptography.ECDsa]::Create($p)
+}
+# A DER ECDSA signature (SEQUENCE of two INTEGERs) as the 64 bytes .NET Framework's VerifyData takes.
+function ConvertFrom-DerSignature([byte[]]$der) {
+    $i = 2
+    if ($der[1] -band 0x80) { $i = 2 + ($der[1] -band 0x7f) }
+    $out = New-Object byte[] 64
+    foreach ($half in 0, 1) {
+        if ($der[$i] -ne 0x02) { throw 'not DER' }
+        $len = [int]$der[$i + 1]
+        $v = $der[($i + 2)..($i + 1 + $len)]
+        while ($v.Count -gt 32 -and $v[0] -eq 0) { $v = $v[1..($v.Count - 1)] }
+        if ($v.Count -gt 32) { throw 'not P-256' }
+        [Array]::Copy([byte[]]$v, 0, $out, $half * 32 + (32 - $v.Count), $v.Count)
+        $i += 2 + $len
+    }
+    return $out
+}
+function Test-PhoneAnchor($a, $jwk) {
+    try {
+        if ($null -eq $jwk) { return $false }
+        $e = $a['envelope']
+        if ($e['type'] -ne 'anchor' -or [long]$e['anchor']['seq'] -ne [long]$a['seq'] -or $e['anchor']['hash'] -ne $a['hash']) { return $false }
+        $clientBytes = ConvertFrom-B64Url $a['assertion']['clientDataJSON']
+        $client = Read-Json ([System.Text.Encoding]::UTF8.GetString($clientBytes))
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $challenge = [Convert]::ToBase64String($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Canonical $e)))).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        if ($client['type'] -ne 'webauthn.get' -or $client['challenge'] -ne $challenge) { return $false }
+        $auth = ConvertFrom-B64Url $a['assertion']['authenticatorData']
+        if ($auth.Length -lt 37 -or ($auth[32] -band 0x04) -eq 0) { return $false }
+        $clientHash = $sha.ComputeHash($clientBytes)
+        $data = New-Object byte[] ($auth.Length + 32)
+        [Array]::Copy($auth, 0, $data, 0, $auth.Length)
+        [Array]::Copy($clientHash, 0, $data, $auth.Length, 32)
+        $sig = ConvertFrom-DerSignature (ConvertFrom-B64Url $a['assertion']['signature'])
+        return (New-EcKey $jwk).VerifyData($data, $sig, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    } catch { return $false }
+}
 if (Test-Path -LiteralPath $Anchors) {
-    $anchorFiles = @(Get-ChildItem -LiteralPath $Anchors -File | Where-Object { $_.Name -match '^anchor-\d+\.json$' } | Sort-Object Name)
+    $anchorFiles = @(Get-ChildItem -LiteralPath $Anchors -File | Where-Object { $_.Name -match '^anchor-\d+(-p)?\.json$' } | Sort-Object Name)
     if ($anchorFiles.Count -gt 0) {
         $aec = $null
-        try {
-            $ajwk = Read-Json ([System.IO.File]::ReadAllText((Join-Path $Anchors 'key.json')))
-            $b64u = {
-                param([string]$s)
-                $b = $s.Replace('-', '+').Replace('_', '/')
-                switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
-                [Convert]::FromBase64String($b)
-            }
-            $aq = New-Object System.Security.Cryptography.ECPoint
-            $aq.X = & $b64u $ajwk['x']
-            $aq.Y = & $b64u $ajwk['y']
-            $ap = New-Object System.Security.Cryptography.ECParameters
-            $ap.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
-            $ap.Q = $aq
-            $aec = [System.Security.Cryptography.ECDsa]::Create($ap)
-        } catch {
-            Add-Problem 'anchors/key.json' 0 $null "the anchors' key could not be read, so no anchor could be checked"
+        $keyFile = Join-Path $Anchors 'key.json'
+        if (Test-Path -LiteralPath $keyFile) {
+            try { $aec = New-EcKey (Read-Json ([System.IO.File]::ReadAllText($keyFile))) } catch { $aec = $null }
         }
+        $phones = @{}
+        $phonesFile = Join-Path $Anchors 'phones.json'
+        if (Test-Path -LiteralPath $phonesFile) {
+            try { $phones = Read-Json ([System.IO.File]::ReadAllText($phonesFile)) } catch { Add-Problem 'anchors/phones.json' 0 $null "the phones' keys could not be read" }
+        }
+        $keyMissing = $false
         foreach ($af in $anchorFiles) {
             $anchorCount++
             $where = "anchors/$($af.Name)"
             $a = $null
             try { $a = Read-Json ([System.IO.File]::ReadAllText($af.FullName)) } catch { $a = $null }
-            if ($null -eq $a -or [long]$a['v'] -ne 1 -or -not (Test-IsInteger $a['seq']) -or $a['hash'] -isnot [string] -or $a['sig'] -isnot [string]) {
+            if ($null -ne $a -and [long]$a['v'] -eq 1 -and $a['signer'] -eq 'phone' -and (Test-IsInteger $a['seq']) -and $a['hash'] -is [string]) {
+                $aSeq = [long]$a['seq']
+                if (-not (Test-PhoneAnchor $a $phones[[string]$a['phone']])) { Add-Problem $where 0 $aSeq "the passkey's signature does not verify, so the anchor was changed" }
+            } elseif ($null -eq $a -or [long]$a['v'] -ne 1 -or -not (Test-IsInteger $a['seq']) -or $a['hash'] -isnot [string] -or $a['sig'] -isnot [string]) {
                 Add-Problem $where 0 $null 'not an anchor'
                 continue
-            }
-            $aSeq = [long]$a['seq']
-            if ($null -ne $aec) {
-                $ok1 = $false
-                try {
-                    $msg = [System.Text.Encoding]::UTF8.GetBytes("codehouse-anchor-v1`n$aSeq`n$($a['hash'])`n$($a['ts'])")
-                    $ok1 = $aec.VerifyData($msg, [Convert]::FromBase64String($a['sig']), [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-                } catch { $ok1 = $false }
-                if (-not $ok1) { Add-Problem $where 0 $aSeq "the anchor's signature does not verify, so the anchor was changed" }
+            } else {
+                $aSeq = [long]$a['seq']
+                if ($null -eq $aec) { $keyMissing = $true }
+                else {
+                    $ok1 = $false
+                    try {
+                        $msg = [System.Text.Encoding]::UTF8.GetBytes("codehouse-anchor-v1`n$aSeq`n$($a['hash'])`n$($a['ts'])")
+                        $ok1 = $aec.VerifyData($msg, [Convert]::FromBase64String($a['sig']), [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+                    } catch { $ok1 = $false }
+                    if (-not $ok1) { Add-Problem $where 0 $aSeq "the anchor's signature does not verify, so the anchor was changed" }
+                }
             }
             $r = $bySeq[$aSeq]
             if ($null -eq $r) { Add-Problem $where 0 $aSeq "record $aSeq, which was anchored, is not in the log" }
             elseif ($r['hash'] -ne $a['hash']) { Add-Problem $where 0 $aSeq "record $aSeq was changed after it was anchored on $($a['ts'])" }
         }
+        if ($keyMissing) { Add-Problem 'anchors/key.json' 0 $null "the anchors' key could not be read, so no anchor could be checked" }
     }
 }
 

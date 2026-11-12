@@ -177,6 +177,8 @@ export interface PhoneSessionsDeps {
   templates?: () => Array<{ id: string; name: string }>
   /** The conversations and activity kept from the stream; without it each is read from its transcript. */
   live?: PhoneLive
+  /** D-029b: the audit chain's head, for the phone to anchor. */
+  head?: () => { seq: number; hash: string } | undefined
   now?: () => Date
 }
 
@@ -277,10 +279,12 @@ export async function buildPhoneSessions(d: PhoneSessionsDeps): Promise<PhoneSes
     }),
   )
   const templates = (d.templates?.() ?? []).map((t) => ({ id: t.id, name: d.redact(t.name) }))
+  const auditHead = d.head?.()
   return fit({
     at: (d.now ?? (() => new Date()))().toISOString(),
     sessions,
     ...(templates.length ? { templates } : {}),
+    ...(auditHead ? { auditHead } : {}),
   })
 }
 

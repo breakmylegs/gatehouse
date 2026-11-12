@@ -40,6 +40,8 @@ export type PhoneAction =
   | { type: "start"; templateId: string }
   /** D-025: "I'm still here" for the dead-man timer; it names nothing. */
   | { type: "heartbeat" }
+  /** D-029b: an audit anchor, naming one record and its hash. */
+  | { type: "anchor"; seq: number; hash: string }
 
 export type Accepted = {
   ok: true
@@ -106,6 +108,13 @@ async function verify(i: VerifyInput): Promise<Accepted | Rejected> {
       return no("A heartbeat names nothing")
     if (life > MAX_KILL_LIFE_MS) return no("A heartbeat lives too long")
     action = { type: "heartbeat" }
+  } else if (e.type === "anchor") {
+    // D-029b: signed like the kill switch, a fresh nonce and a short life; it names only the record and its hash.
+    if (e.requestId !== undefined || e.sessionId !== undefined || e.templateId !== undefined || e.text !== undefined)
+      return no("An anchor names only its record")
+    if (life > MAX_KILL_LIFE_MS) return no("An anchor lives too long")
+    if (!e.anchor) return no("The envelope names no record")
+    action = { type: "anchor", seq: e.anchor.seq, hash: e.anchor.hash }
   } else if (e.type === "start") {
     // G32: like a message, signed over the whole envelope with a fresh nonce and a short life; it names only a routine.
     if (e.requestId !== undefined || e.sessionId !== undefined || e.text !== undefined)

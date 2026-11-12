@@ -12,6 +12,7 @@ import {
   loadSessions,
   register,
   sendToSession,
+  signAnchor,
   startTemplate,
   stillHere,
   unlock,
@@ -903,6 +904,25 @@ function SessionsScreen({
           <p role="status" className="m-0 px-4 pt-2 text-[15px]">
             {said}
           </p>
+        ) : null}
+        {data.auditHead ? (
+          <section aria-label="Audit log" className="grid gap-2 px-4 pt-4">
+            <h2 className="m-0 text-[17px] font-semibold">Audit log</h2>
+            <p className="m-0 text-[15px] text-mut">
+              Anchor it here and no one can later rewrite what it holds up to record {data.auditHead.seq.toLocaleString("en-GB")} without it
+              showing. Your computer anchors it every day itself; one from this phone, with Face ID, is stronger.
+            </p>
+            <button
+              className="btn justify-self-start"
+              disabled={busy}
+              onClick={() => {
+                const head = data.auditHead!
+                void act(() => signAnchor(session, device, head), "Sent. Your computer keeps the anchor once it checks the signature.")
+              }}
+            >
+              Anchor with Face ID
+            </button>
+          </section>
         ) : null}
         {data.sessions.length ? (
           <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
