@@ -51,17 +51,45 @@ if (!fs.existsSync("/usr/bin/swiftc"))
     "swiftc was not found. Install Apple's command line tools: xcode-select --install",
   )
 
-// The same version a Windows release of this commit would have: major.minor from package.json, the commit count.
-const version = execFileSync(
-  process.execPath,
-  [
-    path.join(root, "node_modules", "tsx", "dist", "cli.mjs"),
-    path.join(root, "scripts", "release.ts"),
-    "version",
-  ],
-  { cwd: root, encoding: "utf8" },
-).trim()
+// The upstream release this build is made from, and how many commits the Mac fork adds on top of it: 2.0.264+mac.25.
+// Settings, Updates compares that with upstream's releases (the +mac part is ignored there, as semver's build part
+// is), so a build of the newest release reads as up to date and a newer upstream release shows as one to sync.
+// Counting this fork's own commits instead (2.0.289) ran ahead of upstream's numbers and matched no release.
+// Uncommitted changes add .dev. With no upstream release tag to be found, it falls back to upstream's own scheme.
+const gitOut = (...a) => {
+  try {
+    return execFileSync("git", a, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim()
+  } catch {
+    return ""
+  }
+}
+const releaseTag = gitOut(
+  "describe",
+  "--tags",
+  "--abbrev=0",
+  "--match",
+  "v[0-9]*.[0-9]*.[0-9]*",
+  "HEAD",
+)
+const dirty = gitOut("status", "--porcelain", "--untracked-files=no") !== ""
+const version = /^v\d+\.\d+\.\d+$/.test(releaseTag)
+  ? `${releaseTag.slice(1)}+mac.${gitOut("rev-list", "--count", `${releaseTag}..HEAD`) || "0"}${dirty ? ".dev" : ""}`
+  : execFileSync(
+      process.execPath,
+      [
+        path.join(root, "node_modules", "tsx", "dist", "cli.mjs"),
+        path.join(root, "scripts", "release.ts"),
+        "version",
+      ],
+      { cwd: root, encoding: "utf8" },
+    ).trim()
 const plain = /^\d+\.\d+\.\d+/.exec(version)?.[0] ?? "0.0.0"
+// The bundle's own build number only ever grows: every commit counted.
+const bundleBuild = gitOut("rev-list", "--count", "HEAD") || "0"
 say(`Codehouse ${version} for ${arch}`)
 
 if (!has("--swift-only")) {
@@ -288,7 +316,7 @@ function infoPlist() {
     CFBundleName: "Codehouse",
     CFBundlePackageType: "APPL",
     CFBundleShortVersionString: plain,
-    CFBundleVersion: plain,
+    CFBundleVersion: bundleBuild,
     CodehouseVersion: version,
     LSApplicationCategoryType: "public.app-category.developer-tools",
     LSMinimumSystemVersion: MIN_MACOS,
