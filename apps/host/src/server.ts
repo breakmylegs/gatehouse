@@ -1,4 +1,5 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { draftMarkdown, threatDelta } from "./threat-delta.js"
 import { fitnessCheck } from "./fitness.js"
 import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
 import { readArchRules, updateGraph } from "./architecture.js"
@@ -978,6 +979,31 @@ export class HostServer {
           .map((x) => x.path)
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
+      }
+      case "threat_delta": {
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) return { drafts: [] }
+        const added = c.files
+          .filter((x) => x.change !== "deleted" && !x.binary)
+          .map((x) => {
+            const lines: Array<{ line: number; text: string }> = []
+            let at: number | undefined
+            for (const l of x.diff.split(/\r?\n/)) {
+              const h = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(l)
+              if (h) at = Number(h[1])
+              else if (at !== undefined && l.startsWith("+") && !l.startsWith("+++")) lines.push({ line: at++, text: l.slice(1) })
+              else if (at !== undefined && !l.startsWith("-")) at++
+            }
+            return { file: x.path, lines }
+          })
+        const dependencies: DependencyChange[] = []
+        for (const x of c.files.filter((x) => isLockfile(x.path)).slice(0, 20)) {
+          const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined)
+          if (v) dependencies.push(...lockfileChanges(x.path, v.before, v.after))
+        }
+        const drafts = threatDelta({ added, dependencies })
+        return { drafts: drafts.map((d) => ({ ...d, markdown: draftMarkdown(d) })) }
       }
       case "architecture": {
         const s = this.#session(cmd.sessionId)

@@ -222,6 +222,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-050: draft STRIDE entries for what the change adds (routes, data stores, connections, listeners, dependencies). */
+  z.object({ type: z.literal("threat_delta"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-042, D-043: the project's architecture as it is, its C4 diagrams in Mermaid, and drift since you approved it. */
   z.object({ type: z.literal("architecture"), sessionId: Id }),
   /** D-043: you approve the architecture as it is now; drift is measured from here. */

@@ -281,6 +281,8 @@ When a signed vulnerability snapshot (OSV advisories) is in Codehouse's managed 
 
 **Where it came from**, beside a file, says for each of its changes which edit made it and what Claude had read before that edit, marking a page or file that held what looks like injected instructions.
 
+When the change adds a web route, a data store, an outbound connection, a listener or a package, Changes lists it for the threat model; **Copy the drafts** gives a STRIDE table for each, with the questions to answer.
+
 Above the files, Changes lists what Codehouse's own analysis finds in the changed lines, with the file and line: SQL or a shell command built from input, code run from a string, TLS checks switched off, weak cryptography, and a file path taken from a request. A commit that adds a Severe one waits for you, even in Extreme approval.
 
 When a changed JavaScript or TypeScript file is named by none of the project's tests, Changes offers **Capture behaviour**: what it did before the change, with generated inputs, in a copy of the project. **Compare with now** then says each input that gives a different answer after the change.

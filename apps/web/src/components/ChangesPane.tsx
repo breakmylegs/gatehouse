@@ -24,6 +24,14 @@ import { send, useStore } from "../store"
 const LOCKFILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
 
+/** D-050: a draft threat model entry, as apps/host/src/threat-delta.ts gives it. */
+interface Draft {
+  kind: string
+  where: string
+  what: string
+  markdown: string
+}
+
 /** D-034: a hunk neither the plan nor a requirement accounts for. */
 interface Untraced {
   file: string
@@ -110,6 +118,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   // D-066 and D-006: changed files nothing tests, and what replaying their captured behaviour found.
   const [untested, setUntested] = useState<string[]>([])
   const [untraced, setUntraced] = useState<Untraced[]>([])
+  const [drafts, setDrafts] = useState<Draft[]>([])
   const [behaviour, setBehaviour] = useState<Record<string, { cases: number; deltas?: string[] }>>({})
   const [capturing, setCapturing] = useState<string>()
   // D-028: where each file's hunks came from, by file.
@@ -132,6 +141,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     // D-034: hunks neither the plan nor a requirement accounts for.
     const sc = await send({ type: "scope", sessionId, ...(ref ? { ref } : {}) })
     setUntraced(sc.ok ? ((sc.data as { unrequested: Untraced[] }).unrequested ?? []) : [])
+    // D-050: draft threat model entries for what the change adds.
+    const td = await send({ type: "threat_delta", sessionId, ...(ref ? { ref } : {}) })
+    setDrafts(td.ok ? ((td.data as { drafts: Draft[] }).drafts ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
@@ -219,6 +231,29 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               {findings.some((x) => x.severity === "Severe") ? (
                 <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
               ) : null}
+            </section>
+          ) : null}
+          {drafts.length ? (
+            <section aria-label="Threat model drafts" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <div className="flex items-center gap-2">
+                <h3 className="m-0 text-[13.5px] font-semibold">
+                  {drafts.length === 1 ? "1 thing" : `${drafts.length} things`} for the threat model
+                </h3>
+                <button
+                  type="button"
+                  className="btn ml-auto !min-h-6 !px-2 !text-[12px]"
+                  onClick={() => void navigator.clipboard.writeText(drafts.map((d) => d.markdown).join("\n")).then(() => toast("Copied the drafts"))}
+                >
+                  Copy the drafts
+                </button>
+              </div>
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {drafts.map((d) => (
+                  <li key={`${d.kind}:${d.where}:${d.what}`}>
+                    New {d.kind}: <span className="mono">{d.what}</span> <span className="text-mut">({d.where})</span>
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
           {untraced.length ? (

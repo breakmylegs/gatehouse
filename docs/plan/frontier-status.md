@@ -126,7 +126,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-045 | Fitness functions | built | slice/D-045-fitness | BUILD_REPORT "Frontier D-045" | .codehouse/fitness.yml; a failing check stops a done goal run as fitness, and is in the evidence pack |
 | D-046 | Public API break guard | todo | | | |
 | D-048 | Architecture review pack | todo | | | |
-| D-050 | Threat model delta | todo | | | |
+| D-050 | Threat model delta | built | slice/D-050-threat-delta | BUILD_REPORT "Frontier D-050" | Routes, data stores, outbound connections, listeners, new dependencies; STRIDE drafts in Changes with Copy |
 
 ## Wave 4: approvals and human factors
 
