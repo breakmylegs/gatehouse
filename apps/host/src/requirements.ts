@@ -64,7 +64,7 @@ export function readRequirements(root: string): { requirements: Requirement[]; p
     const rel = path.join(REQUIREMENTS_DIR, name).replace(/\\/g, "/")
     let text: string
     try {
-      text = fs.readFileSync(path.join(dir, name), "utf8").replace(/^﻿/, "")
+      text = fs.readFileSync(path.join(dir, name), "utf8").replace(/^\uFEFF/, "")
     } catch {
       problems.push({ file: rel, problem: "it could not be read" })
       continue

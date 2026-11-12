@@ -11,7 +11,7 @@
  * session's signed timeline export (C-011) with the pack in it, signed the same way, so changing one byte fails both
  * verifiers.
  */
-import { fitnessCheck, type FitnessResult } from "./fitness.js"
+import { fitnessCheck, hasFitness, type FitnessResult } from "./fitness.js"
 import { listFiles } from "./mutation.js"
 import { createHash } from "node:crypto"
 import fs from "node:fs"
@@ -337,7 +337,7 @@ export class EvidenceService {
       findings,
       ...(s.assumptions?.length ? { assumptions: s.assumptions } : {}),
     })
-    const fit = await fitnessCheck(s.cwd, await listFiles(s.cwd).catch(() => [] as string[])).catch(() => undefined)
+    const fit = hasFitness(s.cwd) ? await fitnessCheck(s.cwd, await listFiles(s.cwd).catch(() => [] as string[])).catch(() => undefined) : undefined
     if (fit) {
       pack.fitness = fit
       if (fit.failed) pack.notes.push(`${fit.failed} fitness check${fit.failed === 1 ? "" : "s"} fail, so this change does not pass the project's gate.`)

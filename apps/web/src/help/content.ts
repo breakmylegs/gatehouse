@@ -249,7 +249,7 @@ With a goal set and a model running on this computer (Settings, Models), Codehou
 
 When Claude works on an assumption it has not checked with you, it can record it: the progress card lists it with how to check it, until you choose **It holds**, and the change's evidence keeps the ones you have not.
 
-**Decisions...** in the same menu drafts the session's decisions (questions you answered, plans you approved) as architecture decision records; edit one if you like, and **Accept and write** saves it in the project's docs/adr folder. The project's accepted records are given to every session, and an edit that goes against one waits for you, naming it.
+**Decisions...** in the same menu drafts the session's decisions (questions you answered, plans you approved) as architecture decision records; edit one if you like, and **Accept and write** saves it in the adr folder of the project's docs folder. The project's accepted records are given to every session, and an edit that goes against one waits for you, naming it.
 
 **Architecture...** in the same menu draws the project from its imports, as C4 diagrams in Mermaid to copy into documentation. **Review pack (arc42)** saves an architecture review document with all twelve arc42 sections, filled from the project's own files, and marks the ones nothing covers yet. Choose **Approve as it is**, and from then on a new module, a new link across layers or a new import cycle shows at the top as drift.
 
@@ -259,7 +259,7 @@ In a library (a package.json that is not private and names its entry point), an 
 
 A project can set how it is built in .codehouse/architecture.yml: its layers (by file patterns), which layers each may use, and imports that are not allowed. An edit that adds an import breaking one of these waits for you, naming the rule, even in Extreme approval.
 
-**Requirements...** in the same menu reads the project's docs/requirements folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. When a change edits a requirement, Changes lists the code, tests and decisions linked to it. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.
+**Requirements...** in the same menu reads the requirements folder in the project's docs folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. When a change edits a requirement, Changes lists the code, tests and decisions linked to it. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.
 
 **Evidence...** in the same menu gathers what shows a change was done properly into one pack: the decisions and approvals, the commands and how each ended, the checked claims and sealed checks, the dependency changes and what Codehouse's own analysis found, each tied to its audit record. One is made with each commit a session makes; **Gather now** makes one for what changed since the session's first checkpoint, and **Export, signed** saves it inside the session's signed timeline, which the checker that comes with it verifies. Packs are kept for 90 days unless you change it in Settings.
 

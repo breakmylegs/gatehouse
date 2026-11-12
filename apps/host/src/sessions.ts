@@ -1,7 +1,7 @@
 import { noteCommit } from "./lineage.js"
 import type { IntentCheck } from "./intent-drift.js"
 import { adrContext, readAdrs } from "./adr.js"
-import { fitnessCheck, fitnessWords } from "./fitness.js"
+import { fitnessCheck, fitnessWords, hasFitness } from "./fitness.js"
 import { listFiles, mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
 import type { VulnCommitGuard } from "./vuln-snapshot.js"
 import type { EvidenceService } from "./evidence.js"
@@ -2004,7 +2004,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // D-045: done, or the goal met, only when the project's fitness checks pass; otherwise it stops as fitness.
       let why: string = step.why
       let fitness: string | undefined
-      if (step.why === "goal" || step.why === "done") {
+      if ((step.why === "goal" || step.why === "done") && hasFitness(this.cwd)) {
         const fit = await fitnessCheck(this.cwd, await listFiles(this.cwd).catch(() => [] as string[])).catch(() => undefined)
         if (fit?.failed) {
           why = "fitness"

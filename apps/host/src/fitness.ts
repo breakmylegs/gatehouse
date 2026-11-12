@@ -16,6 +16,9 @@ import { languageOf } from "./outline.js"
 
 export const FITNESS_FILE = path.join(".codehouse", "fitness.yml")
 
+/** Whether the project sets fitness checks: read before anything else, so a project without them costs nothing. */
+export const hasFitness = (root: string) => fs.existsSync(path.join(root, FITNESS_FILE))
+
 export interface FitnessCheck {
   id: string
   title: string
