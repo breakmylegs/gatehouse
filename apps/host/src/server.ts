@@ -1,4 +1,7 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { runMutation } from "./mutation.js"
+import { projectCommand } from "./claims.js"
+import os from "node:os"
 import { TestLockError, type TestLocks } from "./test-locks.js"
 import { approveInstructions, InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
 import { BoundaryStaleError, classificationOf, refuseHandoff, refuseStaleSend, type Boundaries } from "./boundary.js"
@@ -77,6 +80,8 @@ export interface HostApp {
   heldOut?: HeldOutChecks
   /** Section 6: the command that runs them, as a Codehouse action for the session. */
   heldOutExec?: (sessionId: string) => HeldOutExec
+  /** D-004: a mutation run's test runs, as Codehouse actions. */
+  mutationExec?: (sessionId: string) => import("./mutation.js").MutationExec
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -891,6 +896,47 @@ export class HostServer {
       case "changes": {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+      }
+      case "mutant_task": {
+        const s = this.#session(cmd.sessionId)
+        s.startMutantTask(cmd.survivor)
+        return { started: true }
+      }
+      case "mutation_run": {
+        // D-004: the changed lines of the change since the checkpoint, mutated one at a time in a sandbox copy.
+        const s = this.#session(cmd.sessionId)
+        if (!a.mutationExec) throw new CommandError("unavailable", "Mutation runs are not available here.")
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to test.")
+        const command = projectCommand(s.cwd, "tests")
+        if (!command) throw new CommandError("no-tests", "Codehouse could not find this project's test command (an npm test script, pytest or dotnet test).")
+        const changes: Array<{ path: string; text: string; lines: Set<number> }> = []
+        for (const x of c.files.filter((x) => x.change !== "deleted" && !x.binary && /\.[cm]?[jt]sx?$/i.test(x.path)).slice(0, 30)) {
+          const lines = [...addedLines(x.diff).values()][0]
+          const v = lines?.size ? await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined) : undefined
+          if (lines && v?.after !== undefined) changes.push({ path: x.path, text: v.after, lines })
+        }
+        const threshold = a.admin?.config().mutation?.thresholds?.[s.project]
+        const report = await runMutation({
+          root: s.cwd,
+          changes,
+          command,
+          exec: a.mutationExec(s.id),
+          sandbox: path.join(os.tmpdir(), `codeh-mutants-${s.id}-${Date.now().toString(36)}`),
+          ...(threshold !== undefined ? { threshold } : {}),
+        })
+        await a.audit.record({
+          session: s.id,
+          event: "mutation_run",
+          channel: "host",
+          tool: "mutation",
+          cwd: s.cwd,
+          project: s.project,
+          input: { tool: report.tool, mutants: report.mutants, killed: report.killed, survived: report.survived.length, ...(report.score !== undefined ? { score: report.score } : {}), ...(report.aborted ? { aborted: report.aborted } : {}) },
+          verdict: { outcome: "allow", ruleId: "mutation-run", reason: report.aborted ? `A mutation run stopped: ${report.aborted}.` : "The tests were run against small changes to the change's new lines.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return report
       }
       case "evidence_build": {
         const s = this.#session(cmd.sessionId)

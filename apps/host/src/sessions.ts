@@ -1,10 +1,11 @@
 import { noteCommit } from "./lineage.js"
+import { mutantTaskPrompt, runMutation, type MutationExec, type Survivor } from "./mutation.js"
 import type { VulnCommitGuard } from "./vuln-snapshot.js"
 import type { EvidenceService } from "./evidence.js"
 import type { SastCommitGuard } from "./sast.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
-import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
+import { CLAIM_WORDS, commandFor, findClaims, projectCommand, type ClaimKind, type ClaimOutcome } from "./claims.js"
 import { freshSeed, seedEnv, seededCommand } from "./seeds.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
@@ -472,6 +473,8 @@ export interface SessionDeps {
   sast?: SastCommitGuard
   /** D-057: the vulnerability snapshot, for what a session's commit would add. */
   vulns?: VulnCommitGuard
+  /** D-005: a mutant's test runs, as Codehouse actions. */
+  mutationExec?: (sessionId: string) => MutationExec
   /** D-003: the change evidence packs. */
   evidence?: EvidenceService
   /** D-059: the pins of what each project tells Claude. */
@@ -1188,6 +1191,8 @@ export class Session extends EventEmitter<SessionEvents> {
     const instructions = await this.#instructionsText()
     // One permission path for tool calls and for a server's request to open a page (B06).
     const canUse = createCanUseTool({
+      // D-005: while a task writes a test for a surviving mutant, edits outside test files ask.
+      mutantTask: () => this.#mutantTask,
       sessionId: this.id,
       cwd: this.cwd,
       sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
@@ -1478,6 +1483,12 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#noteBackground(m)
     }
     if (msg.type === "result") {
+      // D-005: the task's turn is over: its scope ends, and the mutant is run again.
+      const task = this.#mutantTask
+      if (task) {
+        this.#mutantTask = undefined
+        void this.#recheckMutant(task)
+      }
       this.#deps.usage.record(this.id, this.project, m)
       this.#running = false
       this.#stuck.stop()
@@ -1547,6 +1558,61 @@ export class Session extends EventEmitter<SessionEvents> {
   /** What this chat was told it remembers when it started, in the words it was given (CH-03). */
   memoryGiven(): Array<{ id: string; scope: string; topic: string; text: string }> {
     return this.#memoryGiven.map((m) => ({ ...m }))
+  }
+
+  /** D-005: the survivor a task is writing a test for; while it is set, edits outside test files ask. */
+  #mutantTask: Survivor | undefined
+
+  /** D-005: starts a task to write a test that kills a surviving mutant, scoped to test files. */
+  startMutantTask(survivor: Survivor): void {
+    this.prompt(mutantTaskPrompt(survivor))
+    this.#mutantTask = survivor
+    this.emit("event", { type: "mutant_task_started", data: { file: survivor.file, line: survivor.line } })
+  }
+
+  /** D-005: the survivor the session is writing a test for, if any. */
+  mutantTask(): Survivor | undefined {
+    return this.#mutantTask
+  }
+
+  /** D-005: the mutant run again on the code as it is now; killed when a test now notices it. */
+  async #recheckMutant(s: Survivor): Promise<void> {
+    const exec = this.#deps.mutationExec?.(this.id)
+    const command = projectCommand(this.cwd, "tests")
+    let outcome: "killed" | "survived" | "not checked" = "not checked"
+    let why = ""
+    if (exec && command) {
+      try {
+        const text = fs.readFileSync(path.join(this.cwd, s.file), "utf8")
+        const r = await runMutation({
+          root: this.cwd,
+          changes: [{ path: s.file, text, lines: new Set([s.line]) }],
+          command,
+          exec,
+          sandbox: path.join(os.tmpdir(), `codeh-mutant-${this.id}-${Date.now().toString(36)}`),
+          only: (m) => m.mutated === s.mutated,
+        })
+        if (r.aborted) why = r.aborted
+        else if (r.mutants === 0) why = "the line has changed, so the mutant could not be made again"
+        else outcome = r.killed > 0 ? "killed" : "survived"
+      } catch (e) {
+        why = (e as Error).message.slice(0, 200)
+      }
+    } else why = "the project's test command could not be found"
+    await this.#deps.audit
+      .record({
+        session: this.id,
+        event: "mutant_rechecked",
+        channel: "host",
+        tool: "mutation",
+        cwd: this.cwd,
+        project: this.project,
+        input: { file: s.file, line: s.line, outcome, ...(why ? { why } : {}) },
+        verdict: { outcome: "allow", ruleId: "mutation-run", reason: `The mutant at ${s.file}, line ${s.line}, was run again: ${outcome}${why ? ` (${why})` : ""}.`, risk: 0, decidedBy: "rules", policyHash: "n/a" },
+        latencyMs: 0,
+      })
+      .catch(() => undefined)
+    this.emit("event", { type: "mutant_rechecked", data: { file: s.file, line: s.line, outcome, ...(why ? { why } : {}) } })
   }
 
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */

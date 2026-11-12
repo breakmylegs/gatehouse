@@ -1753,6 +1753,7 @@ const LIVE_SETTINGS = [
   "untrustedFiles",
   "allowedLicences",
   "evidence",
+  "mutation",
   "dataClassification",
   "riskBudget",
   "outputStyle",

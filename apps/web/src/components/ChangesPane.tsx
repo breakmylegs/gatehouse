@@ -24,6 +24,19 @@ import { send, useStore } from "../store"
 const LOCKFILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
 
+/** D-004: a mutation run's report, as apps/host/src/mutation.ts gives it. */
+interface MutationReport {
+  tool: string
+  detected?: "stryker-js" | "stryker-net"
+  mutants: number
+  killed: number
+  survived: Array<{ file: string; line: number; original: string; mutated: string }>
+  score?: number
+  threshold?: number
+  passed?: boolean
+  aborted?: string
+}
+
 /** D-062: one finding of the local analysis, as apps/host/src/sast.ts gives it. */
 interface Finding {
   file: string
@@ -80,6 +93,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const said = Object.values(comments).filter((c) => c.text.trim())
 
   const [findings, setFindings] = useState<Finding[]>([])
+  // D-004: the last mutation run's report, and whether one is running.
+  const [mutation, setMutation] = useState<MutationReport>()
+  const [mutating, setMutating] = useState(false)
   const load = useCallback(async () => {
     const r = await send({ type: "changes", sessionId, ...(ref ? { ref } : {}) })
     if (!r.ok) {
@@ -300,6 +316,20 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
             >
               Undo all of these
             </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={mutating}
+              onClick={async () => {
+                setMutating(true)
+                const r = await send({ type: "mutation_run", sessionId, ref: since.ref })
+                setMutating(false)
+                if (!r.ok) return void toast.error(r.error?.message ?? "The tests could not be tested")
+                setMutation(r.data as MutationReport)
+              }}
+            >
+              {mutating ? "Testing the tests…" : "Test the tests"}
+            </button>
             {files.some((f) => LOCKFILE.test(f.path)) ? (
               <button
                 type="button"
@@ -325,6 +355,42 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
         </>
       )}
 
+      {mutation ? (
+        <section aria-label="Mutation run" className="panel grid gap-1.5 p-2.5 text-[13px]">
+          <h3 className="m-0 text-[13.5px] font-semibold">
+            {mutation.aborted
+              ? `Stopped: ${mutation.aborted}.`
+              : mutation.mutants === 0
+                ? "Nothing to mutate in the changed lines."
+                : `${mutation.killed} of ${mutation.mutants} small changes to the new lines were caught by the tests (${mutation.score}%)${mutation.threshold !== undefined ? (mutation.passed ? `, at or above this project's ${mutation.threshold}%` : `, below this project's ${mutation.threshold}%`) : ""}.`}
+          </h3>
+          {mutation.detected ? (
+            <p className="m-0 text-mut">This project has {mutation.detected === "stryker-js" ? "StrykerJS" : "Stryker.NET"}; this run used Codehouse's own mutator on the changed lines only.</p>
+          ) : null}
+          {mutation.survived.length ? (
+            <ul className="m-0 grid list-none gap-1.5 p-0">
+              {mutation.survived.map((s) => (
+                <li key={`${s.file}:${s.line}:${s.mutated}`} className="grid gap-1">
+                  <span>
+                    Not caught: <span className="mono">{s.file}</span> line {s.line}, <span className="mono">{s.original}</span> to <span className="mono">{s.mutated}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn justify-self-start !min-h-7"
+                    onClick={async () => {
+                      const r = await send({ type: "mutant_task", sessionId, survivor: s })
+                      if (!r.ok) return void toast.error(r.error?.message ?? "The task could not be started")
+                      toast("Claude is writing a test for it. Only test files may change without asking you.", { id: "changes" })
+                    }}
+                  >
+                    Write a test that catches it
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
       {confirm ? (
         <div role="group" aria-label="Confirm undo" className="panel grid gap-2 p-3">
           <p className="m-0 text-[13.5px]">

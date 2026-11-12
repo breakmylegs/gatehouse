@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { TEST_FILE, TEST_SCOPE_RULE, testScopeReason, type Survivor } from "./mutation.js"
 import { VULN_RULE, vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { SAST_RULE, sastReason, type SastCommitGuard, type SastFinding } from "./sast.js"
 import { makesCommit } from "./commit-scan.js"
@@ -63,6 +64,8 @@ export interface CanUseDeps {
   sast?: Pick<SastCommitGuard, "severe">
   /** D-057: the dependency versions a commit would add that the vulnerability snapshot lists. */
   vulns?: Pick<VulnCommitGuard, "matches">
+  /** D-005: the surviving mutant a task is writing a test for; while there is one, edits outside test files ask. */
+  mutantTask?: () => Survivor | undefined
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
   instructions?: Pick<InstructionPins, "touched">
@@ -265,6 +268,13 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
             decidedBy: "rules",
           }
       }
+      // D-005: a task writing a test for a surviving mutant changes only test files; any other edit goes to a person.
+      const task = deps.mutantTask?.()
+      if (task && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
+        const file = String(input.file_path ?? input.notebook_path ?? "")
+        if (!TEST_FILE.test(file))
+          verdict = { ...verdict, outcome: "escalate", ruleId: TEST_SCOPE_RULE, reason: testScopeReason(file, task), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
       // D-057: a commit that adds a dependency version the snapshot lists goes to a person, with the advisories. A
       // lockfile that cannot be read while a snapshot is in use counts as one (fail closed).
       if (deps.vulns && verdict.outcome !== "deny" && verdict.ruleId !== SAST_RULE && makesCommit(toolName, input)) {
@@ -457,6 +467,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   SAST_RULE,
   // D-057: so is one that adds a dependency version with a known advisory.
   VULN_RULE,
+  // D-005: an edit outside test files while a task writes a test for a surviving mutant.
+  TEST_SCOPE_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

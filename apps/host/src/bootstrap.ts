@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import type { MutationExec } from "./mutation.js"
 import { VulnCommitGuard, VulnSnapshot } from "./vuln-snapshot.js"
 import { EvidenceService, EvidenceStore } from "./evidence.js"
 import { AnchorService } from "./anchors.js"
@@ -583,6 +584,16 @@ export function createHost(opts: HostOptions = {}): Host {
     )
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
+  // D-004: a mutation run's test runs, as Codehouse actions; the memory cap's stop is told apart from a failure.
+  const mutationExecFor = (sessionId: string): MutationExec => async (command, cwd, timeoutMs) => {
+    const s = manager.get(sessionId)
+    const r = await runCodehouseAction(
+      { sessionId, cwd, project: s?.project ?? "", command, why: "testing the tests against small changes to the new lines", level: s?.info().resources ?? "high", timeoutMs },
+      { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+    )
+    return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
+  }
+  deps.mutationExec = mutationExecFor
   // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
   const chatStore = new ChatStore({
     file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
@@ -1117,6 +1128,7 @@ export function createHost(opts: HostOptions = {}): Host {
     limits: limitPauser,
     heldOut,
     heldOutExec: actionFor,
+    mutationExec: mutationExecFor,
     locks,
     evidence,
     instructions,

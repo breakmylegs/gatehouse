@@ -222,6 +222,18 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-005: starts a task to write a test that kills a surviving mutant, scoped to test files. */
+  z.object({
+    type: z.literal("mutant_task"),
+    sessionId: Id,
+    survivor: z.object({ file: z.string().min(1).max(4096), line: z.number().int().min(1), original: z.string().max(4000), mutated: z.string().max(4000) }),
+  }),
+  /** D-004: tests the tests: the change's new lines mutated one at a time in a sandbox copy, the project's tests run on each. */
+  z.object({
+    type: z.literal("mutation_run"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
   /** D-003: gathers the change since the checkpoint (the first, by default) into an evidence pack, kept and recorded. */
   z.object({
     type: z.literal("evidence_build"),

@@ -344,6 +344,11 @@ function build(loose: boolean) {
      * is used instead when it sets one.
      */
     allowedLicences: z.array(z.string().max(120)).max(200).optional(),
+    /** D-004: the mutation score each project must reach, by folder name; absent: none, the score is only shown. */
+    mutation: z
+      .object({ thresholds: z.record(z.string().max(120), z.number().int().min(0).max(100)).optional() })
+      .passthrough()
+      .optional(),
     /** D-003: how long change evidence packs are kept. Absent: 90 days. */
     evidence: z
       .object({ retentionDays: z.number().int().min(1).max(3650) })

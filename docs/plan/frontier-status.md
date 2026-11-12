@@ -86,8 +86,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
 | D-003 | Change evidence pack | built | slice/D-003-evidence-pack | BUILD_REPORT "Frontier D-003" | Per commit and on demand; hash in the D-030 note; inside the signed timeline export; coverage and mutation deltas only once a run records them |
-| D-004 | Diff-scoped mutation gate | todo | | | |
-| D-005 | Surviving-mutant tasks | todo | | | |
+| D-004 | Diff-scoped mutation gate | built | slice/D-004-mutation | BUILD_REPORT "Frontier D-004 and D-005" | Codehouse's own mutator on the changed lines (Stryker detected and named, a recorded deviation); sandbox copy; per-project threshold; memory cap stops cleanly |
+| D-005 | Surviving-mutant tasks | built | slice/D-004-mutation | BUILD_REPORT "Frontier D-004 and D-005" | Task scoped to test files (test-scope, never auto-approved); mutant run again when its turn ends |
 | D-010 | Randomised check seeds | built | slice/D-010-check-seeds | BUILD_REPORT "Frontier D-010" | CODEHOUSE_SEED, and Vitest's and Jest's own seed flags; recorded with the claim |
 | D-011 | Flake quarantine | built | slice/D-011-flake-quarantine | BUILD_REPORT "Frontier D-011" | Five runs with their seeds; flaky is a mark on a contradicted claim (older screens read it); skipping goes through D-001 |
 | D-016 | Taint-tracked egress guard | built | slice/D-016-taint-egress | BUILD_REPORT "Frontier D-016" | Addresses, hosts, emails and long tokens from pages, servers and untrusted files; network calls and writes outside the project; never approved by Extreme |
