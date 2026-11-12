@@ -222,6 +222,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-066: captures what a changed file did before the change, from the checkpoint, in a sandbox. */
+  z.object({ type: z.literal("characterise"), sessionId: Id, file: z.string().min(1).max(4096), ref: z.string().min(1).max(500).optional() }),
+  /** D-006: replays a file's captured inputs against it as it is now and lists what changed. */
+  z.object({ type: z.literal("behaviour_diff"), sessionId: Id, file: z.string().min(1).max(4096) }),
   /** D-005: starts a task to write a test that kills a surviving mutant, scoped to test files. */
   z.object({
     type: z.literal("mutant_task"),

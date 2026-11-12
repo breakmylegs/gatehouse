@@ -1132,6 +1132,7 @@ export function createHost(opts: HostOptions = {}): Host {
     heldOut,
     heldOutExec: actionFor,
     mutationExec: mutationExecFor,
+    dataDir: gatehouseDataDir(env),
     locks,
     evidence,
     instructions,

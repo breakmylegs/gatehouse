@@ -140,7 +140,7 @@ export async function mutantsOf(file: string, text: string, lines: ReadonlySet<n
 const LINKED = ["node_modules", ".venv", "venv", "packages/node_modules"]
 
 /** Lists the project's files as git sees them (tracked and new, not ignored). */
-function listFiles(root: string): Promise<string[]> {
+export function listFiles(root: string): Promise<string[]> {
   return new Promise((resolve, reject) =>
     execFile("git", ["ls-files", "-co", "--exclude-standard", "-z"], { cwd: root, windowsHide: true, maxBuffer: 64 * 1024 * 1024 }, (e, out) =>
       e ? reject(e) : resolve(String(out).split("\0").filter(Boolean)),

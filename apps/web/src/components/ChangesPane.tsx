@@ -93,6 +93,10 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const said = Object.values(comments).filter((c) => c.text.trim())
 
   const [findings, setFindings] = useState<Finding[]>([])
+  // D-066 and D-006: changed files nothing tests, and what replaying their captured behaviour found.
+  const [untested, setUntested] = useState<string[]>([])
+  const [behaviour, setBehaviour] = useState<Record<string, { cases: number; deltas?: string[] }>>({})
+  const [capturing, setCapturing] = useState<string>()
   // D-004: the last mutation run's report, and whether one is running.
   const [mutation, setMutation] = useState<MutationReport>()
   const [mutating, setMutating] = useState(false)
@@ -107,6 +111,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     // D-062: what the local analysis finds on the changed lines. A failure only leaves the list empty.
     const f = await send({ type: "change_findings", sessionId, ...(ref ? { ref } : {}) })
     setFindings(f.ok ? ((f.data as { findings: Finding[] }).findings ?? []) : [])
+    setUntested(f.ok ? ((f.data as { untested?: string[] }).untested ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
@@ -194,6 +199,72 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               {findings.some((x) => x.severity === "Severe") ? (
                 <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
               ) : null}
+            </section>
+          ) : null}
+          {untested.length ? (
+            <section aria-label="Untested files" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <h3 className="m-0 text-[13.5px] font-semibold">Nothing in the tests names {untested.length === 1 ? "this file" : "these files"}</h3>
+              <p className="m-0 text-mut">
+                Capture behaviour records what the file did before this change, with generated inputs, in a copy of the project. Compare with now replays them on the file as it is and says what changed.
+              </p>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {untested.map((p) => (
+                  <li key={p} className="grid gap-1">
+                    <span className="mono [overflow-wrap:anywhere]">{p}</span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn !min-h-7"
+                        disabled={capturing !== undefined}
+                        onClick={async () => {
+                          setCapturing(p)
+                          const r = await send({ type: "characterise", sessionId, file: p, ref: since.ref })
+                          setCapturing(undefined)
+                          if (!r.ok) return void toast.error(r.error?.message ?? "It could not be captured")
+                          setBehaviour((b) => ({ ...b, [p]: { cases: (r.data as { cases: number }).cases } }))
+                        }}
+                      >
+                        {capturing === p ? "Capturing…" : "Capture behaviour"}
+                      </button>
+                      {behaviour[p] ? (
+                        <button
+                          type="button"
+                          className="btn !min-h-7"
+                          disabled={capturing !== undefined}
+                          onClick={async () => {
+                            setCapturing(p)
+                            const r = await send({ type: "behaviour_diff", sessionId, file: p })
+                            setCapturing(undefined)
+                            if (!r.ok) return void toast.error(r.error?.message ?? "It could not be replayed")
+                            const d = r.data as { cases: number; deltas: Array<{ words: string }> }
+                            setBehaviour((b) => ({ ...b, [p]: { cases: d.cases, deltas: d.deltas.map((x) => x.words) } }))
+                          }}
+                        >
+                          Compare with now
+                        </button>
+                      ) : null}
+                    </div>
+                    {behaviour[p] ? (
+                      <p className="m-0 text-mut">
+                        {behaviour[p]!.deltas === undefined
+                          ? `${behaviour[p]!.cases} cases captured, and they replay the same.`
+                          : behaviour[p]!.deltas!.length === 0
+                            ? `All ${behaviour[p]!.cases} cases behave as before.`
+                            : `${behaviour[p]!.deltas!.length} of ${behaviour[p]!.cases} cases behave differently:`}
+                      </p>
+                    ) : null}
+                    {behaviour[p]?.deltas?.length ? (
+                      <ul className="m-0 grid list-none gap-1 p-0">
+                        {behaviour[p]!.deltas!.map((w) => (
+                          <li key={w} className="mono [overflow-wrap:anywhere]">
+                            {w}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
           <ul className="m-0 grid list-none gap-1 p-0" aria-label="Changed files">

@@ -107,8 +107,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
-| D-066 | Characterisation capture | todo | | | |
-| D-006 | Behaviour diff | todo | | | |
+| D-066 | Characterisation capture | built | slice/D-066-characterise | BUILD_REPORT "Frontier D-066 and D-006" | Exported JS/TS functions, generated inputs, captured from the checkpoint's copy, kept only if stable; redacted; sandbox |
+| D-006 | Behaviour diff | built | slice/D-066-characterise | BUILD_REPORT "Frontier D-066 and D-006" | Compare with now: each changed output in plain English |
 | D-028 | Causal provenance graph | todo | | | |
 | D-031 | Evidence queries | todo | | | |
 | D-033 | Requirement ledger | todo | | | |

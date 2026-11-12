@@ -1,4 +1,8 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { behaviourDiff, capture, looksUntested, type BehaviourDelta, type Capture } from "./characterise.js"
+import { listFiles, TEST_FILE } from "./mutation.js"
+import { writeFileAtomic } from "@gatehouse/shared/node"
+import { createHash } from "node:crypto"
 import { runMutation } from "./mutation.js"
 import { projectCommand } from "./claims.js"
 import os from "node:os"
@@ -18,7 +22,7 @@ import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify, { type FastifyInstance } from "fastify"
 import type { WebSocket } from "ws"
-import { checkRemember, isLockfile, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { checkRemember, isLockfile, redactString, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
 import { lockfileChanges, sbomDiff, type DependencyChange } from "./sbom.js"
 import { addedLines, scanSource, type SastFinding } from "./sast.js"
 import {
@@ -80,6 +84,8 @@ export interface HostApp {
   heldOut?: HeldOutChecks
   /** Section 6: the command that runs them, as a Codehouse action for the session. */
   heldOutExec?: (sessionId: string) => HeldOutExec
+  /** D-066: Codehouse's data folder, for the captures. */
+  dataDir?: string
   /** D-004: a mutation run's test runs, as Codehouse actions. */
   mutationExec?: (sessionId: string) => import("./mutation.js").MutationExec
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
@@ -957,7 +963,89 @@ export class HostServer {
           const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined)
           if (v?.after !== undefined) findings.push(...(await scanSource(x.path, v.after, lines)))
         }
-        return { findings }
+        // D-066: the changed source files nothing in the project's tests names, to offer a capture for.
+        const tests = await listFiles(s.cwd).then((l) => l.filter((p) => TEST_FILE.test(p))).catch(() => [] as string[])
+        const untested = c.files
+          .filter((x) => x.change === "modified" && /\.[cm]?[jt]sx?$/i.test(x.path) && !TEST_FILE.test(x.path))
+          .map((x) => x.path)
+          .filter((p) => looksUntested(s.cwd, p, tests))
+        return { findings, untested }
+      }
+      case "characterise": {
+        // D-066: the file's behaviour as it was at the checkpoint, captured in a sandbox and kept only if it replays green.
+        const s = this.#session(cmd.sessionId)
+        if (!a.mutationExec || !a.dataDir) throw new CommandError("unavailable", "Captures are not available here.")
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is nothing from before to capture.")
+        const v = await a.checkpoints.versions(s.cwd, c.since.ref, cmd.file)
+        if (v.before === undefined) throw new CommandError("new-file", "The file did not exist before the change, so it had no behaviour to capture.")
+        const stamp = Date.now().toString(36)
+        let cap: Capture
+        try {
+          cap = await capture({
+            root: s.cwd,
+            file: cmd.file,
+            before: v.before,
+            from: c.since.ref,
+            exec: a.mutationExec(s.id),
+            sandbox: (n) => path.join(os.tmpdir(), `codeh-capture-${s.id}-${stamp}-${n}`),
+            redact: (x) => redactString(x, { terms: a.admin?.config().redactTerms ?? [] }),
+          })
+        } catch (e) {
+          throw new CommandError("not-captured", `It could not be captured: ${(e as Error).message}`)
+        }
+        const dir = path.join(a.dataDir, "characterisation", s.id)
+        fs.mkdirSync(dir, { recursive: true })
+        await writeFileAtomic(path.join(dir, `${captureKey(cmd.file)}.json`), JSON.stringify(cap, null, 1))
+        await a.audit.record({
+          session: s.id,
+          event: "behaviour_captured",
+          channel: "host",
+          tool: "characterise",
+          cwd: s.cwd,
+          project: s.project,
+          input: { file: cmd.file, cases: cap.cases.length },
+          verdict: { outcome: "allow", ruleId: "characterisation", reason: "What the file did before the change was captured, redacted, and replayed green.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { cases: cap.cases.length }
+      }
+      case "behaviour_diff": {
+        // D-006: the captured inputs replayed against the file as it is now.
+        const s = this.#session(cmd.sessionId)
+        if (!a.mutationExec || !a.dataDir) throw new CommandError("unavailable", "Captures are not available here.")
+        let cap: Capture
+        try {
+          cap = JSON.parse(fs.readFileSync(path.join(a.dataDir, "characterisation", s.id, `${captureKey(cmd.file)}.json`), "utf8")) as Capture
+        } catch {
+          throw new CommandError("no-capture", "Capture the file's behaviour first.")
+        }
+        const now = fs.readFileSync(path.join(s.cwd, cmd.file), "utf8")
+        let deltas: BehaviourDelta[]
+        try {
+          deltas = await behaviourDiff({
+            root: s.cwd,
+            capture: cap,
+            now,
+            exec: a.mutationExec(s.id),
+            sandbox: path.join(os.tmpdir(), `codeh-replay-${s.id}-${Date.now().toString(36)}`),
+            redact: (x) => redactString(x, { terms: a.admin?.config().redactTerms ?? [] }),
+          })
+        } catch (e) {
+          throw new CommandError("not-replayed", `It could not be replayed: ${(e as Error).message}`)
+        }
+        await a.audit.record({
+          session: s.id,
+          event: "behaviour_compared",
+          channel: "host",
+          tool: "characterise",
+          cwd: s.cwd,
+          project: s.project,
+          input: { file: cmd.file, cases: cap.cases.length, changed: deltas.length },
+          verdict: { outcome: "allow", ruleId: "characterisation", reason: "The captured inputs were replayed against the file as it is now.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { cases: cap.cases.length, deltas }
       }
       case "change_sbom": {
         // D-056: from the lockfiles as they were at the checkpoint and as they are now; nothing runs or is fetched.
@@ -1213,3 +1301,6 @@ function classify(e: unknown): CommandError {
   if (e instanceof SafetyError) return new CommandError("safety", e.message)
   return new CommandError("failed", (e as Error).message ?? "The command failed")
 }
+
+/** D-066: a capture's file name, from the file's path. */
+const captureKey = (file: string) => createHash("sha256").update(file.replace(/\\/g, "/")).digest("hex").slice(0, 24)

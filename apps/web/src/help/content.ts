@@ -269,6 +269,8 @@ When a signed vulnerability snapshot (OSV advisories) is in Codehouse's managed 
 
 Above the files, Changes lists what Codehouse's own analysis finds in the changed lines, with the file and line: SQL or a shell command built from input, code run from a string, TLS checks switched off, weak cryptography, and a file path taken from a request. A commit that adds a Severe one waits for you, even in Extreme approval.
 
+When a changed JavaScript or TypeScript file is named by none of the project's tests, Changes offers **Capture behaviour**: what it did before the change, with generated inputs, in a copy of the project. **Compare with now** then says each input that gives a different answer after the change.
+
 **Test the tests** makes small changes to the lines the change added, one at a time, in a copy of the project, and runs its tests on each: a change they still pass with is listed, because nothing tests that line properly. **Write a test that catches it** asks Claude for such a test; while it works, a change to anything but a test file waits for you, and the small change is tried again when it finishes.
 
 When the change touches a lockfile, **Download the SBOM of these changes** saves a CycloneDX file of each dependency it adds, upgrades or removes, made on this computer from the lockfiles before and after, with nothing run or fetched.
