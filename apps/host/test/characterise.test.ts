@@ -14,6 +14,7 @@ const BEFORE = `export function price(qty, unit) {
   return qty * unit
 }
 export const label = (n) => "n=" + n
+export const stamp = () => Math.random()
 export function token() {
   return "sk-ant-api03-" + "x".repeat(30)
 }
@@ -44,6 +45,7 @@ describe("characterisation capture and the behaviour diff (D-066, D-006)", () =>
     expect(await exportedFunctions("src/price.js", BEFORE)).toEqual([
       { name: "price", arity: 2 },
       { name: "label", arity: 1 },
+      { name: "stamp", arity: 0 },
       { name: "token", arity: 0 },
     ])
     expect(looksUntested(repo, "src/price.js", ["test/other.test.js"])).toBe(true)
@@ -54,6 +56,8 @@ describe("characterisation capture and the behaviour diff (D-066, D-006)", () =>
     let n = 0
     const cap = await capture({ root: repo, file: "src/price.js", before: BEFORE, from: "refs/x", exec, sandbox: () => path.join(root, `box${n++}`), redact })
     expect(cap.cases.length).toBeGreaterThan(10)
+    // What gives a different answer each time is not behaviour: it is left out.
+    expect(cap.cases.some((c) => c.fn === "stamp")).toBe(false)
     // The recorded data passes redaction.
     expect(JSON.stringify(cap)).not.toContain("sk-ant-api03")
     expect(JSON.stringify(cap)).toContain("[REDACTED:anthropic-key]")
