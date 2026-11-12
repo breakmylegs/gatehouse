@@ -86,6 +86,19 @@ export function Timeline({ sessionId, onClose }: { sessionId: string; onClose: (
     setRoute("approver")
     onClose()
   }
+  // D-027: the tree as it was at this step, rebuilt in a folder of its own and shown in Explorer.
+  const rebuild = async (e: TimelineEntry) => {
+    const r = await api<{ dir: string; exact: boolean; marks: string[]; applied: number }>("POST", "/api/timeline/rebuild", {
+      session: sessionId,
+      seq: e.records[e.records.length - 1] ?? e.seq,
+      open: true,
+    })
+    if (!r.ok || !r.data) return void toast.error(r.error ?? "It could not be rebuilt")
+    setShown({
+      seq: e.seq,
+      text: `Rebuilt in ${r.data.dir}, from a checkpoint and ${r.data.applied} recorded edit${r.data.applied === 1 ? "" : "s"}.${r.data.exact ? " Exact." : `\n${r.data.marks.join("\n")}`}`,
+    })
+  }
   const showDiff = (e: TimelineEntry, ref: string, file?: string) =>
     void send({ type: "checkpoint_preview", cwd, ref }).then((r) => {
       const diff = r.ok ? ((r.data as { diff?: string }).diff ?? "") : ""
@@ -149,6 +162,11 @@ export function Timeline({ sessionId, onClose }: { sessionId: string; onClose: (
                 {e.kind === "call" ? (
                   <button type="button" className="btn !min-h-6 !px-2 !text-[12px]" onClick={() => tryIt(e)}>
                     Try in policy
+                  </button>
+                ) : null}
+                {e.kind === "call" ? (
+                  <button type="button" className="btn !min-h-6 !px-2 !text-[12px]" aria-label={`Rebuild the files as they were at record ${e.records[e.records.length - 1]}`} onClick={() => void rebuild(e)}>
+                    Rebuild here
                   </button>
                 ) : null}
                 {e.checkpoint ? (

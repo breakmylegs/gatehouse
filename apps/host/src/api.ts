@@ -60,6 +60,8 @@ import {
 import { anchorsDirFor, AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
 import type { AnchorService } from "./anchors.js"
 import type { EvidenceStore } from "./evidence.js"
+import { rebuildAt } from "./rebuild.js"
+import { revealInExplorer } from "./files-api.js"
 import {
   configPath,
   GatehouseConfig,
@@ -550,6 +552,44 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   })
 
   // C-011: one session's timeline, signed, in the audit bundle, with what both verifiers said of it.
+  // D-027: the working tree as it was at one step of a session, rebuilt in a folder of its own; nothing of the session
+  // runs. Recorded, and the folder shown in Explorer when asked.
+  app.post("/api/timeline/rebuild", async (req, reply) => {
+    const b = req.body
+    if (!isObject(b) || typeof b.session !== "string" || !/^[\w-]{1,80}$/.test(b.session) || typeof b.seq !== "number")
+      return bad(reply, 400, "Name a session and a record.")
+    const records = sessionRecords(ctx.auditDir, b.session)
+    const cwd = records.find((r) => r.cwd)?.cwd
+    if (!cwd) return bad(reply, 404, "That session has no project folder in the audit log.")
+    const checkpoints = await listCheckpoints(cwd, b.session).catch(() => [])
+    const dir = path.join(path.dirname(ctx.auditDir), "rebuilds", `${b.session}-${b.seq}-${Date.now().toString(36)}`)
+    let result: Awaited<ReturnType<typeof rebuildAt>>
+    try {
+      result = await rebuildAt({ cwd, seq: b.seq, records, checkpoints, dir })
+    } catch (e) {
+      fs.rmSync(dir, { recursive: true, force: true })
+      return bad(reply, 422, (e as Error).message)
+    }
+    await ctx.audit.record({
+      session: b.session,
+      event: "step_rebuilt",
+      channel: "desktop",
+      tool: "audit",
+      input: { seq: b.seq, from: result.from.ref, applied: result.applied, exact: result.exact, tree: result.tree },
+      verdict: {
+        outcome: "allow",
+        ruleId: "step-rebuilt",
+        reason: "The working tree at one step of the session was rebuilt in a folder of its own, from a checkpoint and the recorded edits.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (b.open === true) revealInExplorer(result.dir)
+    return result
+  })
+
   // D-003: a session's evidence packs, newest first.
   app.get("/api/evidence", async (req, reply) => {
     const session = String((req.query as { session?: string }).session ?? "")

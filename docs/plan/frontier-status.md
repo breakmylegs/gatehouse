@@ -93,7 +93,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-016 | Taint-tracked egress guard | built | slice/D-016-taint-egress | BUILD_REPORT "Frontier D-016" | Addresses, hosts, emails and long tokens from pages, servers and untrusted files; network calls and writes outside the project; never approved by Extreme |
 | D-017 | Subagent boundary labels | built | slice/D-017-subagent-labels | BUILD_REPORT "Frontier D-017" | A subagent's report carries the taint of what it read; one that read nothing untrusted taints nothing |
 | D-026 | Policy regression from real history | built | slice/D-026-policy-regression | BUILD_REPORT "Frontier D-026" | Every save of the rules (file, Library, Your choices); typed phrase names the count; compared with the rules in force |
-| D-027 | Step-exact reconstruction | todo | | | |
+| D-027 | Step-exact reconstruction | built | slice/D-027-rebuild | BUILD_REPORT "Frontier D-027" | Rebuild here on a timeline call; checkpoint plus recorded edits; tree hash given; redacted edits, mismatches and shell commands marked |
 | D-029 | Audit anchoring | partial | slice/D-029-audit-anchors | BUILD_REPORT "Frontier D-029" | Local anchors (ECDSA P-256 for PowerShell 5.1, a recorded deviation), both verifiers, Anchor now; phone passkey anchors are D-029b |
 | D-029b | Audit anchors signed with the phone's passkey | todo | | | When a phone is paired; Face ID each day would be a prompt a day, so the daily local anchor stays and the phone adds a stronger one when you choose |
 | D-056 | SBOM per change | built | slice/D-056-sbom | BUILD_REPORT "Frontier D-056" | Made by Codehouse from the lockfiles' text, no tool; ten lockfile kinds; ajv only to test it against the schema; D-003 will carry it |
