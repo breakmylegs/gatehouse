@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { API_RULE, apiBreak, apiReason, hasApiCompat } from "./api-surface.js"
 import { ADR_RULE, adrContradictions, adrReason, readAdrs } from "./adr.js"
 import { ARCH_RULE, archCheck, archReason } from "./architecture.js"
 import { TEST_FILE, TEST_SCOPE_RULE, TESTS_FIRST_RULE, testScopeReason, testsFirstReason, type Survivor } from "./mutation.js"
@@ -298,6 +299,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (against.length)
           verdict = { ...verdict, outcome: "escalate", ruleId: ADR_RULE, reason: adrReason(against), risk: Math.max(verdict.risk, 65), decidedBy: "rules" }
       }
+      // D-046: an edit that removes an export from a library's public module goes to a person, with what it removes.
+      if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
+        const root = deps.projectRoot ?? deps.cwd
+        const b = await apiBreak(root, toolName, input).catch(() => undefined)
+        if (b) verdict = { ...verdict, outcome: "escalate", ruleId: API_RULE, reason: apiReason(b, hasApiCompat(root)), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
       // D-036: in tests-first mode, before the tests are approved, an edit to anything but a test file goes to a person.
       if (deps.testsFirst?.() && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
         const file = String(input.file_path ?? input.notebook_path ?? "")
@@ -504,6 +511,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   ARCH_RULE,
   // D-044: and so are its architecture decisions.
   ADR_RULE,
+  // D-046: a library's public API is the owner's to break.
+  API_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

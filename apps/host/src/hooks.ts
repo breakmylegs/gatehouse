@@ -5,6 +5,7 @@ import {
   withProvenance,
   type Provenance,
 } from "./provenance.js"
+import { apiBreak, apiReason } from "./api-surface.js"
 import { adrContradictions, adrReason, readAdrs } from "./adr.js"
 import { archCheck, archReason } from "./architecture.js"
 import { vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
@@ -297,6 +298,9 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
             against = []
           }
           if (against.length) return askOutput(adrReason(against))
+          // D-046: and one that removes a library's export.
+          const b = await apiBreak(root, input.tool_name, toolInput).catch(() => undefined)
+          if (b) return askOutput(apiReason(b))
         }
         // D-062: a commit of code rated Severe reaches canUseTool, which sends it to a person.
         if (deps.sast && makesCommit(input.tool_name, toolInput)) {

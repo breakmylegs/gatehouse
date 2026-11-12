@@ -124,7 +124,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-043 | Architecture drift alerts | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | New modules, new cross-layer edges, new cycles since Approve as it is |
 | D-044 | ADR-aware context | built | slice/D-038-adr | BUILD_REPORT "Frontier D-038 and D-044" | Accepted ADRs in each session's instructions; forbids in front matter flag a contradicting edit (adr-contradiction) |
 | D-045 | Fitness functions | built | slice/D-045-fitness | BUILD_REPORT "Frontier D-045" | .codehouse/fitness.yml; a failing check stops a done goal run as fitness, and is in the evidence pack |
-| D-046 | Public API break guard | todo | | | |
+| D-046 | Public API break guard | built | slice/D-046-api-break | BUILD_REPORT "Frontier D-046" | Tree-sitter exports (C-032 not built, a recorded deviation); removed export in a library escalates as api-break; ApiCompat detected, never run |
 | D-048 | Architecture review pack | todo | | | |
 | D-050 | Threat model delta | built | slice/D-050-threat-delta | BUILD_REPORT "Frontier D-050" | Routes, data stores, outbound connections, listeners, new dependencies; STRIDE drafts in Changes with Copy |
 
