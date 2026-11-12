@@ -301,7 +301,7 @@ In the request pane the heading, the High risk callout and the decision bar keep
 
 The decision bar is a container. Deny, the other decisions and Allow once sit on one row, Allow once at its end; Remember and Stop session wrap to a second row of their own, so Allow once is never pushed beneath the others. Below 980px of bar width the secondary buttons drop their key hints first (the keys still work); Deny and Allow once keep theirs.
 
-In Codehouse.app the title bar is its own band coloured as the page (`ground`), above the toolbar, so the two read as one (see Known gaps).
+In Codehouse.app the toolbar is the title bar: the page runs under a transparent compact toolbar (40 points), so the toolbar takes that height and starts after the traffic lights (`--mac-titlebar`, `--mac-lights`, set by the window). Where it is empty, a press drags the window and a double-click zooms or minimises as System Settings says. `--check` proves that clicks there reach the page and that Stop everything answers.
 
 ## Elevation & Depth
 
@@ -404,8 +404,5 @@ Sections as grouped sections: a 1px line above each fieldset and a 15px bold leg
 
 ## Known gaps
 
-These are open in the shipped build. They are not part of the system and new surfaces should not copy them.
+None are open: the three the finish review left (the title bar, the session and rule in the grouped rows, the drawn chevron) were built on 12 Nov 2026.
 
-- **Unified title bar (deviation).** A toolbar merged into the title bar with the traffic lights inside it needs the page to extend under the title bar, and whether clicks in that band reach the page, where Stop everything lives, cannot be proven without a screen. Until it is checked at the owner's screen, the title bar stays its own band coloured as the page, above the toolbar.
-- **Session and Held by rule are not yet in the grouped rows.** They still sit in the request heading above the command; the contract's story puts session, risk, where, why and status in the grouped rows.
-- **The ▾ text glyph after sidebar group names.** Folding is shown by a text character, not a drawn symbol. It is a defect carried from upstream's sidebar, not a Mac rule; a drawn chevron should replace it.

@@ -34,6 +34,42 @@ final class MainWindow: PageWindow {
     })();
     """
 
+  /// The title bar's height and how far right the traffic lights reach, in points.
+  private(set) var titlebar: CGFloat = 0
+  private(set) var lights: CGFloat = 0
+
+  /// The page's half of the merged toolbar: it marks the page so mac-standard.css lays the toolbar out beside the
+  /// traffic lights at the title bar's height, and where the toolbar is empty (no control under the pointer) a press
+  /// asks the window to follow the mouse, and a double-click does what System Settings says a title bar's does.
+  static let titlebarScript = """
+    document.documentElement.setAttribute("data-mac-titlebar", "");
+    (() => {
+      const busy = (t) => !t || !t.closest || !!t.closest('button, a, input, select, textarea, label, summary, [role="button"], [role="menuitem"], [role="tab"], [role="switch"], [role="option"], [contenteditable], [tabindex]:not([tabindex="-1"]), .menu, .kill-confirm');
+      Object.defineProperty(window, "__codehouseBusy", { value: busy });
+      const post = (m) => window.webkit && window.webkit.messageHandlers.codehouse.postMessage(m);
+      document.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || e.detail > 1 || e.clientY > (window.__codehouseBand || 0) || busy(e.target)) return;
+        e.preventDefault();
+        post("drag-window");
+      }, true);
+      document.addEventListener("dblclick", (e) => {
+        if (e.clientY > (window.__codehouseBand || 0) || busy(e.target)) return;
+        post("zoom-window");
+      }, true);
+    })();
+    """
+
+  /// The title bar's measures in CSS pixels at the page's zoom, for the page.
+  private func titlebarValues() -> String {
+    let z = max(0.5, web.pageZoom)
+    let band = Int((titlebar / z).rounded()), inset = Int((lights / z).rounded())
+    return """
+      ;window.__codehouseBand = \(band);
+      document.documentElement.style.setProperty("--mac-titlebar", "\(band)px");
+      document.documentElement.style.setProperty("--mac-lights", "\(inset)px");
+      """
+  }
+
   init(check: Bool) {
     self.check = check
     let window = NSWindow(
@@ -46,7 +82,7 @@ final class MainWindow: PageWindow {
     // The size and place you left it at, then kept on one screen (Page.swift).
     if !check { window.setFrameAutosaveName("Codehouse main window") }
     fitToScreen()
-    web.pageZoom = Self.savedZoom
+    web.pageZoom = check ? 1 : Self.savedZoom
     web.isHidden = true
 
     // Standard macOS (owner, 12 Nov): the title bar takes the page's own ground, so it reads as one toolbar with it,
@@ -55,6 +91,17 @@ final class MainWindow: PageWindow {
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
     window.backgroundColor = Self.ground
+    // The toolbar is the title bar, as in macOS 26's own apps: the page runs under a transparent compact toolbar and
+    // draws its toolbar beside the traffic lights. Clicks there reach the page (--check clicks Stop everything under
+    // it), so the page asks for a window drag where the toolbar is empty (titlebarScript).
+    window.styleMask.insert(.fullSizeContentView)
+    let bar = NSToolbar(identifier: "Codehouse")
+    bar.displayMode = .iconOnly
+    window.toolbar = bar
+    window.toolbarStyle = .unifiedCompact
+    window.titlebarSeparatorStyle = .none
+    titlebar = window.frame.height - window.contentLayoutRect.height
+    lights = (window.standardWindowButton(.zoomButton)?.frame.maxX ?? 68) + 14
     let material = NSVisualEffectView()
     material.material = .sidebar
     material.blendingMode = .behindWindow
@@ -63,6 +110,9 @@ final class MainWindow: PageWindow {
     web.underPageBackgroundColor = .clear
     web.configuration.userContentController.addUserScript(
       WKUserScript(source: Self.vibrancyScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+    web.configuration.userContentController.addUserScript(
+      WKUserScript(
+        source: Self.titlebarScript + titlebarValues(), injectionTime: .atDocumentStart, forMainFrameOnly: true))
 
     let content = NSView()
     content.wantsLayer = true
@@ -160,6 +210,46 @@ final class MainWindow: PageWindow {
   func zoom(by step: CGFloat?) {
     web.pageZoom = step.map { min(3, max(0.5, web.pageZoom + $0)) } ?? 1
     Self.savedZoom = web.pageZoom
+    web.evaluateJavaScript(titlebarValues(), completionHandler: nil)
+  }
+
+  // MARK: the toolbar as a title bar
+
+  /// The page asked for a window drag (a press on the toolbar where no control is). The window follows the mouse
+  /// until the button comes up; then WebKit is given the button-up, as it saw the press. `posting` is --check's own
+  /// mouse, put in the queue first; a real drag reads the real one and stops at once if the button is already up.
+  func dragWindow(posting: [NSEvent] = []) {
+    if posting.isEmpty && NSEvent.pressedMouseButtons & 1 == 0 { return }
+    for e in posting { NSApp.postEvent(e, atStart: false) }
+    var last: NSPoint?
+    while true {
+      guard
+        let e = window.nextEvent(
+          matching: [.leftMouseDragged, .leftMouseUp], until: Date().addingTimeInterval(1), inMode: .eventTracking,
+          dequeue: true)
+      else {
+        if posting.isEmpty && NSEvent.pressedMouseButtons & 1 != 0 { continue }
+        break
+      }
+      if e.type == .leftMouseUp {
+        web.mouseUp(with: e)
+        break
+      }
+      let o = window.frame.origin
+      let p = NSPoint(x: o.x + e.locationInWindow.x, y: o.y + e.locationInWindow.y)
+      if let l = last { window.setFrameOrigin(NSPoint(x: o.x + p.x - l.x, y: o.y + p.y - l.y)) }
+      last = p
+    }
+    if let screen = window.screen { window.setFrame(window.constrainFrameRect(window.frame, to: screen), display: true) }
+  }
+
+  /// A double-click on the empty toolbar does what System Settings, Desktop and Dock says a title bar's does.
+  func titleDoubleClick() {
+    switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+    case "Minimize": window.performMiniaturize(nil)
+    case "None": break
+    default: window.performZoom(nil)
+    }
   }
 
   override func pageLoaded() {
@@ -190,7 +280,102 @@ final class MainWindow: PageWindow {
           text.contains("Codehouse") && !text.contains("\"children\":0") && text.contains("\"shell\":true")
           && text.contains("\"glass\":true")
         if !ok { return onLoaded(false, text) }
-        checkBridge { [self] bridgeOk, said in onLoaded(bridgeOk, text + "\n" + said) }
+        checkBridge { [self] bridgeOk, said in
+          if !bridgeOk { return onLoaded(false, text + "\n" + said) }
+          checkTitlebar { [self] barOk, barSaid in onLoaded(barOk, text + "\n" + said + "\n" + barSaid) }
+        }
+      }
+    }
+  }
+
+  /// --check's own mouse for the toolbar drag, while the check runs.
+  private(set) var checkDrag: [NSEvent]?
+
+  private func mouse(_ type: NSEvent.EventType, _ p: NSPoint) -> NSEvent {
+    NSEvent.mouseEvent(
+      with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+      windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1,
+      pressure: type == .leftMouseUp ? 0 : 1)!
+  }
+
+  /// The toolbar under the title bar works: Stop everything, which sits there, answers a click (its question opens,
+  /// and a second click closes it again; Yes is never pressed), and a press on the empty toolbar drags the window.
+  /// The window is ordered far off screen for this, so nothing shows. Which view a click reaches is AppKit's own
+  /// hit test from the window's frame view, the title bar's views included, so the check holds whichever app you
+  /// are using meanwhile; the click is then given to that view, as the window would give it.
+  private func checkTitlebar(done: @escaping (Bool, String) -> Void) {
+    window.orderFrontRegardless()
+    // macOS keeps a window it brings forward on a screen; once it is in, it may go where the check wants it.
+    window.setFrameOrigin(NSPoint(x: -20000, y: 200))
+    // The page as you would have it, not under the start-up picture (check mode keeps it up until now).
+    splash.isHidden = true
+    web.isHidden = false
+    let find = """
+      (() => {
+        const k = document.querySelector(".kill-switch");
+        if (!k) return "";
+        const r = k.getBoundingClientRect(), band = window.__codehouseBand || 0;
+        let free = null;
+        for (let x = innerWidth - 4; x > 0 && band; x -= 6) {
+          const el = document.elementFromPoint(x, band / 2);
+          if (el && !window.__codehouseBusy(el)) { free = [x, band / 2]; break }
+        }
+        return JSON.stringify({ kx: r.left + r.width / 2, ky: r.top + r.height / 2, band, free });
+      })()
+      """
+    web.evaluateJavaScript(find) { [self] result, _ in
+      guard let text = result as? String, let data = text.data(using: .utf8),
+        let m = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let kx = m["kx"] as? Double, let ky = m["ky"] as? Double, let band = m["band"] as? Double
+      else { return done(false, "Toolbar: Stop everything was not found") }
+      guard ky < band else { return done(false, "Toolbar: Stop everything is not under the title bar (\(ky) of \(band))") }
+      let h = window.frame.height
+      let at = { (x: Double, y: Double) in NSPoint(x: x, y: h - y) }
+      var routed = true
+      // The view a press at p goes to, which must be the page; nil when it is not.
+      let page = { [self] (p: NSPoint) -> NSView? in
+        guard let frameView = window.contentView?.superview,
+          let hit = frameView.hitTest(frameView.convert(p, from: nil)), hit === web || hit.isDescendant(of: web)
+        else {
+          routed = false
+          return nil
+        }
+        return hit
+      }
+      let click = { [self] (p: NSPoint) in
+        guard let v = page(p) else { return }
+        v.mouseDown(with: mouse(.leftMouseDown, p))
+        v.mouseUp(with: mouse(.leftMouseUp, p))
+      }
+      let open = "!!document.querySelector('.kill-confirm')"
+      click(at(kx, ky))
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+        web.evaluateJavaScript(open) { [self] opened, _ in
+          click(at(kx, ky))
+          DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [self] in
+            web.evaluateJavaScript(open) { [self] stillOpen, _ in
+              let clicks = (opened as? Bool) == true && (stillOpen as? Bool) == false
+              guard let free = m["free"] as? [Double], free.count == 2 else {
+                return done(false, "Toolbar: Stop everything \(clicks ? "answers" : "did not answer"); no empty toolbar to drag")
+              }
+              // Five drag steps of 10 points; the window follows from the first, so it moves 40 (dragWindow).
+              let f = at(free[0], free[1])
+              checkDrag = (1...5).map { k in mouse(.leftMouseDragged, NSPoint(x: f.x + (k == 1 ? 10 : 20), y: f.y)) }
+                + [mouse(.leftMouseUp, NSPoint(x: f.x + 20, y: f.y))]
+              let start = window.frame.origin.x
+              page(f)?.mouseDown(with: mouse(.leftMouseDown, f))
+              DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [self] in
+                checkDrag = nil
+                let moved = window.frame.origin.x - start
+                let ok = routed && clicks && abs(moved - 40) < 0.5
+                done(
+                  ok,
+                  "Toolbar: clicks under the title bar \(routed ? "reach the page" : "do NOT reach the page"); Stop everything \(clicks ? "answers a click" : "did NOT answer a click"); the empty toolbar dragged the window \(Int(moved)) of 40 points"
+                )
+              }
+            }
+          }
+        }
       }
     }
   }

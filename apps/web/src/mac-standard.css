@@ -606,6 +606,22 @@
   backdrop-filter: none;
 }
 
+/* The toolbar is the title bar (data-mac-titlebar, MainWindow.swift): the page runs under a transparent compact
+   toolbar, so whatever is at the top takes the title bar's height and starts after the traffic lights. Clicks
+   there reach the page; an empty part of the toolbar drags the window. */
+:root[data-platform="mac"][data-mac-titlebar] .deck,
+:root[data-platform="mac"][data-mac-titlebar] .update-bar {
+  min-height: var(--mac-titlebar, 40px);
+  padding-left: var(--mac-lights, 84px);
+}
+:root[data-platform="mac"][data-mac-titlebar] .update-bar + .deck {
+  padding-left: 16px;
+}
+:root[data-platform="mac"][data-mac-titlebar] .deck {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
 /* ----------------------------------------- the Mac's own accessibility settings */
 @media (prefers-reduced-transparency: reduce) {
   :root[data-platform="mac"] .rail.shell,

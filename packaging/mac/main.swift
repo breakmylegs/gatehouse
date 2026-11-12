@@ -19,5 +19,5 @@ let app = NSApplication.shared
 // The delegate is held here: NSApplication keeps only a weak reference to it.
 let delegate = AppDelegate(check: check)
 app.delegate = delegate
-app.setActivationPolicy(check ? .prohibited : .regular)
+app.setActivationPolicy(check ? .accessory : .regular)
 app.run()
