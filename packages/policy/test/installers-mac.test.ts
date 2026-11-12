@@ -25,6 +25,10 @@ describe("installing software on a Mac", () => {
     expect((await judge("mas install 497799835"))?.reason).toMatch(/with mas: 497799835, from the Mac App Store/)
     expect(await judge("/opt/homebrew/bin/brew install jq")).toMatchObject({ ruleId: INSTALLER_RULE })
     expect(await judge("npm test && brew install jq")).toMatchObject({ ruleId: INSTALLER_RULE })
+    // A flag before the subcommand still installs.
+    expect((await judge("brew -v install jq"))?.reason).toMatch(/with brew: jq, from Homebrew/)
+    expect(await judge("brew --verbose --cask install x")).toMatchObject({ ruleId: INSTALLER_RULE })
+    expect(await judge("port -N install wget")).toMatchObject({ ruleId: INSTALLER_RULE })
   })
 
   it("leaves looking alone, and Windows' installers as upstream judges them", async () => {

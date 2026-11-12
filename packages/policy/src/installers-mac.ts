@@ -21,11 +21,13 @@ const plain = (args: string[]) => args.filter((a) => !a.startsWith("-"))
 
 /** One command, as its name and arguments, if it installs software on a Mac. */
 function installs(name: string, args: string[]): MacInstall | undefined {
-  const sub = args[0]
-  const rest = args.slice(1)
+  // The first word that is not a flag: brew -v install jq installs as surely as brew install jq.
+  const at = args.findIndex((a) => !a.startsWith("-"))
+  const sub = args[at]
+  const rest = args.slice(at + 1)
   if (name === "brew" && ["install", "reinstall", "upgrade", "tap", "bundle"].includes(sub ?? "")) {
     const names = plain(rest)
-    const cask = rest.includes("--cask")
+    const cask = args.includes("--cask")
     if (sub === "tap")
       return { tool: "brew tap", id: names[0], source: names[1] ?? "GitHub, as a new Homebrew tap" }
     if (sub === "bundle")

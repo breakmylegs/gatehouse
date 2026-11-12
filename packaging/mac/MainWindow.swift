@@ -253,6 +253,8 @@ final class MainWindow: PageWindow {
   }
 
   override func pageLoaded() {
+    // The start script holds the zoom the window opened at; a page loaded since may be at another.
+    web.evaluateJavaScript(titlebarValues(), completionHandler: nil)
     guard !loaded else { return }
     loaded = true
     if check { return checkPage() }

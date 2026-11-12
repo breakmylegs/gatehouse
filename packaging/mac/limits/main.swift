@@ -16,7 +16,8 @@
 //     again without an administrator, so a job set back to normal stays below until the session starts again.
 //   - The processor: macOS cannot cap a group of processes, so the job is paused and resumed in slices of 100 ms
 //     (SIGSTOP and SIGCONT, as cpulimit does), the share it may run adjusted to hold the cap.
-//   - Memory: macOS does not enforce a memory limit on a process, so the job's memory footprint is read every slice,
+//   - Memory: macOS does not enforce a memory limit on a process, so the job's memory footprint is read every slice
+//     (every second without a processor cap),
 //     and over the cap the largest process in the job is ended, with a line on the error stream saying so. On Windows
 //     the job's allocation fails instead.
 // Nothing here needs an administrator or any permission.
@@ -207,6 +208,7 @@ var runShare = 1.0
 var reportCpuNs = 0.0
 var reportSince = Date()
 var lastMemoryKill = Date.distantPast
+var lastScan = Date.distantPast
 let period = 0.1
 
 func readNewLimits() {
@@ -251,6 +253,14 @@ loop: while true {
     break loop
   }
   readNewLimits()
+  // Listing every process on the Mac costs about 2% of a core at ten a second; without a processor cap, once a second
+  // keeps the memory cap, the priority and the report.
+  let capped = current.cpu > 0
+  if !capped && Date().timeIntervalSince(lastScan) < 1 {
+    usleep(useconds_t(period * 1_000_000))
+    continue
+  }
+  lastScan = Date()
   let procs = jobProcesses(root: child)
 
   if current.priority == "below" {
@@ -276,17 +286,17 @@ loop: while true {
   }
 
   // The processor: run for runShare of the slice, pause for the rest, and move runShare towards the cap.
-  if current.cpu > 0 && runShare < 1 {
+  if capped && runShare < 1 {
     usleep(useconds_t(period * runShare * 1_000_000))
     signalAll(procs, SIGSTOP)
     usleep(useconds_t(period * (1 - runShare) * 1_000_000))
     signalAll(procs, SIGCONT)
-  } else {
+  } else if capped {
     usleep(useconds_t(period * 1_000_000))
   }
-  let used = cpuSince(jobProcesses(root: child))
+  let used = cpuSince(capped ? jobProcesses(root: child) : procs)
   reportCpuNs += used
-  if current.cpu > 0 {
+  if capped {
     let share = used / (period * 1e9 * processors)
     let cap = Double(current.cpu) / 100
     if share > cap {

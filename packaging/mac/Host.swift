@@ -44,6 +44,17 @@ enum Paths {
       .appendingPathComponent("Library/Application Support/Gatehouse")
   }
 
+  /// What the Host and the Relay start with: this app's environment without any Claude credential (invariant 6), and
+  /// Node's compile cache in the data folder.
+  static func childEnvironment() -> [String: String] {
+    var env = ProcessInfo.processInfo.environment
+    for secret in ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] {
+      env.removeValue(forKey: secret)
+    }
+    if env["NODE_COMPILE_CACHE"] == nil { env["NODE_COMPILE_CACHE"] = dataDir.appendingPathComponent("node-cache").path }
+    return env
+  }
+
   /// A part's built file, or its source through tsx if the package has no built file.
   static func entry(_ name: String) -> [String] {
     let built = appDir.appendingPathComponent("apps/\(name)/dist/main.mjs")
@@ -157,12 +168,8 @@ final class HostProcess {
   /// The environment the Host runs with: this app's own, without any Claude credential (invariant 6), and with the
   /// rules you change kept in the data folder instead of inside the app.
   func environment() -> [String: String] {
-    var env = ProcessInfo.processInfo.environment
-    for secret in ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] {
-      env.removeValue(forKey: secret)
-    }
-    let data = Paths.dataDir
-    let policy = data.appendingPathComponent("policy")
+    var env = Paths.childEnvironment()
+    let policy = Paths.dataDir.appendingPathComponent("policy")
     env["PATH"] = path
     if let developerDir { env["DEVELOPER_DIR"] = developerDir }
     env["GATEHOUSE_EXIT_ON_STDIN_CLOSE"] = "1"
@@ -172,7 +179,6 @@ final class HostProcess {
     if let dir = Bundle.main.executableURL?.deletingLastPathComponent() {
       env["GATEHOUSE_MAC_LIMITS"] = dir.appendingPathComponent("codehouse-limits").path
     }
-    if env["NODE_COMPILE_CACHE"] == nil { env["NODE_COMPILE_CACHE"] = data.appendingPathComponent("node-cache").path }
     if env["GATEHOUSE_LOCAL_RULES"] == nil {
       env["GATEHOUSE_LOCAL_RULES"] = policy.appendingPathComponent("rules.local.yaml").path
     }

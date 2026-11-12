@@ -4,6 +4,7 @@
 //   --parse <shortcut>                    {"ok":true,"text":...,"mods":...,"key":...} or {"ok":false,"error":...}
 //   --alternatives <shortcut> [taken,...]  up to three free alternatives, one a line
 //   --devtools <git>                      the developer folder Codehouse would use instead of Xcode's, or none
+//   --env                                 the Host's environment, KEY=value a line
 import Foundation
 
 func json(_ o: [String: Any]) -> String {
@@ -31,6 +32,12 @@ if (a.count == 3 || a.count == 4) && a[1] == "--alternatives", case .success(let
 }
 if a.count == 3 && a[1] == "--devtools" {
   print(DeveloperTools.fallback(git: a[2]) ?? "none")
+  exit(0)
+}
+if a.count == 2 && a[1] == "--env" {
+  for (k, v) in HostProcess(version: "test", path: "/usr/bin:/bin").environment().sorted(by: { $0.key < $1.key }) {
+    print("\(k)=\(v)")
+  }
   exit(0)
 }
 FileHandle.standardError.write("usage: --decide <uri> <origin> <where> | --parse <s> | --alternatives <s> [taken]\n".data(using: .utf8)!)

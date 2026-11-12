@@ -69,3 +69,22 @@ describe.skipIf(!can)("Apple's developer tools while Xcode's licence waits", () 
     )
   })
 })
+
+// Invariant 6 in Codehouse.app: the Host, and the Relay beside it (Paths.childEnvironment), start without any Claude
+// credential the app was given.
+describe.skipIf(!can)("the Host's environment in Codehouse.app", () => {
+  it("leaves out every Claude credential and keeps the rest", () => {
+    const out = execFileSync(exe, ["--env"], {
+      env: {
+        PATH: "/usr/bin:/bin",
+        ANTHROPIC_API_KEY: "k",
+        ANTHROPIC_AUTH_TOKEN: "t",
+        CLAUDE_CODE_OAUTH_TOKEN: "o",
+        KEEP_ME: "1",
+      },
+    }).toString()
+    expect(out).not.toMatch(/^(ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|CLAUDE_CODE_OAUTH_TOKEN)=/m)
+    expect(out).toMatch(/^KEEP_ME=1$/m)
+    expect(out).toMatch(/^GATEHOUSE_EXIT_ON_STDIN_CLOSE=1$/m)
+  })
+})

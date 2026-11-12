@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { normaliseRaw } from "../src/paths.js"
-import { isLocalAbsolute } from "../src/paths-mac.js"
+import { isFullFolder as isLocalAbsolute } from "@gatehouse/shared/node"
 
 describe("paths on a Mac in the policy", () => {
   it("keeps /c and /mnt/d as the folders they are on a Mac, not Windows drives", () => {

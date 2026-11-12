@@ -61,12 +61,8 @@ final class RelayProcess {
     guard FileManager.default.fileExists(atPath: entry.last ?? "") else {
       throw HostError("The Relay is not inside Codehouse.app. Install Codehouse again.")
     }
-    var env = ProcessInfo.processInfo.environment
-    for secret in ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] { env.removeValue(forKey: secret) }
+    var env = Paths.childEnvironment()
     env["RELAY_DATA_DIR"] = Self.dataDir.path
-    if env["NODE_COMPILE_CACHE"] == nil {
-      env["NODE_COMPILE_CACHE"] = Paths.dataDir.appendingPathComponent("node-cache").path
-    }
     try FileManager.default.createDirectory(at: Self.dataDir, withIntermediateDirectories: true)
     let p = Process()
     let relayArgs = [Paths.node.path] + entry + (address.map { ["--public-url", $0] } ?? [])
