@@ -1,4 +1,6 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
+import { readArchRules, updateGraph } from "./architecture.js"
 import { approvedPlan, readRequirements, REQUIREMENTS_DIR, scopeOf, traceMatrix, unrequested } from "./requirements.js"
 import { execFile as execFileCb } from "node:child_process"
 import { provenanceGraph } from "./provenance-graph.js"
@@ -975,6 +977,38 @@ export class HostServer {
           .map((x) => x.path)
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
+      }
+      case "architecture": {
+        const s = this.#session(cmd.sessionId)
+        const files = await listFiles(s.cwd).catch(() => [] as string[])
+        const graph = modulesOf(await updateGraph(s.cwd, files))
+        const approved = readApproved(s.cwd)
+        const drift = driftOf(graph, approved)
+        return {
+          ...(readArchRules(s.cwd).problem ? { problem: readArchRules(s.cwd).problem } : {}),
+          modules: Object.keys(graph.modules).length,
+          approved: approved !== undefined,
+          drift,
+          cycles: cyclesOf(graph),
+          diagrams: c4Diagrams(s.project, graph, drift),
+        }
+      }
+      case "architecture_approve": {
+        const s = this.#session(cmd.sessionId)
+        const graph = modulesOf(await updateGraph(s.cwd, await listFiles(s.cwd).catch(() => [] as string[])))
+        await approveArch(s.cwd, graph)
+        await a.audit.record({
+          session: s.id,
+          event: "architecture_approved",
+          channel: "desktop",
+          tool: "architecture",
+          cwd: s.cwd,
+          project: s.project,
+          input: { modules: Object.keys(graph.modules).length, edges: graph.edges.length },
+          verdict: { outcome: "allow", ruleId: "architecture", reason: "You approved the project's architecture as it is; drift is measured from here.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { ok: true }
       }
       case "tests_first": {
         const s = this.#session(cmd.sessionId)

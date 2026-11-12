@@ -222,6 +222,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-042, D-043: the project's architecture as it is, its C4 diagrams in Mermaid, and drift since you approved it. */
+  z.object({ type: z.literal("architecture"), sessionId: Id }),
+  /** D-043: you approve the architecture as it is now; drift is measured from here. */
+  z.object({ type: z.literal("architecture_approve"), sessionId: Id }),
   /** D-036: tests first: Claude writes tests for these criteria; only test files change until you approve them. */
   z.object({ type: z.literal("tests_first"), sessionId: Id, criteria: z.string().max(8000) }),
   /** D-036: you approve the tests the session wrote: they are locked and the implementation may start. */

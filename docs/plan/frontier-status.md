@@ -120,8 +120,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-039 | Requirement change impact | todo | | | |
 | D-040 | Intent drift alarm | todo | | | Needs a local model |
 | D-041 | Architecture rules as policy | built | slice/D-041-architecture | BUILD_REPORT "Frontier D-041" | .codehouse/architecture.yml layers, allow, forbid; Tree-sitter imports; architecture rule, never auto-approved; graph in .codehouse/arch; 11 golden cases |
-| D-042 | Living C4 diagrams | todo | | | |
-| D-043 | Architecture drift alerts | todo | | | |
+| D-042 | Living C4 diagrams | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | Context, container and component in Mermaid, new modules marked; shown as text with Copy (no drawing library, a recorded deviation) |
+| D-043 | Architecture drift alerts | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | New modules, new cross-layer edges, new cycles since Approve as it is |
 | D-044 | ADR-aware context | todo | | | |
 | D-045 | Fitness functions | todo | | | |
 | D-046 | Public API break guard | todo | | | |

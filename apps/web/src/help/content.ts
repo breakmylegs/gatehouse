@@ -247,6 +247,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 When Claude works on an assumption it has not checked with you, it can record it: the progress card lists it with how to check it, until you choose **It holds**, and the change's evidence keeps the ones you have not.
 
+**Architecture...** in the same menu draws the project from its imports, as C4 diagrams in Mermaid to copy into documentation. Choose **Approve as it is**, and from then on a new module, a new link across layers or a new import cycle shows at the top as drift.
+
 A project can set how it is built in .codehouse/architecture.yml: its layers (by file patterns), which layers each may use, and imports that are not allowed. An edit that adds an import breaking one of these waits for you, naming the rule, even in Extreme approval.
 
 **Requirements...** in the same menu reads the project's docs/requirements folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.
