@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import type { IntentCheck } from "./intent-drift.js"
 import { adrContext, readAdrs } from "./adr.js"
 import { fitnessCheck, fitnessWords } from "./fitness.js"
 import { listFiles, mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
@@ -391,6 +392,7 @@ export interface SessionEvents {
         | "heartbeat_missed"
         | "commit_noted"
         | "mutant_task_started"
+        | "intent_drift"
         | "mutant_rechecked"
       data: Record<string, unknown>
     },
@@ -477,6 +479,8 @@ export interface SessionDeps {
   sast?: SastCommitGuard
   /** D-057: the vulnerability snapshot, for what a session's commit would add. */
   vulns?: VulnCommitGuard
+  /** D-040: compares the goal with what Claude says it is doing, with a model on this computer. */
+  intentCheck?: (goal: string, said: string) => Promise<IntentCheck>
   /** D-005: a mutant's test runs, as Codehouse actions. */
   mutationExec?: (sessionId: string) => MutationExec
   /** D-003: the change evidence packs. */
@@ -937,6 +941,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#goal ? { goal: this.#goal } : {}),
       ...(this.#assumptions.length ? { assumptions: this.#assumptions.map((a) => ({ ...a })) } : {}),
       ...(this.#testsFirst ? { testsFirst: true } : {}),
+      ...(this.#drift ? { intentDrift: this.#drift } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
@@ -1504,6 +1509,8 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#stuck.stop()
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      // D-040: and whether the work still serves the goal.
+      if (typeof m.result === "string" && m.is_error !== true) void this.#checkIntent(m.result)
       // D-009: a claim that the work is done is checked by running its command again.
       if (typeof m.result === "string" && m.is_error !== true) void this.#checkClaims(m.result)
       // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
@@ -1568,6 +1575,29 @@ export class Session extends EventEmitter<SessionEvents> {
   /** What this chat was told it remembers when it started, in the words it was given (CH-03). */
   memoryGiven(): Array<{ id: string; scope: string; topic: string; text: string }> {
     return this.#memoryGiven.map((m) => ({ ...m }))
+  }
+
+  /** D-040: the last intent check, and the drift it found. */
+  #intentAt = 0
+  #drift: { at: string; reason: string } | undefined
+
+  /** D-040: at the end of a turn in a session with a goal, at most every five minutes. */
+  async #checkIntent(said: string): Promise<void> {
+    if (!this.#goal || !this.#deps.intentCheck || Date.now() - this.#intentAt < 5 * 60_000 || !said.trim()) return
+    this.#intentAt = Date.now()
+    const r = await this.#deps.intentCheck(this.#goal, said).catch(() => undefined)
+    if (!r?.available) return
+    if (!r.drift) {
+      if (this.#drift) {
+        this.#drift = undefined
+        this.emit("state", this.info())
+      }
+      return
+    }
+    this.#drift = { at: new Date().toISOString(), reason: r.reason }
+    await this.#auditLimit("intent_drift", "intent-drift", { reason: r.reason }, `The work may have drifted from the goal: ${r.reason}`, "rules").catch(() => undefined)
+    this.emit("event", { type: "intent_drift", data: { reason: r.reason } })
+    this.emit("state", this.info())
   }
 
   /** D-036: tests-first mode: the tests are being written and are not approved yet. */

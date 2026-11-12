@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { checkIntent } from "./intent-drift.js"
 import type { MutationExec } from "./mutation.js"
 import { VulnCommitGuard, VulnSnapshot } from "./vuln-snapshot.js"
 import { EvidenceService, EvidenceStore } from "./evidence.js"
@@ -607,6 +608,14 @@ export function createHost(opts: HostOptions = {}): Host {
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
   deps.mutationExec = mutationExecFor
+  // D-040: only a runtime on this computer, and only when other models are switched on in Settings.
+  deps.intentCheck = (goal, said) =>
+    checkIntent({
+      goal,
+      said,
+      cfg: config.providers?.multi?.enabled ? (config.providers.local as LocalRuntimeConfig | undefined) : undefined,
+      redact: (t) => redactString(t, { terms: config.redactTerms }),
+    })
   // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
   const chatStore = new ChatStore({
     file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
@@ -931,6 +940,10 @@ export function createHost(opts: HostOptions = {}): Host {
             x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty", actionFor(s.id)) : undefined,
           )
           .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
+    } else if (type === "intent_drift") {
+      // D-040: the phone is told too.
+      const body = typeof data.reason === "string" ? data.reason : "The work may no longer serve the goal."
+      void phone.notify("notify", { title: "Drifting from the goal?", body, project }).catch(() => undefined)
     } else if (type === "heartbeat_missed") {
       // D-025: nothing was heard from you, so an Extreme session paused: the phone and push channels are told.
       const body = "Nothing was heard from you in time, so Extreme approval paused it. Start it again on the desktop."

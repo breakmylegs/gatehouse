@@ -480,6 +480,8 @@ export const SessionInfo = z.object({
   effortCap: Effort.optional(),
   /** B25: the check Extreme approval carries on until it passes. */
   goal: z.string().max(300).optional(),
+  /** D-040: a model on this computer found the work may have drifted from the goal. */
+  intentDrift: z.object({ at: z.string(), reason: z.string() }).optional(),
   /** D-036: the session is writing its tests first, and they are not approved yet. */
   testsFirst: z.boolean().optional(),
   /** D-037: the assumptions Claude declared, until you verify them. Absent from older Hosts. */

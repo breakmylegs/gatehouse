@@ -243,6 +243,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **A plan's card** says, before you approve it, how many of the commands and file changes the plan names your rules would allow, would ask you about and would refuse. It is an estimate: nothing in the plan is run to work it out, and every call is still judged when Claude makes it.
 
+With a goal set and a model running on this computer (Settings, Models), Codehouse checks now and then that what Claude says it is doing still serves the goal, and says so at the top of the session, and on your phone, when it seems to have drifted. Nothing is sent anywhere else; without such a model the check is not made.
+
 **Tests first...** in the same menu asks Claude to write the tests for your acceptance criteria before anything else: until you choose **Approve the tests**, a change to anything but a test file waits for you, even in Extreme approval. Approving locks the tests, and Claude then implements.
 
 When Claude works on an assumption it has not checked with you, it can record it: the progress card lists it with how to check it, until you choose **It holds**, and the change's evidence keeps the ones you have not.

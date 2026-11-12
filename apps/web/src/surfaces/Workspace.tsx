@@ -1094,6 +1094,11 @@ function SessionPane({
         ) : null}
         {/* The plan while there is one to follow: steps done, in progress and not started (owner, 2 Nov). */}
         {session.testsFirst ? <TestsFirstBanner sessionId={session.id} /> : null}
+        {session.intentDrift ? (
+          <section aria-label="Drifting from the goal" role="status" className="panel mb-2 px-3 py-2 text-[13px]">
+            <strong className="text-warn">Drifting from the goal?</strong> {session.intentDrift.reason}
+          </section>
+        ) : null}
         {(transcript.todos.length &&
           (session.state === "running" || transcript.todos.some((t) => t.status !== "completed"))) ||
         session.assumptions?.some((a) => !a.verified) ? (
