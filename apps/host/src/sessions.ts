@@ -298,6 +298,12 @@ export interface SessionInfo {
   effortCap?: Effort
   /** B25: the check Extreme approval carries on until. */
   goal?: string
+  /** D-040: a model on this computer found the work may have drifted from the goal. */
+  intentDrift?: { at: string; reason: string }
+  /** D-036: the session is writing its tests first, and they are not approved yet. */
+  testsFirst?: boolean
+  /** D-037: the assumptions Claude declared, until you verify them. */
+  assumptions?: Array<{ id: string; text: string; check?: string; at: string; verified?: boolean }>
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
   historyFrom?: string
   /**

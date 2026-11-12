@@ -548,7 +548,8 @@ export const SessionInfo = z.object({
       spentUsd: z.number(),
       /** Absent: no limit. */
       maxUsd: z.number().optional(),
-      ended: z.enum(["done", "goal", "turns", "spend", "stopped", "error", "stalled"]).optional(),
+      // D-045: fitness, when a run said it was done but a fitness check fails.
+      ended: z.enum(["done", "goal", "turns", "spend", "stopped", "error", "stalled", "fitness"]).optional(),
     })
     .optional(),
 })
