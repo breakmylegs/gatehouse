@@ -74,6 +74,7 @@ interface Config {
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
   keepAwake?: boolean
+  phoneAlerts?: "all" | "decisions" // Mac fork
   recapByClaude?: boolean
   chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
@@ -164,6 +165,8 @@ interface Values {
   work: string
   /** Keep the computer awake while a session works. */
   awake: boolean
+  /** Mac fork: what the phone is told through the Relay. */
+  phoneAlerts: "all" | "decisions"
   /** While you were away, written by Claude. */
   recap: boolean
   /** Open in Claude (CH-06). */
@@ -222,6 +225,7 @@ function valuesOf(d: SettingsData): Values {
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
     awake: c.keepAwake !== false,
+    phoneAlerts: c.phoneAlerts === "decisions" ? "decisions" : "all", // Mac fork
     recap: c.recapByClaude !== false,
     handoff: c.chatHandoff?.target ?? "edge",
     edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
@@ -256,6 +260,9 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   }
   if (Object.keys(profile).length) body.profile = profile
   else delete body.profile
+  // Mac fork: absent is every notification, so the file only says so when you choose decisions only.
+  if (v.phoneAlerts === "decisions") body.phoneAlerts = "decisions"
+  else delete body.phoneAlerts
   if (v.awake) delete body.keepAwake
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
@@ -437,6 +444,7 @@ export const DEFAULT_VALUES: Values = {
   callMe: "",
   work: "",
   awake: true,
+  phoneAlerts: "all", // Mac fork
   recap: true,
   handoff: "edge",
   edgeProfile: "Default",
@@ -684,7 +692,7 @@ export function Settings() {
   if (!data || !v) return <p className="p-6 text-mut">Loading…</p>
 
   const orgChanged = differs(v, ["org", "roots", "projects"])
-  const phoneChanged = v.quiet || differs(v, ["phoneMin", "hardMin"])
+  const phoneChanged = v.quiet || differs(v, ["phoneMin", "hardMin", "phoneAlerts"]) // Mac fork: phoneAlerts
   const digestChanged =
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
@@ -837,6 +845,40 @@ export function Settings() {
               gap="gap-3"
               changed={phoneChanged}
             >
+              {/* Mac fork (owner, 12 Nov): the phone told of decisions only, as ntfy is. */}
+              <fieldset className="m-0 grid gap-1.5 border-0 p-0">
+                <legend className="mb-1 p-0 text-[13px] font-semibold">What the phone is told</legend>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="phone-alerts"
+                    checked={v.phoneAlerts === "decisions"}
+                    onChange={() => change({ phoneAlerts: "decisions" }, "Phone notifications")}
+                  />
+                  <span>
+                    Only decisions waiting for you
+                    <span className="block text-xs text-mut">
+                      A permission, a plan or a question to answer, as ntfy does. Sessions finishing,
+                      notes from Claude, the digest and alerts stay on this computer.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2">
+                  <input
+                    type="radio"
+                    name="phone-alerts"
+                    checked={v.phoneAlerts === "all"}
+                    onChange={() => change({ phoneAlerts: "all" }, "Phone notifications")}
+                  />
+                  <span>
+                    Everything
+                    <span className="block text-xs text-mut">
+                      Decisions, and also sessions finishing, notes from Claude, the digest and
+                      alerts such as a paused or stopped session.
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"

@@ -694,6 +694,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
   const phone = new PhoneService({
     store: phoneStore,
+    // Mac fork: Settings, Phone and notifications can keep the phone to decisions only (live, read each time).
+    notifyAllowed: () => config.phoneAlerts !== "decisions",
     broker,
     kill,
     // D-025: anything signed on the phone starts the dead-man timers again.

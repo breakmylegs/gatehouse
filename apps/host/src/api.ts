@@ -1783,6 +1783,7 @@ const LIVE_SETTINGS = [
   "globalInstructions",
   "profile",
   "keepAwake",
+  "phoneAlerts", // Mac fork: relay/service.ts reads it at each notification
   "recapByClaude",
   "chatHandoff",
   "chatContinue",
