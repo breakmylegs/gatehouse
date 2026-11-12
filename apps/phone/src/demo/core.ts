@@ -116,5 +116,44 @@ export const register = async () => ({
   info: {} as never,
 })
 export const awaitConfirmation = () => new Promise<never>(() => undefined)
+// The sessions screen (G32), the dead-man timer (D-025) and the audit anchor (D-029b), with long names too.
+export const loadSessions = async () => ({
+  at: new Date().toISOString(),
+  sessions: [
+    {
+      id: "s1",
+      project: "atlas-migration",
+      title: "Add the basket, with tests and a migration for the orders table",
+      state: "waiting",
+      waiting: 2,
+      latest: "",
+    },
+    {
+      id: "s2",
+      project: "Überprüfung-日本語-проект",
+      title: "Speed up search",
+      state: "running",
+      mode: "acceptEdits",
+      waiting: 0,
+      latest: "",
+      activity: { phase: "running", since: new Date(Date.now() - 12_000).toISOString(), tool: "Bash", target: "npm test -- --runInBand" },
+      recent: [
+        { who: "you", text: "Speed up search, it takes four seconds on the big catalogue." },
+        { who: "claude", text: "I will profile it first, then look at the query plan." },
+        { who: "tool", text: "Bash: npm run profile -- search" },
+        { who: "claude", text: "The index on products.name is not used because of the lower() call. I will add a functional index." },
+        { who: "tool", text: "Edit: db/migrations/0042_search_index.sql" },
+      ],
+    },
+    { id: "s3", project: "x", state: "idle", waiting: 0, latest: "" },
+    { id: "s4", project: "shop", title: "Release notes", state: "paused", mode: "plan", waiting: 0, latest: "" },
+  ],
+  templates: [{ id: "t1", name: "Nightly triage" }, { id: "t2", name: "Dependency check" }],
+  auditHead: { seq: 48213, hash: "h" },
+})
+export const sendToSession = async () => void (await sleep(600))
+export const startTemplate = async () => void (await sleep(600))
+export const signAnchor = async () => void (await sleep(600))
+export const stillHere = async () => void (await sleep(600))
 export const call = async () => undefined
 export class RelayError extends Error {}

@@ -1,0 +1,361 @@
+/* Mac fork (owner, 12 Nov): the phone in Apple's Liquid Glass. Glass is the navigation layer only (the header's
+   scroll edge, the tab bar, the back button and the bars of actions), floating over solid content, as Apple asks:
+   never glass on glass. The night sky and the neon teal are Codehouse's own (docs/brand/palette.json), the teal the
+   same as the Mac app's. Loaded after styles.css, so these win. */
+
+:root {
+  --c-bg: #f4f6f9;
+  --c-s1: #ffffff;
+  --c-s2: #eef2f5;
+  --c-line: #dde3ea;
+  --c-tx: #0f172a;
+  --c-mut: #4b5565;
+  --c-acc: #0d6c76;
+  --c-acc-tx: #ffffff;
+  --glass-bg: rgb(255 255 255 / 0.62);
+  --glass-line: rgb(15 23 42 / 0.08);
+  --glass-hi: rgb(255 255 255 / 0.95);
+  --glass-shadow: 0 12px 32px -12px rgb(15 23 42 / 0.28), 0 2px 8px rgb(15 23 42 / 0.08);
+  --lens: rgb(13 108 118 / 0.12);
+  --sky: radial-gradient(90% 45% at 0% 0%, #d9f6f2 0%, transparent 70%),
+    radial-gradient(90% 45% at 100% 100%, #fbe4ef 0%, transparent 70%), #f4f6f9;
+  /* iOS's own sheet curve: quick to start, long to settle. */
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --head-h: calc(max(12px, env(safe-area-inset-top, 0px)) + 56px);
+  --bar-h: 64px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: #0a0b1e;
+    --c-s1: #15142c;
+    --c-s2: #201e3d;
+    --c-line: #2e2b52;
+    --c-tx: #ecebf7;
+    --c-mut: #a9a7c4;
+    --c-acc: #4ff0e0;
+    --c-acc-tx: #04201d;
+    --glass-bg: rgb(30 28 60 / 0.55);
+    --glass-line: rgb(255 255 255 / 0.12);
+    --glass-hi: rgb(255 255 255 / 0.16);
+    --glass-shadow: 0 14px 36px -12px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.35);
+    --lens: rgb(79 240 224 / 0.14);
+    --sky: radial-gradient(100% 50% at 0% 0%, #1c1240 0%, transparent 70%),
+      radial-gradient(100% 50% at 100% 100%, #3a1840 0%, transparent 65%), #0a0b1e;
+  }
+}
+
+body {
+  background: var(--sky);
+  accent-color: var(--c-acc);
+}
+
+/* The material: blurred and saturated, a bright top edge where light catches it, and a soft shadow under it. */
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 0.5px solid var(--glass-line);
+  box-shadow:
+    inset 0 1px 0 var(--glass-hi),
+    var(--glass-shadow);
+}
+
+/* A screen: content scrolls under the header and the tab bar. */
+.frame {
+  position: relative;
+}
+.frame-main {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: var(--head-h);
+}
+.frame[data-bar] .frame-main {
+  padding-bottom: calc(var(--bar-h) + max(10px, env(safe-area-inset-bottom, 0px)) + 16px);
+}
+/* No divider under the header: the content blurs and fades where it passes under, Apple's scroll edge effect. */
+.frame-head {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 10;
+  height: var(--head-h);
+  box-sizing: border-box;
+  align-items: flex-end;
+  border: 0;
+  background: linear-gradient(var(--c-bg) 30%, color-mix(in oklab, var(--c-bg) 60%, transparent));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  /* The fade sits below the title, so a large title's descenders stay whole. */
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 10px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 10px), transparent);
+}
+.large-title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.022em;
+}
+.inline-title {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.012em;
+}
+.back {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--c-tx);
+  transition: transform 120ms var(--ease-out);
+}
+.back:active {
+  transform: scale(0.92);
+}
+
+/* The tab bar floats over the content, and its lens slides to the tab you are on. */
+.tabbar {
+  position: absolute;
+  bottom: max(10px, env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: min(380px, calc(100% - 32px));
+  height: var(--bar-h);
+  padding: 4px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  transform: translateX(-50%);
+}
+.tabbar-lens {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 3);
+  border-radius: 999px;
+  background: var(--lens);
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+  transform: translateX(calc(var(--tab, 0) * 100%));
+  transition: transform 300ms var(--ease-ios);
+}
+.tab {
+  position: relative;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 2px;
+  border: 0;
+  background: none;
+  color: var(--c-mut);
+  font: 600 11px/1.1 var(--font-ui);
+  letter-spacing: 0.01em;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.tab[aria-current] {
+  color: var(--c-acc);
+}
+/* The tab you are on fills its icon, as iOS's do. */
+.tab[aria-current] svg > * {
+  fill: color-mix(in oklab, currentColor 22%, transparent);
+}
+.tab-icon {
+  position: relative;
+  display: grid;
+  transition: transform 120ms var(--ease-out);
+}
+.tab:active .tab-icon {
+  transform: scale(0.9);
+}
+.tab-badge {
+  position: absolute;
+  top: -5px;
+  left: 15px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: #e5484d;
+  color: #fff;
+  font: 700 11px/18px var(--font-ui);
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--c-s1);
+}
+
+/* Bars of actions pinned to the bottom of a request or a session, as a glass sheet. */
+.action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin: 0 8px;
+  padding: 14px 14px max(14px, env(safe-area-inset-bottom, 0px));
+  border-radius: 28px 28px 0 0;
+  border-bottom: 0;
+}
+
+/* Controls: capsules, filled rather than outlined, that give under your finger. */
+.btn {
+  min-height: 50px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--c-tx) 8%, transparent);
+  transition:
+    transform 120ms var(--ease-out),
+    background-color 120ms ease;
+}
+.btn:active {
+  background: color-mix(in oklab, var(--c-tx) 14%, transparent);
+  transform: scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.45;
+  transform: none;
+}
+.btn-primary,
+.btn-primary:active {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+}
+.btn-strong {
+  background: color-mix(in oklab, var(--c-acc) 16%, transparent);
+  color: var(--c-acc);
+}
+.btn-strong:active {
+  background: color-mix(in oklab, var(--c-acc) 24%, transparent);
+}
+.btn-danger {
+  background: color-mix(in oklab, var(--c-sev) 14%, transparent);
+  color: var(--c-sev);
+}
+.btn-danger:active {
+  background: color-mix(in oklab, var(--c-sev) 22%, transparent);
+}
+.hold-to-allow {
+  background-color: color-mix(in oklab, var(--c-acc) 16%, transparent);
+}
+.field {
+  border: 0.5px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-s1);
+  resize: none;
+}
+.panel {
+  border: 0.5px solid var(--c-line);
+  border-radius: 22px;
+}
+.cmd {
+  border: 0.5px solid var(--c-line);
+  border-radius: 14px;
+}
+button.panel {
+  transition: transform 120ms var(--ease-out);
+}
+button.panel:active {
+  transform: scale(0.98);
+}
+/* A row that opens a screen ends in a chevron. */
+.row-link {
+  position: relative;
+  padding-right: 40px;
+}
+.row-link::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  width: 9px;
+  height: 9px;
+  border: solid var(--c-mut);
+  border-width: 2px 2px 0 0;
+  border-radius: 1px;
+  transform: translateY(-50%) rotate(45deg);
+  opacity: 0.6;
+}
+/* An on/off setting is a switch, as on iOS. */
+.panel input[type="checkbox"] {
+  position: relative;
+  flex: none;
+  order: 2; /* at the end of its row, where iOS puts it */
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--c-tx) 16%, transparent);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: background-color 200ms ease;
+}
+.panel input[type="checkbox"]::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 3px 8px rgb(0 0 0 / 0.15), 0 1px 1px rgb(0 0 0 / 0.16);
+  transition: transform 250ms var(--ease-ios);
+}
+.panel input[type="checkbox"]:checked {
+  background: var(--c-acc);
+}
+.panel input[type="checkbox"]:checked::before {
+  transform: translateX(20px);
+}
+
+/* How a session stands, in colour as well as words. */
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--c-mut);
+}
+.dot-waiting {
+  background: var(--c-warn);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--c-warn) 25%, transparent);
+}
+.dot-idle {
+  background: var(--c-ok);
+}
+.dot-error {
+  background: var(--c-sev);
+}
+.dot-starting {
+  background: var(--c-acc);
+}
+
+/* Reduce transparency: the glass turns solid. Increase contrast: solid, with a defined edge. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass,
+  .frame-head {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--c-s1);
+  }
+  .frame-head {
+    -webkit-mask-image: none;
+    mask-image: none;
+    background: var(--c-bg);
+  }
+}
+@media (prefers-contrast: more) {
+  .glass {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: var(--c-s1);
+    border: 1px solid var(--c-tx);
+  }
+  .panel,
+  .field,
+  .cmd {
+    border: 1px solid var(--c-mut);
+  }
+}
