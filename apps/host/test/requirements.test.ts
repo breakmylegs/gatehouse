@@ -79,10 +79,7 @@ describe("the change against the plan (D-034, D-035)", () => {
 
 describe("requirement change impact (D-039)", () => {
   it("lists the code, tests and ADRs linked to a requirement that is edited", () => {
-    put("docs/adr/0001-sessions.md", "# 0001. Sign-in sessions
-
-This decides REQ-001.
-")
+    put("docs/adr/0001-sessions.md", "# 0001. Sign-in sessions\n\nThis decides REQ-001.\n")
     const { requirements } = readRequirements(root)
     const r = requirements.find((x) => x.id === "REQ-001")!
     const [row] = traceMatrix({ root, requirements: [r], commitsFor: () => ["c1"], testFiles: ["test/login.test.ts"], evidenceFor: () => [] })
