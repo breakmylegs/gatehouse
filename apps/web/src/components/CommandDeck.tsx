@@ -9,6 +9,7 @@ import { openPalette } from "./Rail"
 import { SessionCode } from "./SessionCode"
 import { Icon, type IconName } from "./Icon"
 import { keyLabel, systemName } from "../lib/platform-mac" // Mac fork
+import { Disclosure } from "./DisclosureMac" // Mac fork
 
 /** A session's state in a word and a small icon, for the strip (owner, 3 Nov: icons for state, not words). */
 function stateWord(s: {
@@ -235,7 +236,7 @@ function ProfileMenu() {
                 <span className="truncate text-[11.5px] text-shell-mut">{signin.organization}</span>
               ) : null}
             </span>
-            <span aria-hidden="true">&#9662;</span>
+            <Disclosure open />
           </>
         }
         items={[
