@@ -24,7 +24,7 @@ beforeAll(() => {
     "-O",
     "-o",
     exe,
-    ...["NavGuard.swift", "Shortcut.swift", "test/main.swift"].map((f) =>
+    ...["NavGuard.swift", "Shortcut.swift", "Host.swift", "test/main.swift"].map((f) =>
       path.join(REPO, "packaging", "mac", f),
     ),
   ])

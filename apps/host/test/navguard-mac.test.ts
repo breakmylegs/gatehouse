@@ -30,6 +30,7 @@ beforeAll(() => {
     exe,
     path.join(REPO, "packaging", "mac", "NavGuard.swift"),
     path.join(REPO, "packaging", "mac", "Shortcut.swift"),
+    path.join(REPO, "packaging", "mac", "Host.swift"),
     path.join(REPO, "packaging", "mac", "test", "main.swift"),
   ])
 }, 180_000)

@@ -68,8 +68,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     step("Reading your PATH")
     DispatchQueue.global().async { [self] in
       let path = ShellPath.read()
+      let developerDir = DeveloperTools.fallback()
       DispatchQueue.main.async { [self] in
-        let h = HostProcess(version: version, path: path)
+        if let developerDir {
+          remember("[mac] Xcode's licence has not been accepted, so git and the other developer tools use \(developerDir)")
+        }
+        let h = HostProcess(version: version, path: path, developerDir: developerDir)
         h.onEvent = { [weak self] e in self?.hostSaid(e) }
         h.onLog = { [weak self] line in self?.remember(line) }
         h.onExit = { [weak self] code in self?.hostExited(code) }

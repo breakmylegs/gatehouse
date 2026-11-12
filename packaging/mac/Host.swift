@@ -58,6 +58,42 @@ enum Paths {
 /// The PATH your Terminal has. An app started from the Finder gets only /usr/bin:/bin:/usr/sbin:/sbin, so without this
 /// Claude would not find Homebrew's or nvm's tools. Read once from your login shell, with a time limit, and never
 /// anything else from it: the Claude credentials in the environment are removed whatever the shell says.
+/// Apple's developer tools when Xcode's licence is waiting to be accepted. Installing or updating Xcode selects it, and
+/// until someone accepts its licence (sudo xcodebuild -license, an administrator's job) /usr/bin/git and the other
+/// tools refuse to run: Codehouse's checkpoints and every git command in a session fail. Then, and only then, the Host
+/// and its sessions are pointed at the Command Line Tools, which have no licence to accept. A DEVELOPER_DIR you set
+/// yourself is left alone.
+enum DeveloperTools {
+  static let commandLineTools = "/Library/Developer/CommandLineTools"
+
+  /// The folder to use instead, or nil when the tools work as they are.
+  static func fallback(git: String = "/usr/bin/git") -> String? {
+    if ProcessInfo.processInfo.environment["DEVELOPER_DIR"] != nil { return nil }
+    guard FileManager.default.isExecutableFile(atPath: commandLineTools + "/usr/bin/git") else { return nil }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: git)
+    p.arguments = ["--version"]
+    let err = Pipe()
+    p.standardError = err
+    p.standardOutput = FileHandle.nullDevice
+    p.standardInput = FileHandle.nullDevice
+    do { try p.run() } catch { return nil }
+    let done = DispatchSemaphore(value: 0)
+    var said = Data()
+    DispatchQueue.global().async {
+      said = err.fileHandleForReading.readDataToEndOfFile()
+      done.signal()
+    }
+    if done.wait(timeout: .now() + 5) == .timedOut {
+      p.terminate()
+      return nil
+    }
+    p.waitUntilExit()
+    let text = String(decoding: said, as: UTF8.self).lowercased()
+    return p.terminationStatus != 0 && text.contains("license") ? commandLineTools : nil
+  }
+}
+
 enum ShellPath {
   static let fallback = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -108,9 +144,12 @@ final class HostProcess {
   private let version: String
   private let path: String
 
-  init(version: String, path: String) {
+  private let developerDir: String?
+
+  init(version: String, path: String, developerDir: String? = nil) {
     self.version = version
     self.path = path
+    self.developerDir = developerDir
   }
 
   var isRunning: Bool { process?.isRunning == true }
@@ -125,6 +164,7 @@ final class HostProcess {
     let data = Paths.dataDir
     let policy = data.appendingPathComponent("policy")
     env["PATH"] = path
+    if let developerDir { env["DEVELOPER_DIR"] = developerDir }
     env["GATEHOUSE_EXIT_ON_STDIN_CLOSE"] = "1"
     env["GATEHOUSE_CAN_RESTART"] = "1"
     env["GATEHOUSE_MAC_APP_VERSION"] = version
