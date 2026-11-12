@@ -12,6 +12,28 @@ final class MainWindow: PageWindow {
   /// Called once the page has loaded (and, in check mode, with what it showed).
   var onLoaded: (_ ok: Bool, _ detail: String) -> Void = { _, _ in }
 
+  /// The page's ground (--c-bg in mac-standard.css), light or dark with the window's appearance.
+  static let ground = NSColor(name: "Codehouse ground") { appearance in
+    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+      ? NSColor(srgbRed: 0x1e / 255, green: 0x1e / 255, blue: 0x20 / 255, alpha: 1)
+      : .white
+  }
+
+  /// Marks the page as having the Mac's material behind it, and says which theme it shows, whenever that changes,
+  /// so the title bar and the material follow the page (the page's own choice can differ from the Mac's).
+  static let vibrancyScript = """
+    document.documentElement.setAttribute("data-mac-vibrancy", "");
+    (() => {
+      let last = "";
+      const say = () => {
+        const t = document.documentElement.dataset.theme || "";
+        if (t && t !== last && window.webkit) { last = t; window.webkit.messageHandlers.codehouse.postMessage("theme:" + t) }
+      };
+      new MutationObserver(say).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+      document.addEventListener("DOMContentLoaded", say);
+    })();
+    """
+
   init(check: Bool) {
     self.check = check
     let window = NSWindow(
@@ -27,11 +49,26 @@ final class MainWindow: PageWindow {
     web.pageZoom = Self.savedZoom
     web.isHidden = true
 
+    // Standard macOS (owner, 12 Nov): the title bar takes the page's own ground, so it reads as one toolbar with it,
+    // and the Mac's sidebar material sits behind the page, which leaves its sidebar column clear to show it
+    // (mac-standard.css, under data-mac-vibrancy). With Reduce transparency on, macOS makes the material opaque.
+    window.titlebarAppearsTransparent = true
+    window.titleVisibility = .hidden
+    window.backgroundColor = Self.ground
+    let material = NSVisualEffectView()
+    material.material = .sidebar
+    material.blendingMode = .behindWindow
+    material.state = .followsWindowActiveState
+    if web.responds(to: Selector(("setDrawsBackground:"))) { web.setValue(false, forKey: "drawsBackground") }
+    web.underPageBackgroundColor = .clear
+    web.configuration.userContentController.addUserScript(
+      WKUserScript(source: Self.vibrancyScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+
     let content = NSView()
     content.wantsLayer = true
     content.layer?.backgroundColor = Self.night.cgColor
     window.contentView = content
-    for v in [web, splash] {
+    for v in [material, web, splash] {
       v.translatesAutoresizingMaskIntoConstraints = false
       content.addSubview(v)
       NSLayoutConstraint.activate([
@@ -144,10 +181,14 @@ final class MainWindow: PageWindow {
   private func checkPage() {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [self] in
       web.evaluateJavaScript(
-        "JSON.stringify({title: document.title, children: (document.getElementById('root')||{children:[]}).children.length, text: document.body.innerText.slice(0,80), shell: !!(window.chrome && window.chrome.webview)})"
+        "JSON.stringify({title: document.title, children: (document.getElementById('root')||{children:[]}).children.length, text: document.body.innerText.slice(0,80), shell: !!(window.chrome && window.chrome.webview), glass: document.documentElement.dataset.platform === 'mac' && document.documentElement.hasAttribute('data-mac-vibrancy') && getComputedStyle(document.body).backgroundColor === 'rgba(0, 0, 0, 0)' && !!document.querySelector('.rail') && getComputedStyle(document.querySelector('.rail')).backgroundColor !== 'rgba(0, 0, 0, 0)'})"
       ) { [self] result, error in
         let text = (result as? String) ?? "error: \(error?.localizedDescription ?? "no result")"
-        let ok = text.contains("Codehouse") && !text.contains("\"children\":0") && text.contains("\"shell\":true")
+        // glass: the page is marked for the Mac's material, its ground is clear so the material shows, and the
+        // sidebar still paints its tint over it (mac-standard.css).
+        let ok =
+          text.contains("Codehouse") && !text.contains("\"children\":0") && text.contains("\"shell\":true")
+          && text.contains("\"glass\":true")
         if !ok { return onLoaded(false, text) }
         checkBridge { [self] bridgeOk, said in onLoaded(bridgeOk, text + "\n" + said) }
       }

@@ -7,6 +7,7 @@ import { RiskBadge } from "../components/RiskBadge"
 import { SessionCode } from "../components/SessionCode"
 import { age } from "../lib/format"
 import { needsYou } from "../lib/needsYou"
+import { isMac, keyLabel } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { usePending, useStore } from "../store"
 import { EmptyState } from "../components/EmptyState"
@@ -196,11 +197,20 @@ export function Approvals() {
         {view ? (
           <div className="mx-auto max-w-[1100px]">
             <ApprovalCard view={view} />
+            {/* Mac fork: the same keys as a Mac names them */}
+            {isMac() ? (
+              <p className="mt-3 text-[13px] text-mut">
+                <kbd>{keyLabel("Ctrl Shift A")}</kbd> moves focus to the card.{" "}
+                <kbd>{keyLabel("Alt Up")}</kbd> and <kbd>{keyLabel("Alt Down")}</kbd> change
+                request. <kbd>{keyLabel("Ctrl K")}</kbd> opens the palette.
+              </p>
+            ) : (
             <p className="mt-3 text-[13px] text-mut">
               <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>A</kbd> moves focus to the card. <kbd>Alt</kbd>+
               <kbd>Up</kbd> and <kbd>Alt</kbd>+<kbd>Down</kbd> change request. <kbd>Ctrl</kbd>+
               <kbd>K</kbd> opens the palette.
             </p>
+            )}
           </div>
         ) : (
           <div className="mx-auto mt-20 grid max-w-md justify-items-center gap-2 text-center">

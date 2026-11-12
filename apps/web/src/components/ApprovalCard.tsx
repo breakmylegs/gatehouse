@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { decideFull } from "../lib/decide"
 import { age, clock, commandText, riskBand } from "../lib/format"
 import { splitByHighlights } from "../lib/highlight"
+import { keyLabel, onMac } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
@@ -291,8 +292,9 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             <span aria-hidden="true" className="pass-alert-icon">
               ■
             </span>
-            Risk is high. Allowing takes a deliberate click or Ctrl+Enter inside this card. Deny is
-            the safe choice.
+            {/* Mac fork: the Mac's key names */}
+            Risk is high. Allowing takes a deliberate click or {onMac("Ctrl+Enter", "⌘↩")} inside
+            this card. Deny is the safe choice.
           </p>
         ) : null}
         <div className="grid content-start gap-4 p-5">
@@ -678,7 +680,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               onClick={() => setConfirmStop(true)}
               aria-keyshortcuts="Shift+S"
             >
-              Stop session… <kbd aria-hidden="true">Shift S</kbd>
+              Stop session… <kbd aria-hidden="true">{keyLabel("Shift S")}</kbd>
             </button>
             <button
               className={clsx("btn pass-allow", view.defaultToNo ? "btn-strong" : "btn-primary")}
@@ -687,7 +689,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               aria-keyshortcuts="Control+Enter"
             >
               {req.kind === "plan" ? "Approve plan" : severe ? "Allow once…" : "Allow once"}{" "}
-              <kbd aria-hidden="true">Ctrl Enter</kbd>
+              <kbd aria-hidden="true">{keyLabel("Ctrl Enter")}</kbd>
             </button>
           </div>
         )}

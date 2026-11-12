@@ -5,6 +5,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary"
 import "./styles.css"
 import "./polish.css" // Mac fork
 import "./mac.css" // Mac fork
+import "./mac-standard.css" // Mac fork
 import { markPlatform } from "./lib/platform-mac" // Mac fork
 import { startConnection, useStore } from "./store"
 import { Quick } from "./surfaces/Quick"

@@ -15,9 +15,10 @@
 //   --check       afterwards run Codehouse --check against the built app, with its own data folder
 //   --dmg         also make the disk image
 //   --install     put it in /Applications, or in your own Applications folder when /Applications needs an administrator
+//   --when-quit   with --install, when that Codehouse is running: install it as soon as you quit it, and open it again
 //
 // Builds on a Mac only, for the Mac's own processor. Signed for this Mac only (ad hoc), not notarised: see docs/mac.md.
-import { execFileSync, spawnSync } from "node:child_process"
+import { execFileSync, spawn, spawnSync } from "node:child_process"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
@@ -333,13 +334,16 @@ function install() {
   const dest = path.join(dir, "Codehouse.app")
   const program = path.join(dest, "Contents", "MacOS", "Codehouse")
   const running = spawnSync("/usr/bin/pgrep", ["-f", "-x", program]).status === 0
-  if (running)
-    throw new Error(`Codehouse is running from ${dest}. Quit it (Command-Q), then install again.`)
+  if (running && !has("--when-quit"))
+    throw new Error(
+      `Codehouse is running from ${dest}. Quit it (Command-Q), then install again, or add --when-quit.`,
+    )
   // Copied into a hidden folder first, so Spotlight never lists a half-copied app under a passing name.
   const staging = path.join(dir, ".codehouse-installing")
   fs.rmSync(staging, { recursive: true, force: true })
   fs.mkdirSync(staging)
   run("/usr/bin/ditto", [appBundle, path.join(staging, "Codehouse.app")])
+  if (running) return installWhenQuit(program, staging, dest)
   fs.rmSync(dest, { recursive: true, force: true })
   fs.renameSync(path.join(staging, "Codehouse.app"), dest)
   fs.rmSync(staging, { recursive: true, force: true })
@@ -350,4 +354,55 @@ function install() {
   )
   spawnSync("/usr/bin/mdimport", [dest])
   say(`installed ${dest}`)
+}
+
+/**
+ * --when-quit, for the Codehouse you are using: the new copy is already staged beside it, and a small background
+ * script waits until you quit Codehouse (for up to a day), puts the new copy in its place and opens it. A Codehouse
+ * that was working when it closed carries on where it was. What happened goes in updates/mac-install.log.
+ */
+function installWhenQuit(program, staging, dest) {
+  const log = path.join(
+    os.homedir(),
+    "Library",
+    "Application Support",
+    "Gatehouse",
+    "updates",
+    "mac-install.log",
+  )
+  fs.mkdirSync(path.dirname(log), { recursive: true })
+  const script = [
+    'LOG="$5"',
+    'say() { echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) $1" >> "$LOG"; }',
+    'say "waiting for Codehouse to quit"',
+    "i=0",
+    'while /usr/bin/pgrep -f -x "$1" >/dev/null; do',
+    '  i=$((i+1)); if [ "$i" -gt 43200 ]; then say "gave up after a day; the new copy is in $2"; exit 1; fi',
+    "  /bin/sleep 2",
+    "done",
+    "/bin/sleep 2",
+    // The old copy is kept until the new one is in place, and put back if it cannot be.
+    'if [ -e "$3" ] && ! /bin/mv "$3" "$3.previous"; then say "could not move the old copy aside; nothing changed"; exit 1; fi',
+    'if /bin/mv "$2/Codehouse.app" "$3"; then',
+    '  /bin/rm -rf "$3.previous"; /bin/rmdir "$2"',
+    '  "$4" -f "$3"; /usr/bin/mdimport "$3"; say "installed $3"; /usr/bin/open "$3"',
+    "else",
+    '  [ -e "$3.previous" ] && /bin/mv "$3.previous" "$3"',
+    '  say "could not put the new copy in place, so the old one is back; the new copy is in $2"; exit 1',
+    "fi",
+  ].join("\n")
+  const lsregister =
+    "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+  const child = spawn(
+    "/bin/sh",
+    ["-c", script, "codehouse-install", program, staging, dest, lsregister, log],
+    {
+      detached: true,
+      stdio: "ignore",
+    },
+  )
+  child.unref()
+  say(
+    `Codehouse is running, so the new copy waits: quit Codehouse (Command-Q) and it is installed and opened again`,
+  )
 }

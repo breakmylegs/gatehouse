@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         ok ? 0 : 1,
         ok
           ? "Check passed: the window loaded the interface from the packaged Host."
-          : "Check failed: the window did not show the interface, or its bridge to the page answered something other than Codehouse's own page.")
+          : "Check failed: the window did not show the interface, the page was not ready for the Mac's sidebar material, or its bridge to the page answered something other than Codehouse's own page.")
     }
     clock?.invalidate()
     clock = nil
@@ -130,6 +130,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
       setHotkey(String(m.dropFirst("hotkey:".count)))
     } else if m.hasPrefix("popout:") {
       popOut(String(m.dropFirst("popout:".count)))
+    } else if m == "theme:dark" || m == "theme:light" {
+      // The page's theme can differ from the Mac's (Settings, Appearance): the windows' own chrome follows the page.
+      let look = NSAppearance(named: m == "theme:dark" ? .darkAqua : .aqua)
+      for w in [main.window] + popouts.values.map(\.window) + [quick?.window].compactMap({ $0 }) { w.appearance = look }
     }
   }
 
