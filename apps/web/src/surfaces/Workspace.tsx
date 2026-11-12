@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { Requirements } from "../components/Requirements"
 import { Evidence } from "../components/Evidence"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -353,6 +354,8 @@ function SessionPane({
   const [timeline, setTimeline] = useState(false)
   // D-003: the change's evidence pack.
   const [evidence, setEvidence] = useState(false)
+  // D-033: the project's requirements and their trace matrix.
+  const [requirements, setRequirements] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -588,6 +591,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
     ...(chat ? [] : [{ label: "Timeline...", onSelect: () => setTimeline(true) }]),
     ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
+    ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     { kind: "separator" },
     {
       label: "Larger text",
@@ -796,6 +800,11 @@ function SessionPane({
       {timeline ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Timeline sessionId={session.id} onClose={() => setTimeline(false)} />
+        </div>
+      ) : null}
+      {requirements ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
         </div>
       ) : null}
       {evidence ? (
@@ -1059,7 +1068,7 @@ function SessionPane({
         {/* The plan while there is one to follow: steps done, in progress and not started (owner, 2 Nov). */}
         {transcript.todos.length &&
         (session.state === "running" || transcript.todos.some((t) => t.status !== "completed")) ? (
-          <ProgressCard todos={transcript.todos} />
+          <ProgressCard todos={transcript.todos} sessionId={session.id} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} starting={session.state === "starting"} />
         {/* What the session runs on, under the prompt box where you look when you send. */}

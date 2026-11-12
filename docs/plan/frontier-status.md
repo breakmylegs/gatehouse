@@ -111,9 +111,9 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-006 | Behaviour diff | built | slice/D-066-characterise | BUILD_REPORT "Frontier D-066 and D-006" | Compare with now: each changed output in plain English |
 | D-028 | Causal provenance graph | built | slice/D-028-provenance-graph | BUILD_REPORT "Frontier D-028" | Where it came from in Changes: hunk to edit to what was read before, injected and outside sources marked |
 | D-031 | Evidence queries | built | slice/D-031-evidence-queries | BUILD_REPORT "Frontier D-031" | Four saved questions on the Audit page; incremental JSONL index per month; redacted; under 2 s at 100,000 records |
-| D-033 | Requirement ledger | todo | | | |
-| D-034 | Unrequested behaviour detector | todo | | | |
-| D-035 | Scope creep meter | todo | | | |
+| D-033 | Requirement ledger | built | slice/D-033-requirements | BUILD_REPORT "Frontier D-033, D-034 and D-035" | docs/requirements Markdown with front matter, read tolerantly; trace matrix and gaps in Requirements... |
+| D-034 | Unrequested behaviour detector | built | slice/D-033-requirements | BUILD_REPORT "Frontier D-033, D-034 and D-035" | Hunks the approved plan and the requirements do not account for, with the reason, in Changes |
+| D-035 | Scope creep meter | built | slice/D-033-requirements | BUILD_REPORT "Frontier D-033, D-034 and D-035" | Files changed outside the plan, on the progress card |
 | D-036 | Tests-first contract mode | todo | | | |
 | D-037 | Assumption register | todo | | | |
 | D-038 | ADR capture | todo | | | |

@@ -222,6 +222,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-033: the project's requirements, traced to commits, tests and evidence, with the gaps. Read only. */
+  z.object({ type: z.literal("requirements"), sessionId: Id }),
+  /** D-034, D-035: the change against the approved plan and the requirements: files outside the plan, untraced hunks. */
+  z.object({ type: z.literal("scope"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-028: where a changed file's hunks came from: the edit that made each and what was read before it. Read only. */
   z.object({ type: z.literal("provenance_graph"), sessionId: Id, file: z.string().min(1).max(4096).optional(), ref: z.string().min(1).max(500).optional() }),
   /** D-066: captures what a changed file did before the change, from the checkpoint, in a sandbox. */

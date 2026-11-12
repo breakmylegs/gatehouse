@@ -24,6 +24,13 @@ import { send, useStore } from "../store"
 const LOCKFILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
 
+/** D-034: a hunk neither the plan nor a requirement accounts for. */
+interface Untraced {
+  file: string
+  hunk: number
+  reason: string
+}
+
 /** D-028: one hunk's origin, as apps/host/src/provenance-graph.ts gives it. */
 interface Origin {
   file: string
@@ -102,6 +109,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [findings, setFindings] = useState<Finding[]>([])
   // D-066 and D-006: changed files nothing tests, and what replaying their captured behaviour found.
   const [untested, setUntested] = useState<string[]>([])
+  const [untraced, setUntraced] = useState<Untraced[]>([])
   const [behaviour, setBehaviour] = useState<Record<string, { cases: number; deltas?: string[] }>>({})
   const [capturing, setCapturing] = useState<string>()
   // D-028: where each file's hunks came from, by file.
@@ -121,6 +129,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     const f = await send({ type: "change_findings", sessionId, ...(ref ? { ref } : {}) })
     setFindings(f.ok ? ((f.data as { findings?: Finding[] } | undefined)?.findings ?? []) : [])
     setUntested(f.ok ? ((f.data as { untested?: string[] } | undefined)?.untested ?? []) : [])
+    // D-034: hunks neither the plan nor a requirement accounts for.
+    const sc = await send({ type: "scope", sessionId, ...(ref ? { ref } : {}) })
+    setUntraced(sc.ok ? ((sc.data as { unrequested: Untraced[] }).unrequested ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
@@ -208,6 +219,20 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               {findings.some((x) => x.severity === "Severe") ? (
                 <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
               ) : null}
+            </section>
+          ) : null}
+          {untraced.length ? (
+            <section aria-label="Not asked for" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <h3 className="m-0 text-[13.5px] font-semibold">
+                {untraced.length === 1 ? "1 change" : `${untraced.length} changes`} the plan and the requirements do not account for
+              </h3>
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {untraced.map((u) => (
+                  <li key={`${u.file}:${u.hunk}`}>
+                    Change {u.hunk + 1} in <span className="mono">{u.file}</span>: {u.reason}
+                  </li>
+                ))}
+              </ul>
             </section>
           ) : null}
           {untested.length ? (

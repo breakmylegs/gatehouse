@@ -1,4 +1,6 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { approvedPlan, readRequirements, REQUIREMENTS_DIR, scopeOf, traceMatrix, unrequested } from "./requirements.js"
+import { execFile as execFileCb } from "node:child_process"
 import { provenanceGraph } from "./provenance-graph.js"
 import { sessionRecords } from "./timeline.js"
 import { UNTRUSTED_FILES } from "./provenance.js"
@@ -974,6 +976,40 @@ export class HostServer {
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
       }
+      case "requirements": {
+        // D-033: read from the project's docs\requirements, linked by the ids commits and tests name.
+        const s = this.#session(cmd.sessionId)
+        const { requirements, problems } = readRequirements(s.cwd)
+        const testFiles = await listFiles(s.cwd).then((l) => l.filter((p) => TEST_FILE.test(p))).catch(() => [] as string[])
+        const commits = new Map<string, string[]>()
+        for (const r of requirements)
+          commits.set(r.id, await gitLines(s.cwd, ["log", "--all", "--format=%H", "-F", `--grep=${r.id}`]).catch(() => []))
+        const packs = a.evidence?.store.packs(s.id) ?? []
+        const rows = traceMatrix({
+          root: s.cwd,
+          requirements,
+          commitsFor: (id) => commits.get(id) ?? [],
+          testFiles,
+          evidenceFor: (c) => packs.filter((p) => p.pack.range.commit === c).map((p) => p.sha),
+        })
+        return { dir: REQUIREMENTS_DIR, rows, problems }
+      }
+      case "scope": {
+        // D-034, D-035: from the plan in the audit log and the change since the checkpoint.
+        const s = this.#session(cmd.sessionId)
+        const auditDir = a.admin?.auditDir
+        const plan = auditDir ? approvedPlan(sessionRecords(auditDir, s.id)) : undefined
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        const files = c.since && "files" in c ? c.files : []
+        const { requirements } = readRequirements(s.cwd)
+        const { planned, outside } = scopeOf(plan, files.map((x) => x.path))
+        return {
+          hasPlan: plan !== undefined,
+          planned,
+          outside,
+          unrequested: unrequested({ plan, requirements, files: files.filter((x) => !x.binary && x.change !== "deleted") }),
+        }
+      }
       case "provenance_graph": {
         // D-028: each changed hunk, the edit that made it, and what was read before it; from the audit log alone.
         const s = this.#session(cmd.sessionId)
@@ -1323,3 +1359,11 @@ function classify(e: unknown): CommandError {
 
 /** D-066: a capture's file name, from the file's path. */
 const captureKey = (file: string) => createHash("sha256").update(file.replace(/\\/g, "/")).digest("hex").slice(0, 24)
+
+/** D-033: a git command's output, a line at a time. */
+const gitLines = (cwd: string, args: string[]): Promise<string[]> =>
+  new Promise((resolve, reject) =>
+    execFileCb("git", args, { cwd, windowsHide: true, timeout: 20_000, maxBuffer: 16 * 1024 * 1024 }, (e, out) =>
+      e ? reject(e) : resolve(String(out).split(/\r?\n/).filter(Boolean)),
+    ),
+  )

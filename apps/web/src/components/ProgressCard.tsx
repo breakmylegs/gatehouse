@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { send } from "../store"
 import type { Todo } from "../lib/transcript"
 
 /** How many steps are done, out of how many. */
@@ -94,9 +95,18 @@ function visible(todos: Todo[], limit: number): Todo[] {
  * completed, in progress or not started"): how far Claude is, and each step. A long plan shows the steps around the
  * one in progress until you open it all.
  */
-export function ProgressCard({ todos }: { todos: Todo[] }) {
+export function ProgressCard({ todos, sessionId }: { todos: Todo[]; sessionId?: string }) {
   const [all, setAll] = useState(false)
   const { done, total } = progressOf(todos)
+  // D-035: the files changed that the approved plan did not name, read again as the steps move.
+  const [outside, setOutside] = useState<string[]>()
+  useEffect(() => {
+    if (!sessionId || !total) return
+    void send({ type: "scope", sessionId }).then((r) => {
+      const d = r.ok ? (r.data as { hasPlan: boolean; outside: string[] }) : undefined
+      setOutside(d?.hasPlan ? d.outside : undefined)
+    })
+  }, [sessionId, total, done])
   if (!total) return null
   return (
     <section className="progress-card panel mb-2 grid gap-2 px-3 py-2" aria-label="Progress">
@@ -105,6 +115,11 @@ export function ProgressCard({ todos }: { todos: Todo[] }) {
         <span className="text-[12.5px] text-mut">
           {done} of {total} done
         </span>
+        {outside?.length ? (
+          <span className="text-[12.5px] text-warn" aria-label={`${outside.length} changed outside the plan: ${outside.join(", ")}`}>
+            {outside.length === 1 ? "1 file changed outside the plan" : `${outside.length} files changed outside the plan`}
+          </span>
+        ) : null}
         <span
           className="h-1 min-w-12 flex-1 overflow-hidden rounded bg-s2"
           role="progressbar"
