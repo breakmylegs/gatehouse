@@ -44,6 +44,24 @@ export function Architecture({ sessionId, onClose }: { sessionId: string; onClos
         >
           Approve as it is
         </button>
+        <button
+          type="button"
+          className="btn !min-h-7"
+          onClick={async () => {
+            // D-048: the arc42 review pack, as a Markdown file.
+            const r = await send({ type: "arc42", sessionId })
+            if (!r.ok) return void toast.error(r.error?.message ?? "The review pack could not be made")
+            const d = r.data as { markdown: string; gaps: string[] }
+            const a = document.createElement("a")
+            a.href = URL.createObjectURL(new Blob([d.markdown], { type: "text/markdown" }))
+            a.download = "architecture-review.md"
+            a.click()
+            setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+            toast(d.gaps.length ? `Saved. ${d.gaps.length} of 12 sections are gaps: ${d.gaps.join(", ")}.` : "Saved, with all 12 sections filled.")
+          }}
+        >
+          Review pack (arc42)
+        </button>
         <button type="button" className="btn !min-h-7" onClick={onClose}>
           Close
         </button>

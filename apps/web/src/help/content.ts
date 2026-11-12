@@ -249,7 +249,7 @@ When Claude works on an assumption it has not checked with you, it can record it
 
 **Decisions...** in the same menu drafts the session's decisions (questions you answered, plans you approved) as architecture decision records; edit one if you like, and **Accept and write** saves it in the project's docs/adr folder. The project's accepted records are given to every session, and an edit that goes against one waits for you, naming it.
 
-**Architecture...** in the same menu draws the project from its imports, as C4 diagrams in Mermaid to copy into documentation. Choose **Approve as it is**, and from then on a new module, a new link across layers or a new import cycle shows at the top as drift.
+**Architecture...** in the same menu draws the project from its imports, as C4 diagrams in Mermaid to copy into documentation. **Review pack (arc42)** saves an architecture review document with all twelve arc42 sections, filled from the project's own files, and marks the ones nothing covers yet. Choose **Approve as it is**, and from then on a new module, a new link across layers or a new import cycle shows at the top as drift.
 
 A project can also set limits in .codehouse/fitness.yml: the longest a file may be, how many modules one may use, how many packages, and code that may not be used. When a run in Extreme approval says it is done but one fails, it is not done, and you are told which.
 

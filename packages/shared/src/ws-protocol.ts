@@ -232,6 +232,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("threat_delta"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-042, D-043: the project's architecture as it is, its C4 diagrams in Mermaid, and drift since you approved it. */
   z.object({ type: z.literal("architecture"), sessionId: Id }),
+  /** D-048: the project's architecture review pack, arc42 in Markdown, with its gaps. Read only. */
+  z.object({ type: z.literal("arc42"), sessionId: Id }),
   /** D-043: you approve the architecture as it is now; drift is measured from here. */
   z.object({ type: z.literal("architecture_approve"), sessionId: Id }),
   /** D-036: tests first: Claude writes tests for these criteria; only test files change until you approve them. */

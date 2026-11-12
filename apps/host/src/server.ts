@@ -1,5 +1,6 @@
 import { RubberStamp } from "./rubber-stamp.js"
-import { decisionsIn, draftAdr, nextNumber, writeAdr } from "./adr.js"
+import { arc42, deploymentFiles } from "./arc42.js"
+import { decisionsIn, draftAdr, nextNumber, readAdrs, writeAdr } from "./adr.js"
 import { draftMarkdown, threatDelta } from "./threat-delta.js"
 import { fitnessCheck } from "./fitness.js"
 import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
@@ -1071,6 +1072,24 @@ export class HostServer {
           // D-045: and the project's fitness checks.
           ...(await fitnessCheck(s.cwd, files).then((x) => (x ? { fitness: x } : {})).catch(() => ({}))),
         }
+      }
+      case "arc42": {
+        const s = this.#session(cmd.sessionId)
+        const files = await listFiles(s.cwd).catch(() => [] as string[])
+        const graph = modulesOf(await updateGraph(s.cwd, files))
+        const drift = driftOf(graph, readApproved(s.cwd))
+        return arc42({
+          project: s.project,
+          date: new Date().toISOString().slice(0, 10),
+          requirements: readRequirements(s.cwd).requirements,
+          ...(readArchRules(s.cwd).rules ? { rules: readArchRules(s.cwd).rules! } : {}),
+          ...(Object.keys(graph.modules).length ? { diagrams: c4Diagrams(s.project, graph, drift) } : {}),
+          adrs: readAdrs(s.cwd),
+          ...(await fitnessCheck(s.cwd, files).then((x) => (x ? { fitness: x } : {})).catch(() => ({}))),
+          drift,
+          deployment: deploymentFiles(s.cwd),
+          threats: [],
+        })
       }
       case "architecture_approve": {
         const s = this.#session(cmd.sessionId)
