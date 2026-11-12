@@ -48,6 +48,7 @@ import {
   PolicyEngine,
   PolicyLoadError,
   readRememberEntries,
+  redactString,
   removeRemember,
   replay,
   type ReplayChange,
@@ -60,6 +61,7 @@ import {
 import { anchorsDirFor, AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
 import type { AnchorService } from "./anchors.js"
 import type { EvidenceStore } from "./evidence.js"
+import { AuditIndex, TEMPLATES, type QueryTemplate } from "./audit-index.js"
 import { rebuildAt } from "./rebuild.js"
 import { revealInExplorer } from "./files-api.js"
 import {
@@ -496,6 +498,24 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const cwd = records.find((r) => r.cwd)?.cwd
     const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
     return { entries: sessionTimeline(records, checkpoints) }
+  })
+
+  // D-031: saved questions about the audit log, answered from an index kept beside it, redacted.
+  const index = new AuditIndex({ auditDir: ctx.auditDir, dir: path.join(path.dirname(path.resolve(ctx.auditDir)), "audit-index") })
+  app.get("/api/audit/query", async (req, reply) => {
+    const q = req.query as { template?: string; project?: string; limit?: string }
+    const template = String(q.template ?? "") as QueryTemplate
+    if (!Object.hasOwn(TEMPLATES, template)) return bad(reply, 400, "Choose one of the saved questions.")
+    const project = q.project?.trim() ? q.project.trim().slice(0, 120) : undefined
+    if (TEMPLATES[template].needsProject && !project) return bad(reply, 400, "Name the project.")
+    const limit = Math.min(1000, Math.max(1, Number(q.limit ?? 200) || 200))
+    const started = Date.now()
+    const r = await index.query(template, {
+      ...(project ? { project } : {}),
+      limit,
+      redact: (x) => redactString(x, { terms: ctx.config().redactTerms }),
+    })
+    return { title: TEMPLATES[template].title, ...r, ms: Date.now() - started }
   })
 
   // D-029: the anchors so far, and one now.

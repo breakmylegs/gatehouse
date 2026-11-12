@@ -116,6 +116,15 @@ export function Audit() {
     void load(applied)
   }, [applied, load])
 
+  // D-031: a saved question and its answer.
+  const [question, setQuestion] = useState<{ template: string; project: string }>({ template: "", project: "" })
+  const [answer, setAnswer] = useState<{ title: string; total: number; ms: number; results: Array<{ seq: number; ts: string; tool: string; outcome: string; ruleId: string; decidedBy: string; project?: string; summary: string }> }>()
+  async function ask(template: string, project = "") {
+    setQuestion({ template, project })
+    const r = await api<NonNullable<typeof answer>>("GET", `/api/audit/query?template=${template}${project ? `&project=${encodeURIComponent(project)}` : ""}`)
+    if (r.ok && r.data) setAnswer(r.data)
+    else setError(r.error ?? "The question could not be answered")
+  }
   // D-029: the newest anchor, and one made now on request.
   const [anchor, setAnchor] = useState<Anchor>()
   async function check() {
@@ -158,7 +167,7 @@ export function Audit() {
   }, [rows, live, unfiltered])
 
   return (
-    <div className="grid h-full grid-rows-[auto_auto_auto_1fr]">
+    <div className="grid h-full grid-rows-[auto_auto_auto_auto_1fr]">
       <header className="flex flex-wrap items-center gap-4 px-6 pb-2 pt-5">
         <h1 className="m-0">Audit log</h1>
         <p role="status" className="m-0">
@@ -206,6 +215,58 @@ export function Audit() {
           Export
         </button>
       </header>
+
+      <div>
+      <div role="group" aria-label="Saved questions" className="flex flex-wrap items-center gap-2 px-6 pb-2">
+        <span className="text-[13px] text-mut">Saved questions:</span>
+        <button type="button" className="pane-tool" aria-pressed={question.template === "who-approved"} onClick={() => void ask("who-approved")}>
+          Who approved what
+        </button>
+        <button type="button" className="pane-tool" aria-pressed={question.template === "network"} onClick={() => void ask("network")}>
+          Every network call
+        </button>
+        <button type="button" className="pane-tool" aria-pressed={question.template === "extreme"} onClick={() => void ask("extreme")}>
+          Every Extreme approval
+        </button>
+        <label className="flex items-center gap-1.5 text-[13px]">
+          <span className="text-mut">Every deny for</span>
+          <input
+            className="field !min-h-7 w-40"
+            placeholder="project"
+            value={question.template === "denies" ? question.project : ""}
+            onChange={(e) => setQuestion({ template: "denies", project: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && e.currentTarget.value.trim()) void ask("denies", e.currentTarget.value.trim())
+            }}
+          />
+        </label>
+        {answer ? (
+          <button type="button" className="pane-tool" onClick={() => (setAnswer(undefined), setQuestion({ template: "", project: "" }))}>
+            Close the answer
+          </button>
+        ) : null}
+      </div>
+      {answer ? (
+        <section aria-label="Answer" className="panel mx-6 mb-2 grid max-h-72 gap-1 overflow-auto p-3 text-[13px]">
+          <h2 className="m-0 text-sm font-semibold">
+            {answer.title}: {answer.total.toLocaleString("en-GB")} record{answer.total === 1 ? "" : "s"}
+            {answer.total > answer.results.length ? `, the newest ${answer.results.length} shown` : ""}
+          </h2>
+          <ul className="m-0 grid list-none gap-1 p-0">
+            {answer.results.map((r) => (
+              <li key={r.seq} className="grid grid-cols-[auto_auto_1fr] gap-2">
+                <span className="mono text-mut">{r.seq}</span>
+                <span className="mono text-mut">{new Date(r.ts).toLocaleString("en-GB")}</span>
+                <span className="[overflow-wrap:anywhere]">
+                  <strong>{r.tool}</strong> {r.summary ? <span className="mono">{r.summary}</span> : null}: {r.outcome}, {r.decidedBy}, rule {r.ruleId}
+                  {r.project ? `, ${r.project}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      </div>
 
       <div role="group" aria-label="Quick views" className="audit-views">
         {VIEWS.map((v) => {
