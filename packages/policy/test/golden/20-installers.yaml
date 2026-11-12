@@ -1,0 +1,10 @@
+# D-096, WinGet and installer admission: installing software on this computer is High in every mode and names what it
+# installs and from where; Extreme approval never approves it (canuse). Looking, not installing, is as before.
+- { t: Bash, cmd: "winget install Microsoft.PowerToys", o: escalate, r: installer-admission, note: "winget, by id" }
+- { t: Bash, cmd: "winget install --id Git.Git --source winget --silent", o: escalate, r: installer-admission, note: "winget with flags" }
+- { t: PowerShell, cmd: "winget upgrade --id Microsoft.VisualStudioCode", o: escalate, r: installer-admission, note: "an upgrade" }
+- { t: Bash, cmd: "choco install nodejs -y", o: escalate, r: installer-admission, note: "Chocolatey" }
+- { t: Bash, cmd: "scoop install extras/vscode", o: escalate, r: installer-admission, note: "scoop, from a bucket" }
+- { t: Bash, cmd: "msiexec /i setup.msi /qn", o: escalate, r: installer-admission, note: "an MSI, quietly" }
+- { t: PowerShell, cmd: "Install-Module -Name PSReadLine -Scope CurrentUser", o: escalate, r: installer-admission, note: "PowerShell Gallery" }
+- { t: Bash, cmd: "winget list", o: escalate, r: package-install, note: "listing installs nothing; the usual winget rule asks" }

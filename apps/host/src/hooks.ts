@@ -5,12 +5,17 @@ import {
   withProvenance,
   type Provenance,
 } from "./provenance.js"
+import { apiBreak, apiReason } from "./api-surface.js"
+import { adrContradictions, adrReason, readAdrs } from "./adr.js"
+import { archCheck, archReason } from "./architecture.js"
+import { vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { compileGlobs } from "@gatehouse/policy"
 
 const untrusted = (globs: readonly string[]) => compileGlobs(globs.map((g) => g.toLowerCase()))
 import {
   makesCommit,
   scanCommit,
+  makesPush,
   secretReason,
   SECRET_IN_COMMIT_RULE,
   type Found,
@@ -22,6 +27,9 @@ import type { ApproverClient } from "./approver-client.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { sastReason, type SastCommitGuard } from "./sast.js"
+import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
+import { quarantined, scanForInjection, type InjectionFinding } from "./injection-scan.js"
 import type { HostAudit } from "./hostaudit.js"
 
 /**
@@ -101,7 +109,14 @@ export interface SessionHookDeps {
   grants?: GrantUses
   /** D-007: the locked tests, and the calls a person approved that touched them. */
   locks?: Pick<TestLocks, "touched" | "repin">
+  /** D-062: the Severe findings in what a commit would add; in Auto and Accept edits such a commit is asked about. */
+  sast?: Pick<SastCommitGuard, "severe">
+  /** D-057: the same for dependency versions the vulnerability snapshot lists. */
+  vulns?: Pick<VulnCommitGuard, "matches">
   lockedCalls?: Map<string, string[]>
+  /** D-059: what the project tells Claude, and the calls a person approved that changed it. */
+  instructions?: Pick<InstructionPins, "touched" | "repin">
+  instructionCalls?: Map<string, string[]>
   /** toolUseIDs that went through canUseTool, so PostToolUse can tell which calls Claude Code approved itself. */
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
@@ -128,10 +143,17 @@ export interface SessionHookDeps {
   untrustedFiles?: () => readonly string[]
   /** A file the session wrote or edited, by its path, so its pane can open it even outside the folder (owner, 4 Nov). */
   onWritten?: (filePath: string) => void
+  /** D-030: the session made a commit, in this folder. */
+  onCommitted?: (cwd: string) => void
   /** D-008: what a shell command printed, read for counterexamples. */
   onToolOutput?: (tool: string, output: string) => void
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
-  onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => void
+  /** D-061: a result that looked like prompt injection, for the screen and the record. */
+  onInjection?: (tool: string, findings: InjectionFinding[], toolUseId?: string) => void
+  /** D-003: how a shell command ended (the error when it failed), for the change's evidence. */
+  onCommandEnded?: (toolUseId: string, error: string | undefined) => void
+  /** G19, D-075: how each call ended; words returned go to Claude with the call's result (a warning it is repeating). */
+  onToolOutcome?: (tool: string, input: unknown, error: string | undefined) => string | undefined
   /** G22: commits are checked for secrets unless this is false (tests only). */
   scanCommits?: boolean
   /** Tests only: stands in for reading the commit. */
@@ -154,6 +176,8 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
     try {
       const toolInput = asRecord(input.tool_input)
       const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
+      // D-017: a subagent is starting; what it reads while it runs taints what it reports.
+      if (input.tool_name === "Task" || input.tool_name === "Agent") deps.provenance?.subagentStarted(String(input.tool_use_id))
       if (deps.kill())
         return denyOutput(
           "The Codehouse kill switch is engaged. Everything is denied until the user re-arms it.",
@@ -187,14 +211,14 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         })
         return denyOutput(`${hit.reason} (rule ${hit.ruleId})`)
       }
-      // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person.
-      if (deps.scanCommits !== false && makesCommit(input.tool_name, toolInput)) {
+      // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person. D-058: a push too.
+      if (deps.scanCommits !== false && (makesCommit(input.tool_name, toolInput) || makesPush(input.tool_name, toolInput))) {
         let found: Found[]
         try {
           found = await (deps.commitScanner ?? scanCommit)(cwd, String(toolInput.command))
         } catch {
           return askOutput(
-            "Codehouse could not check this commit for secrets, so it asks you before it runs.",
+            "Codehouse could not check this commit or push for secrets, so it asks you before it runs.",
           )
         }
         if (found.length) {
@@ -232,6 +256,16 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           .catch(() => ["(the locks could not be read)"])
         if (files.length) return askOutput(lockedReason(files))
       }
+      // D-059: and so is a change to what the project tells Claude.
+      if (SELF_APPROVING_MODES.has(mode) && deps.instructions) {
+        let files: string[]
+        try {
+          files = deps.instructions.touched(cwd, input.tool_name, toolInput)
+        } catch {
+          files = ["(the instruction files could not be read)"]
+        }
+        if (files.length) return askOutput(instructionsReason(files))
+      }
       if (deps.approver && SELF_APPROVING_MODES.has(mode) && !NOT_JUDGED.has(input.tool_name)) {
         const judged = await deps.approver.evaluate(
           { toolName: input.tool_name, input: toolInput },
@@ -247,11 +281,40 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           },
         )
         // B32: a command copied from what Claude read goes to a person, even in these modes.
-        const verdict = withProvenance(judged, input.tool_name, toolInput, deps.provenance)
+        const verdict = withProvenance(judged, input.tool_name, toolInput, deps.provenance, cwd)
         deps.verdicts?.set(input.tool_use_id, verdict)
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
+        // D-041: so does an edit that breaks the project's architecture rules, and (D-044) one against an ADR.
+        if (["Edit", "Write", "MultiEdit"].includes(input.tool_name)) {
+          const root = deps.projectRoot ?? cwd
+          const broken = await archCheck(root, input.tool_name, toolInput).catch(() => [])
+          if (broken.length) return askOutput(archReason(broken))
+          let against: ReturnType<typeof adrContradictions> = []
+          try {
+            against = adrContradictions(root, readAdrs(root), input.tool_name, toolInput)
+          } catch {
+            against = []
+          }
+          if (against.length) return askOutput(adrReason(against))
+          // D-046: and one that removes a library's export.
+          const b = await apiBreak(root, input.tool_name, toolInput).catch(() => undefined)
+          if (b) return askOutput(apiReason(b))
+        }
+        // D-062: a commit of code rated Severe reaches canUseTool, which sends it to a person.
+        if (deps.sast && makesCommit(input.tool_name, toolInput)) {
+          const severe = await deps.sast
+            .severe(cwd, String(toolInput.command))
+            .catch(() => [{ file: "(the commit could not be read)", line: 0, kind: "eval" as const, severity: "Severe" as const, title: "Not checked" }])
+          if (severe.length) return askOutput(sastReason(severe))
+        }
+        if (deps.vulns && makesCommit(input.tool_name, toolInput)) {
+          const found = await deps.vulns
+            .matches(cwd, String(toolInput.command))
+            .catch(() => [{ name: "(a lockfile could not be read)", version: "", ecosystem: "", ids: ["not checked"], lockfile: "" }])
+          if (found.length) return askOutput(vulnReason(found))
+        }
         // C-013: a remembered rule that has used its allowed number of calls asks instead.
         if (deps.grants?.spent(verdict, input.tool_use_id))
           return askOutput(deps.grants.reason(verdict.ruleId))
@@ -291,27 +354,66 @@ const SELF_APPROVED: Omit<Verdict, "policyHash"> = {
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
 
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
-  return async (input) => {
+  // D-075: words for Claude about the call just ended (it is repeating itself), by tool use id, for the hook's answer.
+  const notes = new Map<string, string>()
+  // D-061: a result with prompt injection in it, as Claude is to read it instead, by tool use id.
+  const replacements = new Map<string, string>()
+  /** D-061: a result from an untrusted source, scanned; a finding raises the taint, is told, and replaces what Claude reads. */
+  const scan = (id: string, tool: string, response: unknown, where: string) => {
+    let text: string
+    try {
+      text = typeof response === "string" ? response : JSON.stringify(response)
+    } catch {
+      return
+    }
+    const findings = scanForInjection(text.slice(0, 400_000))
+    if (!findings.length) return
+    deps.provenance?.raise(`${where} that held what looks like prompt injection`)
+    deps.onInjection?.(tool, findings, id)
+    replacements.set(id, quarantined(text.slice(0, 400_000), findings))
+  }
+  const inner: HookCallback = async (input) => {
     if (input.hook_event_name !== "PostToolUse" && input.hook_event_name !== "PostToolUseFailure")
       return NO_DECISION
     try {
       // G19: the loop guard hears how each call ended.
-      deps.onToolOutcome?.(
+      const note = deps.onToolOutcome?.(
         input.tool_name,
         input.tool_input,
         input.hook_event_name === "PostToolUseFailure" && input.is_interrupt !== true
           ? String(input.error ?? "")
           : undefined,
       )
+      if (note) notes.set(String(input.tool_use_id), note)
+      const interrupted = input.hook_event_name === "PostToolUseFailure" && input.is_interrupt === true
+      if ((input.tool_name === "Bash" || input.tool_name === "PowerShell") && !interrupted)
+        deps.onCommandEnded?.(
+          String(input.tool_use_id),
+          input.hook_event_name === "PostToolUseFailure" ? String(input.error ?? "failed") : undefined,
+        )
+      // D-017: a subagent's report carries the taint of what it read.
+      if (input.hook_event_name === "PostToolUse" && (input.tool_name === "Task" || input.tool_name === "Agent"))
+        deps.provenance?.subagentFinished(String(input.tool_use_id), input.tool_response)
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
-        deps.provenance?.add(input.tool_response)
+        scan(String(input.tool_use_id), input.tool_name, input.tool_response, input.tool_name === "WebFetch" ? "a fetched page" : `a result from ${input.tool_name}`)
+      if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
+        deps.provenance?.add(
+          input.tool_response,
+          input.tool_name === "WebFetch" && typeof asRecord(input.tool_input).url === "string"
+            ? `the page ${String(asRecord(input.tool_input).url).slice(0, 120)}`
+            : `what ${input.tool_name} returned`,
+        )
       // D-015: a file that is not the project's own words (a README, a dependency's code), read in the session.
       if (input.hook_event_name === "PostToolUse" && input.tool_name === "Read" && deps.provenance) {
         const file = asRecord(input.tool_input).file_path
         if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
-          deps.provenance.addUntrustedFile(input.tool_response)
+          deps.provenance.addUntrustedFile(input.tool_response, file)
+          scan(String(input.tool_use_id), input.tool_name, input.tool_response, `the file ${file}`)
       }
+      // D-030: a commit the session made gets a note of its approvals' lineage.
+      if (input.hook_event_name === "PostToolUse" && makesCommit(input.tool_name, asRecord(input.tool_input)))
+        deps.onCommitted?.(typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd)
       // D-008: a shell command's output, read for a property test's or a fuzz run's counterexample.
       if (deps.onToolOutput && (input.tool_name === "Bash" || input.tool_name === "PowerShell")) {
         const r = input.hook_event_name === "PostToolUse" ? input.tool_response : (input as { error?: unknown }).error
@@ -353,6 +455,30 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
           latencyMs: 0,
         })
       }
+      // D-059: so is an instruction file a person approved changing, and that is recorded.
+      const instructed = deps.instructionCalls?.get(input.tool_use_id)
+      if (input.hook_event_name === "PostToolUse" && instructed && deps.instructions) {
+        deps.instructionCalls?.delete(input.tool_use_id)
+        await deps.instructions.repin(cwd, instructed).catch(() => undefined)
+        await deps.audit.record({
+          session: deps.sessionId,
+          event: "instructions_repinned",
+          channel: "host",
+          tool: input.tool_name,
+          toolUseId: input.tool_use_id,
+          cwd,
+          input: { files: instructed },
+          verdict: {
+            outcome: "allow",
+            ruleId: INSTRUCTIONS_RULE,
+            reason: "What the project tells Claude was changed with your approval, so it is pinned as it now is.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: deps.policy()?.hash ?? "none",
+          },
+          latencyMs: 0,
+        })
+      }
       if (deps.decided.has(input.tool_use_id)) return NO_DECISION
       await deps.audit.record({
         session: deps.sessionId,
@@ -369,6 +495,23 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       deps.log(`post-tool audit failed (${(e as Error).name})`)
     }
     return NO_DECISION
+  }
+  return async (input, toolUseId, options) => {
+    const out = await inner(input, toolUseId, options)
+    const id = String((input as { tool_use_id?: unknown }).tool_use_id ?? "")
+    const note = notes.get(id)
+    const replaced = replacements.get(id)
+    if (!note && !replaced) return out
+    notes.delete(id)
+    replacements.delete(id)
+    // It decides nothing: it only adds to, or (D-061) cleans, what Claude reads with the call's result.
+    return {
+      hookSpecificOutput: {
+        hookEventName: input.hook_event_name as "PostToolUse" | "PostToolUseFailure",
+        ...(note ? { additionalContext: note } : {}),
+        ...(replaced && input.hook_event_name === "PostToolUse" ? { updatedToolOutput: replaced } : {}),
+      },
+    }
   }
 }
 

@@ -1,6 +1,15 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
-import { INTEGRITY_PREFIX } from "@gatehouse/policy"
-import { TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
+import { API_RULE, apiBreak, apiReason, hasApiCompat } from "./api-surface.js"
+import { ADR_RULE, adrContradictions, adrReason, readAdrs } from "./adr.js"
+import { ARCH_RULE, archCheck, archReason } from "./architecture.js"
+import { TEST_FILE, TEST_SCOPE_RULE, TESTS_FIRST_RULE, testScopeReason, testsFirstReason, type Survivor } from "./mutation.js"
+import { VULN_RULE, vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
+import { SAST_RULE, sastReason, type SastCommitGuard, type SastFinding } from "./sast.js"
+import { makesCommit } from "./commit-scan.js"
+import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
+import { dryRunPlan, estimateWords } from "./plan-dry-run.js"
+import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
+import { EGRESS_RULE, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
@@ -54,7 +63,18 @@ export interface CanUseDeps {
   onRememberRefused?: (why: string) => void
   /** D-007: the locked tests, and the calls that touched them (so an approved change pins them again). */
   locks?: Pick<TestLocks, "touched">
+  /** D-062: the Severe findings in what a commit would add. */
+  sast?: Pick<SastCommitGuard, "severe">
+  /** D-057: the dependency versions a commit would add that the vulnerability snapshot lists. */
+  vulns?: Pick<VulnCommitGuard, "matches">
+  /** D-005: the surviving mutant a task is writing a test for; while there is one, edits outside test files ask. */
+  mutantTask?: () => Survivor | undefined
+  /** D-036: whether the session is writing its tests first and they are not approved yet. */
+  testsFirst?: () => boolean
   lockedCalls?: Map<string, string[]>
+  /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
+  instructions?: Pick<InstructionPins, "touched">
+  instructionCalls?: Map<string, string[]>
   /** D-001: this project is strict about its tests, so Extreme approval does not approve a weakening. */
   strictTests?: () => boolean
   /** D-001: Extreme approval approved a weakening of the tests, which the session then says (pattern, reason). */
@@ -204,7 +224,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           },
         ))
       // B32: the hook already applied it to an early verdict; applying it again changes nothing.
-      let verdict = withProvenance(judged, toolName, input, deps.provenance)
+      let verdict = withProvenance(judged, toolName, input, deps.provenance, deps.cwd)
       // D-007: a call that would change a locked test goes to a person, whatever the rules said, unless they denied it.
       // Locks that cannot be read count as touched (fail closed). Recorded before anything is decided.
       if (deps.locks && verdict.outcome !== "deny") {
@@ -235,6 +255,110 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           if (!written)
             return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
           deps.lockedCalls?.set(toolUseID, files)
+        }
+      }
+      // D-062: a commit that adds code the local analysis rates Severe goes to a person, whatever the rules said, unless
+      // they denied it. A commit that cannot be read is treated as one (fail closed).
+      if (deps.sast && verdict.outcome !== "deny" && makesCommit(toolName, input)) {
+        const severe: SastFinding[] = await deps.sast
+          .severe(deps.cwd, String(input.command))
+          .catch(() => [{ file: "(the commit could not be read)", line: 0, kind: "eval" as const, severity: "Severe" as const, title: "Not checked" }])
+        if (severe.length)
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: SAST_RULE,
+            reason: sastReason(severe),
+            risk: Math.max(verdict.risk, 85),
+            decidedBy: "rules",
+          }
+      }
+      // D-005: a task writing a test for a surviving mutant changes only test files; any other edit goes to a person.
+      const task = deps.mutantTask?.()
+      if (task && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
+        const file = String(input.file_path ?? input.notebook_path ?? "")
+        if (!TEST_FILE.test(file))
+          verdict = { ...verdict, outcome: "escalate", ruleId: TEST_SCOPE_RULE, reason: testScopeReason(file, task), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
+      // D-041: an edit that adds an import the project's architecture rules forbid goes to a person, with the rule named.
+      if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
+        const broken = await archCheck(deps.projectRoot ?? deps.cwd, toolName, input).catch(() => [])
+        if (broken.length)
+          verdict = { ...verdict, outcome: "escalate", ruleId: ARCH_RULE, reason: archReason(broken), risk: Math.max(verdict.risk, 65), decidedBy: "rules" }
+      }
+      // D-044: an edit that adds what one of the project's accepted ADRs rules out goes to a person, with the ADR named.
+      if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
+        const root = deps.projectRoot ?? deps.cwd
+        const against = (() => {
+          try {
+            return adrContradictions(root, readAdrs(root), toolName, input)
+          } catch {
+            return []
+          }
+        })()
+        if (against.length)
+          verdict = { ...verdict, outcome: "escalate", ruleId: ADR_RULE, reason: adrReason(against), risk: Math.max(verdict.risk, 65), decidedBy: "rules" }
+      }
+      // D-046: an edit that removes an export from a library's public module goes to a person, with what it removes.
+      if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
+        const root = deps.projectRoot ?? deps.cwd
+        const b = await apiBreak(root, toolName, input).catch(() => undefined)
+        if (b) verdict = { ...verdict, outcome: "escalate", ruleId: API_RULE, reason: apiReason(b, hasApiCompat(root)), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
+      // D-036: in tests-first mode, before the tests are approved, an edit to anything but a test file goes to a person.
+      if (deps.testsFirst?.() && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
+        const file = String(input.file_path ?? input.notebook_path ?? "")
+        if (!TEST_FILE.test(file))
+          verdict = { ...verdict, outcome: "escalate", ruleId: TESTS_FIRST_RULE, reason: testsFirstReason(file), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
+      // D-057: a commit that adds a dependency version the snapshot lists goes to a person, with the advisories. A
+      // lockfile that cannot be read while a snapshot is in use counts as one (fail closed).
+      if (deps.vulns && verdict.outcome !== "deny" && verdict.ruleId !== SAST_RULE && makesCommit(toolName, input)) {
+        const found = await deps.vulns
+          .matches(deps.cwd, String(input.command))
+          .catch(() => [{ name: "(a lockfile could not be read)", version: "", ecosystem: "", ids: ["not checked"], lockfile: "" }])
+        if (found.length)
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: VULN_RULE,
+            reason: vulnReason(found),
+            risk: Math.max(verdict.risk, 85),
+            decidedBy: "rules",
+          }
+      }
+      // D-059: an agent's change to what the project tells Claude goes to a person the same way, with the change shown.
+      if (deps.instructions && verdict.outcome !== "deny" && verdict.ruleId !== LOCKED_TEST_RULE) {
+        let files: string[]
+        try {
+          files = deps.instructions.touched(deps.cwd, toolName, input)
+        } catch {
+          files = ["(the instruction files could not be read)"]
+        }
+        if (files.length) {
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: INSTRUCTIONS_RULE,
+            reason: instructionsReason(files),
+            risk: Math.max(verdict.risk, 80),
+            decidedBy: "rules",
+          }
+          const written = await deps.audit.record({
+            session: deps.sessionId,
+            event: "instructions_edit_escalated",
+            channel: "host",
+            tool: toolName,
+            toolUseId: toolUseID,
+            cwd: deps.cwd,
+            project: deps.project,
+            input: { files },
+            verdict,
+            latencyMs: 0,
+          })
+          if (!written)
+            return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+          deps.instructionCalls?.set(toolUseID, files)
         }
       }
       if (!early) deps.onDecision?.(toolUseID, verdict)
@@ -283,6 +407,23 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (!written)
           return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
       }
+      // D-055: a dependency whose licence is not allowed, or cannot be read, is recorded before anything is decided.
+      if (verdict.ruleId === LICENCE_NOT_ALLOWED || verdict.ruleId === LICENCE_UNKNOWN) {
+        const written = await deps.audit.record({
+          session: deps.sessionId,
+          event: "licence_escalated",
+          channel: "host",
+          tool: toolName,
+          toolUseId: toolUseID,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { reason: verdict.reason },
+          verdict,
+          latencyMs: 0,
+        })
+        if (!written)
+          return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
+      }
       if (deps.extreme?.() === true && weakens && deps.strictTests?.()) {
         // D-001, strict for this project: a weakening waits for a person even in Extreme approval.
         return await escalate(
@@ -313,7 +454,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
             ...verdict,
             // A locked test's reason already says Extreme approval does not approve it.
             reason:
-              verdict.ruleId === LOCKED_TEST_RULE
+              verdict.ruleId === LOCKED_TEST_RULE || verdict.ruleId === INSTALLER_RULE || verdict.ruleId === INSTRUCTIONS_RULE
                 ? verdict.reason
                 : `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
           },
@@ -346,8 +487,32 @@ export const PLAN_EDIT_TOOLS: ReadonlySet<string> = new Set([
 export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   // B32: a command copied from a web page is always a person's decision.
   TAINT_RULE,
+  // D-016: so is one that sends on a value from an untrusted source.
+  EGRESS_RULE,
   // D-007: a locked test changes only with a person.
   LOCKED_TEST_RULE,
+  // D-096: installing software on Windows runs a publisher's installer with your rights.
+  INSTALLER_RULE,
+  // D-059: what a project tells Claude changes only with a person.
+  INSTRUCTIONS_RULE,
+  // D-064: install scripts run with your rights; Run without scripts is a person's choice too.
+  INSTALL_SCRIPTS_RULE,
+  // D-055: whether a project may use a licence is a person's decision.
+  LICENCE_NOT_ALLOWED,
+  // D-062: a commit of code rated Severe is looked at by a person.
+  SAST_RULE,
+  // D-057: so is one that adds a dependency version with a known advisory.
+  VULN_RULE,
+  // D-005: an edit outside test files while a task writes a test for a surviving mutant.
+  TEST_SCOPE_RULE,
+  // D-036: an implementation edit before the tests are approved.
+  TESTS_FIRST_RULE,
+  // D-041: the project's own architecture rules are the owner's to waive.
+  ARCH_RULE,
+  // D-044: and so are its architecture decisions.
+  ADR_RULE,
+  // D-046: a library's public API is the owner's to break.
+  API_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",
@@ -652,17 +817,24 @@ async function ask(
 ): Promise<PermissionResult> {
   const toolUseID = options.toolUseID
   const toolName = kind === "question" ? "AskUserQuestion" : "ExitPlanMode"
+  // C-012: what the plan's steps would meet under the rules now, judged with nothing run. A failure leaves it out.
+  const estimate =
+    kind === "plan" && typeof input.plan === "string"
+      ? await dryRunPlan(input.plan, deps.cwd, deps.engine).catch(() => undefined)
+      : undefined
+  const words = estimate ? estimateWords(estimate) : ""
   const verdict: Verdict = {
     outcome: "escalate",
     ruleId: kind === "question" ? "ask-user-question" : "exit-plan-mode",
     reason:
       kind === "question"
         ? "Claude is asking you a question."
-        : "Claude wants to leave plan mode and start work.",
+        : `Claude wants to leave plan mode and start work.${words ? ` ${words}` : ""}`,
     risk: 0,
     decidedBy: "rules",
     policyHash: deps.policy()?.hash ?? "none",
   }
+  const counts = estimate ? { estimate: { allow: estimate.allow, escalate: estimate.escalate, deny: estimate.deny } } : {}
   // Extreme approval never waits on you (owner, 30 Oct): the recommended answer, or the plan approved, recorded first.
   const answers = kind === "question" ? recommendedAnswers(input) : {}
   if (deps.extreme?.() === true && answers) {
@@ -674,7 +846,7 @@ async function ask(
       toolUseId: toolUseID,
       cwd: deps.cwd,
       project: deps.project,
-      input: kind === "question" ? { ...input, answers } : input,
+      input: kind === "question" ? { ...input, answers } : { ...input, ...counts },
       verdict: {
         ...verdict,
         outcome: "allow",
@@ -713,7 +885,8 @@ async function ask(
     toolUseId: toolUseID,
     cwd: deps.cwd,
     project: deps.project,
-    input,
+    // D-038: a question's answers are kept with it (redacted like any record), so the decision can become an ADR.
+    input: { ...input, ...counts, ...(kind === "question" && resolution.answers ? { answers: resolution.answers } : {}) },
     verdict: recorded,
     latencyMs: resolution.waitedMs,
   })

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
-import { BoundaryCards, type Boundary, type BoundaryProvider } from "./BoundaryCards"
+import { BoundaryCards, type Boundaries } from "./BoundaryCards"
 
 interface LocalRuntime {
   kind: "ollama" | "openai-compatible" | "gateway"
@@ -17,7 +17,7 @@ interface ProvidersView {
   enabled: boolean
   local?: LocalRuntime
   check?: Check
-  boundaries?: Partial<Record<BoundaryProvider, Boundary>>
+  boundaries?: Boundaries
 }
 
 /** The providers block as the settings file holds it, for the settings page's next save. */

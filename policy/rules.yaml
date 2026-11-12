@@ -55,6 +55,8 @@ allow:
                  "Get-ChildItem*", "Get-Content*"] }
   - { id: companion-tools, tools: ["mcp__companion__notify_user", "mcp__companion__create_checkpoint",
                                    "mcp__companion__get_policy_summary"], mcpSource: [sdk] }
+  # D-037: an assumption Claude records for you to check; only the Host's own in-process Companion offers it.
+  - { id: assumption-tools, tools: ["mcp__companion__declare_assumption"], mcpSource: [sdk], sessionKinds: [code] }
   # Claude Code's own housekeeping (owner decision 1 Nov, CLAUDE.md invariant 2): the floor hook now asks in Manual
   # mode too, so these reach the Approver where Claude Code used to allow them by itself. None does anything outside
   # the session on its own: whatever a subagent, a skill or a slash command then does goes through the hook again.

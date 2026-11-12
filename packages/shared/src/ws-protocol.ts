@@ -90,12 +90,16 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("heldout_list"), sessionId: Id }),
   /** D-007: the session's project's locked tests; locking and unlocking one; accepting ones changed outside Codehouse. */
   z.object({ type: z.literal("locks_state"), sessionId: Id }),
+  /** D-025: a dead-man timer for an Extreme session, in minutes, or off. */
+  z.object({ type: z.literal("set_deadman"), sessionId: Id, minutes: z.number().int().min(1).max(240).nullable() }),
   /** D-008: pins a counterexample as a locked regression test, or puts it away. */
   z.object({ type: z.literal("pin_counterexample"), sessionId: Id, id: z.string().max(40) }),
   z.object({ type: z.literal("dismiss_counterexample"), sessionId: Id, id: z.string().max(40) }),
   z.object({ type: z.literal("lock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
   z.object({ type: z.literal("unlock_test"), sessionId: Id, path: z.string().min(1).max(1000) }),
   z.object({ type: z.literal("locks_accept"), cwd: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("instructions_state"), cwd: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("instructions_approve"), cwd: z.string().min(1).max(1000) }),
   z.object({
     type: z.literal("heldout_add"),
     sessionId: Id,
@@ -215,6 +219,66 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** What changed since a checkpoint of this session (its first, unless one is named), file by file. */
   z.object({
     type: z.literal("changes"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
+  /** D-039: for each requirement the change edits, the code, tests and ADRs linked to it. Read only. */
+  z.object({ type: z.literal("requirement_impact"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
+  /** D-038: the session's decisions (questions answered, plans approved) drafted as ADRs in MADR format. Read only. */
+  z.object({ type: z.literal("adr_drafts"), sessionId: Id }),
+  /** D-038: you accepted an ADR draft (as you edited it): the Host writes it into the project's docs/adr. */
+  z.object({ type: z.literal("adr_write"), sessionId: Id, file: z.string().min(1).max(300), text: z.string().min(1).max(100_000) }),
+  /** D-050: draft STRIDE entries for what the change adds (routes, data stores, connections, listeners, dependencies). */
+  z.object({ type: z.literal("threat_delta"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
+  /** D-042, D-043: the project's architecture as it is, its C4 diagrams in Mermaid, and drift since you approved it. */
+  z.object({ type: z.literal("architecture"), sessionId: Id }),
+  /** D-048: the project's architecture review pack, arc42 in Markdown, with its gaps. Read only. */
+  z.object({ type: z.literal("arc42"), sessionId: Id }),
+  /** D-043: you approve the architecture as it is now; drift is measured from here. */
+  z.object({ type: z.literal("architecture_approve"), sessionId: Id }),
+  /** D-036: tests first: Claude writes tests for these criteria; only test files change until you approve them. */
+  z.object({ type: z.literal("tests_first"), sessionId: Id, criteria: z.string().max(8000) }),
+  /** D-036: you approve the tests the session wrote: they are locked and the implementation may start. */
+  z.object({ type: z.literal("tests_first_approve"), sessionId: Id }),
+  /** D-037: you checked an assumption Claude declared, and it holds. */
+  z.object({ type: z.literal("assumption_verify"), sessionId: Id, id: z.string().min(1).max(100) }),
+  /** D-033: the project's requirements, traced to commits, tests and evidence, with the gaps. Read only. */
+  z.object({ type: z.literal("requirements"), sessionId: Id }),
+  /** D-034, D-035: the change against the approved plan and the requirements: files outside the plan, untraced hunks. */
+  z.object({ type: z.literal("scope"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
+  /** D-028: where a changed file's hunks came from: the edit that made each and what was read before it. Read only. */
+  z.object({ type: z.literal("provenance_graph"), sessionId: Id, file: z.string().min(1).max(4096).optional(), ref: z.string().min(1).max(500).optional() }),
+  /** D-066: captures what a changed file did before the change, from the checkpoint, in a sandbox. */
+  z.object({ type: z.literal("characterise"), sessionId: Id, file: z.string().min(1).max(4096), ref: z.string().min(1).max(500).optional() }),
+  /** D-006: replays a file's captured inputs against it as it is now and lists what changed. */
+  z.object({ type: z.literal("behaviour_diff"), sessionId: Id, file: z.string().min(1).max(4096) }),
+  /** D-005: starts a task to write a test that kills a surviving mutant, scoped to test files. */
+  z.object({
+    type: z.literal("mutant_task"),
+    sessionId: Id,
+    survivor: z.object({ file: z.string().min(1).max(4096), line: z.number().int().min(1), original: z.string().max(4000), mutated: z.string().max(4000) }),
+  }),
+  /** D-004: tests the tests: the change's new lines mutated one at a time in a sandbox copy, the project's tests run on each. */
+  z.object({
+    type: z.literal("mutation_run"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
+  /** D-003: gathers the change since the checkpoint (the first, by default) into an evidence pack, kept and recorded. */
+  z.object({
+    type: z.literal("evidence_build"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
+  /** D-062: what the local analysis finds on the lines changed since the checkpoint. Read only. */
+  z.object({
+    type: z.literal("change_findings"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+  }),
+  /** D-056: what the changes since the checkpoint do to the dependencies, as a CycloneDX 1.6 document. Read only. */
+  z.object({
+    type: z.literal("change_sbom"),
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
@@ -364,6 +428,8 @@ export const SessionInfo = z.object({
       }),
     )
     .optional(),
+  /** D-025: the dead-man timer, when on. Absent from older Hosts. */
+  deadman: z.object({ minutes: z.number().int(), lastHeardFrom: z.string() }).optional(),
   /** D-018: what is left of the session's risk budget; absent when it has none. Absent from older Hosts. */
   riskBudget: z.number().int().min(0).optional(),
   /** D-009: claims that the work is done, as Codehouse checked them, newest last. Absent from older Hosts. */
@@ -375,6 +441,11 @@ export const SessionInfo = z.object({
         outcome: z.enum(["verified", "contradicted", "unverified"]),
         why: z.string(),
         command: z.string().optional(),
+        /** D-010: the seed the check ran with. */
+        seed: z.number().int().optional(),
+        /** D-011: a failing run's reruns, each with its seed, and whether the mix of passes and failures made it flaky. */
+        runs: z.array(z.object({ seed: z.number().int(), passed: z.boolean() })).max(5).optional(),
+        flaky: z.boolean().optional(),
       }),
     )
     .optional(),
@@ -409,8 +480,29 @@ export const SessionInfo = z.object({
   effortCap: Effort.optional(),
   /** B25: the check Extreme approval carries on until it passes. */
   goal: z.string().max(300).optional(),
+  /** D-040: a model on this computer found the work may have drifted from the goal. */
+  intentDrift: z.object({ at: z.string(), reason: z.string() }).optional(),
+  /** D-036: the session is writing its tests first, and they are not approved yet. */
+  testsFirst: z.boolean().optional(),
+  /** D-037: the assumptions Claude declared, until you verify them. Absent from older Hosts. */
+  assumptions: z
+    .array(z.object({ id: z.string(), text: z.string(), check: z.string().optional(), at: z.string(), verified: z.boolean().optional() }))
+    .optional(),
   /** Where a local chat's words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel: z.string().max(120).optional(),
+  /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */
+  instructionsChanged: z.boolean().optional(),
+  /** D-061: results that looked like prompt injection, newest last, with what was found. */
+  flagged: z
+    .array(
+      z.object({
+        tool: z.string(),
+        at: z.string(),
+        findings: z.array(z.object({ kind: z.string(), sample: z.string() })).max(10),
+      }),
+    )
+    .max(20)
+    .optional(),
   /** A fork from a point in a conversation: its earlier conversation is shown up to this message only. */
   historyUntil: z.string().max(100).optional(),
   /** Works in a git worktree Codehouse made for it (B10). Absent from older Hosts. */
@@ -444,7 +536,7 @@ export const SessionInfo = z.object({
        * B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. D-018 "risk":
        * the session's risk budget is spent; it waits for you, and no limit starts it again by itself.
        */
-      reason: z.enum(["spend", "risk"]).optional(),
+      reason: z.enum(["spend", "risk", "heartbeat"]).optional(),
     })
     .optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
@@ -456,7 +548,8 @@ export const SessionInfo = z.object({
       spentUsd: z.number(),
       /** Absent: no limit. */
       maxUsd: z.number().optional(),
-      ended: z.enum(["done", "goal", "turns", "spend", "stopped", "error", "stalled"]).optional(),
+      // D-045: fitness, when a run said it was done but a fitness check fails.
+      ended: z.enum(["done", "goal", "turns", "spend", "stopped", "error", "stalled", "fitness"]).optional(),
     })
     .optional(),
 })

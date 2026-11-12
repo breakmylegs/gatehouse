@@ -1,8 +1,14 @@
+import fs from "node:fs"
 import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
-import { checkFloor } from "./floor.js"
+import { checkCallFloor } from "./floor.js"
+import { DEFAULT_LICENCES, licenceFindings } from "./licences.js"
+import { admit, dependencyKey, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
+import { installerCall } from "./installers.js"
+import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
+import { INSTALL_SCRIPTS_RULE, installScriptsFinding, withoutScripts } from "./install-scripts.js"
 import { hiddenCharacters } from "./hidden.js"
 import {
   fileFindings,
@@ -116,6 +122,8 @@ export interface EngineOptions {
   pwsh?: PwshWorker
   /** Your redaction list: a web search or address holding one of these is refused (W1-10). */
   sensitiveTerms?: () => readonly string[]
+  /** D-055: the licences allowed without asking, from Settings. Undefined: the permissive default. */
+  allowedLicences?: () => readonly string[] | undefined
 }
 
 /** What a call would send out to the web: a search's query, a fetched page's address. Nothing else is checked. */
@@ -140,12 +148,14 @@ export class PolicyEngine {
   readonly #getPolicy: () => Policy | undefined
   readonly #pwsh: PwshWorker | undefined
   readonly #sensitive: () => readonly string[]
+  readonly #licences: () => readonly string[] | undefined
   readonly #effectiveCache = new Map<string, Effective>()
 
   constructor(opts: EngineOptions) {
     this.#getPolicy = opts.getPolicy
     this.#pwsh = opts.pwsh
     this.#sensitive = opts.sensitiveTerms ?? (() => [])
+    this.#licences = opts.allowedLicences ?? (() => undefined)
   }
 
   async evaluate(call: ToolCall, ctx: EvalContext): Promise<Verdict> {
@@ -156,9 +166,12 @@ export class PolicyEngine {
       policyHash = policy.hash
       const v = await this.#evaluate(call, ctx, policy)
       // D-013: a shell call is judged with everything it would run besides what it says.
-      return call.toolName === "Bash" || call.toolName === "PowerShell"
-        ? await this.#withEffects(call, ctx, policy, v)
-        : v
+      const judged = call.toolName === "Bash" || call.toolName === "PowerShell" ? await this.#withEffects(call, ctx, policy, v) : v
+      // D-064: the command "Run without scripts" would send instead, for the card to offer as an edited input.
+      const command = (call.input as { command?: unknown } | undefined)?.command
+      return judged.ruleId === INSTALL_SCRIPTS_RULE && typeof command === "string"
+        ? { ...judged, withoutScripts: withoutScripts(command) }
+        : judged
     } catch {
       // Invariant 1: any failure escalates. It never allows and never throws.
       return this.#verdict("escalate", BUILTIN.engineError, policyHash, "rules")
@@ -203,6 +216,42 @@ export class PolicyEngine {
     return withShown(v)
   }
 
+  /**
+   * D-053: what the call adds to the project's dependencies that it does not already use, judged. D-055: and each one's
+   * licence, against the managed policy's list, or yours, or the permissive default; a licence finding carries what
+   * D-053 said too, so the card says both.
+   */
+  #dependencies(
+    call: ToolCall,
+    input: Record<string, unknown>,
+    ctx: EvalContext,
+    root: string,
+    policy: Policy,
+  ): Array<DependencyFinding | Candidate> {
+    let added: AddedDependency[] = []
+    let dirs = [root, ctx.cwd]
+    const change = fileChange(call, input, ctx.cwd)
+    if ((call.toolName === "Bash" || call.toolName === "PowerShell") && typeof input.command === "string")
+      added = fromCommand(input.command)
+    else if (change) {
+      dirs = [...dirs, path.dirname(change.file)]
+      added = fromManifestEdit(change.file, change.before, change.after)
+    }
+    if (!added.length) return []
+    const known = knownDependencies(dirs)
+    const found = admit(added, known, new Set(policy.approvedDependencies ?? []))
+    if (found.some((d) => d.outcome === "deny")) return found
+    const fresh = added.filter((d) => !known.has(dependencyKey(d)))
+    const allowed = policy.managedLicences ?? this.#licences() ?? DEFAULT_LICENCES
+    const lic = licenceFindings(fresh, [...new Set(dirs)], allowed)
+    if (!lic.length) return found
+    const also = (xs: Array<{ reason: string }>) => xs.map((d) => d.reason).join(" ")
+    return [
+      ...found.map((d) => ({ ...d, reason: `${d.reason} ${also(lic)}` })),
+      ...lic.map((l) => ({ ruleId: l.ruleId, risk: l.risk, reason: found.length ? `${l.reason} ${also(found)}` : l.reason })),
+    ]
+  }
+
   #verdict(
     outcome: Outcome,
     c: Candidate,
@@ -242,7 +291,7 @@ export class PolicyEngine {
     const f = await analyse(call, ctx, { pwsh: this.#pwsh })
     const hash = policy.hash
 
-    const floor = checkFloor(f, ctx, policy.rules.floor)
+    const floor = checkCallFloor(call, f, ctx, policy.rules.floor)
     if (floor) return this.#verdict("deny", { ...floor, risk: 100 }, hash, "floor")
     // After the floor, before any rule: no rule of yours can send a listed term out to the web.
     const out = sentToWeb(call)
@@ -277,6 +326,11 @@ export class PolicyEngine {
     const firstSegDeny = [...segDeny.values()][0]
     if (firstSegDeny) return this.#verdict("deny", firstSegDeny, hash, "rules", segmentVerdicts(f, segDeny, new Map()))
 
+    // D-053: a dependency the project does not use yet goes to a person; one models are known to invent is refused.
+    const deps = this.#dependencies(call, input, ctx, rootKeyPath, policy)
+    const refused = deps.find((d): d is DependencyFinding => "outcome" in d && d.outcome === "deny")
+    if (refused) return this.#verdict("deny", refused, hash, "rules")
+
     if (f.parseError) return this.#verdict("escalate", BUILTIN.parseError, hash, "rules")
     if (f.unavailable) return this.#verdict("escalate", BUILTIN.unavailable, hash, "rules")
 
@@ -305,6 +359,35 @@ export class PolicyEngine {
     const hidden = hiddenCharacters(call)
     if (hidden.length)
       escalations.push({ ...HIDDEN_UNICODE, reason: `${HIDDEN_UNICODE.reason} Found: ${hidden.slice(0, 6).join(", ")}.` })
+    // D-053, D-055: an install you remembered was your approval of that dependency, so only what the rest of the call
+    // adds is asked about. A name models are known to invent was refused above, remembered or not.
+    const open =
+      callRemembered !== undefined
+        ? []
+        : f.isShell && segRemembered.size
+          ? this.#dependencies(
+              call,
+              { ...input, command: f.segments.filter((_, i) => !segRemembered.has(i)).map((s) => s.coreText).join(" ; ") },
+              ctx,
+              rootKeyPath,
+              policy,
+            )
+          : deps
+    for (const d of open) escalations.push(d)
+    // D-054: a lockfile edited by hand goes to a person, with what in it matters most.
+    const change = fileChange(call, input, ctx.cwd)
+    const lock = f.isShell
+      ? lockfileShellEdit(f.segments)
+      : change
+        ? lockfileEdit(change.file, change.before, change.after, rootKeyPath)
+        : undefined
+    if (lock) escalations.push(lock)
+    // D-096: installing software on Windows is High, and never approved by Extreme approval.
+    const installer = f.isShell ? installerCall(f.segments) : undefined
+    if (installer) escalations.push(installer)
+    // D-064: an install that would run install scripts goes to a person, with each script's text.
+    const scripts = f.isShell && typeof input.command === "string" ? installScriptsFinding(input.command, ctx.cwd) : undefined
+    if (scripts) escalations.push(scripts)
     // D-001: a change that weakens the tests goes to a person, whatever rule would allow it, remembered or not.
     const integrity = f.isShell
       ? shellFindings(f.segments, f.targets, typeof input.command === "string" ? input.command : "")
@@ -402,6 +485,37 @@ export class PolicyEngine {
     }
     const known = BUILTIN_KNOWN_TOOLS.has(f.tool) || eff.all.some((r) => r.tools && matchAnyWildcard(r.tools, f.tool, false))
     return this.#verdict("escalate", known ? BUILTIN.noRule : BUILTIN.unknownTool, hash, "rules", segments)
+  }
+}
+
+/** What a Write, Edit or MultiEdit changes in a file: a Write against the file as it is. */
+function fileChange(
+  call: ToolCall,
+  input: Record<string, unknown>,
+  cwd: string,
+): { file: string; before: string; after: string } | undefined {
+  if (typeof input.file_path !== "string" || !["Write", "Edit", "MultiEdit"].includes(call.toolName)) return undefined
+  const file = path.resolve(cwd, input.file_path)
+  if (call.toolName === "Write") {
+    let before = ""
+    try {
+      before = fs.readFileSync(file, "utf8")
+    } catch {
+      before = ""
+    }
+    return { file, before, after: typeof input.content === "string" ? input.content : "" }
+  }
+  if (call.toolName === "Edit")
+    return {
+      file,
+      before: typeof input.old_string === "string" ? input.old_string : "",
+      after: typeof input.new_string === "string" ? input.new_string : "",
+    }
+  const edits = Array.isArray(input.edits) ? (input.edits as Array<{ old_string?: unknown; new_string?: unknown }>) : []
+  return {
+    file,
+    before: edits.map((e) => (typeof e.old_string === "string" ? e.old_string : "")).join("\n"),
+    after: edits.map((e) => (typeof e.new_string === "string" ? e.new_string : "")).join("\n"),
   }
 }
 

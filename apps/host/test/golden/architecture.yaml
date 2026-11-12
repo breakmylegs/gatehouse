@@ -1,0 +1,44 @@
+# D-041, architecture rules as policy: an edit that adds an import the project's .codehouse/architecture.yml forbids
+# escalates as architecture, naming the rule; an import the rules allow, one the file already had, or a file outside
+# every layer is as it was. Every case uses this project:
+#   layers: domain src/domain/**, application src/app/**, infrastructure src/infra/**
+#   allow: domain: [] (nothing), application: [domain], infrastructure: [domain, application]
+#   forbid: axios from src/domain/** ("the domain does no network calls"), and any "child_process"
+- note: "a domain file importing infrastructure"
+  edit: { tool: Edit, file: src/domain/order.ts, old: "export class Order {}", new: "import { Db } from '../infra/db'\nexport class Order {}" }
+  expect: architecture
+  rule: "layer domain"
+- note: "a domain file importing the application layer"
+  edit: { tool: Write, file: src/domain/price.ts, content: "import { checkout } from '../app/checkout'\nexport const price = 1\n" }
+  expect: architecture
+  rule: "layer domain"
+- note: "the application layer importing the domain"
+  edit: { tool: Write, file: src/app/checkout.ts, content: "import { Order } from '../domain/order'\nexport function checkout() {}\n" }
+  expect: none
+- note: "infrastructure importing the application layer"
+  edit: { tool: Write, file: src/infra/db.ts, content: "import { checkout } from '../app/checkout'\nexport class Db {}\n" }
+  expect: none
+- note: "the application layer importing infrastructure"
+  edit: { tool: Write, file: src/app/checkout.ts, content: "import { Db } from '../infra/db'\nexport function checkout() {}\n" }
+  expect: architecture
+  rule: "layer application"
+- note: "a forbidden package from the domain"
+  edit: { tool: Edit, file: src/domain/order.ts, old: "export class Order {}", new: "import axios from 'axios'\nexport class Order {}" }
+  expect: architecture
+  rule: "forbid axios"
+- note: "the same package from infrastructure"
+  edit: { tool: Write, file: src/infra/http.ts, content: "import axios from 'axios'\nexport const http = axios\n" }
+  expect: none
+- note: "child_process anywhere, by require"
+  edit: { tool: Write, file: src/app/run.ts, content: "const { exec } = require('child_process')\nexport const run = exec\n" }
+  expect: architecture
+  rule: "forbid child_process"
+- note: "an import only in a comment"
+  edit: { tool: Edit, file: src/domain/order.ts, old: "export class Order {}", new: "// import { Db } from '../infra/db'\nexport class Order {}" }
+  expect: none
+- note: "an edit that keeps an import the file already had"
+  edit: { tool: Edit, file: src/domain/legacy.ts, old: "export const x = 1", new: "export const x = 2" }
+  expect: none
+- note: "a file in no layer"
+  edit: { tool: Write, file: scripts/seed.ts, content: "import { Db } from '../src/infra/db'\n" }
+  expect: none

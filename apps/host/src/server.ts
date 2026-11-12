@@ -1,5 +1,25 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { arc42, deploymentFiles } from "./arc42.js"
+import { decisionsIn, draftAdr, nextNumber, readAdrs, writeAdr } from "./adr.js"
+import { draftMarkdown, threatDelta } from "./threat-delta.js"
+import { fitnessCheck } from "./fitness.js"
+import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
+import { readArchRules, updateGraph } from "./architecture.js"
+import { approvedPlan, impactOf, readRequirements, REQUIREMENTS_DIR, scopeOf, traceMatrix, unrequested } from "./requirements.js"
+import { execFile as execFileCb } from "node:child_process"
+import { provenanceGraph } from "./provenance-graph.js"
+import { sessionRecords } from "./timeline.js"
+import { UNTRUSTED_FILES } from "./provenance.js"
+import { behaviourDiff, capture, looksUntested, type BehaviourDelta, type Capture } from "./characterise.js"
+import { listFiles, TEST_FILE } from "./mutation.js"
+import { writeFileAtomic } from "@gatehouse/shared/node"
+import { createHash } from "node:crypto"
+import { runMutation } from "./mutation.js"
+import { projectCommand } from "./claims.js"
+import os from "node:os"
 import { TestLockError, type TestLocks } from "./test-locks.js"
+import { approveInstructions, InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
+import { BoundaryStaleError, classificationOf, refuseHandoff, refuseStaleSend, type Boundaries } from "./boundary.js"
 import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import { sessionDetails } from "./session-details.js"
@@ -13,7 +33,9 @@ import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify, { type FastifyInstance } from "fastify"
 import type { WebSocket } from "ws"
-import { checkRemember, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { checkRemember, compileGlobs, isLockfile, redactString, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { lockfileChanges, sbomDiff, type DependencyChange } from "./sbom.js"
+import { addedLines, scanSource, type SastFinding } from "./sast.js"
 import {
   ClientMessage,
   WS_SUBPROTOCOL,
@@ -65,10 +87,18 @@ export interface HostApp {
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
+  /** D-003: the change evidence packs. Absent where they cannot be kept (tests). */
+  evidence?: import("./evidence.js").EvidenceService
+  /** D-059: the pins of what each project tells Claude. Absent where they cannot be kept (tests). */
+  instructions?: InstructionPins
   /** D-002: the sealed held-out checks. Absent where they cannot be kept (tests). */
   heldOut?: HeldOutChecks
   /** Section 6: the command that runs them, as a Codehouse action for the session. */
   heldOutExec?: (sessionId: string) => HeldOutExec
+  /** D-066: Codehouse's data folder, for the captures. */
+  dataDir?: string
+  /** D-004: a mutation run's test runs, as Codehouse actions. */
+  mutationExec?: (sessionId: string) => import("./mutation.js").MutationExec
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -453,7 +483,12 @@ export class HostServer {
 
   async #handle(cmd: ClientCommand): Promise<unknown> {
     const a = this.#opts.app
+    // D-025: anything you do on the desktop shows you are there.
+    a.manager.heartbeat()
     switch (cmd.type) {
+      case "set_deadman":
+        await this.#session(cmd.sessionId).setDeadman(cmd.minutes)
+        return undefined
       case "create_session": {
         const s = await a.manager.start({
           cwd: cmd.cwd,
@@ -538,6 +573,18 @@ export class HostServer {
         })
         if (!written) a.log("locks: the change could not be recorded in the audit log")
         return await l.state(cwd)
+      }
+      case "instructions_state": {
+        if (!a.instructions) throw new CommandError("unavailable", "Instruction pins are not available here")
+        return await a.instructions.state(cmd.cwd)
+      }
+      case "instructions_approve": {
+        // D-059: you read the change on the desktop and approve it; recorded before the pins move.
+        const pins = a.instructions
+        if (!pins) throw new CommandError("unavailable", "Instruction pins are not available here")
+        if (!(await approveInstructions(pins, a.audit, cmd.cwd)))
+          throw new CommandError("audit", "The approval could not be recorded, so the change is not approved.")
+        return await pins.state(cmd.cwd)
       }
       case "heldout_list": {
         // The desktop only: this socket is the desktop's, never the phone's or a push channel's.
@@ -643,9 +690,20 @@ export class HostServer {
       }
       case "term_stop":
         return { stopped: a.terminal?.stop(cmd.sessionId) ?? false }
-      case "prompt":
-        this.#session(cmd.sessionId).prompt(cmd.text)
+      case "prompt": {
+        const s = this.#session(cmd.sessionId)
+        // D-059: no turn starts on instructions changed outside Codehouse until you approve the change.
+        await s.checkInstructions()
+        // C-016: nor is anything sent to a model whose card saying where your words go is stale. Recorded.
+        try {
+          await refuseStaleSend(s, a.admin?.config().providers?.boundaries as Boundaries | undefined, a.audit)
+        } catch (e) {
+          if (e instanceof BoundaryStaleError) throw new CommandError("boundary-stale", e.message)
+          throw e
+        }
+        s.prompt(cmd.text)
         return undefined
+      }
       case "tell": {
         // G18: your message to another session, sent from this one's prompt box. It is yours, so it is a prompt like
         // any other there; the record says where it came from and went, and how long it was, never the words.
@@ -856,6 +914,366 @@ export class HostServer {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
       }
+      case "mutant_task": {
+        const s = this.#session(cmd.sessionId)
+        s.startMutantTask(cmd.survivor)
+        return { started: true }
+      }
+      case "mutation_run": {
+        // D-004: the changed lines of the change since the checkpoint, mutated one at a time in a sandbox copy.
+        const s = this.#session(cmd.sessionId)
+        if (!a.mutationExec) throw new CommandError("unavailable", "Mutation runs are not available here.")
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to test.")
+        const command = projectCommand(s.cwd, "tests")
+        if (!command) throw new CommandError("no-tests", "Codehouse could not find this project's test command (an npm test script, pytest or dotnet test).")
+        const changes: Array<{ path: string; text: string; lines: Set<number> }> = []
+        for (const x of c.files.filter((x) => x.change !== "deleted" && !x.binary && /\.[cm]?[jt]sx?$/i.test(x.path)).slice(0, 30)) {
+          const lines = [...addedLines(x.diff).values()][0]
+          const v = lines?.size ? await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined) : undefined
+          if (lines && v?.after !== undefined) changes.push({ path: x.path, text: v.after, lines })
+        }
+        const threshold = a.admin?.config().mutation?.thresholds?.[s.project]
+        const report = await runMutation({
+          root: s.cwd,
+          changes,
+          command,
+          exec: a.mutationExec(s.id),
+          sandbox: path.join(os.tmpdir(), `codeh-mutants-${s.id}-${Date.now().toString(36)}`),
+          ...(threshold !== undefined ? { threshold } : {}),
+        })
+        await a.audit.record({
+          session: s.id,
+          event: "mutation_run",
+          channel: "host",
+          tool: "mutation",
+          cwd: s.cwd,
+          project: s.project,
+          input: { tool: report.tool, mutants: report.mutants, killed: report.killed, survived: report.survived.length, ...(report.score !== undefined ? { score: report.score } : {}), ...(report.aborted ? { aborted: report.aborted } : {}) },
+          verdict: { outcome: "allow", ruleId: "mutation-run", reason: report.aborted ? `A mutation run stopped: ${report.aborted}.` : "The tests were run against small changes to the change's new lines.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return report
+      }
+      case "evidence_build": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.evidence) throw new CommandError("unavailable", "Evidence packs are not available here.")
+        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions() }, cmd.ref ? { ref: cmd.ref } : {})
+        if (!got) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to gather.")
+        return got
+      }
+      case "change_findings": {
+        // D-062: the lines each changed file adds, parsed as they are now; nothing runs.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) return { findings: [] }
+        const findings: SastFinding[] = []
+        for (const x of c.files.filter((x) => x.change !== "deleted" && !x.binary).slice(0, 60)) {
+          const lines = [...addedLines(x.diff).values()][0]
+          if (!lines?.size) continue
+          const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined)
+          if (v?.after !== undefined) findings.push(...(await scanSource(x.path, v.after, lines)))
+        }
+        // D-066: the changed source files nothing in the project's tests names, to offer a capture for.
+        const tests = await listFiles(s.cwd).then((l) => l.filter((p) => TEST_FILE.test(p))).catch(() => [] as string[])
+        const untested = c.files
+          .filter((x) => x.change === "modified" && /\.[cm]?[jt]sx?$/i.test(x.path) && !TEST_FILE.test(x.path))
+          .map((x) => x.path)
+          .filter((p) => looksUntested(s.cwd, p, tests))
+        return { findings, untested }
+      }
+      case "requirement_impact": {
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        const changed = c.since && "files" in c ? c.files.map((x) => x.path.replace(/\\/g, "/")) : []
+        const { requirements } = readRequirements(s.cwd)
+        const touched = requirements.filter((r) => changed.includes(r.file))
+        if (!touched.length) return { impacts: [] }
+        const testFiles = await listFiles(s.cwd).then((l) => l.filter((p) => TEST_FILE.test(p))).catch(() => [] as string[])
+        const commits = new Map<string, string[]>()
+        for (const r of touched) commits.set(r.id, await gitLines(s.cwd, ["log", "--all", "--format=%H", "-F", `--grep=${r.id}`]).catch(() => []))
+        const rows = traceMatrix({ root: s.cwd, requirements: touched, commitsFor: (id) => commits.get(id) ?? [], testFiles, evidenceFor: () => [] })
+        const filesOf = new Map<string, string[]>()
+        for (const ids of commits.values())
+          for (const h of ids.slice(0, 30))
+            if (!filesOf.has(h)) filesOf.set(h, await gitLines(s.cwd, ["show", "--name-only", "--format=", h]).catch(() => []))
+        return {
+          impacts: touched.map((r, i) => impactOf({ root: s.cwd, requirement: r, row: rows[i]!, filesOf: (h) => filesOf.get(h) ?? [] })),
+        }
+      }
+      case "adr_drafts": {
+        const s = this.#session(cmd.sessionId)
+        const auditDir = a.admin?.auditDir
+        const decisions = auditDir ? decisionsIn(sessionRecords(auditDir, s.id)) : []
+        const first = nextNumber(s.cwd)
+        const date = new Date().toISOString().slice(0, 10)
+        return { drafts: decisions.map((d, i) => ({ seq: d.seq, kind: d.kind, title: d.title, ...draftAdr(d, { number: first + i, session: s.id, date }) })) }
+      }
+      case "adr_write": {
+        // D-038: written by the Host only after you accept it, and recorded.
+        const s = this.#session(cmd.sessionId)
+        let rel: string
+        try {
+          rel = await writeAdr(s.cwd, cmd.file, cmd.text)
+        } catch (e) {
+          throw new CommandError("not-written", (e as Error).message)
+        }
+        await a.audit.record({
+          session: s.id,
+          event: "adr_written",
+          channel: "desktop",
+          tool: "adr",
+          cwd: s.cwd,
+          project: s.project,
+          input: { file: rel, chars: cmd.text.length },
+          verdict: { outcome: "allow", ruleId: "adr", reason: "You accepted an architecture decision record, and Codehouse wrote it into the project.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { file: rel }
+      }
+      case "threat_delta": {
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) return { drafts: [] }
+        const added = c.files
+          .filter((x) => x.change !== "deleted" && !x.binary)
+          .map((x) => {
+            const lines: Array<{ line: number; text: string }> = []
+            let at: number | undefined
+            for (const l of x.diff.split(/\r?\n/)) {
+              const h = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(l)
+              if (h) at = Number(h[1])
+              else if (at !== undefined && l.startsWith("+") && !l.startsWith("+++")) lines.push({ line: at++, text: l.slice(1) })
+              else if (at !== undefined && !l.startsWith("-")) at++
+            }
+            return { file: x.path, lines }
+          })
+        const dependencies: DependencyChange[] = []
+        for (const x of c.files.filter((x) => isLockfile(x.path)).slice(0, 20)) {
+          const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined)
+          if (v) dependencies.push(...lockfileChanges(x.path, v.before, v.after))
+        }
+        const drafts = threatDelta({ added, dependencies })
+        return { drafts: drafts.map((d) => ({ ...d, markdown: draftMarkdown(d) })) }
+      }
+      case "architecture": {
+        const s = this.#session(cmd.sessionId)
+        const files = await listFiles(s.cwd).catch(() => [] as string[])
+        const graph = modulesOf(await updateGraph(s.cwd, files))
+        const approved = readApproved(s.cwd)
+        const drift = driftOf(graph, approved)
+        return {
+          ...(readArchRules(s.cwd).problem ? { problem: readArchRules(s.cwd).problem } : {}),
+          modules: Object.keys(graph.modules).length,
+          approved: approved !== undefined,
+          drift,
+          cycles: cyclesOf(graph),
+          diagrams: c4Diagrams(s.project, graph, drift),
+          // D-045: and the project's fitness checks.
+          ...(await fitnessCheck(s.cwd, files).then((x) => (x ? { fitness: x } : {})).catch(() => ({}))),
+        }
+      }
+      case "arc42": {
+        const s = this.#session(cmd.sessionId)
+        const files = await listFiles(s.cwd).catch(() => [] as string[])
+        const graph = modulesOf(await updateGraph(s.cwd, files))
+        const drift = driftOf(graph, readApproved(s.cwd))
+        return arc42({
+          project: s.project,
+          date: new Date().toISOString().slice(0, 10),
+          requirements: readRequirements(s.cwd).requirements,
+          ...(readArchRules(s.cwd).rules ? { rules: readArchRules(s.cwd).rules! } : {}),
+          ...(Object.keys(graph.modules).length ? { diagrams: c4Diagrams(s.project, graph, drift) } : {}),
+          adrs: readAdrs(s.cwd),
+          ...(await fitnessCheck(s.cwd, files).then((x) => (x ? { fitness: x } : {})).catch(() => ({}))),
+          drift,
+          deployment: deploymentFiles(s.cwd),
+          threats: [],
+        })
+      }
+      case "architecture_approve": {
+        const s = this.#session(cmd.sessionId)
+        const graph = modulesOf(await updateGraph(s.cwd, await listFiles(s.cwd).catch(() => [] as string[])))
+        await approveArch(s.cwd, graph)
+        await a.audit.record({
+          session: s.id,
+          event: "architecture_approved",
+          channel: "desktop",
+          tool: "architecture",
+          cwd: s.cwd,
+          project: s.project,
+          input: { modules: Object.keys(graph.modules).length, edges: graph.edges.length },
+          verdict: { outcome: "allow", ruleId: "architecture", reason: "You approved the project's architecture as it is; drift is measured from here.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { ok: true }
+      }
+      case "tests_first": {
+        const s = this.#session(cmd.sessionId)
+        s.startTestsFirst(cmd.criteria)
+        return { started: true }
+      }
+      case "tests_first_approve": {
+        // D-036: the test files the session changed since its first checkpoint are the ones approved and locked.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id)
+        const files = c.since && "files" in c ? c.files.filter((x) => x.change !== "deleted" && TEST_FILE.test(x.path)).map((x) => x.path) : []
+        try {
+          return { locked: await s.approveTests(files) }
+        } catch (e) {
+          throw new CommandError("not-approved", (e as Error).message)
+        }
+      }
+      case "assumption_verify": {
+        const s = this.#session(cmd.sessionId)
+        await s.verifyAssumption(cmd.id)
+        return { ok: true }
+      }
+      case "requirements": {
+        // D-033: read from the project's docs\requirements, linked by the ids commits and tests name.
+        const s = this.#session(cmd.sessionId)
+        const { requirements, problems } = readRequirements(s.cwd)
+        const testFiles = await listFiles(s.cwd).then((l) => l.filter((p) => TEST_FILE.test(p))).catch(() => [] as string[])
+        const commits = new Map<string, string[]>()
+        for (const r of requirements)
+          commits.set(r.id, await gitLines(s.cwd, ["log", "--all", "--format=%H", "-F", `--grep=${r.id}`]).catch(() => []))
+        const packs = a.evidence?.store.packs(s.id) ?? []
+        const rows = traceMatrix({
+          root: s.cwd,
+          requirements,
+          commitsFor: (id) => commits.get(id) ?? [],
+          testFiles,
+          evidenceFor: (c) => packs.filter((p) => p.pack.range.commit === c).map((p) => p.sha),
+        })
+        return { dir: REQUIREMENTS_DIR, rows, problems }
+      }
+      case "scope": {
+        // D-034, D-035: from the plan in the audit log and the change since the checkpoint.
+        const s = this.#session(cmd.sessionId)
+        const auditDir = a.admin?.auditDir
+        const plan = auditDir ? approvedPlan(sessionRecords(auditDir, s.id)) : undefined
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        const files = c.since && "files" in c ? c.files : []
+        const { requirements } = readRequirements(s.cwd)
+        const { planned, outside } = scopeOf(plan, files.map((x) => x.path))
+        return {
+          hasPlan: plan !== undefined,
+          planned,
+          outside,
+          unrequested: unrequested({ plan, requirements, files: files.filter((x) => !x.binary && x.change !== "deleted") }),
+        }
+      }
+      case "provenance_graph": {
+        // D-028: each changed hunk, the edit that made it, and what was read before it; from the audit log alone.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) return { hunks: [] }
+        const auditDir = a.admin?.auditDir
+        const records = auditDir ? sessionRecords(auditDir, s.id) : []
+        const isUntrusted = compileGlobs((a.admin?.config().untrustedFiles ?? UNTRUSTED_FILES).map((g) => g.toLowerCase()))
+        return {
+          hunks: provenanceGraph({
+            records,
+            files: c.files.filter((x) => x.path === cmd.file || cmd.file === undefined),
+            untrusted: (file) => isUntrusted(file.replace(/\\/g, "/").toLowerCase()),
+          }),
+        }
+      }
+      case "characterise": {
+        // D-066: the file's behaviour as it was at the checkpoint, captured in a sandbox and kept only if it replays green.
+        const s = this.#session(cmd.sessionId)
+        if (!a.mutationExec || !a.dataDir) throw new CommandError("unavailable", "Captures are not available here.")
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is nothing from before to capture.")
+        const v = await a.checkpoints.versions(s.cwd, c.since.ref, cmd.file)
+        if (v.before === undefined) throw new CommandError("new-file", "The file did not exist before the change, so it had no behaviour to capture.")
+        const stamp = Date.now().toString(36)
+        let cap: Capture
+        try {
+          cap = await capture({
+            root: s.cwd,
+            file: cmd.file,
+            before: v.before,
+            from: c.since.ref,
+            exec: a.mutationExec(s.id),
+            sandbox: (n) => path.join(os.tmpdir(), `codeh-capture-${s.id}-${stamp}-${n}`),
+            redact: (x) => redactString(x, { terms: a.admin?.config().redactTerms ?? [] }),
+          })
+        } catch (e) {
+          throw new CommandError("not-captured", `It could not be captured: ${(e as Error).message}`)
+        }
+        const dir = path.join(a.dataDir, "characterisation", s.id)
+        fs.mkdirSync(dir, { recursive: true })
+        await writeFileAtomic(path.join(dir, `${captureKey(cmd.file)}.json`), JSON.stringify(cap, null, 1))
+        await a.audit.record({
+          session: s.id,
+          event: "behaviour_captured",
+          channel: "host",
+          tool: "characterise",
+          cwd: s.cwd,
+          project: s.project,
+          input: { file: cmd.file, cases: cap.cases.length },
+          verdict: { outcome: "allow", ruleId: "characterisation", reason: "What the file did before the change was captured, redacted, and replayed green.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { cases: cap.cases.length }
+      }
+      case "behaviour_diff": {
+        // D-006: the captured inputs replayed against the file as it is now.
+        const s = this.#session(cmd.sessionId)
+        if (!a.mutationExec || !a.dataDir) throw new CommandError("unavailable", "Captures are not available here.")
+        let cap: Capture
+        try {
+          cap = JSON.parse(fs.readFileSync(path.join(a.dataDir, "characterisation", s.id, `${captureKey(cmd.file)}.json`), "utf8")) as Capture
+        } catch {
+          throw new CommandError("no-capture", "Capture the file's behaviour first.")
+        }
+        const now = fs.readFileSync(path.join(s.cwd, cmd.file), "utf8")
+        let deltas: BehaviourDelta[]
+        try {
+          deltas = await behaviourDiff({
+            root: s.cwd,
+            capture: cap,
+            now,
+            exec: a.mutationExec(s.id),
+            sandbox: path.join(os.tmpdir(), `codeh-replay-${s.id}-${Date.now().toString(36)}`),
+            redact: (x) => redactString(x, { terms: a.admin?.config().redactTerms ?? [] }),
+          })
+        } catch (e) {
+          throw new CommandError("not-replayed", `It could not be replayed: ${(e as Error).message}`)
+        }
+        await a.audit.record({
+          session: s.id,
+          event: "behaviour_compared",
+          channel: "host",
+          tool: "characterise",
+          cwd: s.cwd,
+          project: s.project,
+          input: { file: cmd.file, cases: cap.cases.length, changed: deltas.length },
+          verdict: { outcome: "allow", ruleId: "characterisation", reason: "The captured inputs were replayed against the file as it is now.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { cases: cap.cases.length, deltas }
+      }
+      case "change_sbom": {
+        // D-056: from the lockfiles as they were at the checkpoint and as they are now; nothing runs or is fetched.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        const locks = c.since ? ("files" in c ? c.files : []).filter((x) => isLockfile(x.path)).slice(0, 20) : []
+        const all: DependencyChange[] = []
+        for (const x of locks) {
+          const v = await a.checkpoints.versions(s.cwd, c.since!.ref, x.path)
+          all.push(...lockfileChanges(x.path, v.before, v.after))
+        }
+        return {
+          lockfiles: locks.map((x) => x.path),
+          bom: sbomDiff(all, {
+            project: s.project,
+            version: a.updates?.status().current ?? "unknown",
+            ...(c.since ? { describe: `changes since ${c.since.label} (${c.since.ref})` } : {}),
+          }),
+        }
+      }
       case "change_versions": {
         const s = this.#session(cmd.sessionId)
         return await a.checkpoints.versions(s.cwd, cmd.ref, cmd.path)
@@ -937,6 +1355,15 @@ export class HostServer {
           throw new Error(
             "That gateway's provider may keep more than Claude does, so a chat is not carried on there.",
           )
+        // D-085: and only content the target model's card allows: confidential content needs a card in date that says so.
+        const config = a.admin?.config()
+        const classification = classificationOf(config?.dataClassification as Parameters<typeof classificationOf>[0], from.project)
+        const refused = await refuseHandoff(
+          { session: cmd.from, from: from.model ?? "default", to: cmd.model, local: true, classification },
+          config?.providers?.boundaries as Boundaries | undefined,
+          this.#opts.app.audit,
+        )
+        if (refused) throw new CommandError("handoff-denied", refused)
         const recorded = await this.#opts.app.audit.record({
           session: cmd.from,
           event: "fallback_used",
@@ -1076,8 +1503,20 @@ function classify(e: unknown): CommandError {
   if (e instanceof SessionLimitError) return new CommandError("session-limit", e.message)
   if (e instanceof MemoryRefusedError) return new CommandError("memory", e.message)
   if (e instanceof LockedTestsChangedError) return new CommandError("locked-tests", e.message)
+  if (e instanceof InstructionsChangedError) return new CommandError("instructions-changed", e.message)
   if (e instanceof ManagedPolicyError) return new CommandError("managed-policy", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)
   return new CommandError("failed", (e as Error).message ?? "The command failed")
 }
+
+/** D-066: a capture's file name, from the file's path. */
+const captureKey = (file: string) => createHash("sha256").update(file.replace(/\\/g, "/")).digest("hex").slice(0, 24)
+
+/** D-033: a git command's output, a line at a time. */
+const gitLines = (cwd: string, args: string[]): Promise<string[]> =>
+  new Promise((resolve, reject) =>
+    execFileCb("git", args, { cwd, windowsHide: true, timeout: 20_000, maxBuffer: 16 * 1024 * 1024 }, (e, out) =>
+      e ? reject(e) : resolve(String(out).split(/\r?\n/).filter(Boolean)),
+    ),
+  )

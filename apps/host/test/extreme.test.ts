@@ -1,4 +1,6 @@
 import { LOCKED_TEST_RULE } from "../src/test-locks.js"
+import { INSTRUCTIONS_RULE } from "../src/instruction-pins.js"
+import { INSTALLER_RULE } from "@gatehouse/policy"
 import { describe, expect, it, vi } from "vitest"
 import {
   CANNOT_UNDO_ASKS,
@@ -107,7 +109,10 @@ describe("Extreme approval mode", () => {
       // The card says why Extreme approval did not approve it.
       expect(t.request.mock.calls[0]?.[0], id).toMatchObject({
         // D-007: a locked test's own reason already says Extreme approval does not approve it.
-        verdict: { ruleId: id, reason: id === LOCKED_TEST_RULE ? "because" : `because ${EXTREME_CANNOT_APPROVE}` },
+        verdict: {
+          ruleId: id,
+          reason: id === LOCKED_TEST_RULE || id === INSTALLER_RULE || id === INSTRUCTIONS_RULE ? "because" : `because ${EXTREME_CANNOT_APPROVE}`,
+        },
       })
     }
     expect(NEVER_AUTO_APPROVED.has("evaluator-unavailable")).toBe(true)

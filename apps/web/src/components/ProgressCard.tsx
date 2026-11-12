@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { send } from "../store"
 import type { Todo } from "../lib/transcript"
 
 /** How many steps are done, out of how many. */
@@ -94,17 +95,43 @@ function visible(todos: Todo[], limit: number): Todo[] {
  * completed, in progress or not started"): how far Claude is, and each step. A long plan shows the steps around the
  * one in progress until you open it all.
  */
-export function ProgressCard({ todos }: { todos: Todo[] }) {
+/** D-037: an assumption Claude declared, as the session reports it. */
+export interface Assumption {
+  id: string
+  text: string
+  check?: string
+  at: string
+  verified?: boolean
+}
+
+export function ProgressCard({ todos, sessionId, assumptions = [] }: { todos: Todo[]; sessionId?: string; assumptions?: Assumption[] }) {
   const [all, setAll] = useState(false)
   const { done, total } = progressOf(todos)
-  if (!total) return null
+  // D-035: the files changed that the approved plan did not name, read again as the steps move.
+  const [outside, setOutside] = useState<string[]>()
+  useEffect(() => {
+    if (!sessionId || !total) return
+    void send({ type: "scope", sessionId }).then((r) => {
+      const d = r.ok ? (r.data as { hasPlan: boolean; outside: string[] }) : undefined
+      setOutside(d?.hasPlan ? d.outside : undefined)
+    })
+  }, [sessionId, total, done])
+  const open = assumptions.filter((a) => !a.verified)
+  if (!total && !open.length) return null
   return (
     <section className="progress-card panel mb-2 grid gap-2 px-3 py-2" aria-label="Progress">
       <div className="flex items-center gap-3">
         <strong className="text-[13px]">Progress</strong>
-        <span className="text-[12.5px] text-mut">
-          {done} of {total} done
-        </span>
+        {total ? (
+          <span className="text-[12.5px] text-mut">
+            {done} of {total} done
+          </span>
+        ) : null}
+        {outside?.length ? (
+          <span className="text-[12.5px] text-warn" aria-label={`${outside.length} changed outside the plan: ${outside.join(", ")}`}>
+            {outside.length === 1 ? "1 file changed outside the plan" : `${outside.length} files changed outside the plan`}
+          </span>
+        ) : null}
         <span
           className="h-1 min-w-12 flex-1 overflow-hidden rounded bg-s2"
           role="progressbar"
@@ -113,7 +140,7 @@ export function ProgressCard({ todos }: { todos: Todo[] }) {
           aria-valuemax={total}
           aria-valuenow={done}
         >
-          <span className="block h-full bg-acc" style={{ width: `${(done / total) * 100}%` }} />
+          <span className="block h-full bg-acc" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
         </span>
         {total > 5 ? (
           <button
@@ -126,7 +153,34 @@ export function ProgressCard({ todos }: { todos: Todo[] }) {
           </button>
         ) : null}
       </div>
-      <StepList todos={todos} {...(all ? {} : { limit: 5 })} />
+      {total ? <StepList todos={todos} {...(all ? {} : { limit: 5 })} /> : null}
+      {open.length ? (
+        <div className="grid gap-1" aria-label="Assumptions">
+          <strong className="text-[12.5px]">
+            {open.length === 1 ? "1 assumption to check" : `${open.length} assumptions to check`}
+          </strong>
+          <ul className="m-0 grid list-none gap-1 p-0 text-[12.5px]">
+            {open.map((a) => (
+              <li key={a.id} className="flex items-start gap-2">
+                <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                  {a.text}
+                  {a.check ? <span className="text-mut"> To check: {a.check}</span> : null}
+                </span>
+                {sessionId ? (
+                  <button
+                    type="button"
+                    className="btn !min-h-6 !px-2 !text-[12px]"
+                    aria-label={`It holds: ${a.text}`}
+                    onClick={() => void send({ type: "assumption_verify", sessionId, id: a.id })}
+                  >
+                    It holds
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   )
 }

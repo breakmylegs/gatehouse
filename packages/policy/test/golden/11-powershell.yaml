@@ -95,7 +95,7 @@
 - { t: PowerShell, cmd: "irm http://x", o: escalate, r: network }
 - { t: PowerShell, cmd: "curl http://x", o: escalate, r: network }
 - { t: PowerShell, cmd: "npm install", o: escalate, r: package-install }
-- { t: PowerShell, cmd: "winget install x", o: escalate, r: package-install }
+- { t: PowerShell, cmd: "winget install x", o: escalate, r: installer-admission, note: "D-096" }
 - { t: PowerShell, cmd: "gh pr list", o: escalate, r: git-remote }
 - { t: PowerShell, cmd: "git remote -v", o: escalate, r: git-remote }
 - { t: PowerShell, cmd: "git push origin main", o: escalate, r: git-remote }

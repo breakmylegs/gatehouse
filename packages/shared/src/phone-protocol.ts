@@ -31,9 +31,33 @@ export interface PhoneSessions {
     waiting: number
     /** The latest of what was said, oldest first, as "You:" and "Claude:" lines. */
     latest: string
+    /** Owner, 11 Nov (see sessions remotely): its permission mode, as the desktop names it. */
+    mode?: string
+    /** What it is doing right now, while a turn runs (the desktop's live line). */
+    activity?: PhoneActivity
+    /** The latest of the conversation, oldest first: what you and Claude said and the tools Claude used. */
+    recent?: PhoneEntry[]
   }>
   /** G32: the routines you allowed to be started from the phone, by name only (B35's safe variant). */
   templates?: Array<{ id: string; name: string }>
+  /** D-029b: the audit chain's head, for the phone to anchor with its passkey. */
+  auditHead?: { seq: number; hash: string }
+}
+
+/** What a session is doing now, without the tool's input: only its target, redacted, as on the desktop. */
+export interface PhoneActivity {
+  phase: "sent" | "thinking" | "replying" | "preparing" | "running"
+  since: string
+  tool?: string
+  target?: string
+  /** For preparing: how much of the tool's input Claude has written. */
+  chars?: number
+}
+
+/** One step of the conversation: something you said, something Claude said, or a tool Claude used and its target. */
+export interface PhoneEntry {
+  who: "you" | "claude" | "tool"
+  text: string
 }
 
 export interface OpenedRequest {
@@ -109,6 +133,8 @@ export function newEnvelope(o: {
   sessionId?: string
   text?: string
   templateId?: string
+  /** D-029b: the audit record an anchor names. */
+  anchor?: { seq: number; hash: string }
 }): Envelope {
   return {
     v: 1,
@@ -117,6 +143,7 @@ export function newEnvelope(o: {
     ...(o.sessionId !== undefined ? { sessionId: o.sessionId } : {}),
     ...(o.templateId !== undefined ? { templateId: o.templateId } : {}),
     ...(o.text !== undefined ? { text: o.text } : {}),
+    ...(o.anchor !== undefined ? { anchor: o.anchor } : {}),
     nonce: o.nonce ?? b64u(globalThis.crypto.getRandomValues(new Uint8Array(24))),
     ...(o.decision !== undefined ? { decision: o.decision } : {}),
     ...(o.message?.trim() ? { message: o.message.trim().slice(0, 500) } : {}),

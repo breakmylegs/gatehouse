@@ -136,6 +136,8 @@ export interface State {
   compare?: { ids: string[]; at: number }
   /** G31: an audit record to open when the Audit page next shows, by its number. */
   auditOpen?: number
+  /** C-010: a call from a session's timeline to try against the live policy when the Approver page next shows. */
+  tryRequest?: { tool: string; text: string; cwd: string }
   theme: "light" | "dark"
   /** No choice of yours is kept, so the window follows the Windows theme as it changes. */
   themeFollows: boolean
@@ -795,6 +797,8 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       if (data.reason === "spend")
         return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
+    case "heartbeat_missed":
+      return `Paused: nothing was heard from you for ${String(data.minutes)} minutes, the dead-man timer. Start it again when you are back.`
     case "remember_refused":
       // D-015: allowed this once, but not remembered, and why.
       return `Not remembered: ${str(data.why) ?? ""}`

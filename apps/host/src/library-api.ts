@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -17,7 +18,7 @@ import {
 } from "@gatehouse/policy"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
-import { replayRecords } from "./api.js"
+import { regressionGate, replayRecords } from "./api.js"
 
 /**
  * The rule library: shipped packs you can switch on, the built-in rules you can switch off (allow and escalate only),
@@ -58,6 +59,8 @@ function parseBody(body: unknown): { user?: UserRules; errors: string[] } {
   const checked = checkUserRules(body)
   return checked.ok ? { user: checked.value, errors: [] } : { errors: checked.errors }
 }
+
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex")
 
 /** What changed between two versions of your rules, by name only, for the audit log. */
 function changes(before: UserRules, after: UserRules): string[] {
@@ -201,8 +204,16 @@ export function registerLibraryRoutes(app: FastifyInstance, ctx: AdminContext): 
         errors: cand.errors,
       })
     const before = readUserRules(file, []) ?? { version: 1 as const }
+    // D-026: the body is your rules alone, so the typed phrase comes as ?confirm=.
+    const confirm = (req.query as Record<string, unknown> | undefined)?.confirm
+    const text = stringifyYaml(parsed.user)
+    const refused = await regressionGate(ctx, cand.policy, confirm, {
+      from: sha256(stringifyYaml(before)),
+      to: sha256(text),
+    })
+    if (refused) return bad(reply, 409, refused.error, { regression: refused.regression })
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    await writeFileAtomic(file, stringifyYaml(parsed.user))
+    await writeFileAtomic(file, text)
     ctx.store.load()
     const changed = changes(before, parsed.user)
     const recorded = await ctx.audit.record({

@@ -34,11 +34,11 @@
 - { t: Bash, cmd: "git fetch && git status", o: escalate, r: no-rule }
 - { t: Bash, cmd: "git remote -v", o: escalate, r: git-remote }
 - { t: Bash, cmd: "gh pr list", o: escalate, r: git-remote }
-- { t: Bash, cmd: "pip install requests", o: escalate, r: package-install }
-- { t: Bash, cmd: "winget install foo", o: escalate, r: package-install }
-- { t: Bash, cmd: "npm i lodash", o: escalate, r: package-install }
+- { t: Bash, cmd: "pip install requests", o: escalate, r: dependency-new, note: "a package the project does not use yet (D-053)" }
+- { t: Bash, cmd: "winget install foo", o: escalate, r: installer-admission, note: "D-096" }
+- { t: Bash, cmd: "npm i lodash", o: escalate, r: dependency-new, note: "a package the project does not use yet (D-053)" }
 - { t: Bash, cmd: "npm install", o: escalate, r: package-install }
-- { t: Bash, cmd: "choco install git", o: escalate, r: package-install }
+- { t: Bash, cmd: "choco install git", o: escalate, r: installer-admission, note: "D-096" }
 - { t: Bash, cmd: "curl https://example.com", o: escalate, r: network }
 - { t: Bash, cmd: "git status && curl https://example.com", o: escalate, r: network }
 - { t: Bash, cmd: "diskpart", o: deny, r: destructive-shell }

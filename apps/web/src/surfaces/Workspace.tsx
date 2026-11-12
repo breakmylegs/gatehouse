@@ -1,6 +1,13 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { Decisions } from "../components/Decisions"
+import { Architecture } from "../components/Architecture"
+import { TestsFirstBanner, TestsFirstStart } from "../components/TestsFirst"
+import { Requirements } from "../components/Requirements"
+import { Evidence } from "../components/Evidence"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
+import { InstructionsReview } from "../components/InstructionsReview"
+import { InjectionFlags } from "../components/InjectionFlags"
 import { BranchNav, BranchSteps, useBranchSteps } from "../components/BranchNav"
 import {
   aboveCap,
@@ -64,6 +71,7 @@ import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
 import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
 import { Walkthrough } from "../components/Walkthrough"
+import { Timeline } from "../components/Timeline"
 import { SearchPane } from "../components/SearchPane"
 import { GitPane } from "../components/GitPane"
 import { PictureViewer } from "../components/PictureViewer"
@@ -345,6 +353,18 @@ function SessionPane({
   const [bypassOpen, setBypassOpen] = useState(false)
   // G31: the evidence for this session's work, above its transcript.
   const [walkthrough, setWalkthrough] = useState(false)
+  // C-010: every call of the session from the audit log, in order.
+  const [timeline, setTimeline] = useState(false)
+  // D-003: the change's evidence pack.
+  const [evidence, setEvidence] = useState(false)
+  // D-033: the project's requirements and their trace matrix.
+  const [requirements, setRequirements] = useState(false)
+  // D-042, D-043: the project's architecture and its drift.
+  const [architecture, setArchitecture] = useState(false)
+  // D-038: the session's decisions as ADR drafts.
+  const [decisions, setDecisions] = useState(false)
+  // D-036: starting tests-first mode.
+  const [testsFirst, setTestsFirst] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
   // A file from one session is never shown in another.
   useEffect(() => setOpened(undefined), [selected])
@@ -539,6 +559,15 @@ function SessionPane({
     session.bypass
       ? { label: "End the limit bypass", onSelect: () => void setBypass(session.id, null) }
       : { label: "Bypass the limits...", onSelect: () => setBypassOpen(true) },
+    // D-025: a dead-man timer for Extreme approval: it pauses if nothing is heard from you in time.
+    ...(session.extreme
+      ? session.deadman
+        ? [{ label: `Dead-man timer off (now ${session.deadman.minutes} min)`, onSelect: () => void send({ type: "set_deadman", sessionId: session.id, minutes: null }) }]
+        : [5, 15, 30, 60].map((m) => ({
+            label: `Dead-man timer: ${m} minutes`,
+            onSelect: () => void send({ type: "set_deadman", sessionId: session.id, minutes: m }),
+          }))
+      : []),
     // B25: carry on until a check passes, while Extreme approval carries on.
     ...(chat
       ? []
@@ -569,6 +598,12 @@ function SessionPane({
         }),
     },
     ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
+    ...(chat ? [] : [{ label: "Timeline...", onSelect: () => setTimeline(true) }]),
+    ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
+    ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
+    ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
+    ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
+    ...(chat || session.testsFirst ? [] : [{ label: "Tests first...", onSelect: () => setTestsFirst(true) }]),
     { kind: "separator" },
     {
       label: "Larger text",
@@ -772,6 +807,36 @@ function SessionPane({
       {walkthrough ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Walkthrough sessionId={session.id} onClose={() => setWalkthrough(false)} />
+        </div>
+      ) : null}
+      {timeline ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Timeline sessionId={session.id} onClose={() => setTimeline(false)} />
+        </div>
+      ) : null}
+      {testsFirst ? (
+        <div className="px-3 pt-2">
+          <TestsFirstStart sessionId={session.id} {...(session.goal ? { goal: session.goal } : {})} onClose={() => setTestsFirst(false)} />
+        </div>
+      ) : null}
+      {decisions ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Decisions sessionId={session.id} onClose={() => setDecisions(false)} />
+        </div>
+      ) : null}
+      {architecture ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Architecture sessionId={session.id} onClose={() => setArchitecture(false)} />
+        </div>
+      ) : null}
+      {requirements ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {evidence ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Evidence sessionId={session.id} onClose={() => setEvidence(false)} />
         </div>
       ) : null}
       {goalOpen ? (
@@ -1001,6 +1066,8 @@ function SessionPane({
         {session.paused ? <PausedLine session={session} paused={session.paused} /> : null}
         {!session.paused && session.bypass ? <BypassLine session={session} /> : null}
         <CounterexampleCards session={session} />
+        {session.kind === "chat" ? null : <InstructionsFor session={session} />}
+        <InjectionFlags session={session} />
         {!session.paused && !session.bypass && bypassOpen ? (
           <div className="pane-stopped">
             <BypassForm session={session} onClose={() => setBypassOpen(false)} />
@@ -1027,9 +1094,16 @@ function SessionPane({
           <BackgroundLine tasks={background} />
         ) : null}
         {/* The plan while there is one to follow: steps done, in progress and not started (owner, 2 Nov). */}
-        {transcript.todos.length &&
-        (session.state === "running" || transcript.todos.some((t) => t.status !== "completed")) ? (
-          <ProgressCard todos={transcript.todos} />
+        {session.testsFirst ? <TestsFirstBanner sessionId={session.id} /> : null}
+        {session.intentDrift ? (
+          <section aria-label="Drifting from the goal" role="status" className="panel mb-2 px-3 py-2 text-[13px]">
+            <strong className="text-warn">Drifting from the goal?</strong> {session.intentDrift.reason}
+          </section>
+        ) : null}
+        {(transcript.todos.length &&
+          (session.state === "running" || transcript.todos.some((t) => t.status !== "completed"))) ||
+        session.assumptions?.some((a) => !a.verified) ? (
+          <ProgressCard todos={transcript.todos} sessionId={session.id} {...(session.assumptions ? { assumptions: session.assumptions } : {})} />
         ) : null}
         <Composer sessionId={session.id} disabled={ended} starting={session.state === "starting"} />
         {/* What the session runs on, under the prompt box where you look when you send. */}
@@ -1447,6 +1521,24 @@ function ContextMeter({
  * Why a session stopped, in its own words, and a way to start it again on the same conversation (owner, 31 Oct:
  * "it is not clear why").
  */
+/** D-059: a message refused because the project's instructions changed outside Codehouse. */
+const INSTRUCTIONS_EVENT = "codehouse-instructions-changed"
+
+/** D-059: the review of a change to what the project tells Claude, looked at again after each turn and refusal. */
+function InstructionsFor({ session }: { session: SessionInfo }) {
+  const [refused, setRefused] = useState(0)
+  useEffect(() => {
+    const on = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === session.id) setRefused((n) => n + 1)
+    }
+    window.addEventListener(INSTRUCTIONS_EVENT, on)
+    return () => window.removeEventListener(INSTRUCTIONS_EVENT, on)
+  }, [session.id])
+  // Only when the Host says the instructions changed, or a message was refused for it; looked at again each time.
+  if (!session.instructionsChanged && !refused) return null
+  return <InstructionsReview cwd={session.cwd} nonce={refused * 2 + (session.instructionsChanged ? 1 : 0)} />
+}
+
 function StoppedLine({ session }: { session: SessionInfo }) {
   const [busy, setBusy] = useState(false)
   return (
@@ -1621,7 +1713,13 @@ function PausedLine({
   const [busy, setBusy] = useState(false)
   return (
     <div role="status" className="pane-stopped flex-wrap">
-      {paused.reason === "risk" ? (
+      {paused.reason === "heartbeat" ? (
+        // D-025: nothing was heard from you in time.
+        <span>
+          <strong>Paused.</strong> Nothing was heard from you within this session's dead-man timer, so
+          Extreme approval stopped it. Start it again when you are back.
+        </span>
+      ) : paused.reason === "risk" ? (
         // D-018: the session's risk budget is spent.
         <span>
           <strong>Paused.</strong> This session's risk budget is spent: Extreme approval approved as much
@@ -2173,7 +2271,12 @@ function Composer({
     setFiles([])
     setPasted([])
     const r = await send({ type: "prompt", sessionId, text: full })
-    if (!r.ok) toast.error(r.error?.message ?? "The prompt was not sent")
+    if (!r.ok) {
+      // D-059: the change to the project's instructions is shown above the prompt box for you to read.
+      if (r.error?.code === "instructions-changed")
+        window.dispatchEvent(new CustomEvent(INSTRUCTIONS_EVENT, { detail: sessionId }))
+      toast.error(r.error?.message ?? "The prompt was not sent")
+    }
   }
 
   return (

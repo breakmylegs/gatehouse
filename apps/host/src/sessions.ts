@@ -1,8 +1,19 @@
+import { noteCommit } from "./lineage.js"
+import type { IntentCheck } from "./intent-drift.js"
+import { adrContext, readAdrs } from "./adr.js"
+import { fitnessCheck, fitnessWords, hasFitness } from "./fitness.js"
+import { listFiles, mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
+import type { VulnCommitGuard } from "./vuln-snapshot.js"
+import type { EvidenceService } from "./evidence.js"
+import type { SastCommitGuard } from "./sast.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
-import { CLAIM_WORDS, commandFor, findClaims, type ClaimKind, type ClaimOutcome } from "./claims.js"
+import { CLAIM_WORDS, commandFor, findClaims, projectCommand, type ClaimKind, type ClaimOutcome } from "./claims.js"
+import { freshSeed, seedEnv, seededCommand } from "./seeds.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
+import { InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
+import type { InjectionFinding } from "./injection-scan.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
 import { EventEmitter } from "node:events"
@@ -41,7 +52,7 @@ import { pluginsWithMods } from "./marketplace.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
 import type { Worktrees } from "./worktrees.js"
 import type { SessionLink } from "./about-session.js"
-import { LoopGuard, LOOP_REPEATS } from "./loop-guard.js"
+import { LoopGuard, LOOP_REPEATS, warnText } from "./loop-guard.js"
 import { STUCK_MS, StuckWatch } from "./stuck-watch.js"
 import {
   assertSafeOptions,
@@ -218,12 +229,44 @@ export class LockedTestsChangedError extends Error {
   }
 }
 
+/** D-059: a change outside Codehouse to what a project tells Claude, recorded (the files, never their words). */
+async function recordInstructionsChanged(
+  audit: HostAudit,
+  session: string,
+  cwd: string,
+  project: string | undefined,
+  files: string[],
+): Promise<void> {
+  await audit
+    .record({
+      session,
+      event: "instructions_changed",
+      channel: "host",
+      tool: "instructions",
+      cwd,
+      ...(project ? { project } : {}),
+      input: { files, by: "outside" },
+      verdict: {
+        outcome: "escalate",
+        ruleId: "instructions-edit",
+        reason: "What this project tells Claude changed outside Codehouse, so nothing starts until you approve the change.",
+        risk: 80,
+        decidedBy: "rules",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    .catch(() => false)
+}
+
 export class LimitPausedError extends Error {
-  constructor(reason?: "spend" | "risk") {
+  constructor(reason?: "spend" | "risk" | "heartbeat") {
     super(
       reason === "risk"
         ? "This session is paused: its risk budget is spent. Start it again from its pane when you have looked at what it did."
-        : reason === "spend"
+        : reason === "heartbeat"
+          ? "This session is paused: nothing was heard from you within its dead-man time. Start it again from its pane when you have looked at what it did."
+          : reason === "spend"
           ? "This session is paused: today's spending reached the most Settings allows a day. Bypass the limits for this session, with a time or a most it may spend, to keep going."
           : "This session is paused at the plan limit set in Settings. Bypass the limits for this session, with a time or a most it may spend, to keep going.",
     )
@@ -257,6 +300,12 @@ export interface SessionInfo {
   effortCap?: Effort
   /** B25: the check Extreme approval carries on until. */
   goal?: string
+  /** D-040: a model on this computer found the work may have drifted from the goal. */
+  intentDrift?: { at: string; reason: string }
+  /** D-036: the session is writing its tests first, and they are not approved yet. */
+  testsFirst?: boolean
+  /** D-037: the assumptions Claude declared, until you verify them. */
+  assumptions?: Array<{ id: string; text: string; check?: string; at: string; verified?: boolean }>
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
   historyFrom?: string
   /**
@@ -274,8 +323,10 @@ export interface SessionInfo {
   testsWeakened?: number
   /** D-018: what is left of the session's risk budget; absent when it has none. */
   riskBudget?: number
+  /** D-025: the dead-man timer, when on. */
+  deadman?: { minutes: number; lastHeardFrom: string }
   /** D-009: claims that the work is done, as checked, newest last. */
-  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string }>
+  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean }>
   /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
   counterexamples?: Array<{ id: string; framework: string; example: string; writesItself: boolean; test?: string }>
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
@@ -298,6 +349,10 @@ export interface SessionInfo {
   local?: boolean
   /** Where its words go: "On this computer", or a provider through your gateway (ADR 0010). */
   localLabel?: string
+  /** D-059: what the project tells Claude changed outside Codehouse and waits for your review. */
+  instructionsChanged?: boolean
+  /** D-061: results that looked like prompt injection, newest last. */
+  flagged?: Array<{ tool: string; at: string; findings: Array<{ kind: string; sample: string }> }>
   /** A fork from a point: its earlier conversation is shown up to this message only. */
   historyUntil?: string
   /** The session it replaced in its pane (Retry and Edit), so Chat keeps both as branches of one conversation. */
@@ -309,7 +364,7 @@ export interface SessionInfo {
   /** Owner, 9 Nov: your bypass of the limits for this session, while it lasts. */
   bypass?: { since: string; until?: string; maxUsd?: number; spentUsd: number }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
-  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" }
+  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" | "heartbeat" }
 }
 
 export interface SessionEvents {
@@ -338,6 +393,15 @@ export interface SessionEvents {
         | "claim_checked"
         | "remember_refused"
         | "risk_budget_exhausted"
+        | "thrash_warned"
+        | "injection_flagged"
+        | "thrash_paused"
+        | "instructions_changed"
+        | "heartbeat_missed"
+        | "commit_noted"
+        | "mutant_task_started"
+        | "intent_drift"
+        | "mutant_rechecked"
       data: Record<string, unknown>
     },
   ]
@@ -419,6 +483,21 @@ export interface SessionDeps {
   grants?: GrantUses
   /** D-007: the locked tests. */
   locks?: TestLocks
+  /** D-062: the local analysis of what a session's commit would add. */
+  sast?: SastCommitGuard
+  /** D-057: the vulnerability snapshot, for what a session's commit would add. */
+  vulns?: VulnCommitGuard
+  /** D-040: compares the goal with what Claude says it is doing, with a model on this computer. */
+  intentCheck?: (goal: string, said: string) => Promise<IntentCheck>
+  /** D-005: a mutant's test runs, as Codehouse actions. */
+  mutationExec?: (sessionId: string) => MutationExec
+  /** D-003: the change evidence packs. */
+  evidence?: EvidenceService
+  /** D-059: the pins of what each project tells Claude. */
+  instructions?: InstructionPins
+  /** D-025, tests only: how long a minute of the dead-man timer is, and how often it is looked at. */
+  deadmanMinuteMs?: number
+  deadmanLookMs?: number
   /** Section 6: runs a command as Codehouse's own action (D-009's claim checks). */
   codehouseAction?: (r: ActionRequest) => Promise<ActionResult>
   account: AccountMonitor
@@ -637,6 +716,52 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** D-018: what is left of the session's risk budget, or undefined when there is none (the default). */
   #budget: number | undefined
+  /** D-025: the dead-man timer, off unless you set it: how often you must be heard from, and when you last were. */
+  #deadman: { minutes: number; last: number } | undefined
+  #deadmanTimer: NodeJS.Timeout | undefined
+
+  /**
+   * D-025: in Extreme approval, a session with the timer on wants a sign of you every so many minutes: anything you do
+   * on the desktop or sign on the phone, or "I'm still here" on the phone. Without one it pauses until you start it.
+   */
+  async setDeadman(minutes: number | null): Promise<void> {
+    clearInterval(this.#deadmanTimer)
+    this.#deadmanTimer = undefined
+    this.#deadman = minutes === null ? undefined : { minutes: Math.min(Math.max(Math.round(minutes), 1), 240), last: Date.now() }
+    await this.#auditLimit(
+      "deadman_set",
+      "dead-man",
+      minutes === null ? { off: true } : { minutes: this.#deadman!.minutes },
+      minutes === null ? "You turned the dead-man timer off for this session." : `You set a dead-man timer of ${this.#deadman!.minutes} minutes on this session.`,
+      "human-desktop",
+    )
+    if (this.#deadman) {
+      this.#deadmanTimer = setInterval(() => void this.#deadmanLook(), this.#deps.deadmanLookMs ?? 5_000)
+      this.#deadmanTimer.unref()
+    }
+    this.emit("state", this.info())
+  }
+
+  /** D-025: you were heard from. */
+  heartbeat(): void {
+    if (this.#deadman) this.#deadman.last = Date.now()
+  }
+
+  async #deadmanLook(): Promise<void> {
+    const d = this.#deadman
+    if (!d || !this.#extreme || this.#paused || !this.live) return
+    const unit = this.#deps.deadmanMinuteMs ?? 60_000
+    if (Date.now() - d.last < d.minutes * unit) return
+    await this.#auditLimit(
+      "extreme_heartbeat_missed",
+      "dead-man",
+      { minutes: d.minutes, lastHeardFrom: new Date(d.last).toISOString() },
+      `Nothing was heard from you for ${d.minutes} minute${d.minutes === 1 ? "" : "s"}, so Codehouse paused this Extreme session.`,
+      "rules",
+    )
+    this.emit("event", { type: "heartbeat_missed", data: { minutes: d.minutes } })
+    await this.pause(0, undefined, "heartbeat")
+  }
 
   /**
    * D-018, the risk budget (opt-in; Settings, Sessions): an allow given without a person, by Extreme approval or by
@@ -673,6 +798,37 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** D-007: calls a person approved that touched locked tests, by toolUseID, so they are pinned again after. */
   readonly #lockedCalls = new Map<string, string[]>()
+  /** D-059: the same for instruction files; and the change outside Codehouse last recorded, so it is recorded once. */
+  readonly #instructionCalls = new Map<string, string[]>()
+  /** D-061: results that looked like prompt injection, newest last, for the quarantine view. */
+  #flagged: Array<{ tool: string; at: string; findings: InjectionFinding[] }> = []
+  #instructionsSeen: string | undefined
+
+  /**
+   * D-059: refuses when what the project tells Claude changed outside Codehouse since it was pinned, until the owner
+   * approves the change on the desktop. Asked before each of your messages and each turn Extreme approval starts. A
+   * chat reads no project's instructions. Pins that cannot be read count as changed.
+   */
+  async checkInstructions(): Promise<void> {
+    if (this.#opts.kind === "chat" || !this.#deps.instructions) return
+    const changed = await this.#deps.instructions.changedOutside(this.cwd).catch(() => ["(the pins could not be read)"])
+    if (!changed.length) {
+      if (this.#instructionsSeen !== undefined) {
+        this.#instructionsSeen = undefined
+        this.emit("state", this.info())
+      }
+      return
+    }
+    const key = changed.join("\n")
+    if (this.#instructionsSeen !== key) {
+      this.#instructionsSeen = key
+      await recordInstructionsChanged(this.#deps.audit, this.id, this.cwd, this.project, changed)
+      this.emit("event", { type: "instructions_changed", data: { files: changed } })
+      // The screen shows the change for review while this is set.
+      this.emit("state", this.info())
+    }
+    throw new InstructionsChangedError(changed)
+  }
   #resources: ResourceLevel = "high"
   readonly #account: string
   /** B25: the check Extreme approval carries on until, or none. */
@@ -791,11 +947,15 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#goal ? { goal: this.#goal } : {}),
+      ...(this.#assumptions.length ? { assumptions: this.#assumptions.map((a) => ({ ...a })) } : {}),
+      ...(this.#testsFirst ? { testsFirst: true } : {}),
+      ...(this.#drift ? { intentDrift: this.#drift } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
       ...(this.#testsWeakened ? { testsWeakened: this.#testsWeakened } : {}),
       ...(this.#budget !== undefined ? { riskBudget: this.#budget } : {}),
+      ...(this.#deadman ? { deadman: { minutes: this.#deadman.minutes, lastHeardFrom: new Date(this.#deadman.last).toISOString() } } : {}),
       ...(this.#claims.length ? { claims: this.#claims.map((c) => ({ ...c })) } : {}),
       ...(this.#pins.list().length
         ? {
@@ -828,6 +988,9 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.localModel !== undefined
         ? { local: true, ...(this.#localLabel ? { localLabel: this.#localLabel } : {}) }
         : {}),
+      // D-059: what the project tells Claude changed outside Codehouse and waits for your review.
+      ...(this.#instructionsSeen !== undefined ? { instructionsChanged: true } : {}),
+      ...(this.#flagged.length ? { flagged: this.#flagged } : {}),
       ...(this.#extreme && (this.#carry.status().turns > 0 || this.#carry.status().ended)
         ? { carryOn: this.#carry.status() }
         : {}),
@@ -914,7 +1077,8 @@ export class Session extends EventEmitter<SessionEvents> {
       global: this.#deps.config().globalInstructions,
       ...(agentsMd ? { agentsMd } : {}),
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
-      session: this.#opts.instructions,
+      // D-044: the project's accepted architecture decisions, after what you told this session.
+      session: [this.#opts.instructions, this.#opts.kind !== "chat" ? adrContext(readAdrs(this.cwd), []) : ""].filter((x) => x?.trim()).join("\n\n") || undefined,
       ...(memory ? { memory } : {}),
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",
@@ -958,6 +1122,11 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
+      ...(d.sast && this.#opts.kind !== "chat" ? { sast: d.sast } : {}),
+      ...(d.vulns && this.#opts.kind !== "chat" ? { vulns: d.vulns } : {}),
+      ...(d.instructions && this.#opts.kind !== "chat"
+        ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
+        : {}),
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,
@@ -977,17 +1146,59 @@ export class Session extends EventEmitter<SessionEvents> {
       // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
+      ...(d.evidence ? { onCommandEnded: (id: string, error: string | undefined) => (error === undefined ? d.evidence!.results.succeeded(id) : d.evidence!.results.failed(id, error)) } : {}),
+      onCommitted: (cwd) =>
+        void noteCommit({
+          sessionId: this.id,
+          cwd,
+          project: this.project,
+          audit: d.audit,
+          log: d.log,
+          ...(d.evidence
+            ? { evidence: async (commit: string) => (await d.evidence!.build({ id: this.id, cwd, project: this.project, assumptions: this.openAssumptions() }, { commit }))?.sha }
+            : {}),
+        }).then(
+          (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
+        ),
+      // D-061: a result that looked like prompt injection: recorded (what kind, never the result) and shown.
+      onInjection: (tool, findings, toolUseId) => {
+        this.#flagged = [...this.#flagged, { tool, at: new Date().toISOString(), findings }].slice(-20)
+        void this.#auditLimit(
+          "injection_flagged",
+          "injection-scan",
+          // D-028: and which call it was, so a change can be traced to it.
+          { tool, kinds: [...new Set(findings.map((f) => f.kind))], ...(toolUseId ? { toolUseId } : {}) },
+          `A result from ${tool} held what looks like prompt injection, so it was cleaned before Claude read it and the next network call asks.`,
+          "rules",
+        ).catch(() => undefined)
+        this.emit("event", { type: "injection_flagged", data: { tool, findings } })
+        this.emit("state", this.info())
+      },
       onToolOutput: (_tool, output) => {
         if (this.#pins.noteOutput(output)) this.emit("state", this.info())
       },
-      // G19: the same failure three times in a row with nothing changed stops the turn.
+      // G19 and D-075: the same failure three times in a row with nothing changed, or an edit undone twice, is first
+      // told to Claude (the hook passes the words on); doing it again stops the turn.
       onToolOutcome: (tool, input, error) => {
         // D-009: the turn's commands, for what a claim that the work is done rests on.
         const command = (input as { command?: unknown } | undefined)?.command
         if ((tool === "Bash" || tool === "PowerShell") && typeof command === "string")
           this.#turnCommands.push(command.slice(0, 2000))
-        if (error === undefined) return this.#loop.succeeded(tool, input)
-        if (this.#loop.failed(tool, input, error)) void this.#stopForLoop(tool)
+        const r = error === undefined ? this.#loop.succeeded(tool, input) : this.#loop.failed(tool, input, error)
+        if (!r) return undefined
+        if (r.act === "stop") {
+          void this.#stopForLoop(tool, r.what)
+          return undefined
+        }
+        void this.#auditLimit(
+          "thrash_warned",
+          "loop-guard",
+          { tool, what: r.what },
+          `Claude did the same thing again with the same result (${r.what}), so Codehouse told it to try something else.`,
+          "rules",
+        ).catch(() => undefined)
+        this.emit("event", { type: "thrash_warned", data: { tool } })
+        return warnText(r.what)
       },
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.
@@ -1001,6 +1212,10 @@ export class Session extends EventEmitter<SessionEvents> {
     const instructions = await this.#instructionsText()
     // One permission path for tool calls and for a server's request to open a page (B06).
     const canUse = createCanUseTool({
+      // D-005: while a task writes a test for a surviving mutant, edits outside test files ask.
+      mutantTask: () => this.#mutantTask,
+      // D-036: and while it writes its tests first.
+      testsFirst: () => this.#testsFirst,
       sessionId: this.id,
       cwd: this.cwd,
       sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
@@ -1015,6 +1230,11 @@ export class Session extends EventEmitter<SessionEvents> {
       checkpoints: d.checkpoints,
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
+      ...(d.sast && this.#opts.kind !== "chat" ? { sast: d.sast } : {}),
+      ...(d.vulns && this.#opts.kind !== "chat" ? { vulns: d.vulns } : {}),
+      ...(d.instructions && this.#opts.kind !== "chat"
+        ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
+        : {}),
       ...(d.localRulesPath !== undefined ? { localRulesPath: d.localRulesPath } : {}),
       decided: this.#decided,
       verdicts: this.#verdicts,
@@ -1243,6 +1463,14 @@ export class Session extends EventEmitter<SessionEvents> {
     const m = msg as unknown as Record<string, unknown>
     // O16: anything from Claude means the turn is alive.
     this.#stuck.seen()
+    // Owner, 10 Nov ("the details on the current activity being performed and the spinning circle in the left menu
+    // arent showing"): after an Interrupt, Claude takes the message it already had and starts a turn by itself. That
+    // is a turn like any other, so the session is working again though nothing was sent just now.
+    if (!this.#running && this.#state === "idle" && (msg.type === "assistant" || (msg.type as string) === "stream_event")) {
+      this.#running = true
+      this.#stuck.start()
+      this.#setState(this.#deps.broker.countFor(this.id) > 0 ? "waiting" : "running")
+    }
     if (typeof m.session_id === "string" && m.session_id !== this.#sdkSessionId) {
       this.#sdkSessionId = m.session_id
       this.emit("state", this.info())
@@ -1279,11 +1507,19 @@ export class Session extends EventEmitter<SessionEvents> {
       this.#noteBackground(m)
     }
     if (msg.type === "result") {
+      // D-005: the task's turn is over: its scope ends, and the mutant is run again.
+      const task = this.#mutantTask
+      if (task) {
+        this.#mutantTask = undefined
+        void this.#recheckMutant(task)
+      }
       this.#deps.usage.record(this.id, this.project, m)
       this.#running = false
       this.#stuck.stop()
       this.#setState("idle")
       if (typeof m.total_cost_usd === "number") this.#lastCost = m.total_cost_usd
+      // D-040: and whether the work still serves the goal.
+      if (typeof m.result === "string" && m.is_error !== true) void this.#checkIntent(m.result)
       // D-009: a claim that the work is done is checked by running its command again.
       if (typeof m.result === "string" && m.is_error !== true) void this.#checkClaims(m.result)
       // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
@@ -1350,6 +1586,140 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#memoryGiven.map((m) => ({ ...m }))
   }
 
+  /** D-040: the last intent check, and the drift it found. */
+  #intentAt = 0
+  #drift: { at: string; reason: string } | undefined
+
+  /** D-040: at the end of a turn in a session with a goal, at most every five minutes. */
+  async #checkIntent(said: string): Promise<void> {
+    if (!this.#goal || !this.#deps.intentCheck || Date.now() - this.#intentAt < 5 * 60_000 || !said.trim()) return
+    this.#intentAt = Date.now()
+    const r = await this.#deps.intentCheck(this.#goal, said).catch(() => undefined)
+    if (!r?.available) return
+    if (!r.drift) {
+      if (this.#drift) {
+        this.#drift = undefined
+        this.emit("state", this.info())
+      }
+      return
+    }
+    this.#drift = { at: new Date().toISOString(), reason: r.reason }
+    await this.#auditLimit("intent_drift", "intent-drift", { reason: r.reason }, `The work may have drifted from the goal: ${r.reason}`, "rules").catch(() => undefined)
+    this.emit("event", { type: "intent_drift", data: { reason: r.reason } })
+    this.emit("state", this.info())
+  }
+
+  /** D-036: tests-first mode: the tests are being written and are not approved yet. */
+  #testsFirst = false
+
+  /** D-036: starts tests-first mode: Claude writes the tests for the criteria, and only test files change. */
+  startTestsFirst(criteria: string): void {
+    const c = criteria.trim() || this.#goal || ""
+    if (!c) throw new Error("Give the acceptance criteria, or set a goal for the session first.")
+    this.prompt(testsFirstPrompt(c))
+    this.#testsFirst = true
+    void this.#auditLimit("tests_first_started", "tests-first", { chars: c.length }, "Tests-first mode started: only test files change until you approve the tests.", "human-desktop").catch(() => undefined)
+    this.emit("state", this.info())
+  }
+
+  /** D-036: you approved the tests: they are locked (D-007) and Claude implements. */
+  async approveTests(files: string[]): Promise<string[]> {
+    if (!this.#testsFirst) throw new Error("This session is not writing its tests first.")
+    const locked: string[] = []
+    for (const file of files) {
+      if (!this.#deps.locks) break
+      await this.#deps.locks.lock(this.cwd, file)
+      locked.push(file)
+    }
+    if (!locked.length) throw new Error("No test file changed yet, or the tests cannot be locked here, so there is nothing to approve.")
+    this.#testsFirst = false
+    await this.#auditLimit("tests_first_approved", "tests-first", { files: locked }, "You approved the tests; they are locked, and the implementation may start.", "human-desktop").catch(() => undefined)
+    this.emit("state", this.info())
+    this.prompt(`The tests are approved and locked (${locked.join(", ")}). Now implement so they pass, without changing them.`)
+    return locked
+  }
+
+  /** D-037: the assumptions Claude declared in this session. */
+  #assumptions: Array<{ id: string; text: string; check?: string; at: string; verified?: boolean }> = []
+
+  /** D-037: an assumption Claude declared: kept, recorded and shown until you verify it. */
+  async declareAssumption(text: string, check?: string): Promise<string> {
+    const id = `a${this.#assumptions.length + 1}`
+    this.#assumptions = [...this.#assumptions, { id, text, ...(check ? { check } : {}), at: new Date().toISOString() }].slice(-50)
+    await this.#auditLimit("assumption_declared", "assumption", { id, text, ...(check ? { check } : {}) }, "Claude declared an assumption for you to check.", "rules").catch(() => undefined)
+    this.emit("state", this.info())
+    return id
+  }
+
+  /** D-037: you checked it, and it holds. */
+  async verifyAssumption(id: string): Promise<void> {
+    const a = this.#assumptions.find((x) => x.id === id)
+    if (!a) throw new Error("There is no such assumption in this session.")
+    a.verified = true
+    await this.#auditLimit("assumption_verified", "assumption", { id }, "You checked an assumption Claude declared, and it holds.", "human-desktop").catch(() => undefined)
+    this.emit("state", this.info())
+  }
+
+  /** D-037: the ones not yet verified, for the evidence pack. */
+  openAssumptions() {
+    return this.#assumptions.filter((a) => !a.verified).map((a) => ({ ...a }))
+  }
+
+  /** D-005: the survivor a task is writing a test for; while it is set, edits outside test files ask. */
+  #mutantTask: Survivor | undefined
+
+  /** D-005: starts a task to write a test that kills a surviving mutant, scoped to test files. */
+  startMutantTask(survivor: Survivor): void {
+    this.prompt(mutantTaskPrompt(survivor))
+    this.#mutantTask = survivor
+    this.emit("event", { type: "mutant_task_started", data: { file: survivor.file, line: survivor.line } })
+  }
+
+  /** D-005: the survivor the session is writing a test for, if any. */
+  mutantTask(): Survivor | undefined {
+    return this.#mutantTask
+  }
+
+  /** D-005: the mutant run again on the code as it is now; killed when a test now notices it. */
+  async #recheckMutant(s: Survivor): Promise<void> {
+    const exec = this.#deps.mutationExec?.(this.id)
+    const command = projectCommand(this.cwd, "tests")
+    let outcome: "killed" | "survived" | "not checked" = "not checked"
+    let why = ""
+    if (exec && command) {
+      try {
+        const text = fs.readFileSync(path.join(this.cwd, s.file), "utf8")
+        const r = await runMutation({
+          root: this.cwd,
+          changes: [{ path: s.file, text, lines: new Set([s.line]) }],
+          command,
+          exec,
+          sandbox: path.join(os.tmpdir(), `codeh-mutant-${this.id}-${Date.now().toString(36)}`),
+          only: (m) => m.mutated === s.mutated,
+        })
+        if (r.aborted) why = r.aborted
+        else if (r.mutants === 0) why = "the line has changed, so the mutant could not be made again"
+        else outcome = r.killed > 0 ? "killed" : "survived"
+      } catch (e) {
+        why = (e as Error).message.slice(0, 200)
+      }
+    } else why = "the project's test command could not be found"
+    await this.#deps.audit
+      .record({
+        session: this.id,
+        event: "mutant_rechecked",
+        channel: "host",
+        tool: "mutation",
+        cwd: this.cwd,
+        project: this.project,
+        input: { file: s.file, line: s.line, outcome, ...(why ? { why } : {}) },
+        verdict: { outcome: "allow", ruleId: "mutation-run", reason: `The mutant at ${s.file}, line ${s.line}, was run again: ${outcome}${why ? ` (${why})` : ""}.`, risk: 0, decidedBy: "rules", policyHash: "n/a" },
+        latencyMs: 0,
+      })
+      .catch(() => undefined)
+    this.emit("event", { type: "mutant_rechecked", data: { file: s.file, line: s.line, outcome, ...(why ? { why } : {}) } })
+  }
+
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
   prompt(text: string): void {
     // Owner, 9 Nov: the limits in Settings hold. A message does not go past them; a bypass for this session does.
@@ -1365,12 +1735,36 @@ export class Session extends EventEmitter<SessionEvents> {
   /** D-009: the turn's shell commands, kept from its start. */
   #turnCommands: string[] = []
   /** D-009: the claims checked in this session, newest last. */
-  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string }> = []
+  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean }> = []
 
   /**
    * D-009: each claim in a reply is stamped Verified, Contradicted or Unverified, by running what it rests on again as a
    * Codehouse action (section 6). With the tests weakened in this session (D-001), a claim about them is Unverified.
    */
+  /** D-011: the failing run, then up to four more, each with a fresh seed; stops early if one cannot be run. */
+  async #rerunForFlakes(
+    run: NonNullable<SessionDeps["codehouseAction"]>,
+    found: { command: string; cwd: string },
+    firstSeed: number,
+  ): Promise<Array<{ seed: number; passed: boolean }>> {
+    const tries = [{ seed: firstSeed, passed: false }]
+    for (let i = 0; i < 4; i++) {
+      const seed = freshSeed()
+      const r = await run({
+        sessionId: this.id,
+        cwd: found.cwd,
+        project: this.project,
+        command: seededCommand(found.command, found.cwd, seed),
+        why: "checking whether a failing test run is flaky",
+        level: this.#resources,
+        env: seedEnv(seed),
+      })
+      if (!r.ran || r.killed || r.timedOut) break
+      tries.push({ seed, passed: r.exitCode === 0 })
+    }
+    return tries
+  }
+
   async #checkClaims(text: string): Promise<void> {
     const run = this.#deps.codehouseAction
     const claims = findClaims(text)
@@ -1379,10 +1773,16 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!claims.length || !run) return
     const root = findProjectRoot(this.cwd)
     const runs = new Map<string, Promise<ActionResult>>()
+    // D-010: the tests are run again with a fresh seed, the same one for every claim of this reply, and it is recorded.
+    const seed = freshSeed()
+    const flakes = new Map<string, Promise<Array<{ seed: number; passed: boolean }>>>()
     for (const c of claims) {
       let outcome: ClaimOutcome = "unverified"
       let why: string
-      const cmd = commandFor(c, commands, this.cwd, root)
+      let tries: Array<{ seed: number; passed: boolean }> | undefined
+      const found = commandFor(c, commands, this.cwd, root)
+      const seeded = found && (c.kind === "tests" || c.kind === "fixed")
+      const cmd = found && seeded ? { ...found, command: seededCommand(found.command, found.cwd, seed) } : found
       if ((c.kind === "tests" || c.kind === "fixed") && this.#testsWeakened)
         why = "the tests were weakened in this session"
       else if (!cmd) why = "there is no command to check it with"
@@ -1398,6 +1798,7 @@ export class Session extends EventEmitter<SessionEvents> {
               command: cmd.command,
               why: `checking Claude's claim: ${c.quote.slice(0, 80)}`,
               level: this.#resources,
+              ...(seeded ? { env: seedEnv(seed) } : {}),
             }),
           )
         const r = await runs.get(key)!
@@ -1410,9 +1811,26 @@ export class Session extends EventEmitter<SessionEvents> {
         } else {
           outcome = "contradicted"
           why = `${cmd.command} failed when Codehouse ran it (exit ${r.exitCode})`
+          // D-011: a failing test run is run up to four more times, each with its own seed; passes and failures mixed
+          // mean the tests are flaky, which the claim then says, with every seed as the evidence.
+          if (seeded && found) {
+            if (!flakes.has(key)) flakes.set(key, this.#rerunForFlakes(run, found, seed))
+            tries = await flakes.get(key)!
+          }
         }
       }
-      const entry = { kind: c.kind, quote: c.quote, outcome, why, ...(cmd ? { command: cmd.command } : {}) }
+      const flaky = tries !== undefined && tries.some((t) => t.passed)
+      if (flaky) why = `${why}; it passed ${tries!.filter((t) => t.passed).length} of ${tries!.length} runs, so the tests are flaky`
+      const entry = {
+        kind: c.kind,
+        quote: c.quote,
+        outcome,
+        why: seeded && outcome === "contradicted" && !flaky ? `${why}, with the fresh seed ${seed}` : why,
+        ...(cmd ? { command: cmd.command } : {}),
+        ...(seeded ? { seed } : {}),
+        ...(tries ? { runs: tries } : {}),
+        ...(flaky ? { flaky: true } : {}),
+      }
       this.#claims = [...this.#claims, entry].slice(-10)
       await this.#deps.audit
         .record({
@@ -1537,15 +1955,17 @@ export class Session extends EventEmitter<SessionEvents> {
    * G19: the same call failed the same way LOOP_REPEATS times in a row with nothing changed in between, so the turn
    * stops (and Extreme stops carrying on), recorded, and the screen says why. Your next message starts afresh.
    */
-  async #stopForLoop(tool: string): Promise<void> {
+  async #stopForLoop(tool: string, what: string): Promise<void> {
     if (!this.#running) return
+    // D-075: recorded as thrash_paused, and the phone is told.
     await this.#auditLimit(
-      "loop_stopped",
+      "thrash_paused",
       "loop-guard",
-      { tool, repeats: LOOP_REPEATS },
-      `The same ${tool} call failed the same way ${LOOP_REPEATS} times in a row with nothing changed in between, so Codehouse stopped the turn.`,
+      { tool, what, repeats: LOOP_REPEATS },
+      `Claude was told it was repeating itself (${what}) and did it again, so Codehouse stopped the turn.`,
       "rules",
     ).catch(() => undefined)
+    this.emit("event", { type: "thrash_paused", data: { tool } })
     await this.interrupt("loop").catch((e: Error) => this.#deps.log(`loop stop: ${e.message}`))
   }
 
@@ -1584,9 +2004,20 @@ export class Session extends EventEmitter<SessionEvents> {
     })
     if (!step) return
     if (!step.go) {
+      // D-045: done, or the goal met, only when the project's fitness checks pass; otherwise it stops as fitness.
+      let why: string = step.why
+      let fitness: string | undefined
+      if ((step.why === "goal" || step.why === "done") && hasFitness(this.cwd)) {
+        const fit = await fitnessCheck(this.cwd, await listFiles(this.cwd).catch(() => [] as string[])).catch(() => undefined)
+        if (fit?.failed) {
+          why = "fitness"
+          fitness = fitnessWords(fit)
+          await this.#auditLimit("fitness_gate_failed", "fitness", { failed: fit.failed, checks: fit.checks.filter((c) => !c.ok).map((c) => c.id) }, `Claude said it was done, but ${fit.failed} fitness check${fit.failed === 1 ? "" : "s"} fail: ${fitness}`, "rules").catch(() => undefined)
+        }
+      }
       this.emit("event", {
         type: "carry_on_end",
-        data: { why: step.why, turns: step.turns, spentUsd: step.spentUsd },
+        data: { why, turns: step.turns, spentUsd: step.spentUsd, ...(fitness ? { fitness } : {}) },
       })
       this.emit("state", this.info())
       return
@@ -1598,6 +2029,13 @@ export class Session extends EventEmitter<SessionEvents> {
   async #carryOnNow(data: Record<string, unknown>): Promise<void> {
     if (this.#deps.kill.isEngaged() || this.#running || this.#paused) return
     if (this.#state === "error" || this.#state === "ended") return
+    // D-059: no turn starts on instructions changed outside Codehouse; the screen is told, and the run waits for you.
+    try {
+      await this.checkInstructions()
+    } catch {
+      this.#carry.stopped()
+      return
+    }
     const written = await this.#deps.audit.record({
       session: this.id,
       event: "extreme_carry_on",
@@ -1653,7 +2091,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
    * when you start it.
    */
-  async pause(percent: number, until?: string, reason?: "spend" | "risk"): Promise<void> {
+  async pause(percent: number, until?: string, reason?: "spend" | "risk" | "heartbeat"): Promise<void> {
     if (!this.live || this.#paused) return
     const wasRunning = this.#running || this.#background.size > 0
     this.#paused = {
@@ -1670,7 +2108,9 @@ export class Session extends EventEmitter<SessionEvents> {
         wasRunning,
         ...(until ? { until } : {}),
       },
-      reason === "risk"
+      reason === "heartbeat"
+        ? "Nothing was heard from you in time, so Codehouse paused this Extreme session until you start it again."
+        : reason === "risk"
         ? "The session's risk budget is spent, so Codehouse paused this Extreme session until you start it again."
         : reason === "spend"
           ? "Today's extra spending beyond the plan reached the most Settings allows a day, so Codehouse paused this session until tomorrow."
@@ -1692,10 +2132,12 @@ export class Session extends EventEmitter<SessionEvents> {
   async resume(by: "you" | "limit-reset"): Promise<boolean> {
     const p = this.#paused
     if (!p) return false
-    // D-018: a session its risk budget paused starts again only when you start it, with its budget full.
-    if (p.reason === "risk") {
+    // D-018: a session its risk budget paused starts again only when you start it, with its budget full. D-025: one
+    // the dead-man timer paused, only when you start it, and that is hearing from you.
+    if (p.reason === "risk" || p.reason === "heartbeat") {
       if (by !== "you") return false
-      this.#fillBudget()
+      if (p.reason === "risk") this.#fillBudget()
+      this.heartbeat()
     }
     if (p.wasRunning) {
       // Sent first: if it cannot be (the kill switch), it stays paused and is tried again.
@@ -2002,6 +2444,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   async close(): Promise<void> {
     this.#stuck.stop()
+    clearInterval(this.#deadmanTimer)
     this.#deps.broker.cancelSession(this.id, "The session was closed")
     this.#input.end()
     this.#q?.close()
@@ -2157,6 +2600,16 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     if (!opts.restore && opts.kind !== "chat" && this.#deps.locks) {
       const changed = await this.#deps.locks.changedOutside(opts.cwd)
       if (changed.length) throw new LockedTestsChangedError(changed)
+    }
+    // D-059: nor while what the project tells Claude changed outside Codehouse, until you approve the change.
+    if (!opts.restore && opts.kind !== "chat" && this.#deps.instructions) {
+      const changed = await this.#deps.instructions
+        .changedOutside(opts.cwd)
+        .catch(() => ["(the pins could not be read)"])
+      if (changed.length) {
+        await recordInstructionsChanged(this.#deps.audit, "desktop", opts.cwd, undefined, changed)
+        throw new InstructionsChangedError(changed)
+      }
     }
     const config = this.#deps.config()
     // B09: the most open at once, over every account and both kinds. A session coming back after a restart is not
@@ -2527,6 +2980,11 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       })
     this.#plan.set(account, { ...(c ?? { at: 0 }), pending })
     return pending
+  }
+
+  /** D-025: you were heard from, on the desktop or the phone: every session's dead-man timer starts again. */
+  heartbeat(): void {
+    for (const s of this.#sessions.values()) s.heartbeat()
   }
 
   /** The kill switch: every turn and every background task stops. */

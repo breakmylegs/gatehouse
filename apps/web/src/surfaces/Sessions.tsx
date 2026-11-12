@@ -1,4 +1,5 @@
 import { MemoryCard } from "../components/MemoryCard"
+import { InstructionsReview } from "../components/InstructionsReview"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import NumberFlow from "@number-flow/react"
 import { useEffect, useState } from "react"
@@ -152,6 +153,8 @@ export function Sessions() {
   const [shortOfMemory, setShortOfMemory] = useState(false)
   // D-007: locked tests changed outside Codehouse; accepting them lets the session start.
   const [lockedChanged, setLockedChanged] = useState(false)
+  // D-059: what the project tells Claude changed outside Codehouse, shown for review.
+  const [instructionsChanged, setInstructionsChanged] = useState(false)
   // B10: a session in a new worktree of the folder's repository, from a branch, tag or commit you name.
   const [inWorktree, setInWorktree] = useState(false)
   const [base, setBase] = useState("")
@@ -219,6 +222,7 @@ export function Sessions() {
     setError(undefined)
     setShortOfMemory(false)
     setLockedChanged(false)
+    setInstructionsChanged(false)
     if (several) return void (await startRuns())
     const r = await send(
       {
@@ -243,6 +247,7 @@ export function Sessions() {
       )
       setShortOfMemory(r.error?.code === "memory")
       setLockedChanged(r.error?.code === "locked-tests")
+      setInstructionsChanged(r.error?.code === "instructions-changed")
       return
     }
     const { sessionId: id, info } = r.data as {
@@ -461,6 +466,15 @@ export function Sessions() {
         {busy ? <StartProgress since={startedAt} /> : null}
         {shortOfMemory ? (
           <MemoryCard />
+        ) : instructionsChanged && error ? (
+          <InstructionsReview
+            cwd={fresh ? freshPath : cwd.trim()}
+            onApproved={() => {
+              setInstructionsChanged(false)
+              setError(undefined)
+              toast("Start the session again.")
+            }}
+          />
         ) : lockedChanged && error ? (
           <div role="alert" className="grid gap-2 rounded-md border border-warn bg-s1 p-3 text-[14px]">
             <strong>Not started: locked tests changed</strong>

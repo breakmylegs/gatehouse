@@ -34,6 +34,8 @@ function build(loose: boolean) {
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional(),
     source: z.string().max(200).optional(),
+    /** D-085: the most sensitive content this model or provider may be handed, when the card is in date. Absent: internal. */
+    maxClassification: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
   })
   const Checkpoints = obj({
     /** Take a checkpoint before any call that is escalated to a person. */
@@ -202,6 +204,13 @@ function build(loose: boolean) {
       boundaries: obj({
         claude: Boundary.optional(),
         local: Boundary.optional(),
+        /** C-016: a card for one model, by its id, which says more than its provider's card. */
+        models: z.record(z.string().min(1).max(120), Boundary).optional(),
+        /**
+         * C-016: how old a card's check may be before a send to its model is refused (days). Absent: 180. A provider
+         * or model with no card is not refused (older versions kept none).
+         */
+        maxAgeDays: z.number().int().min(1).max(3650).optional(),
       }).optional(),
     }).optional(),
     /** How long a request stays deliverable to the phone. */
@@ -319,8 +328,35 @@ function build(loose: boolean) {
       .object({ points: z.number().int().min(1).max(1000), off: z.boolean().optional() })
       .passthrough()
       .optional(),
+    /**
+     * D-085: how sensitive each project's content is, by folder name, for a hand-off to another model. Absent: every
+     * project is internal.
+     */
+    dataClassification: z
+      .object({
+        default: z.enum(["public", "internal", "confidential", "restricted"]).optional(),
+        projects: z.record(z.string().max(120), z.enum(["public", "internal", "confidential", "restricted"])).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** D-015: files whose words are not the project's own (globs); absent: README and Markdown files, dependencies. */
     untrustedFiles: z.array(z.string().max(260)).max(100).optional(),
+    /**
+     * D-055: SPDX licences a new dependency may have without asking, and "npm:name" entries accepted whatever their
+     * licence. Absent: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD and Unlicense. A managed policy's list
+     * is used instead when it sets one.
+     */
+    allowedLicences: z.array(z.string().max(120)).max(200).optional(),
+    /** D-004: the mutation score each project must reach, by folder name; absent: none, the score is only shown. */
+    mutation: z
+      .object({ thresholds: z.record(z.string().max(120), z.number().int().min(0).max(100)).optional() })
+      .passthrough()
+      .optional(),
+    /** D-003: how long change evidence packs are kept. Absent: 90 days. */
+    evidence: z
+      .object({ retentionDays: z.number().int().min(1).max(3650) })
+      .passthrough()
+      .optional(),
     memoryGovernor: z
       .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
       .passthrough()

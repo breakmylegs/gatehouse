@@ -33,4 +33,4 @@ cases:
   - { tool: Bash, input: { command: "python -m pytest -q" }, expect: allow, rule: python-dev-check }
   - { tool: Bash, input: { command: "ruff check src" }, expect: allow }
   - { tool: Bash, input: { command: "pip install requests" }, expect: escalate }
-  - { tool: Bash, input: { command: "poetry add httpx" }, expect: escalate, rule: python-dev-install }
+  - { tool: Bash, input: { command: "poetry add httpx" }, expect: escalate, rule: dependency-new }

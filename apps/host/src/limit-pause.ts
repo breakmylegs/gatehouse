@@ -45,7 +45,7 @@ export interface PauseTarget {
   paused?: SessionInfo["paused"]
   /** Your bypass of the limits for this session, while it lasts. Neither limit pauses it meanwhile. */
   bypass?: LimitBypass
-  pause(percent: number, until?: string, reason?: "spend" | "risk"): Promise<void>
+  pause(percent: number, until?: string, reason?: "spend" | "risk" | "heartbeat"): Promise<void>
   resume(by: "limit-reset"): Promise<boolean>
   /** The bypass ran out: its time, or its spending. */
   endBypass(why: "time" | "spend", spentUsd: number): Promise<void>
@@ -258,7 +258,7 @@ export class LimitPauser {
     // A session with a bypass running is left alone, and one a limit had paused carries on.
     const bypassed = (s: PauseTarget) => s.bypass !== undefined
     for (const s of this.#d.sessions())
-      if (bypassed(s) && s.paused && s.paused.reason !== "risk")
+      if (bypassed(s) && s.paused && s.paused.reason !== "risk" && s.paused.reason !== "heartbeat")
         await s
           .resume("limit-reset")
           .catch((e: Error) => this.#d.log(`session ${s.id} could not start again: ${e.message}`))

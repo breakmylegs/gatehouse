@@ -1,7 +1,9 @@
 import type { Features } from "./analyse.js"
 import { compileGlobs, matchAnyWildcard } from "./match.js"
 import { lexicalResolve } from "./paths.js"
-import type { EvalContext, Rule } from "./types.js"
+import fs from "node:fs"
+import { configTamperFile, configTamperShell } from "./config-tamper.js"
+import type { EvalContext, Rule, ToolCall } from "./types.js"
 
 /**
  * A floor hit can only be a denial. There is deliberately no "allow" member, so the floor
@@ -57,6 +59,29 @@ function candidateKeys(f: Features, ctx: EvalContext): string[] {
     for (const v of variants) keys.add(lexicalResolve(v, ctx.cwd).key)
   }
   return [...keys]
+}
+
+/** The file as it is, for a Write compared with it; nothing when it is not there. */
+const current = (file: string): string | undefined => {
+  try {
+    return fs.readFileSync(file, "utf8")
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The floor for a whole call: its rules on the call's paths and words, then D-060's built-in check of what it would
+ * change in an AI tool's settings, which needs the call itself.
+ */
+export function checkCallFloor(call: ToolCall, f: Features, ctx: EvalContext, rules: readonly Rule[]): FloorHit | null {
+  return (
+    checkFloor(f, ctx, rules) ??
+    configTamperFile(call, ctx.cwd, current) ??
+    (f.isShell
+      ? configTamperShell(f.segments, ctx.cwd, typeof (call.input as { command?: unknown })?.command === "string" ? String((call.input as { command: string }).command) : "")
+      : null)
+  )
 }
 
 export function checkFloor(f: Features, ctx: EvalContext, rules: readonly Rule[]): FloorHit | null {

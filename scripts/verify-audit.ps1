@@ -8,7 +8,9 @@
 # PowerShell 5.1 built into Windows (owner, 4 Nov: no PowerShell version is a hard dependency).
 param(
     [string]$Dir = $(if ($env:GATEHOUSE_AUDIT_DIR) { $env:GATEHOUSE_AUDIT_DIR } elseif ($env:GATEHOUSE_DATA_DIR) { Join-Path $env:GATEHOUSE_DATA_DIR 'audit' } else { Join-Path $env:LOCALAPPDATA 'Gatehouse\audit' }),
-    [switch]$Json
+    [switch]$Json,
+    # D-029: the anchors; by default the anchors folder beside the audit folder, when there is one.
+    [string]$Anchors = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -102,7 +104,8 @@ function Test-RecordShape($r) {
     foreach ($k in 'ts', 'session', 'event', 'tool', 'inputJson') {
         if (-not ($r.ContainsKey($k) -and $r[$k] -is [string])) { return $false }
     }
-    if (-not ($r.ContainsKey('channel') -and $r['channel'] -in @('approver', 'host', 'desktop', 'phone', 'timeout'))) { return $false }
+    # These two lists are the Node schema's (AuditChannel, Verdict.decidedBy); apps/host/test/audit-bundle.test.ts keeps them the same.
+    if (-not ($r.ContainsKey('channel') -and $r['channel'] -in @('approver', 'host', 'desktop', 'phone', 'push', 'timeout'))) { return $false }
     if (-not ($r.ContainsKey('latencyMs') -and (Test-IsInteger $r['latencyMs']) -and $r['latencyMs'] -ge 0)) { return $false }
     if (-not ($r.ContainsKey('prevHash') -and (Test-Hex64 $r['prevHash']))) { return $false }
     if (-not ($r.ContainsKey('hash') -and (Test-Hex64 $r['hash']))) { return $false }
@@ -111,13 +114,14 @@ function Test-RecordShape($r) {
     if (-not ($vd.ContainsKey('outcome') -and $vd['outcome'] -in @('allow', 'deny', 'escalate'))) { return $false }
     foreach ($k in 'ruleId', 'reason', 'policyHash') { if (-not ($vd.ContainsKey($k) -and $vd[$k] -is [string])) { return $false } }
     if (-not ($vd.ContainsKey('risk') -and (Test-IsInteger $vd['risk']) -and $vd['risk'] -ge 0 -and $vd['risk'] -le 100)) { return $false }
-    if (-not ($vd.ContainsKey('decidedBy') -and $vd['decidedBy'] -in @('floor', 'rules', 'judge', 'human-desktop', 'human-phone', 'timeout', 'evaluator-unavailable'))) { return $false }
+    if (-not ($vd.ContainsKey('decidedBy') -and $vd['decidedBy'] -in @('floor', 'rules', 'judge', 'human-desktop', 'human-phone', 'human-push', 'extreme-mode', 'timeout', 'evaluator-unavailable'))) { return $false }
     return $true
 }
 
 $prevSeq = [long]0
 $prevHash = $genesis
 $records = 0
+$bySeq = @{}
 $files = @()
 if (Test-Path -LiteralPath $Dir) {
     $files = @(Get-ChildItem -LiteralPath $Dir -File | Where-Object { $_.Name -match '^audit-\d{4}-\d{2}\.jsonl$' } | ForEach-Object { $_.Name })
@@ -149,6 +153,7 @@ foreach ($file in $files) {
         }
         $records++
         $seq = [long]$rec['seq']
+        $bySeq[$seq] = $rec
         if ($seq -ne $prevSeq + 1) { Add-Problem $file $lineNo $seq "seq $seq does not follow $prevSeq" }
         if ($rec['prevHash'] -ne $prevHash) { Add-Problem $file $lineNo $seq 'prevHash does not match the record before it' }
         $body = @{}
@@ -179,9 +184,236 @@ if ($null -ne $head) {
     elseif ($head['hash'] -ne $prevHash) { Add-Problem 'head.json' 0 $null 'head.json hash does not match the last record' }
 }
 
+# C-011: a signed timeline export. The signature (ECDSA P-256, SHA-256, IEEE P1363) covers timeline.json's bytes
+# followed by head.json's; every entry must say what its records say. The same check as verify-timeline.ts.
+$timelineFile = Join-Path $Dir 'timeline.json'
+if (Test-Path -LiteralPath $timelineFile) {
+    $tBytes = [System.IO.File]::ReadAllBytes($timelineFile)
+    $hBytes = if (Test-Path -LiteralPath $headFile) { [System.IO.File]::ReadAllBytes($headFile) } else { $null }
+    if ($null -eq $hBytes) { Add-Problem 'head.json' 0 $null 'a timeline needs the head.json it was signed with' }
+    else {
+        try {
+            $jwk = Read-Json ([System.IO.File]::ReadAllText((Join-Path $Dir 'timeline-key.json')))
+            $fromB64Url = {
+                param([string]$s)
+                $b = $s.Replace('-', '+').Replace('_', '/')
+                switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+                [Convert]::FromBase64String($b)
+            }
+            $q = New-Object System.Security.Cryptography.ECPoint
+            $q.X = & $fromB64Url $jwk['x']
+            $q.Y = & $fromB64Url $jwk['y']
+            $p = New-Object System.Security.Cryptography.ECParameters
+            $p.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+            $p.Q = $q
+            $ec = [System.Security.Cryptography.ECDsa]::Create($p)
+            $sig = [Convert]::FromBase64String(([System.IO.File]::ReadAllText((Join-Path $Dir 'timeline.sig'))).Trim())
+            $data = New-Object byte[] ($tBytes.Length + $hBytes.Length)
+            [Array]::Copy($tBytes, 0, $data, 0, $tBytes.Length)
+            [Array]::Copy($hBytes, 0, $data, $tBytes.Length, $hBytes.Length)
+            if (-not $ec.VerifyData($data, $sig, [System.Security.Cryptography.HashAlgorithmName]::SHA256)) {
+                Add-Problem 'timeline.sig' 0 $null 'the signature does not match timeline.json and head.json, so one of them was changed'
+            }
+        } catch {
+            Add-Problem 'timeline.sig' 0 $null 'the signature or its key could not be read'
+        }
+    }
+    $t = $null
+    try { $t = Read-Json ([System.Text.Encoding]::UTF8.GetString($tBytes)) } catch { $t = $null }
+    if ($null -eq $t -or $t['version'] -ne 1 -or $t['session'] -isnot [string] -or $null -eq $t['entries']) {
+        Add-Problem 'timeline.json' 0 $null 'timeline.json is not a timeline'
+    } else {
+        $prevEntry = [long]0
+        foreach ($e in $t['entries']) {
+            $rs = @($e['records'])
+            $eSeq = [long]$e['seq']
+            if ($rs.Count -eq 0 -or [long]$rs[0] -ne $eSeq) { Add-Problem 'timeline.json' 0 $eSeq "an entry's place is not its first record"; continue }
+            if ($eSeq -le $prevEntry) { Add-Problem 'timeline.json' 0 $eSeq 'the entries are not in audit order' }
+            $prevEntry = $eSeq
+            $last = $null
+            $before = [long]0
+            foreach ($s in $rs) {
+                $r = $bySeq[[long]$s]
+                if ($null -eq $r) { Add-Problem 'timeline.json' 0 $eSeq "record $s is not in this export" }
+                elseif ($r['session'] -ne $t['session']) { Add-Problem 'timeline.json' 0 $eSeq "record $s belongs to another session" }
+                if ([long]$s -le $before) { Add-Problem 'timeline.json' 0 $eSeq "an entry's records are not in order" }
+                $before = [long]$s
+                if ($null -ne $r) { $last = $r }
+            }
+            if ($null -ne $last) {
+                $v = $last['verdict']
+                if ($last['tool'] -ne $e['tool'] -or $v['outcome'] -ne $e['outcome'] -or $v['ruleId'] -ne $e['ruleId'] -or [long]$v['risk'] -ne [long]$e['risk'] -or $v['decidedBy'] -ne $e['decidedBy']) {
+                    Add-Problem 'timeline.json' 0 $eSeq 'the entry does not say what its last record says'
+                }
+            }
+        }
+    }
+}
+
+# D-003: an evidence pack in a timeline export: evidence.json signed with the timeline's key over its bytes followed by
+# head.json's, this session's, and every { seq, hash } it links to (except the head when it was made) a record here
+# with that hash. The same check as verify-timeline.ts.
+$evidenceFile = Join-Path $Dir 'evidence.json'
+if ((Test-Path -LiteralPath $evidenceFile) -and (Test-Path -LiteralPath $timelineFile)) {
+    $eBytes = [System.IO.File]::ReadAllBytes($evidenceFile)
+    $hBytes2 = if (Test-Path -LiteralPath $headFile) { [System.IO.File]::ReadAllBytes($headFile) } else { New-Object byte[] 0 }
+    try {
+        $ejwk = Read-Json ([System.IO.File]::ReadAllText((Join-Path $Dir 'timeline-key.json')))
+        $u = {
+            param([string]$s)
+            $b = $s.Replace('-', '+').Replace('_', '/')
+            switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+            [Convert]::FromBase64String($b)
+        }
+        $eq = New-Object System.Security.Cryptography.ECPoint
+        $eq.X = & $u $ejwk['x']
+        $eq.Y = & $u $ejwk['y']
+        $epar = New-Object System.Security.Cryptography.ECParameters
+        $epar.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+        $epar.Q = $eq
+        $eec = [System.Security.Cryptography.ECDsa]::Create($epar)
+        $esig = [Convert]::FromBase64String(([System.IO.File]::ReadAllText((Join-Path $Dir 'evidence.sig'))).Trim())
+        $edata = New-Object byte[] ($eBytes.Length + $hBytes2.Length)
+        [Array]::Copy($eBytes, 0, $edata, 0, $eBytes.Length)
+        [Array]::Copy($hBytes2, 0, $edata, $eBytes.Length, $hBytes2.Length)
+        if (-not $eec.VerifyData($edata, $esig, [System.Security.Cryptography.HashAlgorithmName]::SHA256)) {
+            Add-Problem 'evidence.json' 0 $null 'the signature does not match evidence.json and head.json, so one of them was changed'
+        }
+    } catch {
+        Add-Problem 'evidence.json' 0 $null "the evidence's signature or its key could not be read"
+    }
+    $ev = $null
+    try { $ev = Read-Json ([System.Text.Encoding]::UTF8.GetString($eBytes)) } catch { $ev = $null }
+    if ($null -eq $ev) { Add-Problem 'evidence.json' 0 $null 'evidence.json is not an evidence pack' }
+    else {
+        $tl = $null
+        try { $tl = Read-Json ([System.IO.File]::ReadAllText($timelineFile)) } catch { $tl = $null }
+        if ([long]$ev['v'] -ne 1 -or $null -eq $tl -or $ev['session'] -ne $tl['session']) { Add-Problem 'evidence.json' 0 $null "evidence.json is not this session's evidence pack" }
+        $links = New-Object System.Collections.ArrayList
+        $collect = $null
+        $collect = {
+            param($v)
+            if ($v -is [System.Collections.IDictionary]) {
+                if ((Test-IsInteger $v['seq']) -and $v['hash'] -is [string]) { [void]$links.Add(@([long]$v['seq'], [string]$v['hash'])) }
+                foreach ($k in @($v.Keys)) { $x = $v[$k]; if ($x -is [System.Collections.IDictionary] -or ($x -is [System.Collections.IEnumerable] -and $x -isnot [string])) { & $collect $x } }
+            } elseif ($v -is [System.Collections.IEnumerable] -and $v -isnot [string]) {
+                foreach ($x in $v) { & $collect $x }
+            }
+        }
+        foreach ($k in @($ev.Keys)) { if ($k -ne 'head') { $x = $ev[$k]; if ($x -is [System.Collections.IDictionary] -or ($x -is [System.Collections.IEnumerable] -and $x -isnot [string])) { & $collect $x } } }
+        foreach ($l in $links) {
+            $r = $bySeq[[long]$l[0]]
+            if ($null -eq $r) { Add-Problem 'evidence.json' 0 $l[0] "record $($l[0]) is not in this export" }
+            elseif ($r['hash'] -ne $l[1]) { Add-Problem 'evidence.json' 0 $l[0] "record $($l[0]) is not the one the evidence names" }
+        }
+    }
+}
+
+# D-029: each anchor's signature (ECDSA P-256, SHA-256, IEEE P1363) over its plain text, with the key in key.json,
+# and that the record it names still has the hash it anchored. D-029b: an anchor signed on the phone carries the
+# passkey's WebAuthn assertion over an envelope naming the record; it is checked with the phone's key in phones.json.
+# The same checks as anchors.ts.
+if ($Anchors -eq '') { $Anchors = Join-Path (Split-Path -Parent ([System.IO.Path]::GetFullPath($Dir))) 'anchors' }
+$anchorCount = 0
+function ConvertFrom-B64Url([string]$s) {
+    $b = $s.Replace('-', '+').Replace('_', '/')
+    switch ($b.Length % 4) { 2 { $b += '==' } 3 { $b += '=' } }
+    return [Convert]::FromBase64String($b)
+}
+function New-EcKey($jwk) {
+    $q = New-Object System.Security.Cryptography.ECPoint
+    $q.X = ConvertFrom-B64Url $jwk['x']
+    $q.Y = ConvertFrom-B64Url $jwk['y']
+    $p = New-Object System.Security.Cryptography.ECParameters
+    $p.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+    $p.Q = $q
+    return [System.Security.Cryptography.ECDsa]::Create($p)
+}
+# A DER ECDSA signature (SEQUENCE of two INTEGERs) as the 64 bytes .NET Framework's VerifyData takes.
+function ConvertFrom-DerSignature([byte[]]$der) {
+    $i = 2
+    if ($der[1] -band 0x80) { $i = 2 + ($der[1] -band 0x7f) }
+    $out = New-Object byte[] 64
+    foreach ($half in 0, 1) {
+        if ($der[$i] -ne 0x02) { throw 'not DER' }
+        $len = [int]$der[$i + 1]
+        $v = $der[($i + 2)..($i + 1 + $len)]
+        while ($v.Count -gt 32 -and $v[0] -eq 0) { $v = $v[1..($v.Count - 1)] }
+        if ($v.Count -gt 32) { throw 'not P-256' }
+        [Array]::Copy([byte[]]$v, 0, $out, $half * 32 + (32 - $v.Count), $v.Count)
+        $i += 2 + $len
+    }
+    return $out
+}
+function Test-PhoneAnchor($a, $jwk) {
+    try {
+        if ($null -eq $jwk) { return $false }
+        $e = $a['envelope']
+        if ($e['type'] -ne 'anchor' -or [long]$e['anchor']['seq'] -ne [long]$a['seq'] -or $e['anchor']['hash'] -ne $a['hash']) { return $false }
+        $clientBytes = ConvertFrom-B64Url $a['assertion']['clientDataJSON']
+        $client = Read-Json ([System.Text.Encoding]::UTF8.GetString($clientBytes))
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $challenge = [Convert]::ToBase64String($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes((ConvertTo-Canonical $e)))).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        if ($client['type'] -ne 'webauthn.get' -or $client['challenge'] -ne $challenge) { return $false }
+        $auth = ConvertFrom-B64Url $a['assertion']['authenticatorData']
+        if ($auth.Length -lt 37 -or ($auth[32] -band 0x04) -eq 0) { return $false }
+        $clientHash = $sha.ComputeHash($clientBytes)
+        $data = New-Object byte[] ($auth.Length + 32)
+        [Array]::Copy($auth, 0, $data, 0, $auth.Length)
+        [Array]::Copy($clientHash, 0, $data, $auth.Length, 32)
+        $sig = ConvertFrom-DerSignature (ConvertFrom-B64Url $a['assertion']['signature'])
+        return (New-EcKey $jwk).VerifyData($data, $sig, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+    } catch { return $false }
+}
+if (Test-Path -LiteralPath $Anchors) {
+    $anchorFiles = @(Get-ChildItem -LiteralPath $Anchors -File | Where-Object { $_.Name -match '^anchor-\d+(-p)?\.json$' } | Sort-Object Name)
+    if ($anchorFiles.Count -gt 0) {
+        $aec = $null
+        $keyFile = Join-Path $Anchors 'key.json'
+        if (Test-Path -LiteralPath $keyFile) {
+            try { $aec = New-EcKey (Read-Json ([System.IO.File]::ReadAllText($keyFile))) } catch { $aec = $null }
+        }
+        $phones = @{}
+        $phonesFile = Join-Path $Anchors 'phones.json'
+        if (Test-Path -LiteralPath $phonesFile) {
+            try { $phones = Read-Json ([System.IO.File]::ReadAllText($phonesFile)) } catch { Add-Problem 'anchors/phones.json' 0 $null "the phones' keys could not be read" }
+        }
+        $keyMissing = $false
+        foreach ($af in $anchorFiles) {
+            $anchorCount++
+            $where = "anchors/$($af.Name)"
+            $a = $null
+            try { $a = Read-Json ([System.IO.File]::ReadAllText($af.FullName)) } catch { $a = $null }
+            if ($null -ne $a -and [long]$a['v'] -eq 1 -and $a['signer'] -eq 'phone' -and (Test-IsInteger $a['seq']) -and $a['hash'] -is [string]) {
+                $aSeq = [long]$a['seq']
+                if (-not (Test-PhoneAnchor $a $phones[[string]$a['phone']])) { Add-Problem $where 0 $aSeq "the passkey's signature does not verify, so the anchor was changed" }
+            } elseif ($null -eq $a -or [long]$a['v'] -ne 1 -or -not (Test-IsInteger $a['seq']) -or $a['hash'] -isnot [string] -or $a['sig'] -isnot [string]) {
+                Add-Problem $where 0 $null 'not an anchor'
+                continue
+            } else {
+                $aSeq = [long]$a['seq']
+                if ($null -eq $aec) { $keyMissing = $true }
+                else {
+                    $ok1 = $false
+                    try {
+                        $msg = [System.Text.Encoding]::UTF8.GetBytes("codehouse-anchor-v1`n$aSeq`n$($a['hash'])`n$($a['ts'])")
+                        $ok1 = $aec.VerifyData($msg, [Convert]::FromBase64String($a['sig']), [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+                    } catch { $ok1 = $false }
+                    if (-not $ok1) { Add-Problem $where 0 $aSeq "the anchor's signature does not verify, so the anchor was changed" }
+                }
+            }
+            $r = $bySeq[$aSeq]
+            if ($null -eq $r) { Add-Problem $where 0 $aSeq "record $aSeq, which was anchored, is not in the log" }
+            elseif ($r['hash'] -ne $a['hash']) { Add-Problem $where 0 $aSeq "record $aSeq was changed after it was anchored on $($a['ts'])" }
+        }
+        if ($keyMissing) { Add-Problem 'anchors/key.json' 0 $null "the anchors' key could not be read, so no anchor could be checked" }
+    }
+}
+
 $ok = ($problems.Count -eq 0)
 if ($Json) {
     $result = [ordered]@{ ok = $ok; files = $files.Count; records = $records; problems = $problems.ToArray() }
+    if ($anchorCount -gt 0) { $result['anchors'] = $anchorCount }
     if ($records -gt 0) { $result['head'] = [ordered]@{ seq = $prevSeq; hash = $prevHash } }
     [Console]::Out.WriteLine(($result | ConvertTo-Json -Depth 6 -Compress))
 } elseif ($ok) {

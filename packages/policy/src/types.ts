@@ -77,6 +77,8 @@ export interface Overlay {
   deny?: Rule[]
   escalate?: Rule[]
   removeAllow?: string[]
+  /** D-055: the licences allowed without asking. Read from the managed policy only. */
+  licences?: string[]
 }
 
 export interface RememberEntry {
@@ -143,6 +145,10 @@ export interface Policy {
   /** Overlays by project name (file name without extension). */
   overlays: Record<string, Overlay>
   remember: Rule[]
+  /** D-053: dependencies the owner approved, "npm:name", "pypi:name"; beside rules.local.yaml. */
+  approvedDependencies?: string[]
+  /** D-055: the organisation's licence list, from the managed policy; when set, it is the list. */
+  managedLicences?: string[]
   hash: string
   /** Real, lower-case, forward-slash keys of the workspace roots. */
   workspaceRootKeys: string[]

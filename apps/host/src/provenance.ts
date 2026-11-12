@@ -6,6 +6,33 @@ import type { Verdict } from "@gatehouse/shared"
  * planted there, so it goes to a person, whatever the rules or Extreme approval would do with it.
  */
 export const TAINT_RULE = "untrusted-content"
+/** D-016: a network call, or a write outside the project, carrying a value from an untrusted source. */
+export const EGRESS_RULE = "tainted-egress"
+
+/** D-016: network-capable shell commands: the ones that can send what they are given somewhere. */
+const NETWORK = /\b(curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod|start-bitstransfer|scp|sftp|ftp|rsync|ssh|nc|ncat|telnet|npm\s+publish|pnpm\s+publish|yarn\s+publish|twine\s+upload|dotnet\s+nuget\s+push|nuget\s+push|gh\s+release\s+upload|git\s+push|git\s+remote\s+(add|set-url))\b/i
+/** Addresses on this computer are not somewhere else. */
+const LOCAL_HOST = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?)$/i
+const MAX_VALUES = 3000
+
+/** The values worth following out of a text: addresses, their hosts, email addresses, long tokens. */
+export function valuesIn(text: string): string[] {
+  const out = new Set<string>()
+  for (const m of text.matchAll(/\bhttps?:\/\/[^\s"'<>`)\]]+/gi)) {
+    const url = m[0].replace(/[.,;:!?]+$/, "")
+    try {
+      const host = new URL(url).hostname.toLowerCase()
+      if (LOCAL_HOST.test(host)) continue
+      out.add(url.toLowerCase())
+      if (host.includes(".")) out.add(host)
+    } catch {
+      // not an address after all
+    }
+  }
+  for (const m of text.matchAll(/\b[\w.+-]+@[\w-]+(\.[\w-]+)+\b/g)) out.add(m[0].toLowerCase())
+  for (const m of text.matchAll(/[A-Za-z0-9+/=_-]{32,}/g)) out.add(m[0])
+  return [...out]
+}
 
 const SHELL = new Set(["Bash", "PowerShell"])
 const MAX_TEXTS = 40
@@ -43,11 +70,48 @@ export interface RuleTerms {
 
 export class Provenance {
   readonly #texts: string[] = []
+  /** D-016: each value from an untrusted source, and where it came from. */
+  readonly #values = new Map<string, string>()
+  /** D-017: how many untrusted reads there have been, and that count when each subagent started, by its tool use id. */
+  #reads = 0
+  readonly #subagents = new Map<string, number>()
+  /** D-061: why the session's taint was raised (a result that looked like prompt injection), if it was. */
+  #raised: string | undefined
+
+  /** D-061: a result held what looks like prompt injection: from now on every network call asks. */
+  raise(why: string): void {
+    this.#raised ??= why
+  }
+
+  /** D-017: a subagent (the Task or Agent tool) is starting. */
+  subagentStarted(toolUseId: string): void {
+    this.#subagents.set(toolUseId, this.#reads)
+    if (this.#subagents.size > 200) this.#subagents.delete(this.#subagents.keys().next().value as string)
+  }
+
+  /**
+   * D-017: a subagent finished. If anything untrusted was read while it ran (it reads through the same hooks), what it
+   * reports carries that taint too: its words count as read from outside, and its values keep that as their source.
+   */
+  subagentFinished(toolUseId: string, result: unknown): void {
+    const since = this.#subagents.get(toolUseId)
+    this.#subagents.delete(toolUseId)
+    if (since === undefined || this.#reads === since) return
+    this.add(result, "the report of a subagent that read untrusted content")
+  }
+
+  #remember(text: string, source: string): void {
+    for (const v of valuesIn(text)) {
+      if (this.#values.has(v)) continue
+      this.#values.set(v, source)
+      if (this.#values.size > MAX_VALUES) this.#values.delete(this.#values.keys().next().value as string)
+    }
+  }
   /** D-015: untrusted files read in the session, kept apart: they do not taint commands, only remembering. */
   readonly #files: string[] = []
 
   /** D-015: an untrusted file the session read. */
-  addUntrustedFile(result: unknown): void {
+  addUntrustedFile(result: unknown, file?: string): void {
     let text: string
     try {
       text = typeof result === "string" ? result : JSON.stringify(result)
@@ -55,6 +119,8 @@ export class Provenance {
       return
     }
     if (!text) return
+    this.#reads++
+    this.#remember(text.slice(0, MAX_TEXT), file ? `the file ${file}` : "a file that is not the project's own words")
     this.#files.push(norm(text.slice(0, MAX_TEXT)))
     if (this.#files.length > MAX_TEXTS) this.#files.shift()
   }
@@ -81,7 +147,7 @@ export class Provenance {
   }
 
   /** Something a session read from outside. The newest are kept. */
-  add(result: unknown): void {
+  add(result: unknown, source?: string): void {
     let text: string
     try {
       text = typeof result === "string" ? result : JSON.stringify(result)
@@ -89,8 +155,44 @@ export class Provenance {
       return
     }
     if (!text) return
+    this.#reads++
+    this.#remember(text.slice(0, MAX_TEXT), source ?? "something read from outside")
     this.#texts.push(norm(text.slice(0, MAX_TEXT)))
     if (this.#texts.length > MAX_TEXTS) this.#texts.shift()
+  }
+
+  /**
+   * D-016: why a call sends on a value from an untrusted source, or undefined: a network-capable command or WebFetch
+   * whose arguments carry one, or a write outside the project whose content does. The reason names the value and where
+   * it came from.
+   */
+  egress(tool: string, input: Record<string, unknown>, cwd: string | undefined): string | undefined {
+    // D-061: after a result that looked like prompt injection, any network call asks, whatever it carries.
+    if (this.#raised && ((SHELL.has(tool) && typeof input.command === "string" && NETWORK.test(input.command)) || tool === "WebFetch"))
+      return `This is a network call after ${this.#raised}, so it is yours to decide.`
+    if (!this.#values.size) return undefined
+    let carried = ""
+    let what = ""
+    if (SHELL.has(tool) && typeof input.command === "string" && NETWORK.test(input.command)) {
+      carried = input.command
+      what = "This network command carries"
+    } else if (tool === "WebFetch" && typeof input.url === "string") {
+      carried = input.url
+      what = "This fetch goes to"
+    } else if (["Write", "Edit", "MultiEdit"].includes(tool) && typeof input.file_path === "string" && cwd) {
+      const p = input.file_path.replace(/\\/g, "/").toLowerCase()
+      const root = cwd.replace(/\\/g, "/").toLowerCase().replace(/\/$/, "")
+      if (p.startsWith(root + "/")) return undefined
+      carried = JSON.stringify(input)
+      what = "This write outside the project carries"
+    } else return undefined
+    const low = carried.toLowerCase()
+    for (const [v, source] of this.#values) {
+      const hit = /[A-Z]/.test(v) ? carried.includes(v) : low.includes(v)
+      if (hit)
+        return `${what} ${v.length > 80 ? `${v.slice(0, 77)}...` : v}, which came from ${source}, read in this session. Where a value came from can be written to send your work somewhere else, so this is yours to decide.`
+    }
+    return undefined
   }
 
   /** Why a call looks copied from what was read, or undefined. Only shell commands, of some length. */
@@ -113,10 +215,22 @@ export function withProvenance(
   tool: string,
   input: Record<string, unknown>,
   provenance: Provenance | undefined,
+  cwd?: string,
 ): Verdict {
   if (!provenance || verdict.outcome === "deny") return verdict
   const why = provenance.taint(tool, input)
-  if (!why) return verdict
+  if (!why) {
+    // D-016: a value from an untrusted source sent on. It can only escalate, never allow.
+    const egress = provenance.egress(tool, input, cwd)
+    if (!egress) return verdict
+    return {
+      ...verdict,
+      outcome: "escalate",
+      ruleId: EGRESS_RULE,
+      reason: `${egress} (${verdict.outcome === "allow" ? "allowed" : "held"} by rule ${verdict.ruleId} otherwise.)`,
+      risk: Math.min(100, Math.max(70, verdict.risk + 20)),
+    }
+  }
   return {
     ...verdict,
     outcome: "escalate",

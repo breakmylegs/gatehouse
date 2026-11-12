@@ -241,9 +241,15 @@ export function Approver() {
 
 /** Run a request through the live policy without running anything or writing to the audit log. */
 function TryIt() {
-  const [tool, setTool] = useState("Bash")
-  const [text, setText] = useState("npm install left-pad")
-  const [cwd, setCwd] = useState("C:\\dev\\my-project")
+  // C-010: a call opened from a session's timeline, taken once.
+  const [given] = useState(() => {
+    const t = useStore.getState().tryRequest
+    if (t) useStore.setState({ tryRequest: undefined })
+    return t
+  })
+  const [tool, setTool] = useState(given?.tool ?? "Bash")
+  const [text, setText] = useState(given?.text ?? "npm install left-pad")
+  const [cwd, setCwd] = useState(given?.cwd ?? "C:\\dev\\my-project")
   const [verdict, setVerdict] = useState<TestVerdict>()
   const [error, setError] = useState<string>()
 

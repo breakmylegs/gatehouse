@@ -35,6 +35,21 @@ vi.mock("../src/core", () => ({
         latest: "You: add a basket\nClaude: Done, with tests.",
       },
       { id: "s2", project: "shop", state: "idle", waiting: 0, latest: "" },
+      {
+        id: "s3",
+        project: "atlas",
+        title: "Speed up search",
+        state: "running",
+        mode: "acceptEdits",
+        waiting: 0,
+        latest: "You: speed it up",
+        activity: { phase: "running", since: new Date(Date.now() - 12_000).toISOString(), tool: "Bash", target: "npm test" },
+        recent: [
+          { who: "you", text: "Speed up search" },
+          { who: "claude", text: "I will profile it first." },
+          { who: "tool", text: "Bash: npm test" },
+        ],
+      },
     ],
     templates: [{ id: "r1", name: "Nightly triage" }],
   })),
@@ -330,7 +345,25 @@ describe("the list and a request", () => {
     expect(list.textContent).toContain("Add the basket")
     expect(list.textContent).toContain("Needs you, 1 request waits for you")
     await userEvent.click(screen.getByRole("button", { name: /Add the basket/ }))
-    expect(list.textContent).toContain("Claude: Done, with tests.")
+    // A snapshot from a computer before 11 Nov has only the excerpt, which still shows.
+    expect(await screen.findByText(/Claude: Done, with tests\./)).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Answer the request" })).toBeInTheDocument()
+  })
+
+  it("shows what a working session is doing now and its conversation, and goes back to the list (11 Nov)", async () => {
+    await unlocked()
+    await userEvent.click(await screen.findByRole("button", { name: "Sessions" }))
+    const list = await screen.findByRole("list", { name: "Sessions" })
+    expect(list.textContent).toContain("Working, Accept edits")
+    expect(list.textContent).toMatch(/Running a shell command \(npm test\), 1[2-4] s/)
+    await userEvent.click(screen.getByRole("button", { name: /Speed up search/ }))
+    expect(screen.getByRole("heading", { name: "Speed up search" })).toBeInTheDocument()
+    const said = screen.getByRole("list", { name: "Conversation" })
+    expect(said.textContent).toContain("Claude: I will profile it first.")
+    expect(said.textContent).toContain("Tool: Bash: npm test")
+    expect(screen.getByRole("region", { name: "Status" }).textContent).toMatch(/Running a shell command/)
+    await userEvent.click(screen.getByRole("button", { name: "Back to the list" }))
+    expect(await screen.findByRole("list", { name: "Sessions" })).toBeInTheDocument()
   })
 
   it("starts a routine allowed for the phone, by name, signed on the phone (G32)", async () => {

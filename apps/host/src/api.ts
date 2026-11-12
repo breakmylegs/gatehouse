@@ -31,6 +31,9 @@ import { registerLibraryRoutes } from "./library-api.js"
 import { registerUpdateRoutes } from "./update-api.js"
 import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
 import { makeAuditBundle } from "./audit-bundle.js"
+import { sessionRecords, sessionTimeline } from "./timeline.js"
+import { makeTimelineExport, type TimelineSigner } from "./timeline-export.js"
+import { listCheckpoints } from "@gatehouse/shared/node"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
@@ -45,15 +48,22 @@ import {
   PolicyEngine,
   PolicyLoadError,
   readRememberEntries,
+  redactString,
   removeRemember,
   replay,
+  type ReplayChange,
   type LoadOptions,
   type Policy,
   type PolicyStore,
   type PwshWorker,
   type ReplayRecord,
 } from "@gatehouse/policy"
-import { AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
+import { anchorsDirFor, AuditRecord, listAuditFiles, verifyAudit } from "@gatehouse/shared/audit"
+import type { AnchorService } from "./anchors.js"
+import type { EvidenceStore } from "./evidence.js"
+import { AuditIndex, TEMPLATES, type QueryTemplate } from "./audit-index.js"
+import { rebuildAt } from "./rebuild.js"
+import { revealInExplorer } from "./files-api.js"
 import {
   configPath,
   GatehouseConfig,
@@ -172,6 +182,14 @@ export interface AdminContext {
   changelog?: ChangelogStore
   /** G30: the PowerShell verifier, put in each audit bundle. */
   auditVerifier?: string
+  /** C-011: the key a session's timeline export is signed with. */
+  timelineSigner?: TimelineSigner
+  /** D-029: the audit anchors. */
+  anchors?: AnchorService
+  /** D-003: the evidence packs. */
+  evidence?: EvidenceStore
+  /** D-057: how the vulnerability snapshot stands, for Doctor. */
+  vulnSnapshot?: () => import("./vuln-snapshot.js").SnapshotState
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */
@@ -276,9 +294,14 @@ export function queryAudit(
   return { records: out }
 }
 
-export function replayRecords(dir: string): ReplayRecord[] {
+/** D-026: how far back a save of the rules is checked against the decisions really made. */
+export const REGRESSION_DAYS = 90
+
+export function replayRecords(dir: string, opts: { since?: number } = {}): ReplayRecord[] {
   const records: ReplayRecord[] = []
+  let old = false
   for (const file of listAuditFiles(dir).reverse()) {
+    if (old) break
     const lines = fs.readFileSync(path.join(dir, file), "utf8").split("\n")
     for (let i = lines.length - 1; i >= 0 && records.length < MAX_REPLAY; i--) {
       const raw = lines[i]
@@ -287,6 +310,10 @@ export function replayRecords(dir: string): ReplayRecord[] {
         const parsed = AuditRecord.safeParse(JSON.parse(raw))
         if (!parsed.success) continue
         const r = parsed.data
+        if (opts.since !== undefined && Date.parse(r.ts) < opts.since) {
+          old = true
+          break
+        }
         if (!r.cwd || r.event === "policy_activated" || r.event === "settings_changed") continue
         const input: unknown = JSON.parse(r.inputJson)
         if (!input || typeof input !== "object" || Array.isArray(input)) continue
@@ -304,6 +331,100 @@ export function replayRecords(dir: string): ReplayRecord[] {
     if (records.length >= MAX_REPLAY) break
   }
   return records
+}
+
+/**
+ * D-026: the past refusals and escalations (from the last REGRESSION_DAYS days of the audit log) that the candidate
+ * rules would allow and the rules in force would not. Only these block a save; a change that only tightens saves at
+ * once.
+ */
+export async function regressionsOf(
+  ctx: Pick<AdminContext, "auditDir" | "engine" | "pwsh">,
+  candidate: Policy,
+  now = Date.now(),
+): Promise<{ total: number; flipped: ReplayChange[] }> {
+  const records = replayRecords(ctx.auditDir, { since: now - REGRESSION_DAYS * 86_400_000 }).filter(
+    (r) => r.before.outcome !== "allow",
+  )
+  const engine = new PolicyEngine({
+    getPolicy: () => candidate,
+    ...(ctx.pwsh ? { pwsh: ctx.pwsh } : {}),
+  })
+  const byLine = new Map(records.map((r) => [r.line, r]))
+  const flipped: ReplayChange[] = []
+  for (const c of (await replay(engine, records)).changes) {
+    const r = byLine.get(c.line)
+    if (c.after.outcome !== "allow" || !r) continue
+    const today = await ctx.engine.evaluate({ toolName: r.toolName, input: r.input }, { cwd: r.cwd })
+    if (today.outcome !== "allow") flipped.push(c)
+  }
+  return { total: records.length, flipped }
+}
+
+/** D-026: what you type to save rules that would allow what was refused or escalated before. */
+export const regressionPhrase = (n: number) => `allow ${n}`
+
+/**
+ * D-026, for every save of the rules (the rules file, the Library and Your choices): replays the last 90 days of
+ * real decisions. Nothing would be allowed that was refused or asked about: the save goes ahead. Otherwise it goes
+ * ahead only when confirm is the phrase you typed on the desktop (the admin API is the desktop's alone, invariant 7),
+ * recorded first as policy_regression_accepted; a save without it is refused and recorded as policy_regression_blocked.
+ */
+export async function regressionGate(
+  ctx: AdminContext,
+  candidate: Policy,
+  confirm: unknown,
+  change: { from: string; to: string },
+): Promise<{ error: string; regression?: { total: number; phrase: string; changes: ReplayChange[] } } | undefined> {
+  const { total, flipped } = await regressionsOf(ctx, candidate)
+  if (!flipped.length) return undefined
+  const phrase = regressionPhrase(flipped.length)
+  const input = {
+    from: change.from.slice(0, 12),
+    to: change.to.slice(0, 12),
+    flipped: flipped.length,
+    records: flipped.slice(0, 50).map((c) => c.line),
+  }
+  const policyHash = ctx.store.current?.hash ?? "n/a"
+  if (confirm !== phrase) {
+    await ctx.audit.record({
+      session: "desktop",
+      event: "policy_regression_blocked",
+      channel: "desktop",
+      tool: "policy",
+      input,
+      verdict: {
+        outcome: "deny",
+        ruleId: "policy-regression",
+        reason: `The new rules would allow ${flipped.length} past calls that were refused or asked about, so they were not saved.`,
+        risk: 0,
+        decidedBy: "rules",
+        policyHash,
+      },
+      latencyMs: 0,
+    })
+    return {
+      error: `These rules would allow ${flipped.length} of the ${total} calls refused or asked about in the last ${REGRESSION_DAYS} days, so they were not saved. Type "${phrase}" to save them anyway.`,
+      regression: { total, phrase, changes: flipped.slice(0, 100) },
+    }
+  }
+  const accepted = await ctx.audit.record({
+    session: "desktop",
+    event: "policy_regression_accepted",
+    channel: "desktop",
+    tool: "policy",
+    input,
+    verdict: {
+      outcome: "allow",
+      ruleId: "policy-regression",
+      reason: `You typed the confirmation to save rules that allow ${flipped.length} past calls that were refused or asked about.`,
+      risk: 0,
+      decidedBy: "human-desktop",
+      policyHash,
+    },
+    latencyMs: 0,
+  })
+  return accepted ? undefined : { error: "Your confirmation could not be recorded, so nothing was saved." }
 }
 
 /** Loads a candidate rules file with the live overlays, without installing it. */
@@ -369,8 +490,47 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return { usage: (await ctx.planUsage?.(account, q.fresh === "1")) ?? null }
   })
 
+  // C-010: a session's timeline, every call in audit order, with the checkpoints taken in its folder.
+  app.get("/api/timeline", async (req, reply) => {
+    const session = String((req.query as { session?: string }).session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    const records = sessionRecords(ctx.auditDir, session)
+    const cwd = records.find((r) => r.cwd)?.cwd
+    const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
+    return { entries: sessionTimeline(records, checkpoints) }
+  })
+
+  // D-031: saved questions about the audit log, answered from an index kept beside it, redacted.
+  const index = new AuditIndex({ auditDir: ctx.auditDir, dir: path.join(path.dirname(path.resolve(ctx.auditDir)), "audit-index") })
+  app.get("/api/audit/query", async (req, reply) => {
+    const q = req.query as { template?: string; project?: string; limit?: string }
+    const template = String(q.template ?? "") as QueryTemplate
+    if (!Object.hasOwn(TEMPLATES, template)) return bad(reply, 400, "Choose one of the saved questions.")
+    const project = q.project?.trim() ? q.project.trim().slice(0, 120) : undefined
+    if (TEMPLATES[template].needsProject && !project) return bad(reply, 400, "Name the project.")
+    const limit = Math.min(1000, Math.max(1, Number(q.limit ?? 200) || 200))
+    const started = Date.now()
+    const r = await index.query(template, {
+      ...(project ? { project } : {}),
+      limit,
+      redact: (x) => redactString(x, { terms: ctx.config().redactTerms }),
+    })
+    return { title: TEMPLATES[template].title, ...r, ms: Date.now() - started }
+  })
+
+  // D-029: the anchors so far, and one now.
+  app.get("/api/audit/anchors", async () => ({ anchors: ctx.anchors?.list().slice(0, 30) ?? [] }))
+  app.post("/api/audit/anchor", async (_req, reply) => {
+    if (!ctx.anchors) return bad(reply, 501, "Anchoring is not available on this Host.")
+    const anchor = await ctx.anchors.anchor("on demand")
+    if (!anchor) return bad(reply, 409, "There is nothing in the audit log to anchor yet.")
+    return { anchor }
+  })
+
   app.get("/api/audit/verify", async () => {
-    const r = verifyAudit(ctx.auditDir)
+    // D-029: and each anchor against the record it names.
+    const anchorsDir = anchorsDirFor(ctx.auditDir)
+    const r = verifyAudit(ctx.auditDir, fs.existsSync(anchorsDir) ? { anchorsDir } : {})
     return {
       ...r,
       problems: r.problems.slice(0, 50),
@@ -401,6 +561,105 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return reply
       .header("content-type", "application/zip")
       .header("content-disposition", `attachment; filename="codehouse-audit-${day}.zip"`)
+      .header("cache-control", "no-store")
+      .send(zip)
+  })
+
+  // C-011: the signing key's fingerprint, to compare with the one an export names.
+  app.get("/api/timeline/key", async (_req, reply) => {
+    if (!ctx.timelineSigner) return bad(reply, 503, "Signed exports are not available here.")
+    return { fingerprint: await ctx.timelineSigner.fingerprint() }
+  })
+
+  // C-011: one session's timeline, signed, in the audit bundle, with what both verifiers said of it.
+  // D-027: the working tree as it was at one step of a session, rebuilt in a folder of its own; nothing of the session
+  // runs. Recorded, and the folder shown in Explorer when asked.
+  app.post("/api/timeline/rebuild", async (req, reply) => {
+    const b = req.body
+    if (!isObject(b) || typeof b.session !== "string" || !/^[\w-]{1,80}$/.test(b.session) || typeof b.seq !== "number")
+      return bad(reply, 400, "Name a session and a record.")
+    const records = sessionRecords(ctx.auditDir, b.session)
+    const cwd = records.find((r) => r.cwd)?.cwd
+    if (!cwd) return bad(reply, 404, "That session has no project folder in the audit log.")
+    const checkpoints = await listCheckpoints(cwd, b.session).catch(() => [])
+    const dir = path.join(path.dirname(ctx.auditDir), "rebuilds", `${b.session}-${b.seq}-${Date.now().toString(36)}`)
+    let result: Awaited<ReturnType<typeof rebuildAt>>
+    try {
+      result = await rebuildAt({ cwd, seq: b.seq, records, checkpoints, dir })
+    } catch (e) {
+      fs.rmSync(dir, { recursive: true, force: true })
+      return bad(reply, 422, (e as Error).message)
+    }
+    await ctx.audit.record({
+      session: b.session,
+      event: "step_rebuilt",
+      channel: "desktop",
+      tool: "audit",
+      input: { seq: b.seq, from: result.from.ref, applied: result.applied, exact: result.exact, tree: result.tree },
+      verdict: {
+        outcome: "allow",
+        ruleId: "step-rebuilt",
+        reason: "The working tree at one step of the session was rebuilt in a folder of its own, from a checkpoint and the recorded edits.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (b.open === true) revealInExplorer(result.dir)
+    return result
+  })
+
+  // D-003: a session's evidence packs, newest first.
+  app.get("/api/evidence", async (req, reply) => {
+    const session = String((req.query as { session?: string }).session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    return { packs: (ctx.evidence?.packs(session) ?? []).slice(0, 20) }
+  })
+
+  app.get("/api/timeline/export", async (req, reply) => {
+    const session = String((req.query as { session?: string }).session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    if (!ctx.timelineSigner || !ctx.auditVerifier) return bad(reply, 503, "Signed exports are not available here.")
+    // D-003: with an evidence pack of this session's, when one is named.
+    const sha = String((req.query as { evidence?: string }).evidence ?? "")
+    const evidence = sha ? ctx.evidence?.text(sha) : undefined
+    if (sha && (!evidence || (JSON.parse(evidence) as { session?: string }).session !== session))
+      return bad(reply, 404, "That evidence pack is not this session's, or it is no longer kept.")
+    const records = sessionRecords(ctx.auditDir, session)
+    const cwd = records.find((r) => r.cwd)?.cwd
+    const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
+    const entries = sessionTimeline(records, checkpoints)
+    const { zip, fingerprint, ok } = await makeTimelineExport({
+      auditDir: ctx.auditDir,
+      session,
+      entries,
+      signer: ctx.timelineSigner,
+      verifier: ctx.auditVerifier,
+      ...(evidence !== undefined ? { evidence } : {}),
+    })
+    const written = await ctx.audit.record({
+      session,
+      event: "timeline_exported",
+      channel: "desktop",
+      tool: "audit",
+      input: { entries: entries.length, bytes: zip.length, fingerprint, verified: ok, ...(sha ? { evidence: sha } : {}) },
+      verdict: {
+        outcome: "allow",
+        ruleId: "timeline-exported",
+        reason: "A session's timeline was exported, signed, with the records it was made from.",
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    if (!written) return bad(reply, 500, "The export could not be recorded in the audit log, so it was not given.")
+    const day = new Date().toISOString().slice(0, 10)
+    return reply
+      .header("content-type", "application/zip")
+      .header("content-disposition", `attachment; filename="codehouse-timeline-${day}.zip"`)
+      .header("x-codehouse-key", fingerprint)
       .header("cache-control", "no-store")
       .send(zip)
   })
@@ -484,6 +743,9 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       return bad(reply, 422, "The rules do not load, so nothing was saved.", {
         errors: cand.errors,
       })
+    // D-026: a change that would allow what was refused or asked about is saved only with your typed phrase.
+    const refused = await regressionGate(ctx, cand.policy, b.confirm, { from: sha(current), to: sha(b.yaml) })
+    if (refused) return bad(reply, 409, refused.error, { regression: refused.regression })
     await writeFileAtomic(file, b.yaml)
     ctx.store.load()
     const hash = ctx.store.current?.hash ?? cand.policy.hash
@@ -1509,6 +1771,10 @@ const LIVE_SETTINGS = [
   "memoryGovernor",
   "testIntegrity",
   "untrustedFiles",
+  "allowedLicences",
+  "evidence",
+  "mutation",
+  "dataClassification",
   "riskBudget",
   "outputStyle",
   "worktreeLocation",

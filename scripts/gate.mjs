@@ -82,7 +82,10 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   if (
     retryFlaky &&
     r.status !== 0 &&
-    /Failed to start forks worker|Timeout waiting for worker/.test(out)
+    // 10 Nov: also "Worker exited unexpectedly with exit code 3221225794 during starting state" (0xC0000142, a
+    // process Windows could not start while memory was short).
+    // And "... during started state while running test file" (0x80000003, a worker that died part way, memory short).
+    /Failed to start forks worker|Timeout waiting for worker|Worker exited unexpectedly with exit code \d+ during start(ing|ed) state/.test(out)
   ) {
     say("  the test workers did not start (machine busy); running again, one at a time")
     r = once(["--maxWorkers=1"])
@@ -99,8 +102,14 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   // its own output, or the run fails with nothing to go on (30 Oct: "72 passed (73)" and no FAIL line).
   if (r.status !== 0 && !summary.some((l) => /FAIL|error TS|✖|problems?\)/.test(l)))
     console.log(out.slice(-4000))
+  // A file that failed twice in its own process: what it said, or there is nothing to go on (10 Nov, six such files
+  // in the release passed on their own minutes later, and their errors were not kept).
+  else if (r.status !== 0 && summary.some((l) => /\[shards\] FAILED/.test(l))) console.log(out.slice(-12000))
+  lastOutput = out
   return r.status ?? 1
 }
+/** What the last run printed, for the files a dead worker was running (they are not in vitest's report). */
+let lastOutput = ""
 
 // What changed: committed since the base, staged, unstaged and new files.
 const base =
@@ -136,10 +145,17 @@ const depsChanged = (f) => {
   const now = fs.existsSync(path.join(root, f)) ? fs.readFileSync(path.join(root, f), "utf8") : ""
   return before.status !== 0 || installs(before.stdout) !== installs(now)
 }
+// 11 Nov: with memory short, the related tests' two long-lived workers died part way, and so did whatever came after
+// them, five releases in a row. Every file, each in a process of its own as memory allows (C-001), is slower and gets
+// through, so the gate goes that way when less than this is free.
+const SHORT_OF_MEMORY = 4 * 1024 ** 3
+const memoryReason =
+  os.freemem() < SHORT_OF_MEMORY ? `only ${(os.freemem() / 1024 ** 3).toFixed(1)} GB of memory is free` : undefined
 const fullReason = has("--full")
   ? "asked for"
   : (changed.find((f) => FULL_IF.some((re) => re.test(f))) ??
-    changed.filter((f) => /(^|\/)package\.json$/.test(f)).find((f) => depsChanged(f)))
+    changed.filter((f) => /(^|\/)package\.json$/.test(f)).find((f) => depsChanged(f)) ??
+    memoryReason)
 say(`${changed.length} file${changed.length === 1 ? "" : "s"} changed since ${base}`)
 
 // Workspaces and who depends on whom, from their package.json files.
@@ -273,32 +289,61 @@ if (fullReason) {
   let ranRelated = new Set()
   if (sources.length) {
     const report = path.join(os.tmpdir(), `codeh-gate-${process.pid}.json`)
-    const code = run(
-      `tests: those that import any of ${sources.length} changed source file${sources.length === 1 ? "" : "s"}`,
-      node,
-      [
-        bin("vitest/vitest.mjs"),
-        "related",
-        "--run",
-        "--passWithNoTests",
-        "--maxWorkers=2",
-        "--reporter=default",
-        "--reporter=json",
-        `--outputFile=${report}`,
-        ...sources,
-      ],
-      { retryFlaky: true },
-    )
-    if (code !== 0) failures.push("related tests")
+    const relatedArgs = (workers) => [
+      bin("vitest/vitest.mjs"),
+      "related",
+      "--run",
+      "--passWithNoTests",
+      `--maxWorkers=${workers}`,
+      "--reporter=default",
+      "--reporter=json",
+      `--outputFile=${report}`,
+      ...sources,
+    ]
+    const label = `tests: those that import any of ${sources.length} changed source file${sources.length === 1 ? "" : "s"}`
+    let code = run(label, node, relatedArgs(2))
+    let j
     try {
-      const j = JSON.parse(fs.readFileSync(report, "utf8"))
+      j = JSON.parse(fs.readFileSync(report, "utf8"))
+      fs.rmSync(report, { force: true })
+    } catch {
+      j = undefined
+    }
+    if (code !== 0 && j) {
+      // 10 Nov: with memory short, workers died part way through files that pass on their own, and a run of the whole
+      // set in one worker died the same way an hour later. The files that did not pass are run again instead, each in
+      // a process of its own, as many at once as free memory allows (C-001); one that fails twice still fails.
+      const rel = (f) => path.relative(root, path.resolve(root, f)).split(path.sep).join("/")
+      const again = [
+        ...new Set([
+          ...j.testResults.filter((r) => r.status !== "passed" && r.status !== "skipped").map((r) => rel(r.name)),
+          // A file a worker died in is not in the report at all; vitest names it in its error.
+          ...[...lastOutput.matchAll(/while running test file (\S+?\.test\.\w+)/g)].map((m) => rel(m[1])),
+        ]),
+      ]
+      if (again.length) {
+        say(`  ${again.length} file${again.length === 1 ? "" : "s"} did not pass; each runs again in a process of its own`)
+        code = run(`tests: ${again.length} again, one file at a time by free memory`, node, [
+          path.join(root, "scripts", "test-shards.mjs"),
+          ...again,
+        ])
+      }
+    } else if (code !== 0) {
+      // No report at all: the workers never started. Once more, one at a time.
+      say("  the test workers did not start (machine busy); running again, one at a time")
+      code = run(label, node, relatedArgs(1))
+      try {
+        j = JSON.parse(fs.readFileSync(report, "utf8"))
+        fs.rmSync(report, { force: true })
+      } catch {
+        j = undefined
+      }
+    }
+    if (code !== 0) failures.push("related tests")
+    if (j)
       ranRelated = new Set(
         j.testResults.map((r) => path.relative(root, r.name).split(path.sep).join("/")),
       )
-      fs.rmSync(report, { force: true })
-    } catch {
-      // no report: run the named ones anyway
-    }
   }
   const rest = [...named].filter((t) => !ranRelated.has(t)).sort()
   if (rest.length) {

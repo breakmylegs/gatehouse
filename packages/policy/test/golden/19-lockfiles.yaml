@@ -1,0 +1,9 @@
+# D-054, the lockfile diff guard: a lockfile edited by hand, with a file tool or the shell, goes to a person; reading
+# one, or the package manager writing it, is as before.
+- { t: Edit, in: { file_path: "${WS}/fx/l1/package-lock.json", old_string: "\"version\": \"4.17.20\"", new_string: "\"version\": \"4.17.21\"" }, o: escalate, r: lockfile-edited, note: "a version changed with no manifest change" }
+- { t: Edit, in: { file_path: "${WS}/fx/l2/package-lock.json", old_string: "\"node_modules/evil\": {\n      \"version\": \"1.0.0\"\n    }", new_string: "\"node_modules/evil\": {\n      \"version\": \"1.0.0\",\n      \"hasInstallScript\": true\n    }" }, o: escalate, r: lockfile-edited, note: "a package gains an install script" }
+- { t: Edit, in: { file_path: "${WS}/fx/l3/yarn.lock", old_string: "  resolved \"https://registry.yarnpkg.com/a/-/a-1.0.0.tgz\"", new_string: "  resolved \"git+https://github.com/someone/a.git#abc\"" }, o: escalate, r: lockfile-edited, note: "a source moved to git" }
+- { t: Bash, cmd: "sed -i s/4.17.20/4.17.21/ package-lock.json", o: escalate, r: lockfile-edited, note: "edited from the shell" }
+- { t: Write, in: { file_path: "${WS}/fx/l5/poetry.lock", content: "[[package]]\nname = \"requests\"\nversion = \"2.31.0\"\n" }, o: escalate, r: lockfile-edited, note: "a Python lockfile written by hand" }
+- { t: Read, p: "${WS}/package-lock.json", o: allow, r: read-workspace, note: "reading one is fine" }
+- { t: Bash, cmd: "npm install", o: escalate, r: package-install, note: "the package manager writing it asks as before" }

@@ -27,6 +27,8 @@ export const Verdict = z.object({
   expanded: z.array(z.object({ from: z.string(), line: z.string() })).max(20).optional(),
   /** D-013: what it would run that cannot be read. */
   unknownEffects: z.array(z.string()).max(10).optional(),
+  /** D-064: the same command with --ignore-scripts, which the card offers as "Run without scripts" (an edited input). */
+  withoutScripts: z.string().max(20_000).optional(),
 })
 export type Verdict = z.infer<typeof Verdict>
 

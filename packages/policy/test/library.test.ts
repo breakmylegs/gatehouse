@@ -139,10 +139,12 @@ describe("packs that replace an ask", () => {
     ).outcome
 
   it("turn the ask off only while they are on", async () => {
-    expect(await outcome(withUserRules({ version: 1 }), "npm install react")).toBe("escalate")
-    expect(await outcome(withUserRules({ version: 1, packs: ["packages"] }), "npm install react")).toBe(
+    expect(await outcome(withUserRules({ version: 1 }), "pip install -r requirements.txt")).toBe("escalate")
+    expect(await outcome(withUserRules({ version: 1, packs: ["packages"] }), "pip install -r requirements.txt")).toBe(
       "allow",
     )
+    // D-053: a package the project does not use yet still asks, pack or not.
+    expect(await outcome(withUserRules({ version: 1, packs: ["packages"] }), "npm install react")).toBe("escalate")
     // The pack's own ask for whole-computer installs still holds.
     expect(await outcome(withUserRules({ version: 1, packs: ["packages"] }), "winget install x")).toBe(
       "escalate",

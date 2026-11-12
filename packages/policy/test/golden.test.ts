@@ -232,6 +232,12 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "15-test-integrity": 40,
   "16-sealed-checks": 12,
   "17-effects-expand": 30,
+  "18-dependencies": 12,
+  "19-lockfiles": 6,
+  "20-installers": 7,
+  "21-config-tamper": 10,
+  "22-licences": 8,
+  "23-install-scripts": 6,
 }
 
 for (const { category, cases } of corpus) {

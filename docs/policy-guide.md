@@ -224,6 +224,10 @@ Test files are found by convention: a `test`, `tests`, `spec` or `__tests__` fol
 
 In Extreme approval the Host decides what happens to such an escalation per project (Settings, Sessions, Test integrity): by default it is approved and the session says its tests were weakened; a strict project waits for a person. Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
 
+### Settings that decide what a tool may do (D-060)
+
+Built into the floor, so it applies in every mode and before any rule, a session may not change what an AI tool may do without asking: permissions, hooks, defaultMode and the like in `.claude/settings*.json`; keys with autoApprove, chat.tools or chat.agent in `.vscode/settings.json`; anything in `.cursor` or `.codex`; and anything in Codehouse's data folder (`AppData/Local/Gatehouse`) or the managed folder (`ProgramData/Codehouse`). A Write is compared with the file as it is; one that cannot be read as JSON is denied. Shell writes (redirects, Set-Content and the like, sed -i, a copy or move onto one) are denied too. Other settings in the same files, and reading them, are as before. The rule id is `agent-config-tamper`.
+
 ### Built-in floor rules (D-002)
 
 One floor rule is built into Codehouse and checked before the rules file's own, so no rules file can leave it out: `sealed-checks` denies every tool any path under `Gatehouse/sealed` or `Gatehouse/heldout-runs`, wherever Codehouse's data folder is, in either slash and any case. That is where the sealed held-out checks are kept and run. A second, `test-locks`, does the same for `Gatehouse/locks`, where the pins of locked tests are kept (D-007).
@@ -231,6 +235,18 @@ One floor rule is built into Codehouse and checked before the rules file's own, 
 ### What a shell call also runs (D-013)
 
 Before a Bash or PowerShell call is decided, the engine reads what it would also run (`expand.ts`; files are read, never run): an npm, pnpm or yarn script with its pre and post scripts, the lifecycle scripts of an install, and the scripts those call, a few levels deep and never round a loop; the recipe of a make target and of the targets it needs; the git hooks a git command fires (commit, push, merge, pull, checkout, switch, rebase, am), from `core.hooksPath` or `.git/hooks`, unless `--no-verify` skips them; a `.cmd` or `.bat` run by name or path; the local tool `npx` would run, or that it would fetch one; a local dotnet tool from `.config/dotnet-tools.json`; and, for PowerShell without `-NoProfile`, your profile. Each line is judged like the call. A deny on any line denies the call (its reason says which line, from where). A line a rule escalates (network, a package install, a push, a variable) makes the call ask when it is stricter than the call itself. What cannot be read escalates as `unknown-effects` (risk 60). A line no rule speaks of (an ordinary `vitest run`) does not by itself make the call ask, so a test script does not turn every `npm test` into a question. The lines go on the verdict (`expanded`, `unknownEffects`) and are shown on the desktop and phone cards under Also runs.
+
+### Dependencies (D-053)
+
+A call that adds a dependency is judged by name, with no network (`dependencies.ts`). What is added is read from install commands (npm, pnpm and bun install or add, yarn add, pip install, python -m pip install, uv pip install, uv and poetry add, pipenv install, dotnet add package, nuget install, Install-Package, cargo add, go get) and from edits of manifests (package.json, requirements files, pyproject.toml, .csproj and Directory.Packages.props, Cargo.toml, go.mod). A name the project already uses, in a lockfile (package-lock.json, yarn.lock, pnpm-lock.yaml, poetry.lock, uv.lock, Pipfile.lock, packages.lock.json, Cargo.lock, go.sum) or a manifest, at the project's root or in the folder, passes as before. So does one in `dependencies.local.json` beside rules.local.yaml (`{"approved": ["npm:my-lib", "pypi:my-tool"]}`; unreadable approves nothing). Any other escalates as `dependency-new`: at 80 when it is one or two letters from a popular package (the reason names it), at 72 otherwise. A name on the bundled list of names models are known to invent (`dependency-lists.ts`, each with its source and date) is denied as `dependency-hallucinated` while the project does not use it. Remember rules do not lift either.
+
+### Lockfiles (D-054)
+
+An agent's edit of a lockfile (package-lock.json, npm-shrinkwrap.json, yarn.lock, pnpm-lock.yaml, bun.lockb, poetry.lock, uv.lock, Pipfile.lock, packages.lock.json, Cargo.lock, go.sum, composer.lock, Gemfile.lock), by a file tool or from the shell (sed -i, a redirect, Set-Content and the like), escalates as `lockfile-edited`: a lockfile is written by the package manager from the manifest, and a hand edit changes what is installed with nothing in the manifest to explain it. The reason names packages that gain an install script (with the script, where the package is installed in node_modules to read it) and sources other than the registry (git, a file, another host); either raises it to 80. Reading a lockfile, and the package manager writing one, are as before.
+
+### Installing software (D-096)
+
+winget install, upgrade and add, choco install and upgrade (and cinst), scoop install and update, msiexec, and PowerShell's Install-Module, Install-Package and Install-Script escalate as `installer-admission` at 80 (High, so Auto and Accept edits ask too), with the package id, the source and, for a WinGet id, its publisher part, marked as not checked since nothing is looked up. Extreme approval never approves it.
 
 ## 8. Redaction
 

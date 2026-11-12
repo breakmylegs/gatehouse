@@ -228,7 +228,9 @@ export function Dashboard() {
                           {s.claims.at(-1)!.outcome === "verified"
                             ? "Claim verified"
                             : s.claims.at(-1)!.outcome === "contradicted"
-                              ? "Claim contradicted"
+                              ? s.claims.at(-1)!.flaky
+                                ? "Claim contradicted: flaky tests"
+                                : "Claim contradicted"
                               : "Claim unverified"}
                         </span>
                       ) : null}

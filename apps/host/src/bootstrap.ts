@@ -1,4 +1,12 @@
 import { TestLocks } from "./test-locks.js"
+import { checkIntent } from "./intent-drift.js"
+import type { MutationExec } from "./mutation.js"
+import { VulnCommitGuard, VulnSnapshot } from "./vuln-snapshot.js"
+import { EvidenceService, EvidenceStore } from "./evidence.js"
+import { AnchorService } from "./anchors.js"
+import { SastCommitGuard } from "./sast.js"
+import { InstructionPins } from "./instruction-pins.js"
+import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
 import fs from "node:fs"
@@ -10,7 +18,7 @@ import { Telemetry } from "./telemetry.js"
 import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { TriggerWatcher } from "./routine-triggers.js"
 import { BoardStore } from "./board.js"
-import { buildPhoneSessions, PhoneSessionsSharer } from "./phone-sessions.js"
+import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
 import { chatArtifactClient } from "./artifact-client.js"
 import { ArtifactStore } from "./artifacts.js"
@@ -193,6 +201,7 @@ export function createHost(opts: HostOptions = {}): Host {
     getPolicy: () => store.current,
     pwsh,
     sensitiveTerms: () => config.redactTerms ?? [],
+    allowedLicences: () => config.allowedLicences,
   })
   const dir = auditDir(env)
   const audit = new HostAudit(
@@ -463,6 +472,19 @@ export function createHost(opts: HostOptions = {}): Host {
               }),
             }
           : {}),
+        // D-037: a coding session's assumptions, kept by its session.
+        ...(kind !== "chat"
+          ? {
+              assumptions: {
+                declare: async (text: string, check?: string) => {
+                  const s = manager.get(sessionId)
+                  if (!s) return { text: "The session is not open.", isError: true }
+                  const id = await s.declareAssumption(text, check)
+                  return { text: `Recorded as assumption ${id}. The person sees it until they verify it.` }
+                },
+              },
+            }
+          : {}),
         // notify_user reaches the desktop through the session's event stream. The phone path is added with the relay.
         host: { notify: async (m) => (manager.notify(m.sessionId, m.text), true) },
         policy: () => store.current,
@@ -525,6 +547,17 @@ export function createHost(opts: HostOptions = {}): Host {
   // D-007: the locked tests, their pins sealed by a key DPAPI keeps for this Windows user.
   const locks = new TestLocks({ dir: path.join(gatehouseDataDir(env), "locks"), sealer: () => sealer() })
   deps.locks = locks
+  // D-062: a commit of code the local analysis rates Severe goes to a person.
+  deps.sast = new SastCommitGuard()
+  // D-057: an offline vulnerability snapshot in the managed folder, when one is there and signed.
+  const vulnSnapshot = new VulnSnapshot(managedPolicyDir(env))
+  deps.vulns = new VulnCommitGuard(vulnSnapshot)
+  // D-059: what each project tells Claude, pinned the same way.
+  const instructions = new InstructionPins({
+    dir: path.join(gatehouseDataDir(env), "instruction-pins"),
+    sealer: () => sealer(),
+  })
+  deps.instructions = instructions
   // D-002: sealed held-out checks, run under a job object where Codehouse-Limits.exe can be had.
   const limitsExe = findLimitsExe({
     installDir: env.GATEHOUSE_PACKAGED === "1" ? path.dirname(REPO_ROOT) : undefined,
@@ -568,6 +601,24 @@ export function createHost(opts: HostOptions = {}): Host {
     )
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
+  // D-004: a mutation run's test runs, as Codehouse actions; the memory cap's stop is told apart from a failure.
+  const mutationExecFor = (sessionId: string): MutationExec => async (command, cwd, timeoutMs) => {
+    const s = manager.get(sessionId)
+    const r = await runCodehouseAction(
+      { sessionId, cwd, project: s?.project ?? "", command, why: "testing the tests against small changes to the new lines", level: s?.info().resources ?? "high", timeoutMs },
+      { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+    )
+    return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
+  }
+  deps.mutationExec = mutationExecFor
+  // D-040: only a runtime on this computer, and only when other models are switched on in Settings.
+  deps.intentCheck = (goal, said) =>
+    checkIntent({
+      goal,
+      said,
+      cfg: config.providers?.multi?.enabled ? (config.providers.local as LocalRuntimeConfig | undefined) : undefined,
+      redact: (t) => redactString(t, { terms: config.redactTerms }),
+    })
   // Chat's own store (CH-02, CH-03): every native chat is recorded as it happens, redacted first (invariant 12).
   const chatStore = new ChatStore({
     file: path.join(gatehouseDataDir(env), "chat", "chat.db"),
@@ -645,6 +696,10 @@ export function createHost(opts: HostOptions = {}): Host {
     store: phoneStore,
     broker,
     kill,
+    // D-025: anything signed on the phone starts the dead-man timers again.
+    heartbeat: () => manager.heartbeat(),
+    // D-029b: an audit anchor signed on the phone (the anchors are made further down; this runs later).
+    anchors: { phone: (o) => anchors.phone(o) },
     audit,
     log,
     // G32: a signed message or Interrupt from the phone reaches only a session open here, as the phone was shown it.
@@ -889,6 +944,20 @@ export function createHost(opts: HostOptions = {}): Host {
             x.count && x.command ? runHeldOutFor(s, heldOut, audit, "queue-empty", actionFor(s.id)) : undefined,
           )
           .catch((e: Error) => log(`held-out checks could not run: ${e.message.slice(0, 200)}`))
+    } else if (type === "intent_drift") {
+      // D-040: the phone is told too.
+      const body = typeof data.reason === "string" ? data.reason : "The work may no longer serve the goal."
+      void phone.notify("notify", { title: "Drifting from the goal?", body, project }).catch(() => undefined)
+    } else if (type === "heartbeat_missed") {
+      // D-025: nothing was heard from you, so an Extreme session paused: the phone and push channels are told.
+      const body = "Nothing was heard from you in time, so Extreme approval paused it. Start it again on the desktop."
+      void phone.notify("notify", { title: "Paused: are you there?", body, project }).catch(() => undefined)
+      void ntfy.note("paused, are you there?", body, project)
+    } else if (type === "thrash_paused") {
+      // D-075: Claude was told it was repeating itself and did it again, so the turn stopped: the phone is told.
+      const body = "It kept repeating the same thing after it was told, so Codehouse stopped the turn. Look at it on the desktop."
+      void phone.notify("notify", { title: "Stopped: going round in circles", body, project }).catch(() => undefined)
+      void ntfy.note("stopped, repeating itself", body, project)
     } else if (type === "risk_budget_exhausted") {
       // D-018: the risk budget is spent: the phone and push channels are told.
       const body = data.extreme
@@ -913,9 +982,35 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   // G32 (O18, owner 30 Oct): the sessions on the phone, read only, redacted and sealed to each phone; only while one
   // is paired.
+  // Owner, 11 Nov (see sessions remotely, with their status): each session's conversation and what it is doing now,
+  // kept from its stream, so the phone is told within a few seconds.
+  // D-003: each change's evidence, kept 90 days by default, redacted first.
+  const evidence = new EvidenceService({
+    store: new EvidenceStore({ dir: path.join(gatehouseDataDir(env), "evidence"), redact: (t) => redactString(t, { terms: config.redactTerms }) }),
+    auditDir: dir,
+    checkpoints,
+    audit,
+    version: () => updates.status().current,
+    retentionDays: () => config.evidence?.retentionDays ?? 90,
+    log,
+  })
+  evidence.prune()
+  deps.evidence = evidence
+  // D-029: the audit chain's head, signed once a day and on demand, kept apart from the log.
+  const anchors = new AnchorService({
+    dir: path.join(gatehouseDataDir(env), "anchors"),
+    auditDir: dir,
+    signer: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer(), file: "anchor-key.sealed" }),
+    audit,
+    log,
+  })
+  anchors.start()
+  const phoneLive = new PhoneLive()
   const phoneSessions = new PhoneSessionsSharer({
     build: () =>
       buildPhoneSessions({
+        live: phoneLive,
+        head: () => anchors.head(),
         list: () => manager.list(),
         messages: (sdkSessionId, cwd) => history.allMessages(sdkSessionId, cwd),
         redact: (t) => redactString(t, { terms: config.redactTerms }),
@@ -928,8 +1023,16 @@ export function createHost(opts: HostOptions = {}): Host {
     share: (s) => phone.shareSessions(s),
     wanted: () => phoneStore.relay() !== undefined && phoneStore.phones().length > 0,
     log,
+    minGapMs: 3_000,
   })
   manager.on("session", () => phoneSessions.poke())
+  manager.on("message", ({ sessionId, message }) => {
+    if (phoneLive.message(sessionId, message)) phoneSessions.poke()
+  })
+  manager.on("prompted", ({ sessionId, text }) => {
+    phoneLive.prompted(sessionId, text)
+    phoneSessions.poke()
+  })
   phoneSessions.start()
 
   const health = (): Health => {
@@ -1058,7 +1161,11 @@ export function createHost(opts: HostOptions = {}): Host {
     limits: limitPauser,
     heldOut,
     heldOutExec: actionFor,
+    mutationExec: mutationExecFor,
+    dataDir: gatehouseDataDir(env),
     locks,
+    evidence,
+    instructions,
     governor,
     audit,
     engine,
@@ -1199,6 +1306,11 @@ export function createHost(opts: HostOptions = {}): Host {
       changelog,
       // G30: the verifier that goes in each audit bundle (scripts\verify-audit.ps1, in the app folder too).
       auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
+      // C-011: the key timeline exports are signed with, sealed for this Windows user.
+      timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
+      anchors,
+      evidence: evidence.store,
+      vulnSnapshot: () => vulnSnapshot.status(),
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,

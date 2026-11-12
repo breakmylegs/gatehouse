@@ -351,6 +351,13 @@ export async function answer(
   await call("POST", "/api/phone/envelopes", { requestId: item.relayId, sealed }, session.token)
 }
 
+/** D-025: "I'm still here", for a session's dead-man timer, signed with this phone's passkey. */
+export async function stillHere(session: Session, device: DeviceInfo): Promise<void> {
+  const envelope = newEnvelope({ type: "heartbeat", deviceId: device.phoneId, now: Date.now(), ttlMs: ttl.kill })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, "kill")
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
 export async function kill(session: Session, device: DeviceInfo): Promise<void> {
   const envelope = newEnvelope({
     type: "kill",
@@ -401,6 +408,22 @@ export async function startTemplate(
     now: Date.now(),
     ttlMs: ttl.kill,
     templateId,
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
+/**
+ * D-029b: anchors the audit log on the computer at the record named, signed with Face ID. The computer checks the
+ * passkey and that the record has that hash before it keeps the anchor.
+ */
+export async function signAnchor(session: Session, device: DeviceInfo, head: { seq: number; hash: string }): Promise<void> {
+  const envelope = newEnvelope({
+    type: "anchor",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    anchor: { seq: head.seq, hash: head.hash },
   })
   const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
   await call("POST", "/api/phone/envelopes", { sealed }, session.token)

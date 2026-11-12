@@ -21,4 +21,4 @@ escalate:
 cases:
   - { tool: Bash, input: { command: "dotnet build -c Release" }, expect: allow, rule: dotnet-dev-build }
   - { tool: Bash, input: { command: "dotnet test" }, expect: allow }
-  - { tool: Bash, input: { command: "dotnet add src/App.csproj package Serilog" }, expect: escalate, rule: dotnet-dev-package }
+  - { tool: Bash, input: { command: "dotnet add src/App.csproj package Serilog" }, expect: escalate, rule: dependency-new }

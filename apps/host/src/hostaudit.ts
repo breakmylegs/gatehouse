@@ -21,6 +21,24 @@ export class HostAudit {
     return this.#writer.dir
   }
 
+  /** D-030: records, and gives back the record with its place in the chain; undefined when it could not be written. */
+  async recordWithHash(entry: AuditEntry): Promise<{ seq: number; hash: string; ts: string } | undefined> {
+    try {
+      const record = await this.#writer.append(entry)
+      this.onRecord?.(record)
+      for (const f of this.listeners)
+        try {
+          f(record)
+        } catch {
+          // a listener's failure never stops the record
+        }
+      return { seq: record.seq, hash: record.hash, ts: record.ts }
+    } catch (e) {
+      this.#log(`audit append failed (${(e as NodeJS.ErrnoException).code ?? (e as Error).name})`)
+      return undefined
+    }
+  }
+
   async record(entry: AuditEntry): Promise<boolean> {
     try {
       const record = await this.#writer.append(entry)

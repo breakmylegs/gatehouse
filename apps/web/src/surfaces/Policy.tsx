@@ -3,6 +3,7 @@ import { Library } from "./Library"
 import { diffLines } from "diff"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
+import { RegressionConfirm, regressionIn, type Regression } from "../components/RegressionConfirm"
 import { api } from "../lib/api"
 import { Insights } from "./Insights"
 import { PolicyChoices } from "./PolicyChoices"
@@ -369,7 +370,8 @@ function TestCommand() {
   )
 }
 
-function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Promise<void> }) {
+/** The rules editor; exported for its test (D-026). */
+export function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Promise<void> }) {
   const [yaml, setYaml] = useState(data.rulesYaml)
   const [replay, setReplay] = useState<ReplayResult>()
   const [errors, setErrors] = useState<string[]>()
@@ -382,6 +384,8 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
     setReviewing(false)
   }, [data.rulesYamlHash, data.rulesYaml])
 
+  // D-026: rules that would allow what was refused or asked about before, and the phrase that saves them anyway.
+  const [regression, setRegression] = useState<Regression>()
   const dirty = yaml !== data.rulesYaml
   const parts = useMemo(
     () => (reviewing ? diffLines(data.rulesYaml, yaml) : []),
@@ -397,18 +401,22 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
     else setErrors(r.errors ?? [r.error ?? "The replay failed"])
   }
 
-  async function activate() {
+  async function activate(confirm?: string) {
     setBusy(true)
     setErrors(undefined)
     const r = await api<{ hash: string }>("PUT", "/api/policy/rules", {
       yaml,
       baseHash: data.rulesYamlHash,
+      ...(confirm ? { confirm } : {}),
     })
     setBusy(false)
     if (!r.ok) {
+      const reg = regressionIn(r.detail)
+      if (reg) setRegression(reg)
       setErrors(r.errors ?? [r.error ?? "The rules were not saved"])
       return
     }
+    setRegression(undefined)
     toast("New rules are live")
     setReviewing(false)
     await onActivated()
@@ -430,6 +438,7 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
             setYaml(e.target.value)
             setReplay(undefined)
             setReviewing(false)
+            setRegression(undefined)
           }}
           spellCheck={false}
         />
@@ -473,6 +482,9 @@ function Edit({ data, onActivated }: { data: PolicyData; onActivated: () => Prom
             </ul>
           ) : null}
         </section>
+      ) : null}
+      {regression ? (
+        <RegressionConfirm regression={regression} busy={busy} onConfirm={(p) => void activate(p)} />
       ) : null}
       {reviewing ? (
         <section aria-label="Diff" className="panel p-0">

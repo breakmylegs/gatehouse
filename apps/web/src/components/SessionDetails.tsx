@@ -136,6 +136,15 @@ export function SessionDetails({
               <dd className="m-0">{session.model}</dd>
             </>
           ) : null}
+          {session.deadman ? (
+            <>
+              <dt className="text-mut">Dead-man</dt>
+              <dd className="m-0">
+                pauses if nothing is heard from you for {session.deadman.minutes} minutes (last at{" "}
+                {new Date(session.deadman.lastHeardFrom).toLocaleTimeString()})
+              </dd>
+            </>
+          ) : null}
           {session.riskBudget !== undefined ? (
             <>
               <dt className="text-mut">Risk budget</dt>

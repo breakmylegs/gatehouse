@@ -20,6 +20,63 @@ interface Hunk {
 }
 import { send, useStore } from "../store"
 
+/** D-056: the lockfiles Codehouse reads for an SBOM (as packages/policy/src/lockfiles.ts names them). */
+const LOCKFILE =
+  /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
+
+/** D-039: a changed requirement and what it is linked to. */
+interface Impact {
+  id: string
+  title: string
+  code: string[]
+  tests: string[]
+  adrs: string[]
+}
+
+/** D-050: a draft threat model entry, as apps/host/src/threat-delta.ts gives it. */
+interface Draft {
+  kind: string
+  where: string
+  what: string
+  markdown: string
+}
+
+/** D-034: a hunk neither the plan nor a requirement accounts for. */
+interface Untraced {
+  file: string
+  hunk: number
+  reason: string
+}
+
+/** D-028: one hunk's origin, as apps/host/src/provenance-graph.ts gives it. */
+interface Origin {
+  file: string
+  hunk: number
+  call?: { seq: number; tool: string; file: string; sources: Array<{ seq: number; tool: string; what: string; injected?: true; outside?: true }> }
+}
+
+/** D-004: a mutation run's report, as apps/host/src/mutation.ts gives it. */
+interface MutationReport {
+  tool: string
+  detected?: "stryker-js" | "stryker-net"
+  mutants: number
+  killed: number
+  survived: Array<{ file: string; line: number; original: string; mutated: string }>
+  score?: number
+  threshold?: number
+  passed?: boolean
+  aborted?: string
+}
+
+/** D-062: one finding of the local analysis, as apps/host/src/sast.ts gives it. */
+interface Finding {
+  file: string
+  line: number
+  kind: string
+  severity: "Severe" | "High"
+  title: string
+}
+
 interface Checkpoint {
   ref: string
   createdAt: string
@@ -66,6 +123,19 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [comments, setComments] = useState<Comments>({})
   const said = Object.values(comments).filter((c) => c.text.trim())
 
+  const [findings, setFindings] = useState<Finding[]>([])
+  // D-066 and D-006: changed files nothing tests, and what replaying their captured behaviour found.
+  const [untested, setUntested] = useState<string[]>([])
+  const [untraced, setUntraced] = useState<Untraced[]>([])
+  const [drafts, setDrafts] = useState<Draft[]>([])
+  const [impacts, setImpacts] = useState<Impact[]>([])
+  const [behaviour, setBehaviour] = useState<Record<string, { cases: number; deltas?: string[] }>>({})
+  const [capturing, setCapturing] = useState<string>()
+  // D-028: where each file's hunks came from, by file.
+  const [origins, setOrigins] = useState<Record<string, Origin[]>>({})
+  // D-004: the last mutation run's report, and whether one is running.
+  const [mutation, setMutation] = useState<MutationReport>()
+  const [mutating, setMutating] = useState(false)
   const load = useCallback(async () => {
     const r = await send({ type: "changes", sessionId, ...(ref ? { ref } : {}) })
     if (!r.ok) {
@@ -74,6 +144,19 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     }
     setError(undefined)
     setData(r.data as Changes)
+    // D-062: what the local analysis finds on the changed lines. A failure only leaves the list empty.
+    const f = await send({ type: "change_findings", sessionId, ...(ref ? { ref } : {}) })
+    setFindings(f.ok ? ((f.data as { findings?: Finding[] } | undefined)?.findings ?? []) : [])
+    setUntested(f.ok ? ((f.data as { untested?: string[] } | undefined)?.untested ?? []) : [])
+    // D-034: hunks neither the plan nor a requirement accounts for.
+    const sc = await send({ type: "scope", sessionId, ...(ref ? { ref } : {}) })
+    setUntraced(sc.ok ? ((sc.data as { unrequested?: Untraced[] } | undefined)?.unrequested ?? []) : [])
+    // D-050: draft threat model entries for what the change adds.
+    const td = await send({ type: "threat_delta", sessionId, ...(ref ? { ref } : {}) })
+    setDrafts(td.ok ? ((td.data as { drafts?: Draft[] } | undefined)?.drafts ?? []) : [])
+    // D-039: what a changed requirement is linked to.
+    const ri = await send({ type: "requirement_impact", sessionId, ...(ref ? { ref } : {}) })
+    setImpacts(ri.ok ? ((ri.data as { impacts?: Impact[] } | undefined)?.impacts ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.
@@ -141,6 +224,150 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
         <p className="m-0 text-[13.5px] text-mut">Nothing has changed since then.</p>
       ) : (
         <>
+          {findings.length ? (
+            <section aria-label="Findings" className="panel grid gap-1.5 p-2.5">
+              <h3 className="m-0 text-[13.5px] font-semibold">
+                {findings.length === 1 ? "1 thing to look at" : `${findings.length} things to look at`} in the changed lines
+              </h3>
+              <ul className="m-0 grid list-none gap-1 p-0 text-[13px]">
+                {findings.map((x) => (
+                  <li key={`${x.file}:${x.line}:${x.kind}`} className="grid grid-cols-[auto_1fr] gap-2">
+                    <span className={clsx("sign font-semibold", x.severity === "Severe" ? "text-sev" : "text-warn")}>
+                      {x.severity}
+                    </span>
+                    <span className="[overflow-wrap:anywhere]">
+                      {x.title}, <span className="mono">{x.file}</span> line {x.line}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {findings.some((x) => x.severity === "Severe") ? (
+                <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
+              ) : null}
+            </section>
+          ) : null}
+          {impacts.length ? (
+            <section aria-label="Requirement changes" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <h3 className="m-0 text-[13.5px] font-semibold">
+                {impacts.length === 1 ? "A requirement changed" : `${impacts.length} requirements changed`}: what they are linked to
+              </h3>
+              <ul className="m-0 grid list-none gap-1.5 p-0">
+                {impacts.map((r) => (
+                  <li key={r.id} className="grid gap-0.5">
+                    <span>
+                      <strong className="mono">{r.id}</strong> {r.title}
+                    </span>
+                    <span className="text-mut">Code: {r.code.length ? <span className="mono">{r.code.join(", ")}</span> : "none linked"}</span>
+                    <span className="text-mut">Tests: {r.tests.length ? <span className="mono">{r.tests.join(", ")}</span> : "none"}</span>
+                    <span className="text-mut">Decisions: {r.adrs.length ? <span className="mono">{r.adrs.join(", ")}</span> : "none"}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {drafts.length ? (
+            <section aria-label="Threat model drafts" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <div className="flex items-center gap-2">
+                <h3 className="m-0 text-[13.5px] font-semibold">
+                  {drafts.length === 1 ? "1 thing" : `${drafts.length} things`} for the threat model
+                </h3>
+                <button
+                  type="button"
+                  className="btn ml-auto !min-h-6 !px-2 !text-[12px]"
+                  onClick={() => void navigator.clipboard.writeText(drafts.map((d) => d.markdown).join("\n")).then(() => toast("Copied the drafts"))}
+                >
+                  Copy the drafts
+                </button>
+              </div>
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {drafts.map((d) => (
+                  <li key={`${d.kind}:${d.where}:${d.what}`}>
+                    New {d.kind}: <span className="mono">{d.what}</span> <span className="text-mut">({d.where})</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {untraced.length ? (
+            <section aria-label="Not asked for" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <h3 className="m-0 text-[13.5px] font-semibold">
+                {untraced.length === 1 ? "1 change" : `${untraced.length} changes`} the plan and the requirements do not account for
+              </h3>
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {untraced.map((u) => (
+                  <li key={`${u.file}:${u.hunk}`}>
+                    Change {u.hunk + 1} in <span className="mono">{u.file}</span>: {u.reason}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {untested.length ? (
+            <section aria-label="Untested files" className="panel grid gap-1.5 p-2.5 text-[13px]">
+              <h3 className="m-0 text-[13.5px] font-semibold">Nothing in the tests names {untested.length === 1 ? "this file" : "these files"}</h3>
+              <p className="m-0 text-mut">
+                Capture behaviour records what the file did before this change, with generated inputs, in a copy of the project. Compare with now replays them on the file as it is and says what changed.
+              </p>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {untested.map((p) => (
+                  <li key={p} className="grid gap-1">
+                    <span className="mono [overflow-wrap:anywhere]">{p}</span>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn !min-h-7"
+                        disabled={capturing !== undefined}
+                        onClick={async () => {
+                          setCapturing(p)
+                          const r = await send({ type: "characterise", sessionId, file: p, ref: since.ref })
+                          setCapturing(undefined)
+                          if (!r.ok) return void toast.error(r.error?.message ?? "It could not be captured")
+                          setBehaviour((b) => ({ ...b, [p]: { cases: (r.data as { cases: number }).cases } }))
+                        }}
+                      >
+                        {capturing === p ? "Capturing…" : "Capture behaviour"}
+                      </button>
+                      {behaviour[p] ? (
+                        <button
+                          type="button"
+                          className="btn !min-h-7"
+                          disabled={capturing !== undefined}
+                          onClick={async () => {
+                            setCapturing(p)
+                            const r = await send({ type: "behaviour_diff", sessionId, file: p })
+                            setCapturing(undefined)
+                            if (!r.ok) return void toast.error(r.error?.message ?? "It could not be replayed")
+                            const d = r.data as { cases: number; deltas: Array<{ words: string }> }
+                            setBehaviour((b) => ({ ...b, [p]: { cases: d.cases, deltas: d.deltas.map((x) => x.words) } }))
+                          }}
+                        >
+                          Compare with now
+                        </button>
+                      ) : null}
+                    </div>
+                    {behaviour[p] ? (
+                      <p className="m-0 text-mut">
+                        {behaviour[p]!.deltas === undefined
+                          ? `${behaviour[p]!.cases} cases captured, and they replay the same.`
+                          : behaviour[p]!.deltas!.length === 0
+                            ? `All ${behaviour[p]!.cases} cases behave as before.`
+                            : `${behaviour[p]!.deltas!.length} of ${behaviour[p]!.cases} cases behave differently:`}
+                      </p>
+                    ) : null}
+                    {behaviour[p]?.deltas?.length ? (
+                      <ul className="m-0 grid list-none gap-1 p-0">
+                        {behaviour[p]!.deltas!.map((w) => (
+                          <li key={w} className="mono [overflow-wrap:anywhere]">
+                            {w}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           <ul className="m-0 grid list-none gap-1 p-0" aria-label="Changed files">
             {files.map((f) => (
               <li key={f.path} className="panel overflow-hidden">
@@ -193,7 +420,44 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                       Lock
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="btn !min-h-7 !px-2 !text-[12.5px]"
+                    onClick={() =>
+                      void send({ type: "provenance_graph", sessionId, file: f.path, ref: since.ref }).then((r) =>
+                        r.ok
+                          ? setOrigins((o) => ({ ...o, [f.path]: (r.data as { hunks: Origin[] }).hunks }))
+                          : toast.error(r.error?.message ?? "It could not be traced"),
+                      )
+                    }
+                  >
+                    Where it came from
+                  </button>
                 </div>
+                {origins[f.path] ? (
+                  <ul aria-label={`Where ${f.path} came from`} className="m-0 grid list-none gap-1.5 border-t border-line p-2.5 text-[12.5px]">
+                    {origins[f.path]!.map((h) => (
+                      <li key={h.hunk} className="grid gap-0.5">
+                        <span>
+                          Change {h.hunk + 1}: {h.call ? `made by ${h.call.tool} at record ${h.call.seq}` : "not made by an edit the session recorded"}
+                          {h.call?.sources.some((s) => s.injected) ? <strong className="text-sev">, after reading something that held what looks like prompt injection</strong> : null}
+                        </span>
+                        {h.call?.sources.length ? (
+                          <span className="text-mut">
+                            Read before it:{" "}
+                            {h.call.sources.slice(0, 6).map((s, i) => (
+                              <span key={s.seq} className={s.injected ? "font-semibold text-sev" : s.outside ? "text-warn" : ""}>
+                                {i ? "; " : ""}
+                                <span className="mono">{s.what}</span>
+                                {s.injected ? " (held injected text)" : s.outside ? " (not the project's own words)" : ""}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {open[f.path] ? (
                   f.binary ? (
                     <DiffText text={f.diff} />
@@ -261,10 +525,81 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
             >
               Undo all of these
             </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={mutating}
+              onClick={async () => {
+                setMutating(true)
+                const r = await send({ type: "mutation_run", sessionId, ref: since.ref })
+                setMutating(false)
+                if (!r.ok) return void toast.error(r.error?.message ?? "The tests could not be tested")
+                setMutation(r.data as MutationReport)
+              }}
+            >
+              {mutating ? "Testing the tests…" : "Test the tests"}
+            </button>
+            {files.some((f) => LOCKFILE.test(f.path)) ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  void send({ type: "change_sbom", sessionId, ref: since.ref }).then((r) => {
+                    if (!r.ok) return void toast.error(r.error?.message ?? "The SBOM could not be made")
+                    const blob = new Blob([JSON.stringify((r.data as { bom: unknown }).bom, null, 2)], {
+                      type: "application/vnd.cyclonedx+json",
+                    })
+                    const a = document.createElement("a")
+                    a.href = URL.createObjectURL(blob)
+                    a.download = "dependency-changes.cdx.json"
+                    a.click()
+                    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+                  })
+                }
+              >
+                Download the SBOM of these changes
+              </button>
+            ) : null}
           </div>
         </>
       )}
 
+      {mutation ? (
+        <section aria-label="Mutation run" className="panel grid gap-1.5 p-2.5 text-[13px]">
+          <h3 className="m-0 text-[13.5px] font-semibold">
+            {mutation.aborted
+              ? `Stopped: ${mutation.aborted}.`
+              : mutation.mutants === 0
+                ? "Nothing to mutate in the changed lines."
+                : `${mutation.killed} of ${mutation.mutants} small changes to the new lines were caught by the tests (${mutation.score}%)${mutation.threshold !== undefined ? (mutation.passed ? `, at or above this project's ${mutation.threshold}%` : `, below this project's ${mutation.threshold}%`) : ""}.`}
+          </h3>
+          {mutation.detected ? (
+            <p className="m-0 text-mut">This project has {mutation.detected === "stryker-js" ? "StrykerJS" : "Stryker.NET"}; this run used Codehouse's own mutator on the changed lines only.</p>
+          ) : null}
+          {mutation.survived.length ? (
+            <ul className="m-0 grid list-none gap-1.5 p-0">
+              {mutation.survived.map((s) => (
+                <li key={`${s.file}:${s.line}:${s.mutated}`} className="grid gap-1">
+                  <span>
+                    Not caught: <span className="mono">{s.file}</span> line {s.line}, <span className="mono">{s.original}</span> to <span className="mono">{s.mutated}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn justify-self-start !min-h-7"
+                    onClick={async () => {
+                      const r = await send({ type: "mutant_task", sessionId, survivor: s })
+                      if (!r.ok) return void toast.error(r.error?.message ?? "The task could not be started")
+                      toast("Claude is writing a test for it. Only test files may change without asking you.", { id: "changes" })
+                    }}
+                  >
+                    Write a test that catches it
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
       {confirm ? (
         <div role="group" aria-label="Confirm undo" className="panel grid gap-2 p-3">
           <p className="m-0 text-[13.5px]">
