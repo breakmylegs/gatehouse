@@ -252,3 +252,12 @@ export const mutantTaskPrompt = (s: Survivor) =>
 
 export const testScopeReason = (file: string, s: Survivor) =>
   `This session is writing a test for a surviving mutant (${s.file}, line ${s.line}), so it should change only test files. ${file} is not one, so this comes to you.`
+
+/** D-036: while a tests-first session writes its tests, an edit to anything else goes to a person. */
+export const TESTS_FIRST_RULE = "tests-first"
+
+export const testsFirstReason = (file: string) =>
+  `This session is in tests-first mode: it writes the tests first, and you approve them before anything else changes. ${file} is not a test file, so this comes to you.`
+
+export const testsFirstPrompt = (criteria: string) =>
+  `Tests first. Write tests for these acceptance criteria, and change only test files; an edit to any other file comes to the person first:\n\n${criteria}\n\nWhen the tests are written, stop and list the test files. The person approves them, they are locked, and then you implement.`

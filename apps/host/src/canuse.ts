@@ -1,5 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
-import { TEST_FILE, TEST_SCOPE_RULE, testScopeReason, type Survivor } from "./mutation.js"
+import { TEST_FILE, TEST_SCOPE_RULE, TESTS_FIRST_RULE, testScopeReason, testsFirstReason, type Survivor } from "./mutation.js"
 import { VULN_RULE, vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { SAST_RULE, sastReason, type SastCommitGuard, type SastFinding } from "./sast.js"
 import { makesCommit } from "./commit-scan.js"
@@ -66,6 +66,8 @@ export interface CanUseDeps {
   vulns?: Pick<VulnCommitGuard, "matches">
   /** D-005: the surviving mutant a task is writing a test for; while there is one, edits outside test files ask. */
   mutantTask?: () => Survivor | undefined
+  /** D-036: whether the session is writing its tests first and they are not approved yet. */
+  testsFirst?: () => boolean
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
   instructions?: Pick<InstructionPins, "touched">
@@ -275,6 +277,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (!TEST_FILE.test(file))
           verdict = { ...verdict, outcome: "escalate", ruleId: TEST_SCOPE_RULE, reason: testScopeReason(file, task), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
       }
+      // D-036: in tests-first mode, before the tests are approved, an edit to anything but a test file goes to a person.
+      if (deps.testsFirst?.() && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
+        const file = String(input.file_path ?? input.notebook_path ?? "")
+        if (!TEST_FILE.test(file))
+          verdict = { ...verdict, outcome: "escalate", ruleId: TESTS_FIRST_RULE, reason: testsFirstReason(file), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
       // D-057: a commit that adds a dependency version the snapshot lists goes to a person, with the advisories. A
       // lockfile that cannot be read while a snapshot is in use counts as one (fail closed).
       if (deps.vulns && verdict.outcome !== "deny" && verdict.ruleId !== SAST_RULE && makesCommit(toolName, input)) {
@@ -469,6 +477,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   VULN_RULE,
   // D-005: an edit outside test files while a task writes a test for a surviving mutant.
   TEST_SCOPE_RULE,
+  // D-036: an implementation edit before the tests are approved.
+  TESTS_FIRST_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",

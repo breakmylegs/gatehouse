@@ -1,5 +1,5 @@
 import { noteCommit } from "./lineage.js"
-import { mutantTaskPrompt, runMutation, type MutationExec, type Survivor } from "./mutation.js"
+import { mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
 import type { VulnCommitGuard } from "./vuln-snapshot.js"
 import type { EvidenceService } from "./evidence.js"
 import type { SastCommitGuard } from "./sast.js"
@@ -934,6 +934,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#goal ? { goal: this.#goal } : {}),
       ...(this.#assumptions.length ? { assumptions: this.#assumptions.map((a) => ({ ...a })) } : {}),
+      ...(this.#testsFirst ? { testsFirst: true } : {}),
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#compactAfterTurn ? { compactPending: true } : {}),
       ...(this.#paused ? { paused: this.#paused } : {}),
@@ -1197,6 +1198,8 @@ export class Session extends EventEmitter<SessionEvents> {
     const canUse = createCanUseTool({
       // D-005: while a task writes a test for a surviving mutant, edits outside test files ask.
       mutantTask: () => this.#mutantTask,
+      // D-036: and while it writes its tests first.
+      testsFirst: () => this.#testsFirst,
       sessionId: this.id,
       cwd: this.cwd,
       sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
@@ -1562,6 +1565,36 @@ export class Session extends EventEmitter<SessionEvents> {
   /** What this chat was told it remembers when it started, in the words it was given (CH-03). */
   memoryGiven(): Array<{ id: string; scope: string; topic: string; text: string }> {
     return this.#memoryGiven.map((m) => ({ ...m }))
+  }
+
+  /** D-036: tests-first mode: the tests are being written and are not approved yet. */
+  #testsFirst = false
+
+  /** D-036: starts tests-first mode: Claude writes the tests for the criteria, and only test files change. */
+  startTestsFirst(criteria: string): void {
+    const c = criteria.trim() || this.#goal || ""
+    if (!c) throw new Error("Give the acceptance criteria, or set a goal for the session first.")
+    this.prompt(testsFirstPrompt(c))
+    this.#testsFirst = true
+    void this.#auditLimit("tests_first_started", "tests-first", { chars: c.length }, "Tests-first mode started: only test files change until you approve the tests.", "human-desktop").catch(() => undefined)
+    this.emit("state", this.info())
+  }
+
+  /** D-036: you approved the tests: they are locked (D-007) and Claude implements. */
+  async approveTests(files: string[]): Promise<string[]> {
+    if (!this.#testsFirst) throw new Error("This session is not writing its tests first.")
+    const locked: string[] = []
+    for (const file of files) {
+      if (!this.#deps.locks) break
+      await this.#deps.locks.lock(this.cwd, file)
+      locked.push(file)
+    }
+    if (!locked.length) throw new Error("No test file changed yet, or the tests cannot be locked here, so there is nothing to approve.")
+    this.#testsFirst = false
+    await this.#auditLimit("tests_first_approved", "tests-first", { files: locked }, "You approved the tests; they are locked, and the implementation may start.", "human-desktop").catch(() => undefined)
+    this.emit("state", this.info())
+    this.prompt(`The tests are approved and locked (${locked.join(", ")}). Now implement so they pass, without changing them.`)
+    return locked
   }
 
   /** D-037: the assumptions Claude declared in this session. */

@@ -222,6 +222,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-036: tests first: Claude writes tests for these criteria; only test files change until you approve them. */
+  z.object({ type: z.literal("tests_first"), sessionId: Id, criteria: z.string().max(8000) }),
+  /** D-036: you approve the tests the session wrote: they are locked and the implementation may start. */
+  z.object({ type: z.literal("tests_first_approve"), sessionId: Id }),
   /** D-037: you checked an assumption Claude declared, and it holds. */
   z.object({ type: z.literal("assumption_verify"), sessionId: Id, id: z.string().min(1).max(100) }),
   /** D-033: the project's requirements, traced to commits, tests and evidence, with the gaps. Read only. */
@@ -462,6 +466,8 @@ export const SessionInfo = z.object({
   effortCap: Effort.optional(),
   /** B25: the check Extreme approval carries on until it passes. */
   goal: z.string().max(300).optional(),
+  /** D-036: the session is writing its tests first, and they are not approved yet. */
+  testsFirst: z.boolean().optional(),
   /** D-037: the assumptions Claude declared, until you verify them. Absent from older Hosts. */
   assumptions: z
     .array(z.object({ id: z.string(), text: z.string(), check: z.string().optional(), at: z.string(), verified: z.boolean().optional() }))

@@ -243,6 +243,8 @@ Open beside, in a session's name menu or its ... button in the sidebar, shows an
 
 **A plan's card** says, before you approve it, how many of the commands and file changes the plan names your rules would allow, would ask you about and would refuse. It is an estimate: nothing in the plan is run to work it out, and every call is still judged when Claude makes it.
 
+**Tests first...** in the same menu asks Claude to write the tests for your acceptance criteria before anything else: until you choose **Approve the tests**, a change to anything but a test file waits for you, even in Extreme approval. Approving locks the tests, and Claude then implements.
+
 When Claude works on an assumption it has not checked with you, it can record it: the progress card lists it with how to check it, until you choose **It holds**, and the change's evidence keeps the ones you have not.
 
 **Requirements...** in the same menu reads the project's docs/requirements folder (one Markdown file per requirement, with an id such as REQ-001 and a title at the top) and shows each with the commits and tests that name it, gaps first. Changes lists what the change does that neither the approved plan nor a requirement accounts for, and the progress card counts the files changed outside the plan.

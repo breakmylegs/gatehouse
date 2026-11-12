@@ -976,6 +976,22 @@ export class HostServer {
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
       }
+      case "tests_first": {
+        const s = this.#session(cmd.sessionId)
+        s.startTestsFirst(cmd.criteria)
+        return { started: true }
+      }
+      case "tests_first_approve": {
+        // D-036: the test files the session changed since its first checkpoint are the ones approved and locked.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id)
+        const files = c.since && "files" in c ? c.files.filter((x) => x.change !== "deleted" && TEST_FILE.test(x.path)).map((x) => x.path) : []
+        try {
+          return { locked: await s.approveTests(files) }
+        } catch (e) {
+          throw new CommandError("not-approved", (e as Error).message)
+        }
+      }
       case "assumption_verify": {
         const s = this.#session(cmd.sessionId)
         await s.verifyAssumption(cmd.id)
