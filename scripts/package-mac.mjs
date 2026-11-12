@@ -341,6 +341,8 @@ function install() {
     throw new Error(
       `Codehouse is running from ${dest}. Quit it (Command-Q), then install again, or add --when-quit.`,
     )
+  // An earlier --when-quit still waiting would race this one over the same copy: it is stopped first.
+  stopEarlierWaiter()
   // Copied into a hidden folder first, so Spotlight never lists a half-copied app under a passing name.
   const staging = path.join(dir, ".codehouse-installing")
   fs.rmSync(staging, { recursive: true, force: true })
@@ -357,6 +359,33 @@ function install() {
   )
   spawnSync("/usr/bin/mdimport", [dest])
   say(`installed ${dest}`)
+}
+
+const waiterFile = () =>
+  path.join(
+    os.homedir(),
+    "Library",
+    "Application Support",
+    "Gatehouse",
+    "updates",
+    "mac-install.pid",
+  )
+
+/** Stops a waiting --when-quit from an earlier install, if one is still there: only the process it recorded. */
+function stopEarlierWaiter() {
+  let pid
+  try {
+    pid = Number(fs.readFileSync(waiterFile(), "utf8").trim())
+  } catch {
+    return
+  }
+  const line =
+    spawnSync("/bin/ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout ?? ""
+  if (pid > 1 && line.includes("codehouse-install")) {
+    process.kill(pid, "SIGTERM")
+    say(`stopped the earlier install that was waiting (${pid})`)
+  }
+  fs.rmSync(waiterFile(), { force: true })
 }
 
 /**
@@ -388,7 +417,7 @@ function installWhenQuit(program, staging, dest) {
     'if [ -e "$3" ] && ! /bin/mv "$3" "$3.previous"; then say "could not move the old copy aside; nothing changed"; exit 1; fi',
     'if /bin/mv "$2/Codehouse.app" "$3"; then',
     '  /bin/rm -rf "$3.previous"; /bin/rmdir "$2"',
-    '  "$4" -f "$3"; /usr/bin/mdimport "$3"; say "installed $3"; /usr/bin/open "$3"',
+    '  "$4" -f "$3"; /usr/bin/mdimport "$3"; say "installed $3"; /bin/rm -f "$6"; /usr/bin/open "$3"',
     "else",
     '  [ -e "$3.previous" ] && /bin/mv "$3.previous" "$3"',
     '  say "could not put the new copy in place, so the old one is back; the new copy is in $2"; exit 1',
@@ -398,13 +427,14 @@ function installWhenQuit(program, staging, dest) {
     "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
   const child = spawn(
     "/bin/sh",
-    ["-c", script, "codehouse-install", program, staging, dest, lsregister, log],
+    ["-c", script, "codehouse-install", program, staging, dest, lsregister, log, waiterFile()],
     {
       detached: true,
       stdio: "ignore",
     },
   )
   child.unref()
+  fs.writeFileSync(waiterFile(), `${child.pid}\n`)
   say(
     `Codehouse is running, so the new copy waits: quit Codehouse (Command-Q) and it is installed and opened again`,
   )

@@ -4,6 +4,7 @@
  * publisher's installer with your rights. Each is High, shows what it installs and from where, and Extreme approval
  * never approves one (canuse's NEVER_AUTO_APPROVED).
  */
+import { macInstaller } from "./installers-mac.js" // Mac fork
 import type { Segment } from "./segments.js"
 
 export const INSTALLER_RULE = "installer-admission"
@@ -49,6 +50,11 @@ export function installerCall(segments: Segment[]): InstallerFinding | undefined
       tool = s.name
       id = flagValue(args, "-name") ?? firstPlain(args)
       source = flagValue(args, "-repository", "-source") ?? "PSGallery"
+    }
+    if (!tool) {
+      // Mac fork: the Mac's installers go through the same rule (installers-mac.ts).
+      const mac = macInstaller(s)
+      if (mac) ({ tool, id, source } = mac)
     }
     if (!tool) continue
     // A WinGet id is Publisher.Package; anything else names no publisher that can be checked here.
