@@ -294,7 +294,7 @@ if (fullReason) {
     for (const t of named) if (why.get(t) !== "changed") say(`  + ${t} (${why.get(t)})`)
     if (
       list.length &&
-      run(`tests: ${list.length} the change reaches, one file at a time by free memory`, node, [
+      run(`tests: ${list.length} the change reaches, eight files to a process, as free memory allows`, node, [
         path.join(root, "scripts", "test-shards.mjs"),
         ...list,
       ]) !== 0
