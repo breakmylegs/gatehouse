@@ -1,5 +1,6 @@
 import { noteCommit } from "./lineage.js"
-import { mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
+import { fitnessCheck, fitnessWords } from "./fitness.js"
+import { listFiles, mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
 import type { VulnCommitGuard } from "./vuln-snapshot.js"
 import type { EvidenceService } from "./evidence.js"
 import type { SastCommitGuard } from "./sast.js"
@@ -1962,9 +1963,20 @@ export class Session extends EventEmitter<SessionEvents> {
     })
     if (!step) return
     if (!step.go) {
+      // D-045: done, or the goal met, only when the project's fitness checks pass; otherwise it stops as fitness.
+      let why: string = step.why
+      let fitness: string | undefined
+      if (step.why === "goal" || step.why === "done") {
+        const fit = await fitnessCheck(this.cwd, await listFiles(this.cwd).catch(() => [] as string[])).catch(() => undefined)
+        if (fit?.failed) {
+          why = "fitness"
+          fitness = fitnessWords(fit)
+          await this.#auditLimit("fitness_gate_failed", "fitness", { failed: fit.failed, checks: fit.checks.filter((c) => !c.ok).map((c) => c.id) }, `Claude said it was done, but ${fit.failed} fitness check${fit.failed === 1 ? "" : "s"} fail: ${fitness}`, "rules").catch(() => undefined)
+        }
+      }
       this.emit("event", {
         type: "carry_on_end",
-        data: { why: step.why, turns: step.turns, spentUsd: step.spentUsd },
+        data: { why, turns: step.turns, spentUsd: step.spentUsd, ...(fitness ? { fitness } : {}) },
       })
       this.emit("state", this.info())
       return

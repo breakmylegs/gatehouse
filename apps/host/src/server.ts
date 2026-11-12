@@ -1,4 +1,5 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { fitnessCheck } from "./fitness.js"
 import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
 import { readArchRules, updateGraph } from "./architecture.js"
 import { approvedPlan, readRequirements, REQUIREMENTS_DIR, scopeOf, traceMatrix, unrequested } from "./requirements.js"
@@ -991,6 +992,8 @@ export class HostServer {
           drift,
           cycles: cyclesOf(graph),
           diagrams: c4Diagrams(s.project, graph, drift),
+          // D-045: and the project's fitness checks.
+          ...(await fitnessCheck(s.cwd, files).then((x) => (x ? { fitness: x } : {})).catch(() => ({}))),
         }
       }
       case "architecture_approve": {

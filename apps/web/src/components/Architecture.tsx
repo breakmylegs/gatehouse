@@ -14,6 +14,8 @@ interface Data {
   drift: { newModules: string[]; newCrossings: string[]; newCycles: string[][] }
   cycles: string[][]
   diagrams: { context: string; container: string; component: string }
+  /** D-045: the project's fitness checks. */
+  fitness?: { checks: Array<{ id: string; title: string; limit: number | string; ok: boolean; detail?: string }>; failed: number; problem?: string }
 }
 
 export function Architecture({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
@@ -81,6 +83,22 @@ export function Architecture({ sessionId, onClose }: { sessionId: string; onClos
           ) : (
             <p className="m-0 text-mut">No drift since you approved it.</p>
           )}
+          {data.fitness ? (
+            <div className="grid gap-1" aria-label="Fitness checks">
+              <h3 className={`m-0 text-[13.5px] font-semibold ${data.fitness.failed ? "text-sev" : ""}`}>
+                Fitness checks: {data.fitness.failed ? `${data.fitness.failed} fail` : "all pass"}
+              </h3>
+              {data.fitness.problem ? <p className="m-0 text-warn">{data.fitness.problem}.</p> : null}
+              <ul className="m-0 grid list-none gap-1 p-0">
+                {data.fitness.checks.map((c) => (
+                  <li key={c.id}>
+                    <span className={c.ok ? "text-ok" : "font-semibold text-sev"}>{c.ok ? "Passes" : "Fails"}</span> {c.title}, limit {c.limit}
+                    {c.detail ? <span className="text-mut">: {c.detail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {(["context", "container", "component"] as const).map((k) => (
             <div key={k} className="grid gap-1">
               <div className="flex items-center gap-2">

@@ -123,7 +123,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-042 | Living C4 diagrams | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | Context, container and component in Mermaid, new modules marked; shown as text with Copy (no drawing library, a recorded deviation) |
 | D-043 | Architecture drift alerts | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | New modules, new cross-layer edges, new cycles since Approve as it is |
 | D-044 | ADR-aware context | todo | | | |
-| D-045 | Fitness functions | todo | | | |
+| D-045 | Fitness functions | built | slice/D-045-fitness | BUILD_REPORT "Frontier D-045" | .codehouse/fitness.yml; a failing check stops a done goal run as fitness, and is in the evidence pack |
 | D-046 | Public API break guard | todo | | | |
 | D-048 | Architecture review pack | todo | | | |
 | D-050 | Threat model delta | todo | | | |

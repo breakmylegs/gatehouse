@@ -74,6 +74,11 @@ export function noteFor(
         title: "Stopped: no work done",
         body: `Two turns in a row did no work, so Extreme approval stopped ${done}.`,
       }
+    case "fitness":
+      return {
+        title: "Not done: a fitness check fails",
+        body: `Claude said it was done ${done}, but ${typeof data.fitness === "string" ? data.fitness : "one of the project's fitness checks fails"}. Look in Codehouse.`,
+      }
     case "error":
       return {
         title: "Stopped: a turn failed",
@@ -89,7 +94,8 @@ export const saysQueueEmpty = (text: string): boolean => QUEUE_EMPTY.test(text)
 
 /** Why carrying on stopped. Stalled: two turns in a row did no work, so nothing seems left to do. */
 /** Goal: the goal's check passed (B25). */
-export type CarryOnEnd = "done" | "goal" | "turns" | "spend" | "stopped" | "error" | "stalled"
+/** Fitness (D-045): Claude said it was done, but one of the project's fitness checks fails, so it is not. */
+export type CarryOnEnd = "done" | "goal" | "turns" | "spend" | "stopped" | "error" | "stalled" | "fitness"
 
 export interface CarryOnLimits {
   /** Automatic turns after one message of yours. None: no limit. */

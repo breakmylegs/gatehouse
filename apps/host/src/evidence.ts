@@ -11,6 +11,8 @@
  * session's signed timeline export (C-011) with the pack in it, signed the same way, so changing one byte fails both
  * verifiers.
  */
+import { fitnessCheck, type FitnessResult } from "./fitness.js"
+import { listFiles } from "./mutation.js"
 import { createHash } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -43,6 +45,8 @@ export interface EvidencePack {
   dependencies: { sbom?: string; added: number; changed: number; removed: number }
   findings: SastFinding[]
   files: Array<{ path: string; change: string; added: number; removed: number }>
+  /** D-045: the project's fitness checks as the change leaves it. */
+  fitness?: FitnessResult
   /** D-037: the assumptions Claude declared that you have not verified yet. */
   assumptions?: Array<{ id: string; text: string; check?: string; at: string }>
   /** What this pack does not hold, said plainly. */
@@ -333,6 +337,11 @@ export class EvidenceService {
       findings,
       ...(s.assumptions?.length ? { assumptions: s.assumptions } : {}),
     })
+    const fit = await fitnessCheck(s.cwd, await listFiles(s.cwd).catch(() => [] as string[])).catch(() => undefined)
+    if (fit) {
+      pack.fitness = fit
+      if (fit.failed) pack.notes.push(`${fit.failed} fitness check${fit.failed === 1 ? "" : "s"} fail, so this change does not pass the project's gate.`)
+    }
     const sha = await this.store.put(pack)
     await this.#o.audit.record({
       session: s.id,
