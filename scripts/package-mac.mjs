@@ -333,7 +333,10 @@ function install() {
   fs.mkdirSync(dir, { recursive: true })
   const dest = path.join(dir, "Codehouse.app")
   const program = path.join(dest, "Contents", "MacOS", "Codehouse")
-  const running = spawnSync("/usr/bin/pgrep", ["-f", "-x", program]).status === 0
+  // A process whose whole command line is that program. macOS's pgrep -f -x missed the running app, so ps it is.
+  const running = execFileSync("/bin/ps", ["-axo", "command="], { encoding: "utf8" })
+    .split("\n")
+    .some((l) => l.trim() === program)
   if (running && !has("--when-quit"))
     throw new Error(
       `Codehouse is running from ${dest}. Quit it (Command-Q), then install again, or add --when-quit.`,
@@ -376,7 +379,7 @@ function installWhenQuit(program, staging, dest) {
     'say() { echo "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ) $1" >> "$LOG"; }',
     'say "waiting for Codehouse to quit"',
     "i=0",
-    'while /usr/bin/pgrep -f -x "$1" >/dev/null; do',
+    'while /bin/ps -axo command= | /usr/bin/grep -Fxq "$1"; do',
     '  i=$((i+1)); if [ "$i" -gt 43200 ]; then say "gave up after a day; the new copy is in $2"; exit 1; fi',
     "  /bin/sleep 2",
     "done",
