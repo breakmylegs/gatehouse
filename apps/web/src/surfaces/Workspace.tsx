@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { Decisions } from "../components/Decisions"
 import { Architecture } from "../components/Architecture"
 import { TestsFirstBanner, TestsFirstStart } from "../components/TestsFirst"
 import { Requirements } from "../components/Requirements"
@@ -360,6 +361,8 @@ function SessionPane({
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
   const [architecture, setArchitecture] = useState(false)
+  // D-038: the session's decisions as ADR drafts.
+  const [decisions, setDecisions] = useState(false)
   // D-036: starting tests-first mode.
   const [testsFirst, setTestsFirst] = useState(false)
   const [lastUrl, setLastUrl] = useState("http://localhost:5173/")
@@ -599,6 +602,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
+    ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
     ...(chat || session.testsFirst ? [] : [{ label: "Tests first...", onSelect: () => setTestsFirst(true) }]),
     { kind: "separator" },
     {
@@ -813,6 +817,11 @@ function SessionPane({
       {testsFirst ? (
         <div className="px-3 pt-2">
           <TestsFirstStart sessionId={session.id} {...(session.goal ? { goal: session.goal } : {})} onClose={() => setTestsFirst(false)} />
+        </div>
+      ) : null}
+      {decisions ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <Decisions sessionId={session.id} onClose={() => setDecisions(false)} />
         </div>
       ) : null}
       {architecture ? (

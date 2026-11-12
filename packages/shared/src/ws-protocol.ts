@@ -222,6 +222,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-038: the session's decisions (questions answered, plans approved) drafted as ADRs in MADR format. Read only. */
+  z.object({ type: z.literal("adr_drafts"), sessionId: Id }),
+  /** D-038: you accepted an ADR draft (as you edited it): the Host writes it into the project's docs/adr. */
+  z.object({ type: z.literal("adr_write"), sessionId: Id, file: z.string().min(1).max(300), text: z.string().min(1).max(100_000) }),
   /** D-050: draft STRIDE entries for what the change adds (routes, data stores, connections, listeners, dependencies). */
   z.object({ type: z.literal("threat_delta"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-042, D-043: the project's architecture as it is, its C4 diagrams in Mermaid, and drift since you approved it. */

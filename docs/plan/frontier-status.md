@@ -116,13 +116,13 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-035 | Scope creep meter | built | slice/D-033-requirements | BUILD_REPORT "Frontier D-033, D-034 and D-035" | Files changed outside the plan, on the progress card |
 | D-036 | Tests-first contract mode | built | slice/D-036-tests-first | BUILD_REPORT "Frontier D-036" | Tests first... in the session menu; implementation edits ask (tests-first, never auto-approved) until Approve the tests locks them |
 | D-037 | Assumption register | built | slice/D-037-assumptions | BUILD_REPORT "Frontier D-037" | declare_assumption, sdk source only (rule assumption-tools); progress card with It holds; in the pack until verified |
-| D-038 | ADR capture | todo | | | |
+| D-038 | ADR capture | built | slice/D-038-adr | BUILD_REPORT "Frontier D-038 and D-044" | Decisions... drafts MADR from answered questions and approved plans; written to docs/adr only when accepted |
 | D-039 | Requirement change impact | todo | | | |
 | D-040 | Intent drift alarm | todo | | | Needs a local model |
 | D-041 | Architecture rules as policy | built | slice/D-041-architecture | BUILD_REPORT "Frontier D-041" | .codehouse/architecture.yml layers, allow, forbid; Tree-sitter imports; architecture rule, never auto-approved; graph in .codehouse/arch; 11 golden cases |
 | D-042 | Living C4 diagrams | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | Context, container and component in Mermaid, new modules marked; shown as text with Copy (no drawing library, a recorded deviation) |
 | D-043 | Architecture drift alerts | built | slice/D-042-c4-drift | BUILD_REPORT "Frontier D-042 and D-043" | New modules, new cross-layer edges, new cycles since Approve as it is |
-| D-044 | ADR-aware context | todo | | | |
+| D-044 | ADR-aware context | built | slice/D-038-adr | BUILD_REPORT "Frontier D-038 and D-044" | Accepted ADRs in each session's instructions; forbids in front matter flag a contradicting edit (adr-contradiction) |
 | D-045 | Fitness functions | built | slice/D-045-fitness | BUILD_REPORT "Frontier D-045" | .codehouse/fitness.yml; a failing check stops a done goal run as fitness, and is in the evidence pack |
 | D-046 | Public API break guard | todo | | | |
 | D-048 | Architecture review pack | todo | | | |

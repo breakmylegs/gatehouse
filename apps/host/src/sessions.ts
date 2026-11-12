@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import { adrContext, readAdrs } from "./adr.js"
 import { fitnessCheck, fitnessWords } from "./fitness.js"
 import { listFiles, mutantTaskPrompt, runMutation, testsFirstPrompt, type MutationExec, type Survivor } from "./mutation.js"
 import type { VulnCommitGuard } from "./vuln-snapshot.js"
@@ -1063,7 +1064,8 @@ export class Session extends EventEmitter<SessionEvents> {
       global: this.#deps.config().globalInstructions,
       ...(agentsMd ? { agentsMd } : {}),
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
-      session: this.#opts.instructions,
+      // D-044: the project's accepted architecture decisions, after what you told this session.
+      session: [this.#opts.instructions, this.#opts.kind !== "chat" ? adrContext(readAdrs(this.cwd), []) : ""].filter((x) => x?.trim()).join("\n\n") || undefined,
       ...(memory ? { memory } : {}),
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",

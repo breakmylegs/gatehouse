@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { ADR_RULE, adrContradictions, adrReason, readAdrs } from "./adr.js"
 import { ARCH_RULE, archCheck, archReason } from "./architecture.js"
 import { TEST_FILE, TEST_SCOPE_RULE, TESTS_FIRST_RULE, testScopeReason, testsFirstReason, type Survivor } from "./mutation.js"
 import { VULN_RULE, vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
@@ -284,6 +285,19 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (broken.length)
           verdict = { ...verdict, outcome: "escalate", ruleId: ARCH_RULE, reason: archReason(broken), risk: Math.max(verdict.risk, 65), decidedBy: "rules" }
       }
+      // D-044: an edit that adds what one of the project's accepted ADRs rules out goes to a person, with the ADR named.
+      if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
+        const root = deps.projectRoot ?? deps.cwd
+        const against = (() => {
+          try {
+            return adrContradictions(root, readAdrs(root), toolName, input)
+          } catch {
+            return []
+          }
+        })()
+        if (against.length)
+          verdict = { ...verdict, outcome: "escalate", ruleId: ADR_RULE, reason: adrReason(against), risk: Math.max(verdict.risk, 65), decidedBy: "rules" }
+      }
       // D-036: in tests-first mode, before the tests are approved, an edit to anything but a test file goes to a person.
       if (deps.testsFirst?.() && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {
         const file = String(input.file_path ?? input.notebook_path ?? "")
@@ -488,6 +502,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   TESTS_FIRST_RULE,
   // D-041: the project's own architecture rules are the owner's to waive.
   ARCH_RULE,
+  // D-044: and so are its architecture decisions.
+  ADR_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",
@@ -860,7 +876,8 @@ async function ask(
     toolUseId: toolUseID,
     cwd: deps.cwd,
     project: deps.project,
-    input: { ...input, ...counts },
+    // D-038: a question's answers are kept with it (redacted like any record), so the decision can become an ADR.
+    input: { ...input, ...counts, ...(kind === "question" && resolution.answers ? { answers: resolution.answers } : {}) },
     verdict: recorded,
     latencyMs: resolution.waitedMs,
   })

@@ -5,6 +5,7 @@ import {
   withProvenance,
   type Provenance,
 } from "./provenance.js"
+import { adrContradictions, adrReason, readAdrs } from "./adr.js"
 import { archCheck, archReason } from "./architecture.js"
 import { vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { compileGlobs } from "@gatehouse/policy"
@@ -284,10 +285,18 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         deps.onDecision?.(input.tool_use_id, verdict)
         if (verdict.outcome === "deny")
           return denyOutput(`${verdict.reason} (rule ${verdict.ruleId})`)
-        // D-041: so does an edit that breaks the project's architecture rules.
+        // D-041: so does an edit that breaks the project's architecture rules, and (D-044) one against an ADR.
         if (["Edit", "Write", "MultiEdit"].includes(input.tool_name)) {
-          const broken = await archCheck(deps.projectRoot ?? cwd, input.tool_name, toolInput).catch(() => [])
+          const root = deps.projectRoot ?? cwd
+          const broken = await archCheck(root, input.tool_name, toolInput).catch(() => [])
           if (broken.length) return askOutput(archReason(broken))
+          let against: ReturnType<typeof adrContradictions> = []
+          try {
+            against = adrContradictions(root, readAdrs(root), input.tool_name, toolInput)
+          } catch {
+            against = []
+          }
+          if (against.length) return askOutput(adrReason(against))
         }
         // D-062: a commit of code rated Severe reaches canUseTool, which sends it to a person.
         if (deps.sast && makesCommit(input.tool_name, toolInput)) {

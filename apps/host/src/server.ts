@@ -1,4 +1,5 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { decisionsIn, draftAdr, nextNumber, writeAdr } from "./adr.js"
 import { draftMarkdown, threatDelta } from "./threat-delta.js"
 import { fitnessCheck } from "./fitness.js"
 import { approve as approveArch, c4Diagrams, cyclesOf, driftOf, modulesOf, readApproved } from "./arch-view.js"
@@ -979,6 +980,36 @@ export class HostServer {
           .map((x) => x.path)
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
+      }
+      case "adr_drafts": {
+        const s = this.#session(cmd.sessionId)
+        const auditDir = a.admin?.auditDir
+        const decisions = auditDir ? decisionsIn(sessionRecords(auditDir, s.id)) : []
+        const first = nextNumber(s.cwd)
+        const date = new Date().toISOString().slice(0, 10)
+        return { drafts: decisions.map((d, i) => ({ seq: d.seq, kind: d.kind, title: d.title, ...draftAdr(d, { number: first + i, session: s.id, date }) })) }
+      }
+      case "adr_write": {
+        // D-038: written by the Host only after you accept it, and recorded.
+        const s = this.#session(cmd.sessionId)
+        let rel: string
+        try {
+          rel = await writeAdr(s.cwd, cmd.file, cmd.text)
+        } catch (e) {
+          throw new CommandError("not-written", (e as Error).message)
+        }
+        await a.audit.record({
+          session: s.id,
+          event: "adr_written",
+          channel: "desktop",
+          tool: "adr",
+          cwd: s.cwd,
+          project: s.project,
+          input: { file: rel, chars: cmd.text.length },
+          verdict: { outcome: "allow", ruleId: "adr", reason: "You accepted an architecture decision record, and Codehouse wrote it into the project.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { file: rel }
       }
       case "threat_delta": {
         const s = this.#session(cmd.sessionId)
