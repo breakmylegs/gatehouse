@@ -99,6 +99,8 @@ export function Library() {
   const [errors, setErrors] = useState<string[]>()
   const [preview, setPreview] = useState<Preview>()
   const [busy, setBusy] = useState(false)
+  // D-026: rules that would allow what was refused or asked about, and the phrase that saves them anyway.
+  const [regression, setRegression] = useState<Regression>()
   const [editing, setEditing] = useState<{
     section: YourSection
     rule: Rule
@@ -168,8 +170,6 @@ export function Library() {
     })
   }
 
-  // D-026: rules that would allow what was refused or asked about, and the phrase that saves them anyway.
-  const [regression, setRegression] = useState<Regression>()
   async function runPreview() {
     setBusy(true)
     setErrors(undefined)

@@ -112,7 +112,8 @@ describe("on a real session (D-010)", () => {
     session.on("event", (e) => e.type === "claim_checked" && events.push(e.data))
     session.prompt("go")
     await vi.waitFor(() => expect(events.length).toBeGreaterThan(0), { timeout: 10_000 })
-    const seed = runs.at(-1)?.env?.CODEHOUSE_SEED
+    // D-011 reruns a failing check with more fresh seeds; the claim names the first, the one that decided it.
+    const seed = runs.find((r) => r.env?.CODEHOUSE_SEED !== undefined)?.env?.CODEHOUSE_SEED
     expect(seed).toMatch(/^\d+$/)
     expect(events[0]).toMatchObject({ kind: "tests", outcome: "contradicted", seed: Number(seed) })
     expect(String(events[0]!.why)).toContain(`with the fresh seed ${seed}`)

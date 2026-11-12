@@ -119,8 +119,8 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
     setData(r.data as Changes)
     // D-062: what the local analysis finds on the changed lines. A failure only leaves the list empty.
     const f = await send({ type: "change_findings", sessionId, ...(ref ? { ref } : {}) })
-    setFindings(f.ok ? ((f.data as { findings: Finding[] }).findings ?? []) : [])
-    setUntested(f.ok ? ((f.data as { untested?: string[] }).untested ?? []) : [])
+    setFindings(f.ok ? ((f.data as { findings?: Finding[] } | undefined)?.findings ?? []) : [])
+    setUntested(f.ok ? ((f.data as { untested?: string[] } | undefined)?.untested ?? []) : [])
   }, [sessionId, ref])
 
   // Read again when Claude finishes something, a second after the transcript settles.

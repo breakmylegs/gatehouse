@@ -30,7 +30,7 @@ const PATTERNS: Pattern[] = [
   { kind: "tool-syntax", re: /<\/?(function_calls|invoke|tool_use|tool_call|parameter name=)[^>]*>/gi },
   { kind: "tool-syntax", re: /<\|(im_start|im_end|system|endoftext)\|>/gi },
   { kind: "tool-syntax", re: /"(tool_use|function_call|tool_calls)"\s*:/gi },
-  { kind: "hidden", re: /[​-‏⁠-⁤﻿]{2,}|[\u{E0000}-\u{E007F}]+/gu },
+  { kind: "hidden", re: /[\u200b-\u200f\u2060-\u2064\ufeff]{2,}|[\u{E0000}-\u{E007F}]+/gu },
   { kind: "hidden", re: /<[^>]+style\s*=\s*["'][^"']*(display\s*:\s*none|font-size\s*:\s*0|visibility\s*:\s*hidden|opacity\s*:\s*0(\.0+)?\b)[^"']*["'][^>]*>[^<]{12,}/gi },
   { kind: "encoded", re: /\b[A-Za-z0-9+/]{240,}={0,2}/g },
   { kind: "encoded", re: /\bdata:[\w/+.-]+;base64,[A-Za-z0-9+/=]{40,}/gi },
@@ -41,7 +41,7 @@ export function scanForInjection(text: string): InjectionFinding[] {
   const out: InjectionFinding[] = []
   for (const p of PATTERNS) {
     for (const m of text.matchAll(p.re)) {
-      const sample = m[0].replace(/[​-‏⁠-⁤﻿]/g, "·").replace(/[\u{E0000}-\u{E007F}]/gu, "·").replace(/\s+/g, " ").slice(0, 120)
+      const sample = m[0].replace(/[\u200b-\u200f\u2060-\u2064\ufeff]/g, "·").replace(/[\u{E0000}-\u{E007F}]/gu, "·").replace(/\s+/g, " ").slice(0, 120)
       if (!out.some((f) => f.kind === p.kind && f.sample === sample)) out.push({ kind: p.kind, sample })
       if (out.length >= 10) return out
     }
