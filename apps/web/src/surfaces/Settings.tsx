@@ -692,7 +692,7 @@ export function Settings() {
   if (!data || !v) return <p className="p-6 text-mut">Loading…</p>
 
   const orgChanged = differs(v, ["org", "roots", "projects"])
-  const phoneChanged = v.quiet || differs(v, ["phoneMin", "hardMin", "phoneAlerts"]) // Mac fork: phoneAlerts
+  const phoneChanged = v.quiet || differs(v, ["phoneMin", "hardMin"])
   const digestChanged =
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
   const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
@@ -839,46 +839,55 @@ export function Settings() {
               </Field>
             </Group>
 
+            {/* Mac fork (owner, 12 Nov): the phone told of decisions only, as ntfy is. First in the section. */}
+            <Group
+              section="phone"
+              title="Phone notifications"
+              gap="gap-2"
+              changed={v.phoneAlerts !== "all"}
+            >
+              <p className="m-0 text-xs text-mut">
+                What the Relay sends to your iPhone. Every request also waits here on this computer.
+                ntfy and Slack, if you use them, only ever send decisions.
+              </p>
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="phone-alerts"
+                  checked={v.phoneAlerts === "decisions"}
+                  onChange={() => change({ phoneAlerts: "decisions" }, "Phone notifications")}
+                />
+                <span>
+                  Only decisions waiting for you
+                  <span className="block text-xs text-mut">
+                    A permission, a plan or a question to answer, as ntfy does. Sessions finishing,
+                    notes from Claude, the digest and alerts stay on this computer.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="phone-alerts"
+                  checked={v.phoneAlerts === "all"}
+                  onChange={() => change({ phoneAlerts: "all" }, "Phone notifications")}
+                />
+                <span>
+                  Everything
+                  <span className="block text-xs text-mut">
+                    Decisions, and also sessions finishing, notes from Claude, the digest and
+                    alerts such as a paused or stopped session.
+                  </span>
+                </span>
+              </label>
+            </Group>
+
             <Group
               section="phone"
               title="Quiet hours and timeouts"
               gap="gap-3"
               changed={phoneChanged}
             >
-              {/* Mac fork (owner, 12 Nov): the phone told of decisions only, as ntfy is. */}
-              <fieldset className="m-0 grid gap-1.5 border-0 p-0">
-                <legend className="mb-1 p-0 text-[13px] font-semibold">What the phone is told</legend>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="radio"
-                    name="phone-alerts"
-                    checked={v.phoneAlerts === "decisions"}
-                    onChange={() => change({ phoneAlerts: "decisions" }, "Phone notifications")}
-                  />
-                  <span>
-                    Only decisions waiting for you
-                    <span className="block text-xs text-mut">
-                      A permission, a plan or a question to answer, as ntfy does. Sessions finishing,
-                      notes from Claude, the digest and alerts stay on this computer.
-                    </span>
-                  </span>
-                </label>
-                <label className="flex items-start gap-2">
-                  <input
-                    type="radio"
-                    name="phone-alerts"
-                    checked={v.phoneAlerts === "all"}
-                    onChange={() => change({ phoneAlerts: "all" }, "Phone notifications")}
-                  />
-                  <span>
-                    Everything
-                    <span className="block text-xs text-mut">
-                      Decisions, and also sessions finishing, notes from Claude, the digest and
-                      alerts such as a paused or stopped session.
-                    </span>
-                  </span>
-                </label>
-              </fieldset>
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"

@@ -68,6 +68,14 @@ describe("what the phone is told", () => {
     render(<Settings />)
     await openSection("Phone and notifications")
     const everything = await screen.findByRole("radio", { name: /^Everything/ })
+    // Its own group, the first one the section shows, so it is the first thing you see there.
+    const shown = [
+      ...document.querySelectorAll<HTMLFieldSetElement>("fieldset:not([hidden]) > legend"),
+    ]
+    expect(shown[0]?.textContent).toMatch(/^Phone notifications/)
+    expect(everything.closest("fieldset")?.querySelector("legend")?.textContent).toMatch(
+      /^Phone notifications/,
+    )
     expect(everything).toBeChecked()
     fireEvent.click(screen.getByRole("radio", { name: /^Only decisions waiting for you/ }))
     await waitFor(() => expect(puts).toHaveLength(1))

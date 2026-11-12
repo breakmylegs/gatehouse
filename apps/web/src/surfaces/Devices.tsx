@@ -5,6 +5,7 @@ import { LocalRelayPanel } from "../components/LocalRelayPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { useStore } from "../store"
+import { SECTION_KEY } from "../lib/settingsSection" // Mac fork
 
 interface Phone {
   id: string
@@ -75,6 +76,21 @@ export function Devices({ embedded = false }: { embedded?: boolean } = {}) {
                 this computer still work.
               </span>
             )}
+          </p>
+          {/* Mac fork (owner, 12 Nov): where to choose what the phone is told. */}
+          <p className="m-0 text-[13px] text-mut">
+            The phone is told of every notification, or only of decisions waiting for you: choose in{" "}
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-0 text-acc underline underline-offset-2"
+              onClick={() => {
+                localStorage.setItem(SECTION_KEY, "phone")
+                useStore.getState().setRoute("settings")
+              }}
+            >
+              Settings, Phone and notifications
+            </button>
+            .
           </p>
           <Phones phones={info.phones} onChanged={load} />
           <AddPhone onPaired={load} />
