@@ -5,6 +5,7 @@ import {
   withProvenance,
   type Provenance,
 } from "./provenance.js"
+import { vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { compileGlobs } from "@gatehouse/policy"
 
 const untrusted = (globs: readonly string[]) => compileGlobs(globs.map((g) => g.toLowerCase()))
@@ -107,6 +108,8 @@ export interface SessionHookDeps {
   locks?: Pick<TestLocks, "touched" | "repin">
   /** D-062: the Severe findings in what a commit would add; in Auto and Accept edits such a commit is asked about. */
   sast?: Pick<SastCommitGuard, "severe">
+  /** D-057: the same for dependency versions the vulnerability snapshot lists. */
+  vulns?: Pick<VulnCommitGuard, "matches">
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls a person approved that changed it. */
   instructions?: Pick<InstructionPins, "touched" | "repin">
@@ -286,6 +289,12 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
             .severe(cwd, String(toolInput.command))
             .catch(() => [{ file: "(the commit could not be read)", line: 0, kind: "eval" as const, severity: "Severe" as const, title: "Not checked" }])
           if (severe.length) return askOutput(sastReason(severe))
+        }
+        if (deps.vulns && makesCommit(input.tool_name, toolInput)) {
+          const found = await deps.vulns
+            .matches(cwd, String(toolInput.command))
+            .catch(() => [{ name: "(a lockfile could not be read)", version: "", ecosystem: "", ids: ["not checked"], lockfile: "" }])
+          if (found.length) return askOutput(vulnReason(found))
         }
         // C-013: a remembered rule that has used its allowed number of calls asks instead.
         if (deps.grants?.spent(verdict, input.tool_use_id))

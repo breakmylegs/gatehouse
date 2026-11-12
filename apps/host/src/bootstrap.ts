@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { VulnCommitGuard, VulnSnapshot } from "./vuln-snapshot.js"
 import { EvidenceService, EvidenceStore } from "./evidence.js"
 import { AnchorService } from "./anchors.js"
 import { SastCommitGuard } from "./sast.js"
@@ -530,6 +531,9 @@ export function createHost(opts: HostOptions = {}): Host {
   deps.locks = locks
   // D-062: a commit of code the local analysis rates Severe goes to a person.
   deps.sast = new SastCommitGuard()
+  // D-057: an offline vulnerability snapshot in the managed folder, when one is there and signed.
+  const vulnSnapshot = new VulnSnapshot(managedPolicyDir(env))
+  deps.vulns = new VulnCommitGuard(vulnSnapshot)
   // D-059: what each project tells Claude, pinned the same way.
   const instructions = new InstructionPins({
     dir: path.join(gatehouseDataDir(env), "instruction-pins"),
@@ -1258,6 +1262,7 @@ export function createHost(opts: HostOptions = {}): Host {
       timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
       anchors,
       evidence: evidence.store,
+      vulnSnapshot: () => vulnSnapshot.status(),
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,

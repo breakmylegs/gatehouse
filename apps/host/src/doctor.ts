@@ -4,6 +4,7 @@
  * version, the listener's address and the free disk space. What it shows names no email address, token or path to a
  * file of yours, so the report can be copied into a message for help; the copy is redacted again before it leaves.
  */
+import type { SnapshotState } from "./vuln-snapshot.js"
 import { execFile } from "node:child_process"
 import fs from "node:fs"
 import type { FastifyInstance } from "fastify"
@@ -37,6 +38,8 @@ export interface DoctorFacts {
   updates?: { kind: "release" | "source"; checkError?: string }
   /** A model runtime on this computer, when one is switched on. */
   localRuntime?: { ok: boolean; reason?: string }
+  /** D-057: the vulnerability snapshot in the managed folder. */
+  vulnSnapshot?: SnapshotState
 }
 
 const GB = 1024 ** 3
@@ -299,6 +302,23 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
               detail: "Checks for new versions by itself.",
             },
     )
+  // D-057: only when a snapshot is there: none is shipped, and without one nothing changes.
+  const vs = f.vulnSnapshot
+  if (vs && vs.state === "refused")
+    add({
+      id: "vuln-snapshot",
+      label: "Vulnerability snapshot",
+      state: "fail",
+      detail: `The vulnerability snapshot in the managed folder is not used, because ${vs.why}. Nothing is checked against it.`,
+      fix: "Sign the snapshot again with the key in osv-key.json and put osv-snapshot.sig beside it, or remove the snapshot.",
+    })
+  else if (vs && vs.state === "ok")
+    add({
+      id: "vuln-snapshot",
+      label: "Vulnerability snapshot",
+      state: "ok",
+      detail: `Signed and in use: ${vs.advisories.toLocaleString("en-GB")} advisories. A commit that adds a version it lists comes to you.`,
+    })
   return out
 }
 
@@ -344,6 +364,8 @@ export function registerDoctorRoutes(
     updates?: { status: () => { current: string; kind: "release" | "source"; checkError?: string } }
     config: () => GatehouseConfig
     env: NodeJS.ProcessEnv
+    /** D-057: how the vulnerability snapshot stands. */
+    vulnSnapshot?: () => SnapshotState
   },
 ): void {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -362,6 +384,7 @@ export function registerDoctorRoutes(
     const facts: DoctorFacts = {
       health: ctx.health(),
       claude: claude.value,
+      ...(ctx.vulnSnapshot ? { vulnSnapshot: ctx.vulnSnapshot() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

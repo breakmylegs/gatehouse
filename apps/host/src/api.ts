@@ -184,6 +184,8 @@ export interface AdminContext {
   anchors?: AnchorService
   /** D-003: the evidence packs. */
   evidence?: EvidenceStore
+  /** D-057: how the vulnerability snapshot stands, for Doctor. */
+  vulnSnapshot?: () => import("./vuln-snapshot.js").SnapshotState
   /** The sealed GitHub token for a private repository. */
   updateToken?: Pick<UpdateTokenStore, "save" | "forget">
   /** The Approver's supervisor, for the workbench. Absent when the Approver is not run by this Host. */

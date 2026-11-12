@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import type { VulnCommitGuard } from "./vuln-snapshot.js"
 import type { EvidenceService } from "./evidence.js"
 import type { SastCommitGuard } from "./sast.js"
 import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
@@ -469,6 +470,8 @@ export interface SessionDeps {
   locks?: TestLocks
   /** D-062: the local analysis of what a session's commit would add. */
   sast?: SastCommitGuard
+  /** D-057: the vulnerability snapshot, for what a session's commit would add. */
+  vulns?: VulnCommitGuard
   /** D-003: the change evidence packs. */
   evidence?: EvidenceService
   /** D-059: the pins of what each project tells Claude. */
@@ -1097,6 +1100,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
       ...(d.sast && this.#opts.kind !== "chat" ? { sast: d.sast } : {}),
+      ...(d.vulns && this.#opts.kind !== "chat" ? { vulns: d.vulns } : {}),
       ...(d.instructions && this.#opts.kind !== "chat"
         ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
         : {}),
@@ -1199,6 +1203,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(d.grants ? { grants: d.grants } : {}),
       ...(d.locks ? { locks: d.locks, lockedCalls: this.#lockedCalls } : {}),
       ...(d.sast && this.#opts.kind !== "chat" ? { sast: d.sast } : {}),
+      ...(d.vulns && this.#opts.kind !== "chat" ? { vulns: d.vulns } : {}),
       ...(d.instructions && this.#opts.kind !== "chat"
         ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
         : {}),

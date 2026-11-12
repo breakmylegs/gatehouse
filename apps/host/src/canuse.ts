@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { VULN_RULE, vulnReason, type VulnCommitGuard } from "./vuln-snapshot.js"
 import { SAST_RULE, sastReason, type SastCommitGuard, type SastFinding } from "./sast.js"
 import { makesCommit } from "./commit-scan.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
@@ -60,6 +61,8 @@ export interface CanUseDeps {
   locks?: Pick<TestLocks, "touched">
   /** D-062: the Severe findings in what a commit would add. */
   sast?: Pick<SastCommitGuard, "severe">
+  /** D-057: the dependency versions a commit would add that the vulnerability snapshot lists. */
+  vulns?: Pick<VulnCommitGuard, "matches">
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
   instructions?: Pick<InstructionPins, "touched">
@@ -262,6 +265,22 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
             decidedBy: "rules",
           }
       }
+      // D-057: a commit that adds a dependency version the snapshot lists goes to a person, with the advisories. A
+      // lockfile that cannot be read while a snapshot is in use counts as one (fail closed).
+      if (deps.vulns && verdict.outcome !== "deny" && verdict.ruleId !== SAST_RULE && makesCommit(toolName, input)) {
+        const found = await deps.vulns
+          .matches(deps.cwd, String(input.command))
+          .catch(() => [{ name: "(a lockfile could not be read)", version: "", ecosystem: "", ids: ["not checked"], lockfile: "" }])
+        if (found.length)
+          verdict = {
+            ...verdict,
+            outcome: "escalate",
+            ruleId: VULN_RULE,
+            reason: vulnReason(found),
+            risk: Math.max(verdict.risk, 85),
+            decidedBy: "rules",
+          }
+      }
       // D-059: an agent's change to what the project tells Claude goes to a person the same way, with the change shown.
       if (deps.instructions && verdict.outcome !== "deny" && verdict.ruleId !== LOCKED_TEST_RULE) {
         let files: string[]
@@ -436,6 +455,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   LICENCE_NOT_ALLOWED,
   // D-062: a commit of code rated Severe is looked at by a person.
   SAST_RULE,
+  // D-057: so is one that adds a dependency version with a known advisory.
+  VULN_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",
