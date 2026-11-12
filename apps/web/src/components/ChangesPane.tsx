@@ -24,6 +24,13 @@ import { send, useStore } from "../store"
 const LOCKFILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|cargo\.lock|poetry\.lock|uv\.lock|go\.sum|composer\.lock|packages\.lock\.json|pipfile\.lock|gemfile\.lock)$/i
 
+/** D-028: one hunk's origin, as apps/host/src/provenance-graph.ts gives it. */
+interface Origin {
+  file: string
+  hunk: number
+  call?: { seq: number; tool: string; file: string; sources: Array<{ seq: number; tool: string; what: string; injected?: true; outside?: true }> }
+}
+
 /** D-004: a mutation run's report, as apps/host/src/mutation.ts gives it. */
 interface MutationReport {
   tool: string
@@ -97,6 +104,8 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [untested, setUntested] = useState<string[]>([])
   const [behaviour, setBehaviour] = useState<Record<string, { cases: number; deltas?: string[] }>>({})
   const [capturing, setCapturing] = useState<string>()
+  // D-028: where each file's hunks came from, by file.
+  const [origins, setOrigins] = useState<Record<string, Origin[]>>({})
   // D-004: the last mutation run's report, and whether one is running.
   const [mutation, setMutation] = useState<MutationReport>()
   const [mutating, setMutating] = useState(false)
@@ -319,7 +328,44 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                       Lock
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="btn !min-h-7 !px-2 !text-[12.5px]"
+                    onClick={() =>
+                      void send({ type: "provenance_graph", sessionId, file: f.path, ref: since.ref }).then((r) =>
+                        r.ok
+                          ? setOrigins((o) => ({ ...o, [f.path]: (r.data as { hunks: Origin[] }).hunks }))
+                          : toast.error(r.error?.message ?? "It could not be traced"),
+                      )
+                    }
+                  >
+                    Where it came from
+                  </button>
                 </div>
+                {origins[f.path] ? (
+                  <ul aria-label={`Where ${f.path} came from`} className="m-0 grid list-none gap-1.5 border-t border-line p-2.5 text-[12.5px]">
+                    {origins[f.path]!.map((h) => (
+                      <li key={h.hunk} className="grid gap-0.5">
+                        <span>
+                          Change {h.hunk + 1}: {h.call ? `made by ${h.call.tool} at record ${h.call.seq}` : "not made by an edit the session recorded"}
+                          {h.call?.sources.some((s) => s.injected) ? <strong className="text-sev">, after reading something that held what looks like prompt injection</strong> : null}
+                        </span>
+                        {h.call?.sources.length ? (
+                          <span className="text-mut">
+                            Read before it:{" "}
+                            {h.call.sources.slice(0, 6).map((s, i) => (
+                              <span key={s.seq} className={s.injected ? "font-semibold text-sev" : s.outside ? "text-warn" : ""}>
+                                {i ? "; " : ""}
+                                <span className="mono">{s.what}</span>
+                                {s.injected ? " (held injected text)" : s.outside ? " (not the project's own words)" : ""}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
                 {open[f.path] ? (
                   f.binary ? (
                     <DiffText text={f.diff} />

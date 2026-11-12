@@ -1,4 +1,7 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { provenanceGraph } from "./provenance-graph.js"
+import { sessionRecords } from "./timeline.js"
+import { UNTRUSTED_FILES } from "./provenance.js"
 import { behaviourDiff, capture, looksUntested, type BehaviourDelta, type Capture } from "./characterise.js"
 import { listFiles, TEST_FILE } from "./mutation.js"
 import { writeFileAtomic } from "@gatehouse/shared/node"
@@ -22,7 +25,7 @@ import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify, { type FastifyInstance } from "fastify"
 import type { WebSocket } from "ws"
-import { checkRemember, isLockfile, redactString, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { checkRemember, compileGlobs, isLockfile, redactString, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
 import { lockfileChanges, sbomDiff, type DependencyChange } from "./sbom.js"
 import { addedLines, scanSource, type SastFinding } from "./sast.js"
 import {
@@ -970,6 +973,22 @@ export class HostServer {
           .map((x) => x.path)
           .filter((p) => looksUntested(s.cwd, p, tests))
         return { findings, untested }
+      }
+      case "provenance_graph": {
+        // D-028: each changed hunk, the edit that made it, and what was read before it; from the audit log alone.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) return { hunks: [] }
+        const auditDir = a.admin?.auditDir
+        const records = auditDir ? sessionRecords(auditDir, s.id) : []
+        const isUntrusted = compileGlobs((a.admin?.config().untrustedFiles ?? UNTRUSTED_FILES).map((g) => g.toLowerCase()))
+        return {
+          hunks: provenanceGraph({
+            records,
+            files: c.files.filter((x) => x.path === cmd.file || cmd.file === undefined),
+            untrusted: (file) => isUntrusted(file.replace(/\\/g, "/").toLowerCase()),
+          }),
+        }
       }
       case "characterise": {
         // D-066: the file's behaviour as it was at the checkpoint, captured in a sandbox and kept only if it replays green.

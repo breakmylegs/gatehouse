@@ -109,7 +109,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 |---|---|---|---|---|---|
 | D-066 | Characterisation capture | built | slice/D-066-characterise | BUILD_REPORT "Frontier D-066 and D-006" | Exported JS/TS functions, generated inputs, captured from the checkpoint's copy, kept only if stable; redacted; sandbox |
 | D-006 | Behaviour diff | built | slice/D-066-characterise | BUILD_REPORT "Frontier D-066 and D-006" | Compare with now: each changed output in plain English |
-| D-028 | Causal provenance graph | todo | | | |
+| D-028 | Causal provenance graph | built | slice/D-028-provenance-graph | BUILD_REPORT "Frontier D-028" | Where it came from in Changes: hunk to edit to what was read before, injected and outside sources marked |
 | D-031 | Evidence queries | built | slice/D-031-evidence-queries | BUILD_REPORT "Frontier D-031" | Four saved questions on the Audit page; incremental JSONL index per month; redacted; under 2 s at 100,000 records |
 | D-033 | Requirement ledger | todo | | | |
 | D-034 | Unrequested behaviour detector | todo | | | |

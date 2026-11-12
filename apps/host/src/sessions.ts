@@ -1141,12 +1141,13 @@ export class Session extends EventEmitter<SessionEvents> {
           (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
         ),
       // D-061: a result that looked like prompt injection: recorded (what kind, never the result) and shown.
-      onInjection: (tool, findings) => {
+      onInjection: (tool, findings, toolUseId) => {
         this.#flagged = [...this.#flagged, { tool, at: new Date().toISOString(), findings }].slice(-20)
         void this.#auditLimit(
           "injection_flagged",
           "injection-scan",
-          { tool, kinds: [...new Set(findings.map((f) => f.kind))] },
+          // D-028: and which call it was, so a change can be traced to it.
+          { tool, kinds: [...new Set(findings.map((f) => f.kind))], ...(toolUseId ? { toolUseId } : {}) },
           `A result from ${tool} held what looks like prompt injection, so it was cleaned before Claude read it and the next network call asks.`,
           "rules",
         ).catch(() => undefined)

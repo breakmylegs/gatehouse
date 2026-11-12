@@ -146,7 +146,7 @@ export interface SessionHookDeps {
   onToolOutput?: (tool: string, output: string) => void
   /** G19: how each call ended: with the error when it failed, undefined when it worked. */
   /** D-061: a result that looked like prompt injection, for the screen and the record. */
-  onInjection?: (tool: string, findings: InjectionFinding[]) => void
+  onInjection?: (tool: string, findings: InjectionFinding[], toolUseId?: string) => void
   /** D-003: how a shell command ended (the error when it failed), for the change's evidence. */
   onCommandEnded?: (toolUseId: string, error: string | undefined) => void
   /** G19, D-075: how each call ended; words returned go to Claude with the call's result (a warning it is repeating). */
@@ -350,7 +350,7 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
     const findings = scanForInjection(text.slice(0, 400_000))
     if (!findings.length) return
     deps.provenance?.raise(`${where} that held what looks like prompt injection`)
-    deps.onInjection?.(tool, findings)
+    deps.onInjection?.(tool, findings, id)
     replacements.set(id, quarantined(text.slice(0, 400_000), findings))
   }
   const inner: HookCallback = async (input) => {

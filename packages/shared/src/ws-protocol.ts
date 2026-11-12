@@ -222,6 +222,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-028: where a changed file's hunks came from: the edit that made each and what was read before it. Read only. */
+  z.object({ type: z.literal("provenance_graph"), sessionId: Id, file: z.string().min(1).max(4096).optional(), ref: z.string().min(1).max(500).optional() }),
   /** D-066: captures what a changed file did before the change, from the checkpoint, in a sandbox. */
   z.object({ type: z.literal("characterise"), sessionId: Id, file: z.string().min(1).max(4096), ref: z.string().min(1).max(500).optional() }),
   /** D-006: replays a file's captured inputs against it as it is now and lists what changed. */
