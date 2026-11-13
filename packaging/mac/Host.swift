@@ -44,7 +44,7 @@ enum Paths {
       .appendingPathComponent("Library/Application Support/Gatehouse")
   }
 
-  /// What the Host and the Relay start with: this app's environment without any Claude credential (invariant 6), and
+  /// What the Host starts with: this app's environment without any Claude credential (invariant 6), and
   /// Node's compile cache in the data folder.
   static func childEnvironment() -> [String: String] {
     var env = ProcessInfo.processInfo.environment

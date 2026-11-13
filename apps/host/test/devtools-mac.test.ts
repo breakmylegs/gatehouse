@@ -70,8 +70,7 @@ describe.skipIf(!can)("Apple's developer tools while Xcode's licence waits", () 
   })
 })
 
-// Invariant 6 in Codehouse.app: the Host, and the Relay beside it (Paths.childEnvironment), start without any Claude
-// credential the app was given.
+// Invariant 6 in Codehouse.app: the Host (Paths.childEnvironment) starts without any Claude credential the app was given.
 describe.skipIf(!can)("the Host's environment in Codehouse.app", () => {
   it("leaves out every Claude credential and keeps the rest", () => {
     const out = execFileSync(exe, ["--env"], {

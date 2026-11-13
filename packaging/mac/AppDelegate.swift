@@ -23,9 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   private var quick: QuickPanel?
   private var quickItem: NSMenuItem?
   private let hotkey = GlobalHotkey()
-  private let relay = RelayProcess()
-  private var relaySubmenu: NSMenu?
-  private var relayNote: String?
   private var popouts: [String: PopoutWindow] = [:]
   /// The exit code for --check.
   private(set) var exitCode: Int32 = 0
@@ -59,7 +56,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
       clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.showStage() }
     }
     startHost()
-    if !check { startRelayIfSetUp() }
   }
 
   private func startHost() {
@@ -112,16 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   private func pageLoaded(_ ok: Bool, _ detail: String) {
     if check {
       say("Window page: \(detail)")
-      if ok {
-        return checkRelay { [self] relayOk, said in
-          say(said)
-          finish(
-            relayOk ? 0 : 1,
-            relayOk
-              ? "Check passed: the window loaded the interface from the packaged Host."
-              : "Check failed: the app could not run the phone Relay.")
-        }
-      }
       return finish(
         ok ? 0 : 1,
         ok
@@ -417,7 +403,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    relay.stop()
     guard !quitting, let host, host.isRunning else { return .terminateNow }
     quitting = true
     keepAwake(false)
@@ -426,7 +411,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   }
 
   func applicationWillTerminate(_ notification: Notification) {
-    relay.stop()
     keepAwake(false)
   }
 
@@ -439,9 +423,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     q.target = self
     quickItem = q
     menu.addItem(.separator())
-    let relayMenu = NSMenu(title: "Phone Relay")
-    menu.addItem(withTitle: "Phone Relay", action: nil, keyEquivalent: "").submenu = relayMenu
-    relaySubmenu = relayMenu
     let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
     login.target = self
     loginItem = login
@@ -477,140 +458,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     NSWorkspace.shared.open(Paths.dataDir)
   }
 
-  // MARK: the phone Relay
-
-  /// --check: the app runs the phone Relay. Set up in the check's own data folder for http://localhost (the one
-  /// address the Relay takes without https, for testing), it starts, listens, writes its token, and stops again.
-  private func checkRelay(done: @escaping (Bool, String) -> Void) {
-    if RelayProcess.portInUse() { return done(true, "Relay: not checked, port \(RelayProcess.port) is already in use") }
-    do { try relay.start(address: "http://localhost:\(RelayProcess.port)") } catch {
-      return done(false, "Relay: did not start (\(error))")
-    }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
-      let up = relay.isRunning && RelayProcess.portInUse() && RelayProcess.token != nil
-      relay.stop()
-      DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-        let down = !RelayProcess.portInUse()
-        done(
-          up && down,
-          "Relay: started from the app \(up ? "and answered with its token written" : "but did NOT answer"); it \(down ? "stopped" : "did NOT stop") when asked"
-        )
-      }
-    }
-  }
-
-  private func startRelayIfSetUp() {
-    guard RelayProcess.savedAddress != nil, !RelayProcess.portInUse() else { return }
-    relay.onStop = { [weak self] said in
-      guard let self, !self.quitting else { return }
-      self.relayNote = said.isEmpty ? "It stopped." : said
-    }
-    do {
-      try relay.start()
-      relayNote = nil
-    } catch {
-      relayNote = "\(error)"
-    }
-  }
-
-  /// What the Phone Relay menu says and offers, read each time the menu opens.
-  private func fillRelayMenu() {
-    guard let m = relaySubmenu else { return }
-    m.removeAllItems()
-    let address = RelayProcess.savedAddress
-    let line: String
-    if address == nil {
-      line = "Not set up"
-    } else if relay.isRunning {
-      line = "Running for \(address ?? "")"
-    } else if RelayProcess.portInUse() {
-      line = "Another Relay is running on port \(RelayProcess.port)"
-    } else {
-      line = "Stopped"
-    }
-    m.addItem(withTitle: line, action: nil, keyEquivalent: "").isEnabled = false
-    m.addItem(.separator())
-    if address == nil {
-      m.addItem(withTitle: "Set Up Phone Relay…", action: #selector(setUpRelay), keyEquivalent: "").target = self
-    } else {
-      m.addItem(withTitle: "Show Enrolment Token…", action: #selector(showRelayToken), keyEquivalent: "").target = self
-      if relay.isRunning {
-        m.addItem(withTitle: "Stop Phone Relay", action: #selector(stopRelay), keyEquivalent: "").target = self
-      } else if !RelayProcess.portInUse() {
-        m.addItem(withTitle: "Start Phone Relay", action: #selector(startRelay), keyEquivalent: "").target = self
-      }
-    }
-    m.addItem(withTitle: "How to Set Up the Phone…", action: #selector(relayHelp), keyEquivalent: "").target = self
-  }
-
-  /// Asks once for the https address the iPhone uses, then starts the Relay with it and shows the token.
-  @objc private func setUpRelay() {
-    let a = NSAlert()
-    a.messageText = "Set up the phone Relay"
-    a.informativeText =
-      "Give the https address your iPhone will use to reach this Mac, from Tailscale (https://your-mac.your-tailnet.ts.net) or your Cloudflare tunnel (https://relay.example.com). It must stay the same for good: the phone's passkey is tied to it."
-    let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
-    field.placeholderString = "https://"
-    a.accessoryView = field
-    a.addButton(withTitle: "Set Up")
-    a.addButton(withTitle: "Cancel")
-    a.window.initialFirstResponder = field
-    NSApp.activate(ignoringOtherApps: true)
-    guard a.runModal() == .alertFirstButtonReturn else { return }
-    let address = field.stringValue.trimmingCharacters(in: .whitespaces)
-    guard address.lowercased().hasPrefix("https://") else {
-      return relayProblem("The address must start with https://.")
-    }
-    if RelayProcess.portInUse() {
-      return relayProblem("Something is already using port \(RelayProcess.port), perhaps npm run relay in Terminal. Stop it, then set up again.")
-    }
-    relay.onStop = { [weak self] said in
-      guard let self, !self.quitting else { return }
-      self.relayNote = said
-    }
-    do { try relay.start(address: address) } catch { return relayProblem("\(error)") }
-    // The Relay writes its token as it starts; show it once it has, or say why it stopped.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [self] in
-      if relay.isRunning, RelayProcess.token != nil { showRelayToken() } else {
-        relayProblem(relayNote ?? "It did not start.")
-      }
-    }
-  }
-
-  @objc private func showRelayToken() {
-    let address = RelayProcess.savedAddress ?? ""
-    guard let token = RelayProcess.token, !token.isEmpty else {
-      return relayProblem("There is no token yet. Start the Phone Relay first.")
-    }
-    let a = NSAlert()
-    a.messageText = "Pair a phone"
-    a.informativeText =
-      "1. In Codehouse, open Devices.\n2. Enter the address \(address) and this one-time token:\n\n\(token)\n\n3. Choose Connect, then Show a pairing code, and open the address on your iPhone. The token works once; the Relay makes a new one for the next device."
-    a.addButton(withTitle: "Copy Token")
-    a.addButton(withTitle: "Done")
-    NSApp.activate(ignoringOtherApps: true)
-    if a.runModal() == .alertFirstButtonReturn {
-      NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(token, forType: .string)
-    }
-  }
-
-  @objc private func startRelay() { startRelayIfSetUp() }
-  @objc private func stopRelay() { relay.stop() }
-
-  @objc private func relayHelp() {
-    // The guide inside the app: Tailscale, a Cloudflare tunnel and pairing (docs/relay-local.md).
-    NSWorkspace.shared.open(Paths.appDir.appendingPathComponent("docs/relay-local.md"))
-  }
-
-  private func relayProblem(_ text: String) {
-    let a = NSAlert()
-    a.messageText = "The phone Relay did not start"
-    a.informativeText = text
-    NSApp.activate(ignoringOtherApps: true)
-    a.runModal()
-  }
-
   // MARK: open at login
 
   private var loginItem: NSMenuItem?
@@ -618,7 +465,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   /// The tick shows what macOS has now, read each time the menu opens: you can also change it in System Settings,
   /// General, Login Items.
   func menuWillOpen(_ menu: NSMenu) {
-    fillRelayMenu()
     loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
   }
 
