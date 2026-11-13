@@ -25,7 +25,8 @@
 // A version is major.minor from package.json and the number of commits, so every push to main is higher than the
 // one before. A working copy with uncommitted changes builds as -dev, which sorts before the release of that number.
 import { notesFor, parseLog, type Change } from "./platforms.js"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
+import { publishRelease } from "./release-upload.js"
 import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
@@ -359,21 +360,20 @@ if (cmd === "version") {
     ...fs.readFileSync(path.join(out, "routes.txt"), "utf8").split(/\r?\n/).filter(Boolean),
     ...fs.readdirSync(out).filter((f) => /^codeh-.*\.zip$/.test(f)),
   ].map((f) => path.join(out, f))
-  step("publish", "gh", [
-    "release",
-    "create",
-    `v${v.version}`,
-    ...files,
-    "--repo",
-    REPO,
-    "--title",
-    `Codehouse ${v.version}`,
-    "--notes-file",
-    path.join(out, "notes.md"),
-    "--target",
-    git("rev-parse", "HEAD"),
-    "--latest",
-  ])
+  // O28: one file at a time into a draft, each retried and checked, published only when all match.
+  console.log("[release] publish")
+  publishRelease({
+    run: (cmd, args) => {
+      const r = spawnSync(cmd, args, { cwd: root, encoding: "utf8", windowsHide: true })
+      return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? String(r.error ?? "") }
+    },
+    repo: REPO,
+    tag: `v${v.version}`,
+    title: `Codehouse ${v.version}`,
+    notesFile: path.join(out, "notes.md"),
+    target: git("rev-parse", "HEAD"),
+    files,
+  })
   console.log(
     `[release] Codehouse ${v.version} is out: https://github.com/${REPO}/releases/tag/v${v.version}`,
   )
