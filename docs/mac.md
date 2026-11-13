@@ -45,7 +45,7 @@ npm run package:mac -- --swift-only          only recompile the window's program
 
 **Limits of this first version:**
 
-- **Signed for this Mac only** (ad hoc), not notarised. Built and installed here, it opens like any app. A copy downloaded onto another Mac is stopped by Gatekeeper until its owner allows it in System Settings, Privacy and Security, Open Anyway. Signing and notarising for other Macs needs an Apple Developer ID.
+- **Signed for this Mac only** (ad hoc), not notarised. Built and installed here, it opens like any app. A copy downloaded onto another Mac is stopped by Gatekeeper the first time until its owner allows it in System Settings, Privacy and Security, Open Anyway (since macOS 15, Control-click, Open no longer does); once is enough. Built from the source folder on that Mac instead (`npm run package:mac -- --install`), nothing is downloaded and nothing is stopped. Notarising, so no Mac asks at all, needs Apple's paid Developer Program; owner, 13 Nov: not needed, Codehouse goes without.
 - **Its version** names the latest release it is built from and the commits since: `2.0.269+mac.3` is release 2.0.269 and 3 commits after it. Settings, Updates compares it with the releases as 2.0.269 (the `+mac` part is ignored, as semver's build part is), so it reads as up to date until a newer release is published, which then wants a pull and a rebuild. **No in-app updates yet.** Settings, Updates says so. To update, pull and run `npm run package:mac -- --install` again (or install a newer `.dmg`).
 - **For this Mac's processor** (Apple silicon here). An Intel Mac needs its own build, made on an Intel Mac.
 
@@ -120,7 +120,7 @@ All of it was written and unit tested on Windows. None of it has run on a Mac ye
 
 ## Still to do
 
-1. **Updates and signing.** A Developer ID signature and notarisation, so the app opens on other Macs, then Mac releases and an updater: the signed releases of `apps/host/src/update/` with a Mac part, or Sparkle.
+1. **Mac releases and an updater.** The signed releases of `apps/host/src/update/` with a Mac part: a new Codehouse.app checked against the release key (`update.sig`), as on Windows, and put in place of the old one as `--install --when-quit` does. A file the app downloads itself is not quarantined as a browser's download is, so a checked update needs no Open Anyway and no notarisation.
 2. **PowerShell checking.** Commands are checked with tree-sitter Bash on a Mac. Without `pwsh`, PowerShell commands simply wait for you, as on Windows; with it (Microsoft's macOS build, which needs no administrator), they are checked as on Windows, and the tests that need it run.
 
 ## Platform hooks
