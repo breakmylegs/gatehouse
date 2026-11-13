@@ -304,26 +304,21 @@ if (cmd === "version") {
     })
     console.log(`[release] tests skipped under the owner's override: ${r.override.reason}`)
   }
-  // The gate checks what this release changes: everything since the last release, or everything when there is none.
+  // Owner, 13 Nov: "It doesnt make sense to test everything every time. So even for releases the optimal amount of
+  // feature and regression tests should be done." Each change is tested when it is made (its own tests and the
+  // regression tests for what it touches), so a release no longer re-runs everything since the last one (that was up
+  // to 237 test files, half an hour and more on this laptop). It runs the security invariant tests the gate always
+  // runs, then the prohibited patterns and the packaged copy's own check below.
   if (!process.argv.includes("--skip-tests")) {
-    let last: string | undefined
-    // The tags are made on GitHub, so fetch them first: without the last one the gate went back two releases and
-    // ran the whole suite for 34 minutes, which failed two timing tests on a busy laptop (1 Nov).
-    try {
-      git("fetch", "--tags", "--quiet", "origin")
-    } catch {
-      // offline: compare with the newest tag that is here
-    }
-    try {
-      last = git("describe", "--tags", "--abbrev=0", "--match", "v*", "HEAD")
-    } catch {
-      last = undefined
-    }
-    step(
-      last ? `gate: what changed since ${last}` : "gate: everything (no earlier release)",
-      node,
-      [path.join(root, "scripts", "gate.mjs"), ...(last ? ["--base", last] : ["--full"])],
-    )
+    step("security invariant tests", node, [
+      path.join(root, "node_modules", "vitest", "vitest.mjs"),
+      "run",
+      "--maxWorkers=2",
+      "apps/host/test/invariants.test.ts",
+      "apps/host/test/threat-model.test.ts",
+      "apps/host/test/providers.test.ts",
+      "apps/host/test/conformance.test.ts",
+    ])
   }
   // Even with --skip-tests: a release never ships what the terms or the rules forbid (CH-01).
   step("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")])
