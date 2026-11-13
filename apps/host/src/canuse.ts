@@ -9,7 +9,7 @@ import { makesCommit } from "./commit-scan.js"
 import { INSTRUCTIONS_RULE, instructionsReason, type InstructionPins } from "./instruction-pins.js"
 import { dryRunPlan, estimateWords } from "./plan-dry-run.js"
 import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
-import { EGRESS_RULE, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
+import { EGRESS_RULE, GRANTABLE_TOOLS, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
@@ -57,6 +57,8 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /** Owner, 13 Nov: whether you allowed every call of this tool in the session, on the desktop. */
+  toolGranted?: (tool: string) => boolean
   /** D-018: Extreme approval approved an escalation (it spends the risk budget). */
   onAutoApproved?: (verdict: Verdict) => void
   /** D-015: a Remember was refused, and why, for the screen. */
@@ -424,6 +426,10 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (!written)
           return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
       }
+      // Owner, 13 Nov: a tool you allowed for the whole session on the desktop (WebFetch, WebSearch) is allowed without
+      // asking each time, except what Extreme approval may never approve either (a fetch after a prompt-injection flag).
+      if (GRANTABLE_TOOLS.has(toolName) && deps.toolGranted?.(toolName) === true && !NEVER_AUTO_APPROVED.has(verdict.ruleId))
+        return await grantApprove(deps, toolName, input, toolUseID, verdict)
       if (deps.extreme?.() === true && weakens && deps.strictTests?.()) {
         // D-001, strict for this project: a weakening waits for a person even in Extreme approval.
         return await escalate(
@@ -593,6 +599,35 @@ async function extremeApprove(
   } catch {
     // A notification problem never changes the decision.
   }
+  return allow(input, toolUseID)
+}
+
+/** Owner, 13 Nov: allowed by the session's grant for the tool, which you gave on the desktop; recorded first. */
+async function grantApprove(
+  deps: CanUseDeps,
+  toolName: string,
+  input: Record<string, unknown>,
+  toolUseID: string,
+  verdict: Verdict,
+): Promise<PermissionResult> {
+  const written = await deps.audit.record({
+    session: deps.sessionId,
+    event: "human_decision",
+    channel: "host",
+    tool: toolName,
+    toolUseId: toolUseID,
+    cwd: deps.cwd,
+    project: deps.project,
+    input,
+    verdict: {
+      ...verdict,
+      outcome: "allow",
+      decidedBy: "human-desktop",
+      reason: `Allowed because you allowed every ${toolName} in this session (held by rule ${verdict.ruleId} otherwise).`,
+    },
+    latencyMs: 0,
+  })
+  if (!written) return deny("The decision could not be recorded in the audit log, so it was not applied.", toolUseID)
   return allow(input, toolUseID)
 }
 

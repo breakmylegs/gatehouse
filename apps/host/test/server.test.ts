@@ -468,6 +468,9 @@ describe("commands over the WebSocket", () => {
     const results: unknown[] = []
     s.sdk.turn = async (api) => {
       for (let i = 0; i < 5; i++) results.push(await api.callTool("Bash", { command: `git push origin rs${i}` }))
+      // Three more fast ones, then a Severe one (a network share path, rule unc-path at 90).
+      for (let i = 5; i < 8; i++) results.push(await api.callTool("Bash", { command: `git push origin rs${i}` }))
+      results.push(await api.callTool("Read", { file_path: "\\\\fs.test\\share\\rs8.txt" }))
     }
     const created = await c.send({ type: "create_session", cwd: s.repo })
     const sessionId = (created.data as { sessionId: string }).sessionId
@@ -494,10 +497,21 @@ describe("commands over the WebSocket", () => {
     const fifth = await asked(4)
     expect(await c.send({ type: "approve", requestId: fifth.view.request.id, shownMs: 150 })).toMatchObject({ error: { code: "friction" } })
     expect(await c.send({ type: "approve", requestId: fifth.view.request.id, deliberate: true })).toMatchObject({ error: { code: "friction" } })
+    // Typing allow counts only for a Severe request; this one is High.
+    expect(await c.send({ type: "approve", requestId: fifth.view.request.id, typed: true })).toMatchObject({ error: { code: "friction" } })
     await new Promise((r) => setTimeout(r, 2100))
     expect(await c.send({ type: "approve", requestId: fifth.view.request.id, deliberate: true })).toMatchObject({ ok: true })
+    // Owner, 13 Nov ("Typing allow once still doesnt allow it"): a Severe request you typed allow for goes through at
+    // once, even straight after a run of fast approvals.
+    for (let i = 5; i < 8; i++) {
+      const a = await asked(i)
+      expect(await c.send({ type: "approve", requestId: a.view.request.id, shownMs: 150, opened: true })).toMatchObject({ ok: true })
+    }
+    const severe = await c.waitFor("approval_request", (e) => e.view.request.sessionId === sessionId && JSON.stringify(e.view.rawInput).includes("rs8"))
+    expect(severe.view.request.verdict.risk).toBeGreaterThanOrEqual(85)
+    expect(await c.send({ type: "approve", requestId: severe.view.request.id, typed: true, shownMs: 150, opened: true })).toMatchObject({ ok: true })
     await c.waitFor("sdk_message", (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId)
-    expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, false, true])
+    expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, false, true, true, true, true, true])
     expect(s.records().filter((r) => r.event === "approval_friction_shown")).toHaveLength(2)
     await c.send({ type: "close_session", sessionId })
     // Five High calls, each checkpointed before it asks: slow when git is.

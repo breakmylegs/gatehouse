@@ -167,6 +167,11 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     model: z.string().min(1).max(200).optional(),
   }),
+  /**
+   * Owner, 13 Nov: allow every call of a tool for the rest of the session (WebFetch, WebSearch), from the desktop card,
+   * and the ones of it waiting now. The desktop only: never the phone or a push channel (invariant 11).
+   */
+  z.object({ type: z.literal("grant_tool"), sessionId: Id, tool: z.enum(["WebFetch", "WebSearch"]) }),
   z.object({
     type: z.literal("approve"),
     requestId: Id,
@@ -180,6 +185,11 @@ export const ClientCommand = z.discriminatedUnion("type", [
     opened: z.boolean().optional(),
     /** D-021: the second, deliberate approval the friction asked for. */
     deliberate: z.boolean().optional(),
+    /**
+     * Owner, 13 Nov ("Typing allow once still doesnt allow it"): a Severe request confirmed by typing allow on the
+     * desktop card. That is a deliberate approval already, so the rubber-stamp friction does not ask again.
+     */
+    typed: z.boolean().optional(),
   }),
   z.object({ type: z.literal("deny"), requestId: Id, message: Message.optional() }),
   z.object({

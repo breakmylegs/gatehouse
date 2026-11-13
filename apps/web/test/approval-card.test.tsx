@@ -147,7 +147,8 @@ describe("ApprovalCard", () => {
     expect(sent).toEqual([])
     fireEvent.change(box, { target: { value: " Allow " } })
     fireEvent.click(confirm)
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) }]))
+    // Typed, so the Host takes it as deliberate (owner, 13 Nov: typing allow did not allow after fast approvals).
+    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", typed: true, opened: true, shownMs: expect.any(Number) }]))
   })
 
   it("has no effects row for a call that deletes nothing", () => {

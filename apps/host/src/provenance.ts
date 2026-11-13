@@ -8,6 +8,15 @@ import type { Verdict } from "@gatehouse/shared"
 export const TAINT_RULE = "untrusted-content"
 /** D-016: a network call, or a write outside the project, carrying a value from an untrusted source. */
 export const EGRESS_RULE = "tainted-egress"
+/**
+ * Owner, 13 Nov ("Web fetch should just be allowed on extreme approval mode"): a WebFetch whose address carries such a
+ * value, or any WebFetch after a result that looked like prompt injection (D-061). It still asks in Manual, but Extreme
+ * approval answers it and a session's WebFetch grant allows it. Network commands stay under EGRESS_RULE.
+ */
+export const FETCH_RULE = "tainted-fetch"
+
+/** Owner, 13 Nov: the tools a session may be granted from the desktop card, so each call no longer asks. */
+export const GRANTABLE_TOOLS: ReadonlySet<string> = new Set(["WebFetch", "WebSearch"])
 
 /** D-016: network-capable shell commands: the ones that can send what they are given somewhere. */
 const NETWORK = /\b(curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod|start-bitstransfer|scp|sftp|ftp|rsync|ssh|nc|ncat|telnet|npm\s+publish|pnpm\s+publish|yarn\s+publish|twine\s+upload|dotnet\s+nuget\s+push|nuget\s+push|gh\s+release\s+upload|git\s+push|git\s+remote\s+(add|set-url))\b/i
@@ -32,6 +41,18 @@ export function valuesIn(text: string): string[] {
   for (const m of text.matchAll(/\b[\w.+-]+@[\w-]+(\.[\w-]+)+\b/g)) out.add(m[0].toLowerCase())
   for (const m of text.matchAll(/[A-Za-z0-9+/=_-]{32,}/g)) out.add(m[0])
   return [...out]
+}
+
+/** An address as compared for D-016: lower case, without its fragment, trailing punctuation or a trailing slash. */
+export function sameAddress(url: string): string | undefined {
+  try {
+    const u = new URL(url.trim().replace(/[.,;:!?]+$/, ""))
+    if (u.protocol !== "http:" && u.protocol !== "https:") return undefined
+    u.hash = ""
+    return u.toString().toLowerCase().replace(/\/$/, "")
+  } catch {
+    return undefined
+  }
 }
 
 const SHELL = new Set(["Bash", "PowerShell"])
@@ -81,6 +102,11 @@ export class Provenance {
   /** D-061: a result held what looks like prompt injection: from now on every network call asks. */
   raise(why: string): void {
     this.#raised ??= why
+  }
+
+  /** D-061: whether a result looked like prompt injection in this session. */
+  isRaised(): boolean {
+    return this.#raised !== undefined
   }
 
   /** D-017: a subagent (the Task or Agent tool) is starting. */
@@ -177,6 +203,11 @@ export class Provenance {
       carried = input.command
       what = "This network command carries"
     } else if (tool === "WebFetch" && typeof input.url === "string") {
+      // Owner, 12 Nov: a session researching from search results was held on every page it fetched. A fetch of an
+      // address exactly as it was read (fragment and a trailing slash aside) carries nothing from the session: what
+      // D-016 guards against is an address with something added, a path, a query or a value, which this still holds.
+      // It then goes to the network rule as any fetch does.
+      if (this.#readAsIs(input.url)) return undefined
       carried = input.url
       what = "This fetch goes to"
     } else if (["Write", "Edit", "MultiEdit"].includes(tool) && typeof input.file_path === "string" && cwd) {
@@ -193,6 +224,14 @@ export class Provenance {
         return `${what} ${v.length > 80 ? `${v.slice(0, 77)}...` : v}, which came from ${source}, read in this session. Where a value came from can be written to send your work somewhere else, so this is yours to decide.`
     }
     return undefined
+  }
+
+  /** Whether an address is one read from outside exactly as it is, not only its host. */
+  #readAsIs(url: string): boolean {
+    const key = sameAddress(url)
+    if (!key) return false
+    for (const v of this.#values.keys()) if (/^https?:\/\//.test(v) && sameAddress(v) === key) return true
+    return false
   }
 
   /** Why a call looks copied from what was read, or undefined. Only shell commands, of some length. */
@@ -226,7 +265,10 @@ export function withProvenance(
     return {
       ...verdict,
       outcome: "escalate",
-      ruleId: EGRESS_RULE,
+      // Owner, 13 Nov: a fetch is held under its own rule, which Extreme approval and a session's tool grant answer,
+      // after a result that looked like prompt injection too ("this and the approval issue are blocking my use of the
+      // app"). Network commands such as curl stay under EGRESS_RULE, which neither answers.
+      ruleId: tool === "WebFetch" ? FETCH_RULE : EGRESS_RULE,
       reason: `${egress} (${verdict.outcome === "allow" ? "allowed" : "held"} by rule ${verdict.ruleId} otherwise.)`,
       risk: Math.min(100, Math.max(70, verdict.risk + 20)),
     }

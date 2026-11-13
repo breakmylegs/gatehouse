@@ -1,4 +1,5 @@
 import { RubberStamp } from "./rubber-stamp.js"
+import { NEVER_AUTO_APPROVED } from "./canuse.js"
 import { arc42, deploymentFiles } from "./arc42.js"
 import { decisionsIn, draftAdr, nextNumber, readAdrs, writeAdr } from "./adr.js"
 import { draftMarkdown, threatDelta } from "./threat-delta.js"
@@ -33,7 +34,7 @@ import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify, { type FastifyInstance } from "fastify"
 import type { WebSocket } from "ws"
-import { checkRemember, compileGlobs, isLockfile, redactString, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
+import { checkRemember, compileGlobs, isLockfile, redactString, SEVERE_RISK, type Policy, type PolicyEngine, type PwshWorker } from "@gatehouse/policy"
 import { lockfileChanges, sbomDiff, type DependencyChange } from "./sbom.js"
 import { addedLines, scanSource, type SastFinding } from "./sast.js"
 import {
@@ -807,12 +808,25 @@ export class HostServer {
       case "set_model":
         await this.#session(cmd.sessionId).setModel(cmd.model)
         return undefined
+      case "grant_tool": {
+        // Owner, 13 Nov: one choice instead of one approval a fetch. Recorded by the session before it applies; then
+        // the calls of that tool already waiting are allowed too, except those Extreme approval may never approve.
+        const s = this.#session(cmd.sessionId)
+        await s.grantTool(cmd.tool)
+        let allowed = 0
+        for (const v of a.broker.list())
+          if (v.request.sessionId === s.id && v.request.toolName === cmd.tool && v.request.kind === "permission" && !NEVER_AUTO_APPROVED.has(v.request.verdict.ruleId))
+            if (a.broker.resolve(v.request.id, { kind: "decision", decision: "allow" }, "desktop").ok) allowed++
+        return { tool: cmd.tool, allowed }
+      }
       case "approve": {
         // D-021: after approvals too fast to have been read, the next High one wants a second, deliberate approval.
         const view = a.broker.get(cmd.requestId)
         const risk = view?.request.verdict.risk ?? 0
         const stamp = this.#rubberStamp
-        if (view && stamp.needsDeliberate(risk)) {
+        // A Severe request you typed allow for has been read on purpose: the friction does not ask again (owner, 13 Nov).
+        const typedSevere = cmd.typed === true && risk >= SEVERE_RISK
+        if (view && !typedSevere && stamp.needsDeliberate(risk)) {
           const shownAt = this.#frictionAt.get(cmd.requestId)
           if (!cmd.deliberate || shownAt === undefined || Date.now() - shownAt < FRICTION_WAIT_MS) {
             if (shownAt === undefined) {
@@ -859,7 +873,7 @@ export class HostServer {
         )
         if (r.ok && view) {
           this.#frictionAt.delete(cmd.requestId)
-          if (cmd.deliberate && stamp.needsDeliberate(risk)) stamp.deliberate()
+          if ((cmd.deliberate || typedSevere) && stamp.needsDeliberate(risk)) stamp.deliberate()
           else stamp.approved({ risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) })
         }
         return resolveResult(r)
