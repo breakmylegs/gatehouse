@@ -148,7 +148,41 @@ describe("ApprovalCard", () => {
     fireEvent.change(box, { target: { value: " Allow " } })
     fireEvent.click(confirm)
     // Typed, so the Host takes it as deliberate (owner, 13 Nov: typing allow did not allow after fast approvals).
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", typed: true, opened: true, shownMs: expect.any(Number) }]))
+    await waitFor(() =>
+      expect(sent).toEqual([
+        {
+          type: "approve",
+          requestId: "req-1",
+          typed: true,
+          opened: true,
+          shownMs: expect.any(Number),
+        },
+      ]),
+    )
+  })
+
+  it("shows the slow-down next to Allow when the Host asks for a deliberate approval (13 Nov)", async () => {
+    reply = (cmd) =>
+      cmd.type === "approve" && !(cmd as { deliberate?: boolean }).deliberate
+        ? { ok: false, error: { code: "friction", message: "Look again" } }
+        : { ok: true }
+    render(<ApprovalCard view={view()} />)
+    await allowReady()
+    const allowButton = screen.getByRole("button", { name: /^Allow once/ })
+    fireEvent.click(allowButton)
+    const box = await screen.findByRole("alert")
+    expect(within(box).getByText("Look again before allowing this")).toBeTruthy()
+    // Straight after the Allow button, where the click was, not far above it.
+    const order = allowButton.compareDocumentPosition(box)
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const between = [...document.querySelectorAll("button, [role=alert]")]
+    expect(between[between.indexOf(allowButton) + 1]).toBe(box)
+    const yes = within(box).getByRole("button", { name: /Yes, allow it|Read it first/ })
+    await waitFor(() => expect(yes).toBeEnabled(), { timeout: 3000 })
+    fireEvent.click(yes)
+    await waitFor(() =>
+      expect(sent.at(-1)).toMatchObject({ type: "approve", requestId: "req-1", deliberate: true }),
+    )
   })
 
   it("has no effects row for a call that deletes nothing", () => {
@@ -180,7 +214,11 @@ describe("ApprovalCard", () => {
     expect(sent).toEqual([])
     await allowReady()
     fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
-    await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) }]))
+    await waitFor(() =>
+      expect(sent).toEqual([
+        { type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) },
+      ]),
+    )
   })
 
   it("answers the Stitch letter keys inside the card, and no letter ever allows", async () => {
@@ -251,7 +289,8 @@ describe("ApprovalCard", () => {
         type: "approve",
         requestId: "req-1",
         updatedInput: { command: "rm -rf build/tmp", description: "clean" },
-        opened: true, shownMs: expect.any(Number),
+        opened: true,
+        shownMs: expect.any(Number),
       },
     ])
   })
@@ -286,7 +325,8 @@ describe("ApprovalCard", () => {
       requestId: "req-1",
       remember: true,
       rememberFor: { days: 30 },
-      opened: true, shownMs: expect.any(Number),
+      opened: true,
+      shownMs: expect.any(Number),
     })
   })
 
