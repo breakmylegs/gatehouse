@@ -46,7 +46,7 @@ npm run package:mac -- --swift-only          only recompile the window's program
 **Limits of this first version:**
 
 - **Signed for this Mac only** (ad hoc), not notarised. Built and installed here, it opens like any app. A copy downloaded onto another Mac is stopped by Gatekeeper until its owner allows it in System Settings, Privacy and Security, Open Anyway. Signing and notarising for other Macs needs an Apple Developer ID.
-- **Its version** names the upstream release it is built from and the Mac commits on top: `2.0.264+mac.26` is upstream's 2.0.264 with 26 Mac commits. Settings, Updates compares it with upstream's releases as 2.0.264 (the `+mac` part is ignored, as semver's build part is), so it reads as up to date until upstream publishes a newer release, which then wants a sync and a rebuild. An earlier build counted the fork's own commits (2.0.289), which ran ahead of upstream's numbers and matched no release. **No in-app updates yet.** Settings, Updates says so. To update, pull and run `npm run package:mac -- --install` again (or install a newer `.dmg`).
+- **Its version** names the latest release it is built from and the commits since: `2.0.269+mac.3` is release 2.0.269 and 3 commits after it. Settings, Updates compares it with the releases as 2.0.269 (the `+mac` part is ignored, as semver's build part is), so it reads as up to date until a newer release is published, which then wants a pull and a rebuild. **No in-app updates yet.** Settings, Updates says so. To update, pull and run `npm run package:mac -- --install` again (or install a newer `.dmg`).
 - **For this Mac's processor** (Apple silicon here). An Intel Mac needs its own build, made on an Intel Mac.
 
 ## Run it from the source folder
