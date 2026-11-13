@@ -1,7 +1,7 @@
 // End-to-end check of updating a real installed Codehouse, on this computer, with nothing published:
 //   1. copies the packaged dist-app\Codehouse into a temporary Programs folder, without npm's workspace links (as the
 //      installer does), so the first start has to make them
-//   2. makes a signed release of the same package as version 1.0.900 with a throwaway key, served by a local stand-in
+//   2. makes a signed release of the same package as a newer version (100 past it) with a throwaway key, served by a local stand-in
 //      for GitHub
 //   3. starts the installed copy, asks its Host to check, waits for the background download, and chooses Update
 //   4. waits for Codehouse-Update.exe to switch folders and for the new version to say it started, then checks the result
@@ -32,7 +32,8 @@ const original = fs.readFileSync(path.join(dist, "release.json"))
 const from = process.env.E2E_FROM ? path.resolve(process.env.E2E_FROM) : dist
 const oldName = "Codehouse"
 const v1 = versionIn(from)
-const v2 = "1.0.900"
+// Always newer than the copy installed: a fixed "1.0.900" stopped being newer once versions reached 2.0 (13 Nov).
+const v2 = ((v) => `${v[0] ?? 0}.${v[1] ?? 0}.${(v[2] ?? 0) + 100}`)(v1.split(/[.+-]/).map(Number))
 const t = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "codeh-e2e-")))
 const install = path.join(t, "Programs", oldName)
 const data = path.join(t, "data")
