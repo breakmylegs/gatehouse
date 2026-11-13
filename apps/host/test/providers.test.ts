@@ -72,12 +72,12 @@ describe("the provider registry", () => {
 describe("the gate for a loop provider", () => {
   const policy = () => loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: [root] })
 
-  // Mac fork: Windows' system folders; which Mac folders the floor protects is still open (O-MAC-1, docs/mac.md).
-  it.skipIf(process.platform !== "win32")("denies on the floor before asking canUseTool", async () => {
+  it("denies on the floor before asking canUseTool", async () => {
     const canUseTool = vi.fn<CanUseTool>()
     const gate = canUseToolGate({ canUseTool, policy, cwd: root })
     const v = await gate.decide(
-      call("write", { file_path: "C:/Windows/System32/x.txt", content: "x" }),
+      // Mac fork: the system's own folders (O-MAC-1 on a Mac).
+      call("write", { file_path: process.platform === "win32" ? "C:/Windows/System32/x.txt" : "/Library/x.txt", content: "x" }),
       new AbortController().signal,
     )
     expect(v).toMatchObject({ kind: "deny", ruleId: "critical-paths" })
