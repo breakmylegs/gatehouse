@@ -51,11 +51,10 @@ if (!fs.existsSync("/usr/bin/swiftc"))
     "swiftc was not found. Install Apple's command line tools: xcode-select --install",
   )
 
-// The upstream release this build is made from, and how many commits the Mac fork adds on top of it: 2.0.264+mac.25.
-// Settings, Updates compares that with upstream's releases (the +mac part is ignored there, as semver's build part
-// is), so a build of the newest release reads as up to date and a newer upstream release shows as one to sync.
-// Counting this fork's own commits instead (2.0.289) ran ahead of upstream's numbers and matched no release.
-// Uncommitted changes add .dev. With no upstream release tag to be found, it falls back to upstream's own scheme.
+// The release this build is made from, and how many commits came after it: 2.0.269+mac.3.
+// Settings, Updates compares that with the releases (the +mac part is ignored there, as semver's build part is), so
+// a build of the newest release reads as up to date and a newer release shows as one to pull.
+// Uncommitted changes add .dev. With no release tag to be found, it falls back to release.ts's own scheme.
 const gitOut = (...a) => {
   try {
     return execFileSync("git", a, {
