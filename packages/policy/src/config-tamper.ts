@@ -71,9 +71,16 @@ export function configTamperFile(call: ToolCall, cwd: string, current: (f: strin
   return parts.some((s) => keys.test(s)) ? hit(`it changes what ${path.basename(raw)} lets a tool do`) : null
 }
 
-const SHELL_EDITORS = /^(set-content|add-content|out-file|clear-content|tee|truncate|remove-item|rm|del|erase)$/i
+export const SHELL_EDITORS = /^(set-content|add-content|out-file|clear-content|tee|truncate|remove-item|rm|del|erase)$/i
 /** Copy and move write only to their last argument. */
-const COPIERS = /^(cp|mv|copy|move|copy-item|move-item|xcopy|robocopy)$/i
+export const COPIERS = /^(cp|mv|copy|move|copy-item|move-item|xcopy|robocopy)$/i
+
+/** The files a command's redirects write ("> f", ">> f", "2>f"), from its own text; the segments do not keep them. */
+export function redirectTargets(command: string): string[] {
+  return [...command.matchAll(/(?:^|[^<>&\d])\d?>>?\s*("[^"]+"|'[^']+'|[^\s;&|<>]+)/g)]
+    .map((m) => m[1]!.replace(/^["']|["']$/g, ""))
+    .filter((t) => t && !/^(\$null|nul|\/dev\/null)$/i.test(t))
+}
 
 /**
  * A shell command that writes to one of the guarded files or folders. `command` is the call's own text, for its
@@ -84,10 +91,8 @@ export function configTamperShell(segments: Segment[], cwd: string, command = ""
     const p = slash(path.resolve(cwd, a.replace(/^\d?>>?/, "")))
     return WHOLE.some((r) => r.test(p)) || CLAUDE_SETTINGS.test(p) || VSCODE_SETTINGS.test(p)
   }
-  for (const m of command.matchAll(/(?:^|[^<>&\d])\d?>>?\s*("[^"]+"|'[^']+'|[^\s;&|<>]+)/g)) {
-    const target = m[1]!.replace(/^["']|["']$/g, "")
-    if (target && !/^(\$null|nul|\/dev\/null)$/i.test(target) && guarded(target)) return hit(`it writes to ${target} from the shell`)
-  }
+  for (const target of redirectTargets(command))
+    if (guarded(target)) return hit(`it writes to ${target} from the shell`)
   for (const s of segments) {
     const plain = s.args.filter((a) => !a.startsWith("-"))
     const targets = COPIERS.test(s.name) ? plain.slice(-1).filter(guarded) : s.args.filter(guarded)

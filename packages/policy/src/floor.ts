@@ -3,6 +3,7 @@ import { compileGlobs, matchAnyWildcard } from "./match.js"
 import { lexicalResolve } from "./paths.js"
 import fs from "node:fs"
 import { configTamperFile, configTamperShell } from "./config-tamper.js"
+import { macCriticalWrite } from "./critical-paths-mac.js" // Mac fork: O-MAC-1
 import type { EvalContext, Rule, ToolCall } from "./types.js"
 
 /**
@@ -80,7 +81,8 @@ export function checkCallFloor(call: ToolCall, f: Features, ctx: EvalContext, ru
     configTamperFile(call, ctx.cwd, current) ??
     (f.isShell
       ? configTamperShell(f.segments, ctx.cwd, typeof (call.input as { command?: unknown })?.command === "string" ? String((call.input as { command: string }).command) : "")
-      : null)
+      : null) ??
+    macCriticalWrite(call, f.isShell ? f.segments : [], ctx.cwd) // Mac fork: O-MAC-1, the Mac's system folders
   )
 }
 

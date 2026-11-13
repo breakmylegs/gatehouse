@@ -18,3 +18,7 @@
 - { t: Write, p: "C:/Windowsfoo/x", o: deny, r: outside-workspace-write }
 - { t: Write, p: "C:/Program Files Extra/x", o: deny, r: outside-workspace-write }
 - { t: Write, p: "C:/PROGRA~1/x/y.txt", o: deny, r: critical-paths, needs: progra }
+# O-MAC-1 (owner, 13 Nov): on a Mac, a change to its own folders is refused; reading them is not.
+- { t: Write, p: "/Library/LaunchDaemons/x.plist", o: deny, r: critical-paths, needs: mac }
+- { t: Bash, cmd: "echo 127.0.0.1 x >> /etc/hosts", o: deny, r: critical-paths, needs: mac }
+- { t: Bash, cmd: "sudo cp agent.plist ~/Library/LaunchAgents/", o: deny, r: critical-paths, needs: mac }

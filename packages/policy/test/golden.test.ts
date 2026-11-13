@@ -12,7 +12,7 @@ import { fwd, makeEngine, makeFixture, SEED_RULES, shortNameOf, type Fixture } f
 const here = path.dirname(fileURLToPath(import.meta.url))
 const GOLDEN_DIR = path.join(here, "golden")
 
-type Needs = "junction" | "short" | "env8" | "progra" | "windows" // Mac fork: Windows' own paths
+type Needs = "junction" | "short" | "env8" | "progra" | "windows" | "mac" // Mac fork: one system's own paths
 
 interface Case {
   t?: string
@@ -66,8 +66,8 @@ const pwsh = new PwshWorker()
 let shared: ReturnType<typeof makeEngine>
 let env8: string | undefined
 let skipped = 0
-// Mac fork: cases about Windows' own paths, counted apart: they run on Windows only, and which Mac folders the floor
-// protects is still open (O-MAC-1, docs/mac.md).
+// Mac fork: cases about one system's own paths, counted apart: they run only on that system (critical paths are
+// Windows' folders on Windows and, by O-MAC-1, the Mac's own on a Mac).
 let elsewhere = 0
 let evaluated = 0
 
@@ -249,7 +249,7 @@ for (const { category, cases } of corpus) {
       const label = c.cmd ?? c.p ?? c.g ?? c.url ?? c.q ?? c.note ?? JSON.stringify(c.in ?? c.overlay ?? c.remember ?? "")
       const name = `#${i + 1} ${c.t ?? c.kind ?? ""} ${String(label).replace(/\s+/g, " ").slice(0, 70)}`
       it(name, async () => {
-        if (c.needs === "windows" && process.platform !== "win32") {
+        if ((c.needs === "windows" && process.platform !== "win32") || (c.needs === "mac" && process.platform !== "darwin")) {
           elsewhere++
           return
         }
