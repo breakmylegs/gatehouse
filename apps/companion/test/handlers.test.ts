@@ -15,7 +15,7 @@ import { SUMMARY_MAX_CHARS, summarisePolicy } from "../src/summary.js"
 import { SEED_RULES } from "../../../packages/policy/test/helpers.js"
 
 // Mac fork: a workspace folder in this system's own form.
-const DEV = process.platform === "win32" ? DEV : "/dev"
+const DEV = process.platform === "win32" ? "C:/dev" : "/dev"
 
 let root: string
 let n = 0
