@@ -35,7 +35,7 @@
 - { t: Bash, cmd: "git log 2>&1", o: allow, r: safe-shell }
 - { t: Bash, cmd: "git log >> x", o: escalate, r: shell-redirect-write }
 - { t: Bash, cmd: "git status 2> err.txt", o: escalate, r: shell-redirect-write }
-- { t: Bash, cmd: "rm -rf /*", o: deny, r: critical-paths, note: "the glob expands to C:/Windows and C:/Program Files, so the floor decides before the deny rule" }
+- { t: Bash, cmd: "rm -rf /*", o: deny, r: critical-paths, note: "the glob expands to C:/Windows and C:/Program Files, so the floor decides before the deny rule", needs: windows }
 - { t: Bash, cmd: "rm -rf ~/*", o: deny, r: destructive-shell }
 - { t: Bash, cmd: "env -i git status", o: escalate, r: no-rule }
 - { t: Bash, cmd: "git status\\\n --short", o: allow, r: safe-shell }

@@ -905,9 +905,12 @@ describe("commands over the WebSocket", () => {
     expect(rel).toMatchObject({ ok: false, error: { code: "folder-missing" } })
     expect(rel.error?.message).toContain("full folder path")
     const letters = "ZYXWVUTSRQPONMLKJIHGFED".split("").filter((l) => !fs.existsSync(`${l}:/`))
-    const gone = await c.send({ type: "create_session", cwd: `${letters[0]}:/x/y` })
+    // Mac fork: on a Mac, a volume that is not there.
+    const missing = process.platform === "win32" ? `${letters[0]}:/x/y` : `/Volumes/codehouse-missing-${process.pid}/x/y`
+    const gone = await c.send({ type: "create_session", cwd: missing })
     expect(gone).toMatchObject({ ok: false, error: { code: "folder-missing" } })
-    expect(gone.error?.message).toContain("does not exist")
+    // Mac fork: a Mac refuses to make the folder under /Volumes, which says so.
+    expect(gone.error?.message).toMatch(/does not exist|could not be created/)
   })
 
   it("explains an organisation refusal with the code and a message", async () => {

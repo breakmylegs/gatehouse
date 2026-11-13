@@ -72,7 +72,8 @@ describe("the provider registry", () => {
 describe("the gate for a loop provider", () => {
   const policy = () => loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: [root] })
 
-  it("denies on the floor before asking canUseTool, and with no rules loaded", async () => {
+  // Mac fork: Windows' system folders; which Mac folders the floor protects is still open (O-MAC-1, docs/mac.md).
+  it.skipIf(process.platform !== "win32")("denies on the floor before asking canUseTool", async () => {
     const canUseTool = vi.fn<CanUseTool>()
     const gate = canUseToolGate({ canUseTool, policy, cwd: root })
     const v = await gate.decide(
@@ -81,6 +82,10 @@ describe("the gate for a loop provider", () => {
     )
     expect(v).toMatchObject({ kind: "deny", ruleId: "critical-paths" })
     expect(canUseTool).not.toHaveBeenCalled()
+  })
+
+  it("denies with no rules loaded", async () => {
+    const canUseTool = vi.fn<CanUseTool>()
     const none = canUseToolGate({ canUseTool, policy: () => undefined, cwd: root })
     expect(
       await none.decide(call("read", { file_path: "a.txt" }), new AbortController().signal),
@@ -191,11 +196,12 @@ describe("the executor", () => {
         workspaceRoot: root,
         redact: (t) => t,
         shell: {
-          exe: "powershell.exe",
+          exe: process.platform === "win32" ? "powershell.exe" : "pwsh", // Mac fork: PowerShell 7 on a Mac
           args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command"],
         },
       }).run(c, allowed(c))
-      expect(r.output).toContain(root)
+      // Mac fork: a Mac's temporary folder is also /private/var/..., which is what the shell says it is in.
+      expect([root, fs.realpathSync(root)].some((p) => r.output.includes(p))).toBe(true)
       expect(r.output).toContain("key=[]")
     } finally {
       vi.unstubAllEnvs()

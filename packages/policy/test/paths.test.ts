@@ -52,7 +52,8 @@ describe("lexicalResolve", () => {
     expect(lexicalResolve("~/x", "C:/p").key).toBe(toKey(path.join(os.homedir(), "x")))
     expect(lexicalResolve("~", "C:/p").key).toBe(toKey(os.homedir()))
   })
-  it("treats a Git Bash drive path as absolute", () => {
+  // Mac fork: on a Mac /c/... is a folder of its own (paths-mac.test.ts).
+  it.skipIf(process.platform !== "win32")("treats a Git Bash drive path as absolute", () => {
     expect(lexicalResolve("/c/Windows/x", "C:/p").key).toBe("c:/windows/x")
   })
 })

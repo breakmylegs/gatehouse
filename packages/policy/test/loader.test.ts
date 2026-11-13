@@ -7,6 +7,9 @@ import { loadPolicy, PolicyLoadError, PolicyStore } from "../src/loader.js"
 import { checkOverlay, checkRememberFile, checkRulesFile } from "../src/schema.js"
 import { SEED_RULES } from "./helpers.js"
 
+// Mac fork: a remembered file rule names a full path in this system's own form.
+const WIN = process.platform === "win32"
+
 let dir: string
 let n = 0
 
@@ -48,7 +51,11 @@ describe("loadPolicy", () => {
     const p = loadPolicy({ rulesPath: SEED_RULES, user: "pat" })
     expect(p.rules.workspaceRoots).toContain("C:/Users/pat/source")
     expect(p.hash).toMatch(/^[0-9a-f]{64}$/)
-    expect(p.workspaceRootKeys[0]).toBe("c:/dev")
+  })
+
+  // Mac fork: the seed rules' roots are Windows folders; a Mac gets its workspace from Settings, Projects folder.
+  it.skipIf(process.platform !== "win32")("keys the seed rules' first workspace root", () => {
+    expect(loadPolicy({ rulesPath: SEED_RULES, user: "pat" }).workspaceRootKeys[0]).toBe("c:/dev")
   })
 
   it("lets the caller replace the workspace roots", () => {
@@ -150,14 +157,14 @@ describe("overlays and remember files on disk", () => {
         version: 1,
         remember: [
           { id: "one", tool: "Bash", command: "npm install lodash" },
-          { id: "two", tool: "Edit", path: "C:/dev/x/y.ts" },
+          { id: "two", tool: "Edit", path: WIN ? "C:/dev/x/y.ts" : "/Users/pat/dev/x/y.ts" }, // Mac fork
         ],
       }),
     )
     const p = loadPolicy({ rulesPath: SEED_RULES, localPath: local })
     expect(p.remember.map((r) => r.id)).toEqual(["remember-one", "remember-two"])
     expect(p.remember[0]).toMatchObject({ remember: true, commands: ["npm install lodash"] })
-    expect(p.remember[1]?.paths?.[0]).toBe("c:/dev/x/y.ts")
+    expect(p.remember[1]?.paths?.[0]).toBe(WIN ? "c:/dev/x/y.ts" : "/users/pat/dev/x/y.ts")
   })
 })
 

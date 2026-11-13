@@ -14,13 +14,16 @@ import {
 import { SUMMARY_MAX_CHARS, summarisePolicy } from "../src/summary.js"
 import { SEED_RULES } from "../../../packages/policy/test/helpers.js"
 
+// Mac fork: a workspace folder in this system's own form.
+const DEV = process.platform === "win32" ? DEV : "/dev"
+
 let root: string
 let n = 0
 let policy: Policy
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-companion-"))
-  policy = loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: ["C:/dev"] })
+  policy = loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: [DEV] })
 })
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 
@@ -40,7 +43,7 @@ function make(over: Partial<ConstructorParameters<typeof CompanionHandlers>[0]> 
   let clock = 1_000_000
   const handlers = new CompanionHandlers({
     sessionId: "sess-1",
-    cwd: "C:/dev",
+    cwd: DEV,
     host,
     policy: () => policy,
     redact: (v) => redact(v, { terms: ["AcmeCorp"] }),
@@ -172,12 +175,12 @@ describe("get_policy_summary", () => {
   })
 
   it("says so when no policy is loaded and notes a project overlay", () => {
-    expect(summarisePolicy(undefined, "C:/dev")).toContain("No policy is loaded")
+    expect(summarisePolicy(undefined, DEV)).toContain("No policy is loaded")
     const withOverlay: Policy = {
       ...policy,
       overlays: { dev: { version: 1, removeAllow: ["safe-shell"] } },
     }
-    const text = summarisePolicy(withOverlay, "C:/dev")
+    const text = summarisePolicy(withOverlay, DEV)
     expect(text).not.toContain("git status*")
     expect(text).toContain("extra restrictions")
   })
@@ -187,7 +190,7 @@ describe("get_policy_summary", () => {
       ...policy,
       rules: { ...policy.rules, allow: [{ id: "huge", commands: ["x".repeat(3000)] }] },
     }
-    const text = summarisePolicy(big, "C:/dev")
+    const text = summarisePolicy(big, DEV)
     expect(text.length).toBe(SUMMARY_MAX_CHARS)
     expect(text.endsWith("...")).toBe(true)
   })

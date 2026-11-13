@@ -7,6 +7,9 @@ import Fastify from "fastify"
 import { afterAll, describe, expect, it, vi } from "vitest"
 import { BoardStore, registerBoardRoutes } from "../src/board.js"
 
+// Mac fork: a full folder in this system's own form (C:\dev\shop is /dev/shop on a Mac).
+const F = (p: string) => (process.platform === "win32" ? p : p.replace(/^[A-Za-z]:/, "").replace(/\\/g, "/"))
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-board-"))
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
 
@@ -15,7 +18,7 @@ describe("the task board", () => {
     const file = path.join(dir, "board.json")
     fs.writeFileSync(file, JSON.stringify({ version: 1, cards: [], newer: { kept: true } }))
     const board = new BoardStore(file)
-    const a = await board.put({ title: "Add a basket", folder: "C:\\dev\\shop", prompt: "Add it." })
+    const a = await board.put({ title: "Add a basket", folder: F("C:\\dev\\shop"), prompt: "Add it." })
     const b = await board.put({ title: "Fix the logo" })
     await board.put({ title: "Write docs" })
     await board.move(b.id, "review")
@@ -37,7 +40,7 @@ describe("the task board", () => {
     const board = new BoardStore(path.join(dir, "start.json"))
     const card = await board.put({
       title: "Basket",
-      folder: "C:\\dev\\shop",
+      folder: F("C:\\dev\\shop"),
       prompt: "Add a basket.",
     })
     const bare = await board.put({ title: "No folder" })

@@ -12,7 +12,7 @@ import { fwd, makeEngine, makeFixture, SEED_RULES, shortNameOf, type Fixture } f
 const here = path.dirname(fileURLToPath(import.meta.url))
 const GOLDEN_DIR = path.join(here, "golden")
 
-type Needs = "junction" | "short" | "env8" | "progra"
+type Needs = "junction" | "short" | "env8" | "progra" | "windows" // Mac fork: Windows' own paths
 
 interface Case {
   t?: string
@@ -66,6 +66,9 @@ const pwsh = new PwshWorker()
 let shared: ReturnType<typeof makeEngine>
 let env8: string | undefined
 let skipped = 0
+// Mac fork: cases about Windows' own paths, counted apart: they run on Windows only, and which Mac folders the floor
+// protects is still open (O-MAC-1, docs/mac.md).
+let elsewhere = 0
 let evaluated = 0
 
 function subst(value: string): string {
@@ -246,6 +249,10 @@ for (const { category, cases } of corpus) {
       const label = c.cmd ?? c.p ?? c.g ?? c.url ?? c.q ?? c.note ?? JSON.stringify(c.in ?? c.overlay ?? c.remember ?? "")
       const name = `#${i + 1} ${c.t ?? c.kind ?? ""} ${String(label).replace(/\s+/g, " ").slice(0, 70)}`
       it(name, async () => {
+        if (c.needs === "windows" && process.platform !== "win32") {
+          elsewhere++
+          return
+        }
         const reason = skipReason(c)
         if (reason) {
           skipped++
@@ -331,7 +338,7 @@ describe("golden corpus floor (the suite must not pass by finding nothing)", () 
 
   it("actually used the PowerShell worker and evaluated nearly everything", () => {
     expect(pwsh.running).toBe(true)
-    expect(evaluated + skipped).toBeGreaterThanOrEqual(250)
+    expect(evaluated + skipped + elsewhere).toBeGreaterThanOrEqual(250)
     expect(skipped).toBeLessThanOrEqual(10)
   })
 })

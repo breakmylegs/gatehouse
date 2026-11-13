@@ -42,7 +42,8 @@ describe("the terminal pane", () => {
     const s = setup()
     await s.t.run("s1", dir, "console.log(process.cwd()); console.error('warned'); process.exit(3)")
     await s.done()
-    expect(s.out.join("")).toContain(`out:${dir}`)
+    // Mac fork: a Mac's temporary folder is also /private/var/..., which is what the process says it is in.
+    expect([dir, fs.realpathSync(dir)].some((d) => s.out.join("").includes(`out:${d}`))).toBe(true)
     expect(s.out.join("")).toContain("err:warned")
     expect(s.exits).toEqual([expect.objectContaining({ code: 3 })])
     expect(s.t.isRunning("s1")).toBe(false)

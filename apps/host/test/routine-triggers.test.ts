@@ -12,6 +12,9 @@ import {
 } from "../src/routine-triggers.js"
 import { checkRoutine, isDue, RoutineStore } from "../src/routines.js"
 
+// Mac fork: a full folder in this system's own form (C:\dev\shop is /dev/shop on a Mac).
+const F = (p: string) => (process.platform === "win32" ? p : p.replace(/^[A-Za-z]:/, "").replace(/\\/g, "/"))
+
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-triggers-"))
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }))
 const A = "a".repeat(40)
@@ -79,14 +82,14 @@ function rig(routines: Triggered[]) {
 const commit: Triggered = {
   id: "c",
   name: "Review",
-  folder: "C:/r",
+  folder: F("C:/r"),
   enabled: true,
   trigger: { kind: "commit" },
 }
 const files: Triggered = {
   id: "f",
   name: "Docs",
-  folder: "C:/f",
+  folder: F("C:/f"),
   enabled: true,
   trigger: { kind: "files" },
 }
@@ -94,10 +97,10 @@ const files: Triggered = {
 describe("a routine started by a trigger", () => {
   it("starts on a new commit, but not on the first look when Codehouse opens", async () => {
     const r = rig([commit])
-    r.heads.set("C:/r", A)
+    r.heads.set(F("C:/r"), A)
     await r.w.check()
     expect(r.started).toEqual([])
-    r.heads.set("C:/r", B)
+    r.heads.set(F("C:/r"), B)
     await r.w.check()
     expect(r.started).toEqual(["c"])
   })
@@ -106,10 +109,10 @@ describe("a routine started by a trigger", () => {
     const list = [files]
     const r = rig(list)
     await r.w.check()
-    expect(r.watched()).toEqual(["C:/f"])
+    expect(r.watched()).toEqual([F("C:/f")])
     await r.w.check()
     expect(r.started).toEqual([])
-    r.change("C:/f")
+    r.change(F("C:/f"))
     await r.w.check()
     expect(r.started).toEqual(["f"])
     list[0] = { ...files, enabled: false }
@@ -119,21 +122,21 @@ describe("a routine started by a trigger", () => {
 
   it("is not started again by its own session's changes or commits, nor for a while after", async () => {
     const r = rig([commit, files])
-    r.heads.set("C:/r", A)
+    r.heads.set(F("C:/r"), A)
     await r.w.check()
-    r.heads.set("C:/r", B)
-    r.change("C:/f")
+    r.heads.set(F("C:/r"), B)
+    r.change(F("C:/f"))
     await r.w.check()
     expect(r.started).toEqual(["c", "f"])
     // Both sessions work: their commit and their file changes are their own.
     r.working.add("s-c-1").add("s-f-2")
     r.later(TRIGGER_GAP_MS + 1)
-    r.heads.set("C:/r", A)
-    r.change("C:/f")
+    r.heads.set(F("C:/r"), A)
+    r.change(F("C:/f"))
     await r.w.check()
     r.working.clear()
     // Just after they finish, a late change is still theirs.
-    r.change("C:/f")
+    r.change(F("C:/f"))
     r.later(30_000)
     await r.w.check()
     r.later(TRIGGER_GAP_MS)
@@ -144,9 +147,9 @@ describe("a routine started by a trigger", () => {
   it("starts at most once in the gap, and at most the day's cap", async () => {
     const r = rig([files])
     await r.w.check()
-    r.change("C:/f")
+    r.change(F("C:/f"))
     await r.w.check()
-    r.change("C:/f")
+    r.change(F("C:/f"))
     r.later(TRIGGER_GAP_MS - 1000)
     await r.w.check()
     expect(r.started).toHaveLength(1)
@@ -155,7 +158,7 @@ describe("a routine started by a trigger", () => {
     expect(r.started).toHaveLength(2)
     for (let i = 0; i < TRIGGER_DAY_CAP + 3; i++) {
       r.later(TRIGGER_GAP_MS)
-      r.change("C:/f")
+      r.change(F("C:/f"))
       await r.w.check()
     }
     expect(r.started).toHaveLength(TRIGGER_DAY_CAP)
@@ -166,13 +169,13 @@ describe("routines with a trigger", () => {
   it("need no time or days, never run on the clock, and are kept apart so an older version keeps them", async () => {
     const t = checkRoutine({
       name: "On commit",
-      folder: "C:\\dev\\shop",
+      folder: F("C:\\dev\\shop"),
       prompt: "Review the last commit.",
       trigger: { kind: "commit" },
     })
     expect(t).toMatchObject({ trigger: { kind: "commit" }, days: [] })
     expect(() =>
-      checkRoutine({ name: "x", folder: "C:\\x", prompt: "p", trigger: { kind: "push" } as never }),
+      checkRoutine({ name: "x", folder: F("C:\\x"), prompt: "p", trigger: { kind: "push" } as never }),
     ).toThrow(/schedule, a new commit, or files changing/)
     expect(
       isDue({ id: "1", ...t, days: ["wed"], time: "09:00" }, new Date(2026, 10, 4, 9, 5)),
@@ -182,7 +185,7 @@ describe("routines with a trigger", () => {
     await store.put(t)
     await store.put({
       name: "Morning",
-      folder: "C:\\dev\\shop",
+      folder: F("C:\\dev\\shop"),
       prompt: "p",
       time: "08:00",
       days: ["mon"],
