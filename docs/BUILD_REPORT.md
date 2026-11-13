@@ -3,7 +3,7 @@
 
 Built from 9 to 13 Nov in a fork, merged from upstream four times and never rebased, and brought back as one pull request with its history. Everything it adds is in `docs/mac.md`; the hooks it puts in shared files are listed there under "Platform hooks". No dependency was added; the lockfile is unchanged.
 
-- **Codehouse.app** (`packaging/mac/`, `scripts/package-mac.mjs`): a native AppKit window over the Mac's WebKit with the same navigation guard as `NavGuard.cs`, the menu bar mark, notifications, keep-awake, the quick prompt and its shortcut, screen capture, Open at Login, and `codehouse-limits` for each session's limits (`Limits.cs`'s arguments). Bundled Node with its sha256 checked; signed ad hoc, not notarised (an Apple Developer ID is an owner item).
+- **Codehouse.app** (`packaging/mac/`, `scripts/package-mac.mjs`): a native AppKit window over the Mac's WebKit with the same navigation guard as `NavGuard.cs`, the menu bar mark, notifications, keep-awake, the quick prompt and its shortcut, screen capture, Open at Login, and `codehouse-limits` for each session's limits (`Limits.cs`'s arguments). Bundled Node with its sha256 checked; signed ad hoc, not notarised.
 - **Owner decisions taken on the fork**, which change what Windows users see too:
   - The phone can be told of decisions only, as ntfy is (12 Nov): Settings, Phone and notifications, `phoneAlerts`.
   - The phone app in Liquid Glass (12 Nov): a floating tab bar (Waiting, Sessions, Settings), glass back and action bars, solid content; the Home Screen name was still an earlier name and is now Codehouse.
@@ -11,7 +11,7 @@ Built from 9 to 13 Nov in a fork, merged from upstream four times and never reba
   - One phone Relay (13 Nov): Devices' Run the Relay here; the Mac app's own was removed.
 - **Mac only:** the Standard macOS look (`mac-standard.css`), direnv for each session's folder (`direnv-mac.ts`), the Mac's installers in the installer rule (`installers-mac.ts`, and `brew -v install` with a flag before its subcommand), Mac folders for projects, routines and remembered file rules.
 - **Deviations:** the Mac app does not update itself yet (Settings, Updates says to install a newer Codehouse.app); PowerShell commands are checked on a Mac only when `pwsh` is installed, and otherwise wait for you, as on Windows without it.
-- **Owner items left open:** an Apple Developer ID (signing, notarisation, Mac releases).
+- **No Apple Developer ID (owner, 13 Nov):** the paid Developer Program is not needed. Built on a Mac, Codehouse opens like any app; a downloaded copy asks once (System Settings, Privacy and Security, Open Anyway); Mac updates, still to be built, are checked with the release key as on Windows and need no notarisation.
 - **O-MAC-1, decided (owner, 13 Nov):** on a Mac the `critical-paths` floor refuses a change, never a read, to macOS's own folders and the Applications folder, and to what starts by itself (`~/Library/LaunchAgents`, the shell's start-up files); Homebrew's folders are left alone. Stricter only. `docs/mac.md` has the list.
 
 ## Phase 78: the quick prompt (1 Nov, slice W1-15)
