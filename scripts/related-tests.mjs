@@ -69,8 +69,8 @@ export function resolveImport(fromFile, spec) {
   return undefined
 }
 
-/** The test files that reach any of `changed` (paths from the repository root) through their imports. */
-export function relatedTests(changed, files = codeFiles()) {
+/** Who imports each file: a file's path from the repository root, to the files that import it. */
+function importersOf(files) {
   const importers = new Map()
   for (const f of files) {
     let text
@@ -87,6 +87,35 @@ export function relatedTests(changed, files = codeFiles()) {
       importers.get(key).add(rel(f))
     }
   }
+  return importers
+}
+
+const isWorkspaceTest = (f) => TEST.test(f) && /^(apps|packages)\/[^/]+\/test\//.test(f)
+
+/**
+ * The regression tests for what changed (owner's testing standard, 13 Nov): the test files that import a changed file
+ * themselves, and those named after it (src/budgets.ts: budgets.test.ts, budgets.*.test.ts). Not the tests that only
+ * reach it through other files; relatedTests is for that, when it is asked for.
+ */
+export function directTests(changed, files = codeFiles()) {
+  const importers = importersOf(files)
+  const out = new Set()
+  const tests = files.map(rel).filter(isWorkspaceTest)
+  for (const c of changed.map((x) => x.replace(/\\/g, "/"))) {
+    for (const i of importers.get(c) ?? []) if (isWorkspaceTest(i)) out.add(i)
+    const stem = path.posix.basename(c).replace(/\.[^.]+$/, "").toLowerCase()
+    if (stem.length >= 3 && stem !== "index")
+      for (const t of tests) {
+        const b = path.posix.basename(t).toLowerCase()
+        if (b.startsWith(`${stem}.`) || b.startsWith(`${stem}-`)) out.add(t)
+      }
+  }
+  return [...out].sort()
+}
+
+/** The test files that reach any of `changed` (paths from the repository root) through their imports. */
+export function relatedTests(changed, files = codeFiles()) {
+  const importers = importersOf(files)
   const seen = new Set()
   const queue = changed.map((c) => c.replace(/\\/g, "/"))
   while (queue.length) {
@@ -95,9 +124,11 @@ export function relatedTests(changed, files = codeFiles()) {
     seen.add(f)
     for (const i of importers.get(f) ?? []) queue.push(i)
   }
-  return [...seen].filter((f) => TEST.test(f) && /^(apps|packages)\/[^/]+\/test\//.test(f)).sort()
+  return [...seen].filter(isWorkspaceTest).sort()
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  for (const t of relatedTests(process.argv.slice(2))) console.log(t)
+  const args = process.argv.slice(2)
+  const broad = args[0] === "--related"
+  for (const t of (broad ? relatedTests : directTests)(broad ? args.slice(1) : args)) console.log(t)
 }

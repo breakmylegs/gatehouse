@@ -4,14 +4,16 @@
 //   npm run gate -- --base v1.0.80  changes since a release tag (npm run release uses the last one)
 //   npm run gate -- --full        everything: for a dependency or build-config change, or when asked
 //   npm run gate -- --dry         say what would run, run nothing
+//   npm run gate -- --related     also every test that reaches a changed file through other files (owner, 13 Nov: only
+//                                 for a change to a module nearly everything relies on, saying why)
 //
 // What it runs, and why:
 //   0. Always: the prohibited-pattern check (scripts/forbidden.mjs: claude.ai's private API, debugging ports, browser
 //      automation, cookie stores, the Claude app's own data).
 //   1. Typecheck: the workspaces the change touches, and the workspaces that depend on them.
 //   2. Lint: the changed files only.
-//   3. Tests whose code imports a changed file, directly or through other files (vitest related, which follows
-//      the import graph; with memory short, the same set from scripts/related-tests.mjs, eight files to a process).
+//   3. Tests that import a changed file themselves, or are named after it (scripts/related-tests.mjs, directTests);
+//      with --related, every test that reaches one through other files. Eight files to a process when memory is short.
 //   4. Tests that name a changed file that is not code (a C# file, a rules file, a script, a document), and any
 //      changed test file itself.
 //   5. Always: the security invariant tests (invariants.test.ts, threat-model.test.ts) and the provider conformance
@@ -24,7 +26,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { relatedTests } from "./related-tests.mjs"
+import { directTests, relatedTests } from "./related-tests.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -106,11 +108,8 @@ function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
   // A file that failed twice in its own process: what it said, or there is nothing to go on (10 Nov, six such files
   // in the release passed on their own minutes later, and their errors were not kept).
   else if (r.status !== 0 && summary.some((l) => /\[shards\] FAILED/.test(l))) console.log(out.slice(-12000))
-  lastOutput = out
   return r.status ?? 1
 }
-/** What the last run printed, for the files a dead worker was running (they are not in vitest's report). */
-let lastOutput = ""
 
 // What changed: committed since the base, staged, unstaged and new files.
 const base =
@@ -286,91 +285,21 @@ if (fullReason) {
   for (const t of ALWAYS) named.add(t)
   for (const t of named) if (!why.has(t)) why.set(t, ALWAYS.includes(t) ? "always" : "changed")
 
-  let ranRelated = new Set()
-  if (shortOfMemory) {
-    // Memory short: the related files found from the imports, and the named ones, each in a process of its own.
-    const list = [...new Set([...(sources.length ? relatedTests(sources) : []), ...named])].sort()
-    say(`only ${(os.freemem() / 1024 ** 3).toFixed(1)} GB of memory is free, so each test file runs in a process of its own`)
-    for (const t of named) if (why.get(t) !== "changed") say(`  + ${t} (${why.get(t)})`)
-    if (
-      list.length &&
-      run(`tests: ${list.length} the change reaches, eight files to a process, as free memory allows`, node, [
-        path.join(root, "scripts", "test-shards.mjs"),
-        ...list,
-      ]) !== 0
-    )
-      failures.push("related tests")
-    ranRelated = new Set(list)
-  } else if (sources.length) {
-    const report = path.join(os.tmpdir(), `codeh-gate-${process.pid}.json`)
-    const relatedArgs = (workers) => [
-      bin("vitest/vitest.mjs"),
-      "related",
-      "--run",
-      "--passWithNoTests",
-      `--maxWorkers=${workers}`,
-      "--reporter=default",
-      "--reporter=json",
-      `--outputFile=${report}`,
-      ...sources,
-    ]
-    const label = `tests: those that import any of ${sources.length} changed source file${sources.length === 1 ? "" : "s"}`
-    let code = run(label, node, relatedArgs(2))
-    let j
-    try {
-      j = JSON.parse(fs.readFileSync(report, "utf8"))
-      fs.rmSync(report, { force: true })
-    } catch {
-      j = undefined
-    }
-    if (code !== 0 && j) {
-      // 10 Nov: with memory short, workers died part way through files that pass on their own, and a run of the whole
-      // set in one worker died the same way an hour later. The files that did not pass are run again instead, each in
-      // a process of its own, as many at once as free memory allows (C-001); one that fails twice still fails.
-      const rel = (f) => path.relative(root, path.resolve(root, f)).split(path.sep).join("/")
-      const again = [
-        ...new Set([
-          ...j.testResults.filter((r) => r.status !== "passed" && r.status !== "skipped").map((r) => rel(r.name)),
-          // A file a worker died in is not in the report at all; vitest names it in its error.
-          ...[...lastOutput.matchAll(/while running test file (\S+?\.test\.\w+)/g)].map((m) => rel(m[1])),
-        ]),
-      ]
-      if (again.length) {
-        say(`  ${again.length} file${again.length === 1 ? "" : "s"} did not pass; each runs again in a process of its own`)
-        code = run(`tests: ${again.length} again, one file at a time by free memory`, node, [
-          path.join(root, "scripts", "test-shards.mjs"),
-          ...again,
-        ])
-      }
-    } else if (code !== 0) {
-      // No report at all: the workers never started. Once more, one at a time.
-      say("  the test workers did not start (machine busy); running again, one at a time")
-      code = run(label, node, relatedArgs(1))
-      try {
-        j = JSON.parse(fs.readFileSync(report, "utf8"))
-        fs.rmSync(report, { force: true })
-      } catch {
-        j = undefined
-      }
-    }
-    if (code !== 0) failures.push("related tests")
-    if (j)
-      ranRelated = new Set(
-        j.testResults.map((r) => path.relative(root, r.name).split(path.sep).join("/")),
-      )
-  }
-  const rest = [...named].filter((t) => !ranRelated.has(t)).sort()
-  if (rest.length) {
-    for (const t of rest) say(`  + ${t} (${why.get(t)})`)
-    if (
-      run(
-        `tests: ${rest.length} named by the change or always run`,
-        node,
-        [bin("vitest/vitest.mjs"), "run", "--maxWorkers=2", ...rest],
-        { retryFlaky: true },
-      ) !== 0
-    )
-      failures.push("named tests")
+  // Owner's testing standard (13 Nov, global CLAUDE.md): the changed tests, the regression tests for what the change
+  // touches (tests that import a changed file themselves, or are named after it), and the ones always run. The whole
+  // import graph (every test that reaches a changed file through other files) only with --related, which says so: one
+  // fix had reached 237 test files that way.
+  const broad = has("--related")
+  const reached = sources.length ? (broad ? relatedTests(sources) : directTests(sources)) : []
+  if (broad) say("tests: every one that reaches a changed file through its imports (--related)")
+  const list = [...new Set([...reached, ...named])].sort()
+  for (const t of named) if (why.get(t) !== "changed") say(`  + ${t} (${why.get(t)})`)
+  if (list.length) {
+    const label = `tests: ${list.length} (${reached.length} for the changed code, the rest named by the change or always run)`
+    const code = shortOfMemory
+      ? run(`${label}, eight files to a process as free memory allows`, node, [path.join(root, "scripts", "test-shards.mjs"), ...list])
+      : run(label, node, [bin("vitest/vitest.mjs"), "run", "--maxWorkers=2", ...list], { retryFlaky: true })
+    if (code !== 0) failures.push("tests")
   }
   const window = present.filter((f) =>
     /^packaging\/(CodehouseApp|Overlay|Popout|Hotkey|NavGuard|Capture|Backdrop|Common|Launcher|Helper|Limits)\.cs$|^scripts\/package\.mjs$|^packaging\/installer\.iss$/.test(
