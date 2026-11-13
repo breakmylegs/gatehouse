@@ -1031,6 +1031,65 @@ mark.hidden-char {
 .pane[data-density="compact"] .pane-item {
   padding: 2px 20px;
 }
+/* What Claude says, as prose (13 Nov): Tailwind's base takes every margin and list marker away, so without this a reply's
+   paragraphs, bullets and nested points ran together as one block. Spaced as Help is; Compact spacing tightens it. */
+.reply {
+  line-height: 1.6;
+}
+.reply :where(p, ul, ol, blockquote, pre, table, h1, h2, h3, h4, hr) {
+  margin: 0 0 0.75em;
+}
+.reply :where(h1, h2, h3, h4) {
+  margin-top: 1.1em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.reply h1 {
+  font-size: 1.3em;
+}
+.reply h2 {
+  font-size: 1.18em;
+}
+.reply h3 {
+  font-size: 1.06em;
+}
+.reply :where(ul, ol) {
+  padding-left: 1.4em;
+}
+.reply ul {
+  list-style: disc;
+}
+.reply ul ul {
+  list-style: circle;
+}
+.reply ol {
+  list-style: decimal;
+}
+.reply li + li,
+.reply li > :where(ul, ol) {
+  margin-top: 0.3em;
+}
+.reply blockquote {
+  padding-left: 1.2em;
+  color: var(--c-mut);
+}
+.reply hr {
+  border: 0;
+  border-top: 1px solid var(--c-line);
+}
+.reply :where(li, blockquote) > :last-child,
+.reply > div > :last-child {
+  margin-bottom: 0;
+}
+.reply :where(li) > :where(p) {
+  margin-bottom: 0.3em;
+}
+.pane[data-density="compact"] .reply {
+  line-height: 1.45;
+}
+.pane[data-density="compact"] .reply :where(p, ul, ol, blockquote, pre, table, h1, h2, h3, h4, hr) {
+  margin-bottom: 0.4em;
+}
 .pane-body {
   display: grid;
   min-height: 0;

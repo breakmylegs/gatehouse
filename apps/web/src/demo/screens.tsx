@@ -443,7 +443,21 @@ function transcript() {
       content: [
         {
           type: "text",
-          text: "The export works and the tests pass. I'd like to add the customer and the issue date to each row, and then push the branch so you can open a pull request.",
+          text: [
+            "The export works and the tests pass. I'd like to add the customer and the issue date to each row, and then push the branch so you can open a pull request.",
+            "",
+            "**What I did:**",
+            "- **The button:** Download CSV sits beside Print on the invoices page.",
+            "- **The file:** one row per invoice, with the total in pounds and pence.",
+            "  - Dates are written as 2026-11-13.",
+            "  - A comma in a customer's name is quoted.",
+            "",
+            "**Checks:**",
+            "1. The new test fails when the export is removed.",
+            "2. `npm test` passes.",
+            "",
+            "Shall I add the two columns?",
+          ].join("\n"),
         },
       ],
     },
