@@ -177,7 +177,8 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       const toolInput = asRecord(input.tool_input)
       const cwd = typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd
       // D-017: a subagent is starting; what it reads while it runs taints what it reports.
-      if (input.tool_name === "Task" || input.tool_name === "Agent") deps.provenance?.subagentStarted(String(input.tool_use_id))
+      if (input.tool_name === "Task" || input.tool_name === "Agent")
+        deps.provenance?.subagentStarted(String(input.tool_use_id))
       if (deps.kill())
         return denyOutput(
           "The Codehouse kill switch is engaged. Everything is denied until the user re-arms it.",
@@ -212,7 +213,10 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         return denyOutput(`${hit.reason} (rule ${hit.ruleId})`)
       }
       // G22: a commit that would add a secret is refused; one that cannot be checked goes to a person. D-058: a push too.
-      if (deps.scanCommits !== false && (makesCommit(input.tool_name, toolInput) || makesPush(input.tool_name, toolInput))) {
+      if (
+        deps.scanCommits !== false &&
+        (makesCommit(input.tool_name, toolInput) || makesPush(input.tool_name, toolInput))
+      ) {
         let found: Found[]
         try {
           found = await (deps.commitScanner ?? scanCommit)(cwd, String(toolInput.command))
@@ -306,13 +310,29 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
         if (deps.sast && makesCommit(input.tool_name, toolInput)) {
           const severe = await deps.sast
             .severe(cwd, String(toolInput.command))
-            .catch(() => [{ file: "(the commit could not be read)", line: 0, kind: "eval" as const, severity: "Severe" as const, title: "Not checked" }])
+            .catch(() => [
+              {
+                file: "(the commit could not be read)",
+                line: 0,
+                kind: "eval" as const,
+                severity: "Severe" as const,
+                title: "Not checked",
+              },
+            ])
           if (severe.length) return askOutput(sastReason(severe))
         }
         if (deps.vulns && makesCommit(input.tool_name, toolInput)) {
           const found = await deps.vulns
             .matches(cwd, String(toolInput.command))
-            .catch(() => [{ name: "(a lockfile could not be read)", version: "", ecosystem: "", ids: ["not checked"], lockfile: "" }])
+            .catch(() => [
+              {
+                name: "(a lockfile could not be read)",
+                version: "",
+                ecosystem: "",
+                ids: ["not checked"],
+                lockfile: "",
+              },
+            ])
           if (found.length) return askOutput(vulnReason(found))
         }
         // C-013: a remembered rule that has used its allowed number of calls asks instead.
@@ -352,6 +372,10 @@ const SELF_APPROVED: Omit<Verdict, "policyHash"> = {
 /** Audits calls that ran without ever reaching canUseTool (invariant 13), from PostToolUse. */
 /** The tools that write a file Claude made or changed. */
 const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
+/** Pictures, read as images rather than words: never scanned for prompt injection. */
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|ico|tiff?)$/i
+/** What you pasted or attached in the prompt box: your own input, never scanned as someone else's words. */
+const OWN_ATTACHMENT = /(^|\/)\.codehouse\/attachments\//
 
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
   // D-075: words for Claude about the call just ended (it is repeating itself), by tool use id, for the hook's answer.
@@ -385,18 +409,29 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
           : undefined,
       )
       if (note) notes.set(String(input.tool_use_id), note)
-      const interrupted = input.hook_event_name === "PostToolUseFailure" && input.is_interrupt === true
+      const interrupted =
+        input.hook_event_name === "PostToolUseFailure" && input.is_interrupt === true
       if ((input.tool_name === "Bash" || input.tool_name === "PowerShell") && !interrupted)
         deps.onCommandEnded?.(
           String(input.tool_use_id),
-          input.hook_event_name === "PostToolUseFailure" ? String(input.error ?? "failed") : undefined,
+          input.hook_event_name === "PostToolUseFailure"
+            ? String(input.error ?? "failed")
+            : undefined,
         )
       // D-017: a subagent's report carries the taint of what it read.
-      if (input.hook_event_name === "PostToolUse" && (input.tool_name === "Task" || input.tool_name === "Agent"))
+      if (
+        input.hook_event_name === "PostToolUse" &&
+        (input.tool_name === "Task" || input.tool_name === "Agent")
+      )
         deps.provenance?.subagentFinished(String(input.tool_use_id), input.tool_response)
       // B32: what came from outside is remembered, so a command copied from it can be caught.
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
-        scan(String(input.tool_use_id), input.tool_name, input.tool_response, input.tool_name === "WebFetch" ? "a fetched page" : `a result from ${input.tool_name}`)
+        scan(
+          String(input.tool_use_id),
+          input.tool_name,
+          input.tool_response,
+          input.tool_name === "WebFetch" ? "a fetched page" : `a result from ${input.tool_name}`,
+        )
       if (input.hook_event_name === "PostToolUse" && fromOutside(input.tool_name))
         deps.provenance?.add(
           input.tool_response,
@@ -405,18 +440,38 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
             : `what ${input.tool_name} returned`,
         )
       // D-015: a file that is not the project's own words (a README, a dependency's code), read in the session.
-      if (input.hook_event_name === "PostToolUse" && input.tool_name === "Read" && deps.provenance) {
+      if (
+        input.hook_event_name === "PostToolUse" &&
+        input.tool_name === "Read" &&
+        deps.provenance
+      ) {
         const file = asRecord(input.tool_input).file_path
-        if (typeof file === "string" && untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(file.replace(/\\/g, "/").toLowerCase()))
+        // 13 Nov: only those files are scanned. Without the braces every file read was, so a project that tests for
+        // prompt injection (this one) or a pasted screenshot (its bytes look like an encoded payload) raised the taint
+        // and made every push ask, even in Extreme approval. A picture is never scanned: its bytes are not words.
+        const where = typeof file === "string" ? file.replace(/\\/g, "/").toLowerCase() : ""
+        if (
+          typeof file === "string" &&
+          !IMAGE_FILE.test(where) &&
+          !OWN_ATTACHMENT.test(where) &&
+          untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(where)
+        ) {
           deps.provenance.addUntrustedFile(input.tool_response, file)
           scan(String(input.tool_use_id), input.tool_name, input.tool_response, `the file ${file}`)
+        }
       }
       // D-030: a commit the session made gets a note of its approvals' lineage.
-      if (input.hook_event_name === "PostToolUse" && makesCommit(input.tool_name, asRecord(input.tool_input)))
+      if (
+        input.hook_event_name === "PostToolUse" &&
+        makesCommit(input.tool_name, asRecord(input.tool_input))
+      )
         deps.onCommitted?.(typeof input.cwd === "string" && input.cwd !== "" ? input.cwd : deps.cwd)
       // D-008: a shell command's output, read for a property test's or a fuzz run's counterexample.
       if (deps.onToolOutput && (input.tool_name === "Bash" || input.tool_name === "PowerShell")) {
-        const r = input.hook_event_name === "PostToolUse" ? input.tool_response : (input as { error?: unknown }).error
+        const r =
+          input.hook_event_name === "PostToolUse"
+            ? input.tool_response
+            : (input as { error?: unknown }).error
         const text = typeof r === "string" ? r : JSON.stringify(r ?? "")
         if (text) deps.onToolOutput(input.tool_name, text.slice(0, 200_000))
       }
@@ -471,7 +526,8 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
           verdict: {
             outcome: "allow",
             ruleId: INSTRUCTIONS_RULE,
-            reason: "What the project tells Claude was changed with your approval, so it is pinned as it now is.",
+            reason:
+              "What the project tells Claude was changed with your approval, so it is pinned as it now is.",
             risk: 0,
             decidedBy: "rules",
             policyHash: deps.policy()?.hash ?? "none",
@@ -509,7 +565,9 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
       hookSpecificOutput: {
         hookEventName: input.hook_event_name as "PostToolUse" | "PostToolUseFailure",
         ...(note ? { additionalContext: note } : {}),
-        ...(replaced && input.hook_event_name === "PostToolUse" ? { updatedToolOutput: replaced } : {}),
+        ...(replaced && input.hook_event_name === "PostToolUse"
+          ? { updatedToolOutput: replaced }
+          : {}),
       },
     }
   }

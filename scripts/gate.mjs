@@ -11,7 +11,7 @@
 //   1. Typecheck: the workspaces the change touches, and the workspaces that depend on them.
 //   2. Lint: the changed files only.
 //   3. Tests whose code imports a changed file, directly or through other files (vitest related, which follows
-//      the import graph).
+//      the import graph; with memory short, the same set from scripts/related-tests.mjs, eight files to a process).
 //   4. Tests that name a changed file that is not code (a C# file, a rules file, a script, a document), and any
 //      changed test file itself.
 //   5. Always: the security invariant tests (invariants.test.ts, threat-model.test.ts) and the provider conformance
@@ -24,6 +24,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { relatedTests } from "./related-tests.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -146,16 +147,15 @@ const depsChanged = (f) => {
   return before.status !== 0 || installs(before.stdout) !== installs(now)
 }
 // 11 Nov: with memory short, the related tests' two long-lived workers died part way, and so did whatever came after
-// them, five releases in a row. Every file, each in a process of its own as memory allows (C-001), is slower and gets
-// through, so the gate goes that way when less than this is free.
+// them, five releases in a row. Each file in a process of its own as memory allows (C-001) gets through. Owner, 12 Nov
+// ("the testing period has grown very large"): that used to mean every test file, over an hour and a half; now it is
+// only the files the change reaches (scripts/related-tests.mjs reads the imports), each in a process of its own.
 const SHORT_OF_MEMORY = 4 * 1024 ** 3
-const memoryReason =
-  os.freemem() < SHORT_OF_MEMORY ? `only ${(os.freemem() / 1024 ** 3).toFixed(1)} GB of memory is free` : undefined
+const shortOfMemory = os.freemem() < SHORT_OF_MEMORY
 const fullReason = has("--full")
   ? "asked for"
   : (changed.find((f) => FULL_IF.some((re) => re.test(f))) ??
-    changed.filter((f) => /(^|\/)package\.json$/.test(f)).find((f) => depsChanged(f)) ??
-    memoryReason)
+    changed.filter((f) => /(^|\/)package\.json$/.test(f)).find((f) => depsChanged(f)))
 say(`${changed.length} file${changed.length === 1 ? "" : "s"} changed since ${base}`)
 
 // Workspaces and who depends on whom, from their package.json files.
@@ -287,7 +287,21 @@ if (fullReason) {
   for (const t of named) if (!why.has(t)) why.set(t, ALWAYS.includes(t) ? "always" : "changed")
 
   let ranRelated = new Set()
-  if (sources.length) {
+  if (shortOfMemory) {
+    // Memory short: the related files found from the imports, and the named ones, each in a process of its own.
+    const list = [...new Set([...(sources.length ? relatedTests(sources) : []), ...named])].sort()
+    say(`only ${(os.freemem() / 1024 ** 3).toFixed(1)} GB of memory is free, so each test file runs in a process of its own`)
+    for (const t of named) if (why.get(t) !== "changed") say(`  + ${t} (${why.get(t)})`)
+    if (
+      list.length &&
+      run(`tests: ${list.length} the change reaches, eight files to a process, as free memory allows`, node, [
+        path.join(root, "scripts", "test-shards.mjs"),
+        ...list,
+      ]) !== 0
+    )
+      failures.push("related tests")
+    ranRelated = new Set(list)
+  } else if (sources.length) {
     const report = path.join(os.tmpdir(), `codeh-gate-${process.pid}.json`)
     const relatedArgs = (workers) => [
       bin("vitest/vitest.mjs"),

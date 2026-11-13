@@ -2,6 +2,7 @@ import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { useRef, useState } from "react"
 import { decide } from "../lib/decide"
+import { GrantAll } from "./GrantAll"
 import { commandText, riskBand } from "../lib/format"
 import { useStore } from "../store"
 import { RiskBadge } from "./RiskBadge"
@@ -108,6 +109,9 @@ export function QuickDecision({
             allowBtn
           )}
         </div>
+        <span className="[&_.btn]:!min-h-7 [&_.btn]:!px-2.5 [&_.btn]:!text-[13px]">
+          <GrantAll view={view} />
+        </span>
         {error ? (
           <p role="alert" className="m-0 text-[12.5px] font-semibold text-sev">
             {error}
@@ -166,7 +170,10 @@ export function QuickDecision({
         <button type="button" className="btn" onClick={onMore}>
           {shown.more ? "See everything and more options" : "More options"}
         </button>
-        <span className="ml-auto">{allowBtn}</span>
+        <span className="ml-auto flex flex-wrap gap-2">
+          <GrantAll view={view} />
+          {allowBtn}
+        </span>
         {!connected ? (
           <span role="alert" className="text-[13px] font-semibold text-sev">
             Not connected to the Host. Decisions are paused until it is back.

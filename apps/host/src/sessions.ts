@@ -6,7 +6,7 @@ import { listFiles, mutantTaskPrompt, runMutation, testsFirstPrompt, type Mutati
 import type { VulnCommitGuard } from "./vuln-snapshot.js"
 import type { EvidenceService } from "./evidence.js"
 import type { SastCommitGuard } from "./sast.js"
-import { UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
+import { GRANTABLE_TOOLS, UNTRUSTED_FILES, type RuleTerms } from "./provenance.js"
 import type { ActionRequest, ActionResult } from "./codehouse-action.js"
 import { CLAIM_WORDS, commandFor, findClaims, projectCommand, type ClaimKind, type ClaimOutcome } from "./claims.js"
 import { freshSeed, seedEnv, seededCommand } from "./seeds.js"
@@ -868,6 +868,8 @@ export class Session extends EventEmitter<SessionEvents> {
   #model: string | undefined
   #effort: Effort | undefined
   #extreme: boolean
+  /** Owner, 13 Nov: the tools you allowed for the whole session on the desktop. */
+  readonly #toolGrants = new Set<string>()
   #sdkSessionId: string | undefined
   #error: string | undefined
   #running = false
@@ -1240,6 +1242,7 @@ export class Session extends EventEmitter<SessionEvents> {
       decided: this.#decided,
       verdicts: this.#verdicts,
       extreme: () => this.#extreme,
+      toolGranted: (tool: string) => this.#toolGrants.has(tool),
       mode: () => this.#mode,
       // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
       strictTests: () => strictAboutTests(d.config().testIntegrity, this.project),
@@ -2408,6 +2411,39 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!recorded) throw new Error("It could not be recorded, so the goal was not changed.")
     this.#goal = check?.trim()
     this.emit("state", this.info())
+  }
+
+  /**
+   * Owner, 13 Nov: every call of a tool (WebFetch, WebSearch) allowed for the rest of this session, from the desktop
+   * card. Recorded before it applies; refused if it cannot be recorded. It ends with the session.
+   */
+  async grantTool(tool: string): Promise<void> {
+    if (!GRANTABLE_TOOLS.has(tool)) throw new Error(`${tool} cannot be allowed for a whole session.`)
+    const recorded = await this.#deps.audit.record({
+      session: this.id,
+      event: "tool_granted",
+      channel: "desktop",
+      tool,
+      cwd: this.cwd,
+      project: this.project,
+      input: { tool },
+      verdict: {
+        outcome: "allow",
+        ruleId: "session-tool-grant",
+        reason: `You allowed every ${tool} in this session from the desktop.`,
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: "",
+      },
+      latencyMs: 0,
+    })
+    if (!recorded) throw new Error("It could not be recorded, so nothing was allowed.")
+    this.#toolGrants.add(tool)
+  }
+
+  /** Whether every call of this tool is allowed in this session. */
+  toolGranted(tool: string): boolean {
+    return this.#toolGrants.has(tool)
   }
 
   /** Extreme approval for this session only. Written to the audit log, because it changes what gets asked. */

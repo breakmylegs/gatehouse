@@ -1,6 +1,7 @@
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { GrantAll } from "./GrantAll"
 import { toast } from "sonner"
 import { decideFull } from "../lib/decide"
 import { age, clock, commandText, riskBand } from "../lib/format"
@@ -87,9 +88,11 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const shownAt = useRef(Date.now())
   const [friction, setFriction] = useState<number>()
   const [frictionReady, setFrictionReady] = useState(false)
+  const frictionBox = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (friction === undefined) return
     setFrictionReady(false)
+    frictionBox.current?.scrollIntoView?.({ block: "nearest" })
     const t = setTimeout(() => setFrictionReady(true), 2000)
     return () => clearTimeout(t)
   }, [friction])
@@ -143,7 +146,8 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     setBusy(true)
     setError(undefined)
     // D-021: an approval says how long the card was in view, and that the card was open.
-    const sent = cmd.type === "approve" ? { ...cmd, shownMs: Date.now() - shownAt.current, opened: true } : cmd
+    const sent =
+      cmd.type === "approve" ? { ...cmd, shownMs: Date.now() - shownAt.current, opened: true } : cmd
     const r = await decideFull(sent)
     setBusy(false)
     if (r.code === "friction") {
@@ -156,7 +160,8 @@ export function ApprovalCard({ view }: { view: PendingView }) {
 
   const deny = (msg?: string) =>
     run({ type: "deny", requestId: req.id, ...(msg?.trim() ? { message: msg.trim() } : {}) })
-  const allowNow = () => run({ type: "approve", requestId: req.id })
+  const allowNow = (typedConfirm = false) =>
+    run({ type: "approve", requestId: req.id, ...(typedConfirm ? { typed: true } : {}) })
   /** Allow, once it may be used: a Severe request asks you to type "allow" first. */
   const allow = async () => {
     if (!ready) return false
@@ -171,12 +176,16 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   async function runWithoutScripts() {
     const command = req.verdict.withoutScripts
     if (!command || !ready) return
-    if (await run({ type: "approve", requestId: req.id, updatedInput: { ...view.rawInput, command } }))
-      toast("Allowed without install scripts. The changed command was checked against the policy again.")
+    if (
+      await run({ type: "approve", requestId: req.id, updatedInput: { ...view.rawInput, command } })
+    )
+      toast(
+        "Allowed without install scripts. The changed command was checked against the policy again.",
+      )
   }
 
-  async function allowEdited() {
-    if (severe && confirming !== "edited") {
+  async function allowEdited(typedConfirm = false) {
+    if (severe && !typedConfirm && confirming !== "edited") {
       setConfirming("edited")
       return
     }
@@ -193,7 +202,14 @@ export function ApprovalCard({ view }: { view: PendingView }) {
         return
       }
     }
-    if (await run({ type: "approve", requestId: req.id, updatedInput }))
+    if (
+      await run({
+        type: "approve",
+        requestId: req.id,
+        updatedInput,
+        ...(typedConfirm ? { typed: true } : {}),
+      })
+    )
       toast("Allowed with your edit. The edited input was checked against the policy again.")
   }
 
@@ -497,42 +513,6 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </div>
           ) : null}
 
-          {friction !== undefined ? (
-            <div role="alert" className="grid gap-2 rounded border border-warn p-2 text-[14px]">
-              <strong>Look again before allowing this</strong>
-              <span>
-                You approved several requests faster than anyone could read them. Read what this one
-                does above (its command, what it would also run, and what it would delete), then allow
-                it, or give it a limited grant instead. Denying is never slowed.
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!frictionReady || busy}
-                  onClick={() => void run({ type: "approve", requestId: req.id, deliberate: true })}
-                >
-                  {frictionReady ? "Yes, allow it" : "Read it first"}
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={!frictionReady || busy}
-                  onClick={() =>
-                    void run({
-                      type: "approve",
-                      requestId: req.id,
-                      deliberate: true,
-                      remember: true,
-                      rememberFor: { days: 1 },
-                    })
-                  }
-                >
-                  Allow, and for a day in this folder only
-                </button>
-              </div>
-            </div>
-          ) : null}
           {panel === "remember" ? (
             <div className="grid gap-2" role="group" aria-label="Remember this decision">
               {!remember ? (
@@ -714,6 +694,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             >
               Stop session… <kbd aria-hidden="true">{keyLabel("Shift S")}</kbd>
             </button>
+            {connected && !busy ? <GrantAll view={view} /> : null}
             <button
               className={clsx("btn pass-allow", view.defaultToNo ? "btn-strong" : "btn-primary")}
               disabled={busy || !connected || !ready}
@@ -725,6 +706,47 @@ export function ApprovalCard({ view }: { view: PendingView }) {
             </button>
           </div>
         )}
+        {/* Next to Allow, where you clicked: above the card it was missed and the click looked ignored. */}
+        {friction !== undefined ? (
+          <div
+            ref={frictionBox}
+            role="alert"
+            className="grid gap-2 rounded border border-warn p-2 text-[14px]"
+          >
+            <strong>Look again before allowing this</strong>
+            <span>
+              You approved several requests faster than anyone could read them. Read what this one
+              does above (its command, what it would also run, and what it would delete), then allow
+              it, or give it a limited grant instead. Denying is never slowed.
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!frictionReady || busy}
+                onClick={() => void run({ type: "approve", requestId: req.id, deliberate: true })}
+              >
+                {frictionReady ? "Yes, allow it" : "Read it first"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={!frictionReady || busy}
+                onClick={() =>
+                  void run({
+                    type: "approve",
+                    requestId: req.id,
+                    deliberate: true,
+                    remember: true,
+                    rememberFor: { days: 1 },
+                  })
+                }
+              >
+                Allow, and for a day in this folder only
+              </button>
+            </div>
+          </div>
+        ) : null}
         {confirming && !resolved ? (
           <form
             className="grid gap-2 border-t border-line pt-3"
@@ -735,7 +757,8 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               const what = confirming
               setConfirming(undefined)
               setTyped("")
-              void (what === "edited" ? allowEdited() : allowNow())
+              // Typing allow is the deliberate approval itself (owner, 13 Nov).
+              void (what === "edited" ? allowEdited(true) : allowNow(true))
             }}
           >
             <label className="grid gap-1">

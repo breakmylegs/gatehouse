@@ -60,6 +60,23 @@ describe("memory-aware test sharding (C-001)", () => {
     expect(logs).toContain("[shards] retry once: flaky.test.ts")
   })
 
+  it("runs files in batches; a failing batch reruns only the files it names as failing, each on its own", async () => {
+    const calls: Array<string | string[]> = []
+    const run = async (f: string | string[]) => {
+      calls.push(f)
+      if (Array.isArray(f)) return f.includes("b.test.ts") ? { ok: false, out: " FAIL  |host| b.test.ts > adds\n" } : { ok: true, out: "" }
+      return { ok: f !== "b.test.ts", out: "" }
+    }
+    const r = await runShards(["a.test.ts", "b.test.ts", "c.test.ts", "d.test.ts"], { freemem: () => 1 * GB, run, log: () => undefined, batch: 3 })
+    expect(calls).toEqual([["a.test.ts", "b.test.ts", "c.test.ts"], "b.test.ts", "d.test.ts"])
+    expect(r.failed).toEqual(["b.test.ts"])
+    expect(r.passedOnRetry).toEqual([])
+    // A batch that crashes without naming a file: every file in it runs on its own.
+    calls.length = 0
+    await runShards(["a.test.ts", "c.test.ts"], { freemem: () => 1 * GB, run: async (f: string | string[]) => (calls.push(f), { ok: !Array.isArray(f), out: "Worker exited" }), log: () => undefined, batch: 2 })
+    expect(calls).toEqual([["a.test.ts", "c.test.ts"], "a.test.ts", "c.test.ts"])
+  })
+
   it("finds the workspaces' test files", () => {
     const files = listTestFiles()
     expect(files).toContain("apps/host/test/test-shards.test.ts")
