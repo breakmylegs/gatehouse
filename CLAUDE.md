@@ -1,6 +1,6 @@
 # Gatehouse
 
-Local Windows workbench for running Claude agent sessions with the Claude Agent SDK on the user's Accenture SSO Claude login. A custom MCP Approver decides low-risk permission requests automatically. Everything else escalates to the desktop UI and an iPhone at the same time, and the first valid answer wins.
+Local workbench, for Windows and the Mac, for running Claude agent sessions with the Claude Agent SDK on the user's Accenture SSO Claude login. A custom MCP Approver decides low-risk permission requests automatically. Everything else escalates to the desktop UI and an iPhone at the same time, and the first valid answer wins.
 
 The authoritative specification is `docs/BUILD_SPEC.md`. Read it before starting any phase. The build is complete through Phase 8. See `docs/BUILD_REPORT.md` for what was built, the deviations and the owner to-do list.
 
@@ -21,7 +21,7 @@ Every phase must keep these true. Write an automated test for every invariant th
 4. **No bare tool names in `allowedTools`.** Treat the SDK warning `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`, or any equivalent, as a fatal startup error.
 5. **No `updatedPermissions`.** Never return it from `canUseTool`. "Remember" writes to the Gatehouse policy overlay instead, so the Approver stays the single decider and every decision keeps a rule id.
 6. **Credentials.**
-   - Never read, copy, log or transmit `%USERPROFILE%\.claude\.credentials.json` or any token.
+   - Never read, copy, log or transmit `%USERPROFILE%\.claude\.credentials.json` (on a Mac, Claude Code's item in the login Keychain) or any token.
    - Strip `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_OAUTH_TOKEN` from the environment passed to the SDK.
    - Sign-in only happens through Anthropic's own flow in the unmodified Claude Code binary.
 
@@ -82,6 +82,8 @@ Every phase must keep these true. Write an automated test for every invariant th
 | `npm run package` / `npm run package:check` | Build `dist-app\Codehouse\Codehouse.exe` with its runtime and app folder next to it (`docs/packaging.md`). |
 | `npm run gate` | Before a push: typecheck the touched workspaces and their dependents, lint the changed files, run the tests that import what changed (vitest related) plus tests that name a changed C# file, rule, script or style, plus the security invariant tests. `-- --full` for everything; it runs everything by itself when dependencies or build config change. `-- --dry` says what it would run. |
 | `npm run release` | Publish a release from this computer: checks, package, installer, signed update parts, `gh release create`. Run it after pushing app changes; installed copies then offer the update. `docs/packaging.md` has the details. |
+| `npm start` | On a Mac: start the Host from the source folder and open the interface (`scripts/start.mjs`). |
+| `npm run package:mac` | On a Mac: build `dist-app/Codehouse.app` (`-- --check` tests it, `-- --dmg` makes the disk image, `-- --install` puts it in Applications). See `docs/mac.md`. |
 | `npm run relay` / `npm run relay:build-phone` | Run the phone Relay locally (see `docs/relay-local.md`) and build the phone app. |
 
 Layout: `apps/host` (Host, admin API, phone channel), `apps/approver`, `apps/companion`, `apps/web` (desktop UI), `apps/relay` (phone Relay), `apps/phone` (iPhone PWA), `packages/policy`, `packages/shared`. Design notes are in `PRODUCT.md`, `DESIGN.md` and `docs/design`. The threat model (`docs/threat-model.md`) is checked against real test names by `apps/host/test/threat-model.test.ts`.
@@ -97,9 +99,20 @@ Machine facts that shape the design (details in `docs/sdk-notes.md`): the manage
 - Gate each change with `npm run gate`, not the whole suite (owner, 29 Oct: each test run should be specific to what is new and what it might affect). Run the full suite only when the gate says so, before a large refactor, or when asked. Do not add tests for the sake of it: each test guards a behaviour someone relies on.
 - Small conventional commits. One branch per phase, fast-forwarded into `main` when the phase is done. The owner asked for no phase gates, so work continues through the phases.
 - Cross-platform npm scripts. No shell-specific commands such as `rm -rf`.
-- Avoid native addons. Local data lives under `%LOCALAPPDATA%\Gatehouse\`. Write files atomically (temp file, then rename).
+- Avoid native addons. Local data lives under `%LOCALAPPDATA%\Gatehouse\` on Windows and `~/Library/Application Support/Gatehouse/` on a Mac. Write files atomically (temp file, then rename).
 - UI copy, docs and code comments use plain UK English with no em dashes.
 - Impeccable hooks are not enabled. Run `npx impeccable detect` manually after UI tasks.
 - No GitHub Actions (owner, 29 Oct: the account has few minutes). Actions are switched off for the repository; never add a workflow. Releases are made locally with `npm run release`.
 - Settings and other data files are read by older and newer versions alike, because an update can be undone. Read them tolerantly (keep what you do not know) and change them only by adding.
 - Never break the in-app update (owner, 2 Nov). Before a change to updating, packaging, the installer or the program names, check that an install of the last release still updates to it: `scripts/update-e2e.ts`, and `scripts/update-route-e2e.ts` with an install from before a rename.
+
+## Two machines (13 Nov)
+
+The Windows and Mac versions are one repository, worked on from a Windows PC and a Mac. `docs/mac.md` says where the Mac's code lives and its hooks in shared files ("Platform hooks").
+
+- Platform code stays in its own files: the Mac's in `*-mac.*`, `mac*.css`, `packaging/mac/` and `scripts/package-mac.mjs`; Windows' in `packaging/*.cs`, the `*.ps1` scripts and their helpers. Shared code takes the platform as a parameter where it differs, so both are tested on either machine.
+- A short branch per change, rebased on `main` before its pull request and merged by fast-forward or rebase, so `main` stays linear.
+- Gate on your own machine before every push (`npm run gate`). With no GitHub Actions, the other machine's check is a person: a change to a platform hook, packaging, the window's messages or the other platform's files waits for the other person's gate before it merges. A pull request says which machine it was gated on.
+- A test of one platform's behaviour passes that platform, or skips on the other with `describe.skipIf` and a reason, so the full suite is green on both. The Mac needs PowerShell for the tests that use it (Microsoft's macOS build, no administrator needed).
+- Say so before a large edit to a shared file both machines change often (`apps/web/src/App.tsx`, `apps/host/src/bootstrap.ts`, `apps/host/src/sessions.ts`, `apps/web/src/surfaces/Workspace.tsx`).
+- Windows releases are made on the Windows PC (`npm run release`). The Mac app is built locally (`npm run package:mac`) until it can be signed and notarised.
