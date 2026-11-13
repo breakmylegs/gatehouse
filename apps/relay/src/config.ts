@@ -2,6 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { macRelayDir } from "./config-mac.js" // Mac fork
 
 export interface RelayConfig {
   publicUrl: string
@@ -42,7 +43,7 @@ export function resolveRelayConfig(
     env.RELAY_DATA_DIR ??
     (env.LOCALAPPDATA
       ? path.join(env.LOCALAPPDATA, "Gatehouse", "relay")
-      : path.join(home, ".gatehouse-relay"))
+      : (macRelayDir(home) ?? path.join(home, ".gatehouse-relay"))) // Mac fork: config-mac.ts
   const saved = path.join(dataDir, "relay.json")
   const given = argValue(argv, "--public-url") ?? env.RELAY_PUBLIC_URL
   let publicUrl = given

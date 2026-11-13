@@ -10,6 +10,7 @@ import { Devices } from "./surfaces/Devices"
 import { FirstRun } from "./surfaces/FirstRun"
 import { Setup } from "./surfaces/Setup"
 import { HelpPane } from "./components/HelpPane"
+import { isMac } from "./lib/platform-mac" // Mac fork
 import { Rail } from "./components/Rail"
 import { RailResizer, savedRailWidth } from "./components/RailResizer"
 import { ShortcutSheet } from "./components/ShortcutSheet"
@@ -73,6 +74,10 @@ export function App() {
       if (e.key === "F1") {
         e.preventDefault()
         setHelpOpen(!useStore.getState().helpOpen)
+      } else if (e.metaKey && !e.shiftKey && !e.altKey && e.key === "," && isMac()) {
+        // Mac fork: Command-comma opens Settings, as in every Mac app.
+        e.preventDefault()
+        useStore.getState().setRoute("settings")
       } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyK") {
         // The kill switch asks first; this only opens the question.
         e.preventDefault()

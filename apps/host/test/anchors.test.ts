@@ -19,7 +19,7 @@ const sealer = () => ({
 const VERIFIER = path.join(REPO_ROOT, "scripts", "verify-audit.ps1")
 const ps = (dir: string): boolean => {
   try {
-    execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", VERIFIER, "-Dir", dir], { windowsHide: true, stdio: "ignore", timeout: 120_000 })
+    execFileSync(process.platform === "win32" ? "powershell.exe" : "pwsh", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", VERIFIER, "-Dir", dir], { windowsHide: true, stdio: "ignore", timeout: 120_000 })
     return true
   } catch {
     return false

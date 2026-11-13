@@ -49,11 +49,9 @@ describe("what a session wrote", () => {
   })
 
   it("is kept by full path, resolved against the session folder, ignoring case", () => {
-    expect(writtenKey("notes.md", "C:/dev/shop")).toBe(
-      path.resolve("C:/dev/shop", "notes.md").toLowerCase(),
-    )
-    expect(writtenKey("C:/Users/Me/Plan.md", "C:/dev/shop")).toBe(
-      path.resolve("C:/Users/Me/Plan.md").toLowerCase(),
-    )
+    // Mac fork: a full path in this system's own form.
+    const [shop, plan] = process.platform === "win32" ? ["C:/dev/shop", "C:/Users/Me/Plan.md"] : ["/dev/shop", "/Users/Me/Plan.md"]
+    expect(writtenKey("notes.md", shop)).toBe(path.resolve(shop, "notes.md").toLowerCase())
+    expect(writtenKey(plan, shop)).toBe(path.resolve(plan).toLowerCase())
   })
 })

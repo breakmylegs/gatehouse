@@ -1,4 +1,18 @@
 
+## The Mac version joins the repository (13 Nov)
+
+Built from 9 to 13 Nov in a fork, merged from upstream four times and never rebased, and brought back as one pull request with its history. Everything it adds is in `docs/mac.md`; the hooks it puts in shared files are listed there under "Platform hooks". No dependency was added; the lockfile is unchanged.
+
+- **Codehouse.app** (`packaging/mac/`, `scripts/package-mac.mjs`): a native AppKit window over the Mac's WebKit with the same navigation guard as `NavGuard.cs`, the menu bar mark, notifications, keep-awake, the quick prompt and its shortcut, screen capture, Open at Login, and `codehouse-limits` for each session's limits (`Limits.cs`'s arguments). Bundled Node with its sha256 checked; signed ad hoc, not notarised (an Apple Developer ID is an owner item).
+- **Owner decisions taken on the fork**, which change what Windows users see too:
+  - The phone can be told of decisions only, as ntfy is (12 Nov): Settings, Phone and notifications, `phoneAlerts`.
+  - The phone app in Liquid Glass (12 Nov): a floating tab bar (Waiting, Sessions, Settings), glass back and action bars, solid content; the Home Screen name was still an earlier name and is now Codehouse.
+  - Scrolling up from the end of a conversation is no longer pulled back down (12 Nov, `Workspace.tsx`).
+  - One phone Relay (13 Nov): Devices' Run the Relay here; the Mac app's own was removed.
+- **Mac only:** the Standard macOS look (`mac-standard.css`), direnv for each session's folder (`direnv-mac.ts`), the Mac's installers in the installer rule (`installers-mac.ts`, and `brew -v install` with a flag before its subcommand), Mac folders for projects, routines and remembered file rules.
+- **Deviations:** the Mac app does not update itself yet (Settings, Updates says to install a newer Codehouse.app); PowerShell commands are checked on a Mac only when `pwsh` is installed, and otherwise wait for you, as on Windows without it.
+- **Owner items left open:** an Apple Developer ID (signing, notarisation, Mac releases), and O-MAC-1 (which Mac folders the critical-paths floor rule protects).
+
 ## Phase 78: the quick prompt (1 Nov, slice W1-15)
 
 - **What it does:** a shortcut (Ctrl+Alt+Space until you change it in Settings, General) or **Quick prompt** in the tray menu opens a small window over whatever you are doing. Enter starts a chat with what you typed, or messages the coding session you started last if you choose it; the main window then opens on that session with your words in it. Esc puts it away and gives the focus back to the program you were in; clicking elsewhere puts it away too.

@@ -33,6 +33,8 @@ import {
 } from "../lib/sessionActions"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import { EmptyState } from "./EmptyState"
+import { keyLabel } from "../lib/platform-mac" // Mac fork
+import { Disclosure } from "./DisclosureMac" // Mac fork
 
 /** Opens the Ctrl+K palette from a button. */
 export const openPalette = () => window.dispatchEvent(new Event("codeh:palette"))
@@ -231,7 +233,9 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 <Icon name="search" />
                 Search
               </span>
-              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
+              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">
+                {keyLabel("Ctrl K")}
+              </kbd>
             </button>
           </li>
         </ul>
@@ -279,7 +283,9 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 <Icon name="search" />
                 Search
               </span>
-              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">Ctrl K</kbd>
+              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">
+                {keyLabel("Ctrl K")}
+              </kbd>
             </button>
           </li>
           {pinned.map((r) => {
@@ -387,7 +393,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 {g.folder.startsWith("project:") ? (
                   <Icon name="projects" size={13} className="mr-1 inline align-[-2px]" />
                 ) : null}
-                {g.label} <span aria-hidden="true">{folded[g.folder] ? "▸" : "▾"}</span>
+                {g.label} <Disclosure open={!folded[g.folder]} />
               </button>
               <span className="text-[12px] text-shell-mut">{g.sessions.length}</span>
             </div>

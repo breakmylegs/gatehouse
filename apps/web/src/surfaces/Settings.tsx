@@ -41,6 +41,7 @@ import { RoutinesPanel } from "../components/RoutinesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { EFFORTS } from "../lib/modes"
+import { onMac } from "../lib/platform-mac" // Mac fork
 import { send, useStore } from "../store"
 
 interface Config {
@@ -73,6 +74,7 @@ interface Config {
   globalInstructions?: string
   profile?: { callMe?: string; work?: string }
   keepAwake?: boolean
+  phoneAlerts?: "all" | "decisions" // Mac fork
   recapByClaude?: boolean
   chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
@@ -163,6 +165,8 @@ interface Values {
   work: string
   /** Keep the computer awake while a session works. */
   awake: boolean
+  /** Mac fork: what the phone is told through the Relay. */
+  phoneAlerts: "all" | "decisions"
   /** While you were away, written by Claude. */
   recap: boolean
   /** Open in Claude (CH-06). */
@@ -221,6 +225,7 @@ function valuesOf(d: SettingsData): Values {
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
     awake: c.keepAwake !== false,
+    phoneAlerts: c.phoneAlerts === "decisions" ? "decisions" : "all", // Mac fork
     recap: c.recapByClaude !== false,
     handoff: c.chatHandoff?.target ?? "edge",
     edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
@@ -255,6 +260,9 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   }
   if (Object.keys(profile).length) body.profile = profile
   else delete body.profile
+  // Mac fork: absent is every notification, so the file only says so when you choose decisions only.
+  if (v.phoneAlerts === "decisions") body.phoneAlerts = "decisions"
+  else delete body.phoneAlerts
   if (v.awake) delete body.keepAwake
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
@@ -436,6 +444,7 @@ export const DEFAULT_VALUES: Values = {
   callMe: "",
   work: "",
   awake: true,
+  phoneAlerts: "all", // Mac fork
   recap: true,
   handoff: "edge",
   edgeProfile: "Default",
@@ -828,6 +837,49 @@ export function Settings() {
                   spellCheck={false}
                 />
               </Field>
+            </Group>
+
+            {/* Mac fork (owner, 12 Nov): the phone told of decisions only, as ntfy is. First in the section. */}
+            <Group
+              section="phone"
+              title="Phone notifications"
+              gap="gap-2"
+              changed={v.phoneAlerts !== "all"}
+            >
+              <p className="m-0 text-xs text-mut">
+                What the Relay sends to your iPhone. Every request also waits here on this computer.
+                ntfy and Slack, if you use them, only ever send decisions.
+              </p>
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="phone-alerts"
+                  checked={v.phoneAlerts === "decisions"}
+                  onChange={() => change({ phoneAlerts: "decisions" }, "Phone notifications")}
+                />
+                <span>
+                  Only decisions waiting for you
+                  <span className="block text-xs text-mut">
+                    A permission, a plan or a question to answer, as ntfy does. Sessions finishing,
+                    notes from Claude, the digest and alerts stay on this computer.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="phone-alerts"
+                  checked={v.phoneAlerts === "all"}
+                  onChange={() => change({ phoneAlerts: "all" }, "Phone notifications")}
+                />
+                <span>
+                  Everything
+                  <span className="block text-xs text-mut">
+                    Decisions, and also sessions finishing, notes from Claude, the digest and
+                    alerts such as a paused or stopped session.
+                  </span>
+                </span>
+              </label>
             </Group>
 
             <Group
@@ -1280,8 +1332,9 @@ export function Settings() {
 
             <Group section="sessions" title="Memory" gap="gap-2" changed={memChanged}>
               <Field
-                label="Start nothing new when this computer's memory is committed past"
-                help="The commit charge is what Windows has promised to programs, against what memory and the page file can hold; past it programs fail. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on."
+                // Mac fork: a Mac's reading is the share of memory in use (memory-governor-mac.ts).
+                label={onMac("Start nothing new when this computer's memory is committed past", "Start nothing new when the share of this Mac's memory in use is past")}
+                help={onMac("The commit charge is what Windows has promised to programs, against what memory and the page file can hold; past it programs fail. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on.", "macOS's own measure of memory pressure: the share of memory that is neither free nor quick to reclaim. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on.")}
               >
                 <select
                   className="field"
@@ -1485,17 +1538,15 @@ export function Settings() {
                 Keep the computer awake while a session works
               </label>
               <p className="m-0 text-xs text-mut">
-                So a long build is not cut off when Windows would sleep. The display can still turn
-                off, and closing the lid still puts the computer to sleep. In the Codehouse window
-                only.
+                {/* Mac fork */}
+                {onMac("So a long build is not cut off when Windows would sleep. The display can still turn off, and closing the lid still puts the computer to sleep. In the Codehouse window only.", "So a long build is not cut off when the Mac would sleep. The display can still turn off, and closing the lid still puts the Mac to sleep. In the Codehouse app, and with npm start.")}
               </p>
             </Group>
 
             <Group section="system" title="Start and run" gap="gap-2">
               <p className="m-0 text-[13.5px] text-mut">
-                Codehouse keeps running in the system tray when you close its window, so decisions
-                can still reach you; Quit Codehouse is in the tray menu. Starting it when you sign
-                in to Windows is chosen in the installer.
+                {/* Mac fork */}
+                {onMac("Codehouse keeps running in the system tray when you close its window, so decisions can still reach you; Quit Codehouse is in the tray menu. Starting it when you sign in to Windows is chosen in the installer.", "Codehouse keeps running, with its mark in the menu bar, when you close its window, so decisions can still reach you; Quit Codehouse is in that mark's menu. To start it when you log in to your Mac, choose Open at Login in the same menu.")}
               </p>
             </Group>
 

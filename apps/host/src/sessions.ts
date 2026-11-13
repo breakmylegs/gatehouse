@@ -33,6 +33,7 @@ import {
 } from "@gatehouse/policy"
 import { projectName, sanitiseEnv, uuidv7 } from "@gatehouse/shared"
 import type { GatehouseConfig } from "@gatehouse/shared/node"
+import { folderExample } from "@gatehouse/shared/node" // Mac fork
 import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
@@ -85,6 +86,8 @@ import { composeInstructions, type ProjectStore } from "./projects.js"
 import type { ArtifactStore } from "./artifacts.js"
 import type { MemoryStore } from "./memory.js"
 import { CRASH_RESUME_PROMPT, CrashRestarts, describeStop, isProcessCrash } from "./crash.js"
+import { withoutMacAppEnv } from "./env-mac.js" // Mac fork
+import { withDirenvMac } from "./direnv-mac.js" // Mac fork
 
 export class OrgGuardError extends Error {
   constructor(
@@ -132,7 +135,7 @@ export class ChatModeError extends Error {
 export function ensureFolder(cwd: string, log: (line: string) => void = () => undefined): void {
   if (!path.isAbsolute(cwd))
     throw new SessionFolderError(
-      `"${cwd}" is not a full folder path. Type the whole path, for example C:\\dev\\my-project.`,
+      `"${cwd}" is not a full folder path. Type the whole path, for example ${folderExample("my-project")}.`, // Mac fork
     )
   let stat: fs.Stats | undefined
   try {
@@ -1285,7 +1288,12 @@ export class Session extends EventEmitter<SessionEvents> {
           }),
       includePartialMessages: true,
       // Its account's own Claude Code folder, and never a credential (invariant 6).
-      env: d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env),
+      // Mac fork: without Codehouse.app's own settings (env-mac.ts), and with the folder's direnv .envrc (direnv-mac.ts).
+      env: await withDirenvMac(
+        this.cwd,
+        withoutMacAppEnv(d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env)),
+        d.log,
+      ),
       canUseTool: canUse,
       // B06: a server asking you to open a page is decided like a tool call; Codehouse never opens it itself.
       onElicitation: (req, o) =>

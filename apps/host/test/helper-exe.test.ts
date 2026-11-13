@@ -12,6 +12,7 @@ import {
   sealerFor,
 } from "../src/relay/protector.js"
 import { findCodehouseHelper } from "../src/win-helper.js"
+import { KeychainProtector } from "../src/relay/protector-mac.js" // Mac fork
 
 const csc = [
   `${process.env.windir}\\Microsoft.NET\\Framework64\\v4.0.30319\\csc.exe`,
@@ -50,8 +51,9 @@ describe("which protection Codehouse uses", () => {
     expect(sealerFor({ helper: helper(undefined), platform: "win32" })).toBeInstanceOf(
       DpapiProtector,
     )
+    // Mac fork: a Mac seals with the Keychain, where upstream has no protection (apps/host/src/relay/protector-mac.ts).
     expect(sealerFor({ helper: helper(undefined), platform: "darwin" })).toBeInstanceOf(
-      PlainProtector,
+      KeychainProtector,
     )
     expect(looked).toBe(3)
     const given = new PlainProtector()

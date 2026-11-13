@@ -56,7 +56,8 @@ describe("starting Edge", () => {
     expect(() => edgeArgs("https://claude.ai/new", "Default --remote")).toThrow(HandoffError)
   })
 
-  it("finds msedge.exe through the registry's App Paths, never a path written in", async () => {
+  // Mac fork: the Windows registry; on a Mac findEdge() and hasAppLink() are the Mac's (handoff-mac.test.ts).
+  it.skipIf(process.platform !== "win32")("finds msedge.exe through the registry's App Paths, never a path written in", async () => {
     const query = vi.fn(async (_f: string, args: string[]) => {
       if (args[1]!.startsWith("HKCU")) throw new Error("not here")
       return "\r\nHKEY_LOCAL_MACHINE\\...\\msedge.exe\r\n    (Default)    REG_SZ    C:\\Edge\\msedge.exe\r\n"
@@ -147,7 +148,8 @@ describe("handing off", () => {
     ).rejects.toThrow(/Edge was not found/)
   })
 
-  it("checks the app's link is registered before using it", async () => {
+  // Mac fork: the Windows registry; on a Mac findEdge() and hasAppLink() are the Mac's (handoff-mac.test.ts).
+  it.skipIf(process.platform !== "win32")("checks the app's link is registered before using it", async () => {
     expect(await hasAppLink(async () => "    URL Protocol    REG_SZ    ")).toBe(true)
     expect(
       await hasAppLink(async () => {

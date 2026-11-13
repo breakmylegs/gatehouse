@@ -138,7 +138,7 @@ describe("attachments for the composer", () => {
       await post("/api/files/attach-data", {
         session: "s1",
         kind: "file",
-        name: "C:\\Users\\me\\notes.txt",
+        name: process.platform === "win32" ? "C:\\Users\\me\\notes.txt" : "/Users/me/notes.txt", // Mac fork
         type: "text/plain",
         data: Buffer.from("hello").toString("base64"),
       })

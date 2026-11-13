@@ -1,6 +1,7 @@
 import { useId, useState } from "react"
 import { toast } from "sonner"
 import { useStore } from "../store"
+import { onMac } from "../lib/platform-mac" // Mac fork
 import { INTERVALS, moveOverLine, noteLines, updateCall, when } from "../lib/update"
 
 /** Settings, Updates: the version you have, how often Codehouse looks for a newer one, skipped versions and going back. */
@@ -186,8 +187,8 @@ export function UpdatesPanel() {
           GitHub token, only while the Codehouse repository is private
         </label>
         <p className="m-0 text-xs text-mut">
-          A fine-grained token with read access to the repository's contents. It is kept encrypted
-          for your Windows account and only sent to GitHub's API.{" "}
+          A fine-grained token with read access to the repository's contents. It is kept encrypted{" "}
+          {onMac("for your Windows account", "with a key in your login Keychain")} and only sent to GitHub's API.{" "}
           {u.tokenSet ? "A token is saved." : "No token is saved."}
         </p>
         <div className="flex flex-wrap gap-2">

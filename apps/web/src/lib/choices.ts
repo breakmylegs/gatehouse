@@ -374,4 +374,7 @@ export const EXAMPLE_ASKS: ExampleAsk[] = [
 
 /** The folder the examples run in: a project inside your first workspace folder. */
 export const exampleProject = (roots: string[]): string =>
-  `${(roots[0] ?? "C:\dev").replaceAll("/", "\\").replace(/\+$/, "")}\my-app`
+  // Mac fork: a Mac root such as /Users/you/dev stays a Mac path, not \Users\you\dev.
+  roots[0]?.startsWith("/")
+    ? `${roots[0].replace(/\/+$/, "")}/my-app`
+    : `${(roots[0] ?? "C:\dev").replaceAll("/", "\\").replace(/\+$/, "")}\my-app`

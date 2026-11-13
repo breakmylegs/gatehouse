@@ -8,6 +8,8 @@ import { Menu } from "./Menu"
 import { openPalette } from "./Rail"
 import { SessionCode } from "./SessionCode"
 import { Icon, type IconName } from "./Icon"
+import { keyLabel, systemName } from "../lib/platform-mac" // Mac fork
+import { Disclosure } from "./DisclosureMac" // Mac fork
 
 /** A session's state in a word and a small icon, for the strip (owner, 3 Nov: icons for state, not words). */
 function stateWord(s: {
@@ -117,7 +119,7 @@ export function CommandDeck() {
             >
               <Icon name="kill-switch" className="kill-icon" />
               Stop everything
-              <kbd aria-hidden="true">Ctrl Shift K</kbd>
+              <kbd aria-hidden="true">{keyLabel("Ctrl Shift K")}</kbd>
             </button>
             {confirmKill ? (
               <div
@@ -234,7 +236,7 @@ function ProfileMenu() {
                 <span className="truncate text-[11.5px] text-shell-mut">{signin.organization}</span>
               ) : null}
             </span>
-            <span aria-hidden="true">&#9662;</span>
+            <Disclosure open />
           </>
         }
         items={[
@@ -259,7 +261,9 @@ function ProfileMenu() {
             label: theme === "dark" ? "Codehouse light" : "Codehouse dark",
             onSelect: () => setTheme(theme === "dark" ? "light" : "dark"),
           },
-          ...(themeFollows ? [] : [{ label: "Follow Windows theme", onSelect: followSystem }]),
+          ...(themeFollows
+            ? []
+            : [{ label: `Follow ${systemName()} theme`, onSelect: followSystem }]), // Mac fork
           { label: "Help for this page", hint: "F1", onSelect: () => setHelpOpen(!helpOpen) },
           { label: "User guide", onSelect: () => setRoute("guide") },
           { label: "Search and commands", hint: "Ctrl K", onSelect: openPalette },

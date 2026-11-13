@@ -46,7 +46,8 @@ describe("docs/threat-model.md has a real test behind every threat", () => {
         expect(fs.existsSync(p), `${r.id}: ${file} does not exist`).toBe(true)
         const text = fs.readFileSync(p, "utf8")
         const inCall = new RegExp(
-          `(it|test|describe)(\\.each\\([^)]*\\))?\\(\\s*["\`']${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["\`']`,
+          // Mac fork: a test that runs on one platform only is it.skipIf(...)("...").
+          `(it|test|describe)(\\.(each|skipIf|runIf)\\([^)]*\\))?\\(\\s*["\`']${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}["\`']`,
         )
         expect(inCall.test(text), `${r.id}: no test titled "${title}" in ${file}`).toBe(true)
         checked++

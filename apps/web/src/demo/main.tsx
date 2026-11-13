@@ -2,6 +2,11 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { App } from "../App"
 import "../styles.css"
+// Mac fork: the demo as it shows on a Mac, so the Mac's styles can be checked against sample data.
+import "../polish.css"
+import "../mac.css"
+import "../mac-standard.css"
+import { markPlatform } from "../lib/platform-mac"
 import { useStore } from "../store"
 import { type Case, health, pending, sessions } from "./data"
 
@@ -46,6 +51,7 @@ function load(c: Case) {
   }
 }
 
+markPlatform() // Mac fork
 const params = new URLSearchParams(location.search)
 const initial = (params.get("case") ?? "worst") as Case
 load(initial)

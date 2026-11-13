@@ -1,0 +1,657 @@
+/*
+ * Mac fork: Codehouse in the Mac's own design language, as an app that came with the Mac would look (owner, 12 Nov
+ * 2026: "Standard macOS", Mac only). Mail's sidebar, list and detail; System Settings' grouped sections; glass only
+ * where macOS 26 puts it: the sidebar, the menus and the passing notices. Everything here applies only under
+ * :root[data-platform="mac"], which lib/platform-mac.ts sets, so Windows is unchanged and upstream's styles.css is
+ * never edited. In Codehouse.app the window also gives the sidebar the Mac's own material (data-mac-vibrancy, set by
+ * packaging/mac/MainWindow.swift). See docs/mac.md.
+ *
+ * The meanings stay upstream's: amber only for what needs you, red for risk and errors, green for healthy, one
+ * accent for what you can act on. Risk is still a word, a number and a shape.
+ */
+
+/* ---------------------------------------------------------------- the palette */
+:root[data-platform="mac"] {
+  --c-bg: #ffffff;
+  --c-s1: #ffffff;
+  --c-s2: #f5f5f7;
+  --c-line: #e1e1e5;
+  --c-tx: #1d1d1f;
+  --c-mut: #6e6e73;
+  --c-acc: #0d6c76;
+  --c-acc-tx: #ffffff;
+  --c-hi: #fff1d6;
+  --c-hi-line: #a8650a;
+  --c-sev: #c4261d;
+  --c-ok: #1f7a3a;
+  --c-warn: #955800;
+  --c-sign: #ffb347;
+  --c-sign-tx: #2b1700;
+  --c-lit: #fff7e8;
+  --c-shell: #f5f5f7;
+  --c-shell-2: #e9e9ed;
+  --c-shell-line: #dcdce1;
+  --c-shell-tx: #1d1d1f;
+  --c-shell-mut: #6e6e73;
+  /* What shows through the sidebar in a browser; in the app the Mac's own sidebar material does. */
+  --mac-desk: linear-gradient(165deg, #dfe6f0 0%, #ece7ef 55%, #f2ebe1 100%);
+  --mac-glass: color-mix(in srgb, #f6f6f8 70%, transparent);
+  --mac-rim: rgb(255 255 255 / 0.85);
+  --mac-fill: color-mix(in srgb, var(--c-tx) 6%, transparent);
+  --mac-fill-2: color-mix(in srgb, var(--c-tx) 10%, transparent);
+  --mac-hair: color-mix(in srgb, var(--c-tx) 11%, transparent);
+  --mac-shadow: 0 10px 36px rgb(0 0 0 / 0.12), 0 1px 3px rgb(0 0 0 / 0.08);
+  --mac-ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+:root[data-platform="mac"][data-theme="dark"] {
+  --c-bg: #1e1e20;
+  --c-s1: #252528;
+  --c-s2: #2c2c30;
+  --c-line: #3a3a40;
+  --c-tx: #f5f5f7;
+  --c-mut: #a1a1a8;
+  --c-acc: #4ff0e0;
+  --c-acc-tx: #062a2a;
+  --c-hi: #3a2c10;
+  --c-hi-line: #ffcf80;
+  --c-sev: #ff8a80;
+  --c-ok: #8fd9a0;
+  --c-warn: #ffcf80;
+  --c-sign: #ffb347;
+  --c-sign-tx: #2b1700;
+  --c-lit: #2a2519;
+  --c-shell: #2a2a2d;
+  --c-shell-2: #36363b;
+  --c-shell-line: #404046;
+  --c-shell-tx: #f5f5f7;
+  --c-shell-mut: #a1a1a8;
+  --mac-desk: linear-gradient(165deg, #1b2333 0%, #2a2033 55%, #2d241d 100%);
+  --mac-glass: color-mix(in srgb, #2c2c31 62%, transparent);
+  --mac-rim: rgb(255 255 255 / 0.14);
+  --mac-shadow: 0 10px 36px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
+}
+
+/* --------------------------------------------------------------------- type */
+:root[data-platform="mac"] body {
+  font-size: 13px;
+}
+:root[data-platform="mac"] ::selection {
+  background: color-mix(in srgb, var(--c-acc) 28%, transparent);
+  color: inherit;
+}
+:root[data-platform="mac"] :is(h1, h2, h3, legend, .sign) {
+  font-weight: 700;
+}
+:root[data-platform="mac"] kbd {
+  border: 0;
+  border-radius: 5px;
+  padding: 0 5px;
+  background: var(--mac-fill);
+  color: var(--c-mut);
+  font: 500 11px/1.5 var(--font-ui);
+  letter-spacing: 0;
+}
+:root[data-platform="mac"] :focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--c-acc) 55%, transparent);
+  outline-offset: 1px;
+}
+
+/* ----------------------------------------------------------- buttons, fields */
+:root[data-platform="mac"] .btn {
+  min-height: 28px;
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--mac-fill);
+  box-shadow: inset 0 0 0 0.5px var(--mac-hair);
+  font: 500 13px var(--font-ui);
+  transition:
+    background-color 160ms var(--mac-ease),
+    transform 160ms var(--mac-ease);
+}
+:root[data-platform="mac"] .btn:hover {
+  background: var(--mac-fill-2);
+}
+:root[data-platform="mac"] .btn-primary {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  box-shadow: none;
+  font-weight: 600;
+}
+:root[data-platform="mac"] .btn-primary:hover {
+  background: var(--c-acc);
+  filter: brightness(1.08);
+}
+/* The deliberate choice (Allow once at high risk): outlined in the accent, never filled. */
+:root[data-platform="mac"] .btn-strong {
+  background: transparent;
+  color: var(--c-acc);
+  box-shadow: inset 0 0 0 1px var(--c-acc);
+  font-weight: 600;
+}
+:root[data-platform="mac"] .btn-strong:hover {
+  background: color-mix(in srgb, var(--c-acc) 9%, transparent);
+}
+:root[data-platform="mac"] .btn-deny {
+  background: color-mix(in srgb, var(--c-sev) 10%, transparent);
+  color: var(--c-sev);
+  box-shadow: inset 0 0 0 0.5px color-mix(in srgb, var(--c-sev) 45%, transparent);
+}
+:root[data-platform="mac"] .btn kbd {
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  color: inherit;
+}
+:root[data-platform="mac"] .field {
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 7px;
+  background: var(--c-s1);
+  font: 13px var(--font-ui);
+}
+:root[data-platform="mac"] .field:focus-visible {
+  outline: 0;
+  border-color: var(--c-acc);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-acc) 35%, transparent);
+}
+:root[data-platform="mac"] .panel {
+  border: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+:root[data-platform="mac"] .cmd {
+  border: 0;
+  border-radius: 10px;
+  box-shadow: none;
+  font-weight: 500;
+  font-size: 13px;
+}
+:root[data-platform="mac"] mark.seg {
+  border-bottom: 0;
+  border-radius: 4px;
+  padding: 0 3px;
+  background: color-mix(in srgb, var(--c-sign) 40%, transparent);
+}
+
+/* Risk: the same word, number and shape, in a capsule and the system's type. */
+:root[data-platform="mac"] .risk-badge {
+  border-radius: 999px;
+  padding: 1px 8px 1px 7px;
+  font: 600 12px/1.5 var(--font-ui);
+  letter-spacing: 0;
+}
+
+/* --------------------------------------------------------- tabs and menus */
+:root[data-platform="mac"] .tab {
+  margin: 0 2px 6px 0;
+  padding: 4px 12px;
+  border-bottom: 0;
+  border-radius: 8px;
+  font: 500 13px var(--font-ui);
+}
+:root[data-platform="mac"] .tab:hover {
+  background: var(--mac-fill);
+}
+:root[data-platform="mac"] .tab[aria-selected="true"] {
+  background: var(--mac-fill-2);
+  color: var(--c-tx);
+  font-weight: 600;
+}
+/* Menus and popovers are glass, as on macOS 26: the page shows, blurred, through them. */
+:root[data-platform="mac"] :is(.menu, .menu-shell) {
+  padding: 5px;
+  border: 0;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-s1) 78%, transparent);
+  color: var(--c-tx);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow:
+    inset 0 0.5px 0 var(--mac-rim),
+    0 0 0 0.5px var(--mac-hair),
+    var(--mac-shadow);
+}
+:root[data-platform="mac"] .menu-item {
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font: 13px var(--font-ui);
+}
+/* The Mac's menu highlight: the accent, with the label inverted. */
+:root[data-platform="mac"] :is(.menu, .menu-shell) .menu-item:is(:hover, :focus-visible) {
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+}
+:root[data-platform="mac"] :is(.menu, .menu-shell) .menu-item:is(:hover, :focus-visible) * {
+  color: inherit;
+}
+/* Dialogs and the palette: a sheet with rounded corners over a lighter dim. */
+:root[data-platform="mac"] .bg-black\/30 {
+  background: rgb(0 0 0 / 0.18);
+}
+:root[data-platform="mac"] .bg-black\/30 > * {
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 0.5px var(--mac-hair),
+    var(--mac-shadow);
+}
+/* Passing notices (Sonner): small glass panes. */
+:root[data-platform="mac"] [data-sonner-toast] {
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: color-mix(in srgb, var(--c-s1) 80%, transparent) !important;
+  color: var(--c-tx) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow:
+    inset 0 0.5px 0 var(--mac-rim),
+    0 0 0 0.5px var(--mac-hair),
+    var(--mac-shadow) !important;
+  font: 13px var(--font-ui) !important;
+}
+
+/* ----------------------------------------------------------------- the toolbar */
+:root[data-platform="mac"] .deck {
+  min-height: 44px;
+  gap: 10px;
+  padding: 4px 10px 4px 16px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-bg);
+  color: var(--c-tx);
+}
+:root[data-platform="mac"] .deck-brand strong {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0;
+  font-stretch: normal;
+}
+:root[data-platform="mac"] .deck-sub {
+  color: var(--c-mut);
+}
+:root[data-platform="mac"] .deck-claude {
+  border: 0;
+  border-radius: 999px;
+  padding: 0 7px;
+  background: var(--mac-fill);
+  font: 500 11px var(--font-ui);
+  letter-spacing: 0;
+}
+/* Each live session and each control is a glass capsule, as in a macOS 26 toolbar. */
+:root[data-platform="mac"] .deck-chip {
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c-s1);
+  box-shadow:
+    0 0 0 0.5px var(--mac-hair),
+    0 1px 2px rgb(0 0 0 / 0.08);
+  color: var(--c-tx);
+  font: 500 12.5px var(--font-ui);
+}
+:root[data-platform="mac"][data-theme="dark"] .deck-chip {
+  background: var(--c-s2);
+}
+:root[data-platform="mac"] .deck-chip:hover {
+  background: color-mix(in srgb, var(--c-tx) 4%, var(--c-s1));
+}
+:root[data-platform="mac"] .deck .btn {
+  border-radius: 999px;
+}
+/* Stop everything stays unmistakable: red, with its power mark and key, without the warning stripes. */
+:root[data-platform="mac"] .kill-switch {
+  min-height: 28px;
+  padding: 2px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-sev) 13%, var(--c-bg));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-sev) 55%, transparent);
+  color: var(--c-sev);
+  font: 600 13px var(--font-ui);
+}
+:root[data-platform="mac"] .kill-switch:hover {
+  background: color-mix(in srgb, var(--c-sev) 20%, var(--c-bg));
+}
+:root[data-platform="mac"] .kill-switch kbd {
+  background: color-mix(in srgb, var(--c-sev) 16%, transparent);
+  color: inherit;
+}
+:root[data-platform="mac"] :is(.deck-profile, .rail-profile) {
+  border-radius: 8px;
+}
+
+/* ----------------------------------------------------------------- the sidebar */
+/* It floats inside the window with rounded corners, as in macOS 26; behind it, the desktop (or, in a browser, a
+   stand-in for it), so the glass has something to be glass over. */
+:root[data-platform="mac"] .app-shell {
+  background: var(--mac-desk);
+}
+:root[data-platform="mac"] .app-shell > div:last-child {
+  background: var(--c-bg);
+}
+:root[data-platform="mac"] .rail.shell {
+  height: auto;
+  margin: 8px 0 8px 8px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--mac-glass);
+  -webkit-backdrop-filter: blur(30px) saturate(1.8);
+  backdrop-filter: blur(30px) saturate(1.8);
+  box-shadow:
+    inset 0 0.5px 0 var(--mac-rim),
+    inset 0 0 0 0.5px var(--mac-hair),
+    0 4px 18px rgb(0 0 0 / 0.08);
+  color: var(--c-shell-tx);
+}
+:root[data-platform="mac"] .rail-resizer {
+  left: calc(var(--rail-w, 272px) - 1px);
+}
+:root[data-platform="mac"] .rail-item {
+  min-height: 28px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  color: var(--c-shell-tx);
+  font: 13px var(--font-ui);
+}
+/* Sidebar symbols take the accent, as the Mac's own sidebars do. */
+:root[data-platform="mac"] .rail-item > :is(svg, span > svg):first-child,
+:root[data-platform="mac"] .rail-item-label > svg {
+  color: var(--c-acc);
+}
+:root[data-platform="mac"] .rail-item:hover {
+  background: var(--mac-fill);
+}
+:root[data-platform="mac"] .rail-item[aria-current="page"] {
+  background: var(--mac-fill-2);
+  box-shadow: none;
+  font-weight: 600;
+}
+/* Section names in the sidebar: small and bold, in sentence case, as macOS sets them. */
+:root[data-platform="mac"] .rail .uppercase {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  font-weight: 700;
+}
+:root[data-platform="mac"] .rail-icon {
+  border-radius: 7px;
+}
+:root[data-platform="mac"] .rail-icon:hover {
+  background: var(--mac-fill);
+}
+:root[data-platform="mac"] .sign-pill {
+  min-height: 30px;
+  border-radius: 8px;
+  background: var(--mac-fill);
+  font: 600 13px var(--font-ui);
+}
+:root[data-platform="mac"] .sign-pill .n {
+  border-radius: 999px;
+  background: var(--mac-fill-2);
+}
+:root[data-platform="mac"] .sign-pill[data-on] {
+  background: var(--c-sign);
+  color: var(--c-sign-tx);
+}
+:root[data-platform="mac"] .sign-pill[data-on] .n {
+  background: color-mix(in srgb, var(--c-sign-tx) 85%, transparent);
+  color: var(--c-sign);
+}
+/* Ask about code or Code: the Mac's segmented control. */
+:root[data-platform="mac"] .rail-switch {
+  padding: 2px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--mac-fill);
+}
+:root[data-platform="mac"] .rail-switch-option {
+  min-height: 26px;
+  border-radius: 7px;
+  color: var(--c-shell-tx);
+  font: 500 12.5px var(--font-ui);
+}
+:root[data-platform="mac"] .rail-switch-option[aria-checked="true"] {
+  background: var(--c-s1);
+  box-shadow:
+    0 0.5px 0 rgb(255 255 255 / 0.4) inset,
+    0 1px 3px rgb(0 0 0 / 0.14);
+  font-weight: 600;
+}
+:root[data-platform="mac"] .show-rail {
+  margin: 8px;
+}
+
+/* ------------------------------------------------------- the list of requests */
+:root[data-platform="mac"] .board-head {
+  border-bottom: 0;
+  font: 500 11.5px var(--font-ui);
+}
+:root[data-platform="mac"] .board-row {
+  width: calc(100% - 12px);
+  margin: 0 6px 2px;
+  border-bottom: 0;
+  border-radius: 10px;
+  font-family: var(--font-ui);
+  transition: background-color 160ms var(--mac-ease);
+}
+:root[data-platform="mac"] .board-row + .board-row,
+:root[data-platform="mac"] * + .board-row {
+  box-shadow: 0 -1px 0 var(--mac-hair);
+}
+:root[data-platform="mac"] .board-row[data-lit] {
+  background: transparent;
+}
+:root[data-platform="mac"] .board-row:hover {
+  background: var(--mac-fill);
+}
+:root[data-platform="mac"] .board-row[aria-current="true"] {
+  background: color-mix(in srgb, var(--c-acc) 14%, var(--c-s1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-acc) 40%, transparent);
+}
+:root[data-platform="mac"] .board-row[data-lit][aria-current="true"] {
+  background: color-mix(in srgb, var(--c-acc) 14%, var(--c-s1));
+}
+/* A new request's time fades in amber; the departures-board flip is upstream's world, not the Mac's. */
+:root[data-platform="mac"] .board-row[data-lit] .board-time {
+  animation: mac-lit 160ms var(--mac-ease) both;
+}
+@keyframes mac-lit {
+  from {
+    opacity: 0;
+  }
+}
+:root[data-platform="mac"] .board-time {
+  min-width: 48px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--mac-fill);
+  font: 600 13px var(--font-ui);
+}
+:root[data-platform="mac"] .board-row[data-lit] .board-time {
+  background: var(--c-sign);
+  color: var(--c-sign-tx);
+}
+
+/* ------------------------------------------------- the request, read as a pane */
+:root[data-platform="mac"] .pass {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+/* Only Severe keeps a frame, so a frame means Severe. */
+:root[data-platform="mac"] .pass[data-risk="severe"] {
+  border-radius: 14px;
+  outline: 2px solid var(--c-sev);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 1px var(--c-sev);
+}
+/* Where, Why and Status as System Settings' grouped rows. */
+:root[data-platform="mac"] .pass dl {
+  column-gap: 0;
+  row-gap: 0;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--c-s2);
+}
+:root[data-platform="mac"] .pass dl > :is(dt, dd) {
+  padding: 9px 0;
+}
+:root[data-platform="mac"] .pass dl > dd {
+  padding-left: 12px;
+}
+:root[data-platform="mac"] .pass dl > :is(dt, dd):nth-of-type(n + 2) {
+  box-shadow: 0 -1px 0 var(--mac-hair);
+}
+:root[data-platform="mac"] .pass-head {
+  margin: 0 20px;
+  padding: 14px 0 12px;
+  border-bottom: 1px solid var(--c-line);
+  border-radius: 0;
+  background: transparent;
+}
+/* The session, the rule and the wait are grouped rows on a Mac (ApprovalCard.tsx); the header keeps the state and
+   the risk. */
+:root[data-platform="mac"] .pass-head > span:not(.ml-auto) {
+  display: none;
+}
+:root[data-platform="mac"] .pass-head > .ml-auto {
+  margin-left: 0;
+}
+/* The note's square is the Severe shape; beside "Risk is high" it said the wrong band. The badge carries the shape. */
+:root[data-platform="mac"] .pass-alert-icon {
+  display: none;
+}
+:root[data-platform="mac"] .pass-state {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font: 600 11.5px/1.5 var(--font-ui);
+  letter-spacing: 0;
+}
+/* High risk's note: a rounded callout inside the pane, not a band across it. */
+:root[data-platform="mac"] .pass-alert {
+  margin: 14px 20px 0;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c-sev) 10%, var(--c-s1));
+  font-weight: 600;
+}
+:root[data-platform="mac"] .pass-cmd {
+  border: 0;
+  border-radius: 12px;
+  background: var(--c-s2);
+}
+:root[data-platform="mac"] .pass-cmd-head {
+  border-bottom: 0;
+  background: transparent;
+  font: 600 11px var(--font-ui);
+  letter-spacing: 0;
+}
+:root[data-platform="mac"] .pass-cmd .cmd {
+  background: transparent;
+}
+:root[data-platform="mac"] .pass-cmd > div:last-child {
+  border-top: 1px solid var(--mac-hair);
+}
+:root[data-platform="mac"] .pass-bar {
+  container-type: inline-size;
+  margin: 0 20px 20px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-s2);
+}
+/* 5. One row of decisions where it fits: the secondary buttons drop their key hints first (their keys still work,
+   and the shortcut sheet lists them). Deny and Allow once keep theirs. */
+/* The decisions on one row, Allow once at its end; Remember and Stop session on a second row of their own, so the
+   bar never pushes Allow once under the others. The line break is an empty flex line between the two groups. */
+:root[data-platform="mac"] .pass-actions::after {
+  content: "";
+  order: 1;
+  flex-basis: 100%;
+  height: 0;
+}
+:root[data-platform="mac"] .pass-actions > [aria-keyshortcuts="r"],
+:root[data-platform="mac"] .pass-actions > [aria-keyshortcuts="Shift+S"] {
+  order: 2;
+}
+@container (max-width: 980px) {
+  :root[data-platform="mac"] .pass-actions .btn:not(.pass-allow, :first-child) kbd {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------ Settings as grouped sections */
+:root[data-platform="mac"] .sheet fieldset {
+  border-top: 1px solid var(--c-line);
+}
+:root[data-platform="mac"] .sheet fieldset > legend {
+  font-size: 15px;
+}
+
+/* ------------------------------------------- in Codehouse.app: the Mac's glass */
+/* The window puts the Mac's own sidebar material behind the page (MainWindow.swift), so the sidebar column shows
+   the desktop, blurred, through it. Only the main window does; the session windows and the quick prompt paint as
+   in a browser. */
+:root[data-platform="mac"][data-mac-vibrancy],
+:root[data-platform="mac"][data-mac-vibrancy] body,
+:root[data-platform="mac"][data-mac-vibrancy] #root,
+:root[data-platform="mac"][data-mac-vibrancy] .app-shell {
+  background: transparent;
+}
+:root[data-platform="mac"][data-mac-vibrancy] .rail.shell {
+  background: color-mix(in srgb, var(--c-shell) 40%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* The toolbar is the title bar (data-mac-titlebar, MainWindow.swift): the page runs under a transparent compact
+   toolbar, so whatever is at the top takes the title bar's height and starts after the traffic lights. Clicks
+   there reach the page; an empty part of the toolbar drags the window. */
+:root[data-platform="mac"][data-mac-titlebar] .deck,
+:root[data-platform="mac"][data-mac-titlebar] .update-bar {
+  min-height: var(--mac-titlebar, 40px);
+  padding-left: var(--mac-lights, 84px);
+}
+:root[data-platform="mac"][data-mac-titlebar] .update-bar + .deck {
+  padding-left: 16px;
+}
+:root[data-platform="mac"][data-mac-titlebar] .deck {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+/* ----------------------------------------- the Mac's own accessibility settings */
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-platform="mac"] .rail.shell,
+  :root[data-platform="mac"][data-mac-vibrancy] .rail.shell {
+    background: var(--c-shell);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-platform="mac"] :is(.menu, .menu-shell),
+  :root[data-platform="mac"] [data-sonner-toast] {
+    background: var(--c-s1) !important;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-platform="mac"] .app-shell {
+    background: var(--c-shell);
+  }
+}
+@media (prefers-contrast: more) {
+  :root[data-platform="mac"] {
+    --c-line: #8e8e93;
+    --mac-hair: color-mix(in srgb, var(--c-tx) 45%, transparent);
+    --c-mut: #48484d;
+  }
+  :root[data-platform="mac"][data-theme="dark"] {
+    --c-line: #8e8e93;
+    --c-mut: #d1d1d6;
+  }
+  :root[data-platform="mac"] .rail.shell {
+    background: var(--c-shell);
+    box-shadow: inset 0 0 0 1px var(--c-line);
+  }
+}

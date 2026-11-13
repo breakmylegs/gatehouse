@@ -1,4 +1,5 @@
 import { useSyncExternalStore, type RefObject } from "react"
+import { voiceCopy } from "../lib/platform-mac" // Mac fork
 import { inShell, tellShell } from "../lib/shell"
 import { Icon } from "./Icon"
 
@@ -47,8 +48,8 @@ export function VoiceButton({
     <button
       type="button"
       className="btn composer-icon"
-      aria-label="Speak (Windows voice typing)"
-      title="Speak: Windows types what you say here (Win+H)"
+      aria-label={voiceCopy().label} // Mac fork
+      title={voiceCopy().title}
       disabled={disabled}
       onClick={() => {
         // Windows types into whatever has the focus, so the prompt box takes it first.
@@ -64,25 +65,15 @@ export function VoiceButton({
 /** Settings: the switch for the microphone button. */
 export function VoiceSetting() {
   const on = useVoiceTyping()
-  if (!inShell())
-    return (
-      <p className="m-0 text-xs text-mut">
-        Voice typing is part of the Codehouse window, so there is no microphone button in a browser.
-        Win+H still starts Windows voice typing in any text box.
-      </p>
-    )
+  if (!inShell()) return <p className="m-0 text-xs text-mut">{voiceCopy().browser}</p> // Mac fork
   return (
     <>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={on} onChange={(e) => setVoiceTyping(e.target.checked)} />
         <span>Show a microphone beside the prompt box</span>
       </label>
-      <p className="m-0 text-xs text-mut">
-        It starts Windows voice typing in the prompt box (the same as Win+H), and Windows types what
-        you say for you to read before you send it. Windows may send your voice to Microsoft to be
-        recognised, so check your organisation allows it before you switch this on. Codehouse itself
-        never hears or keeps any audio.
-      </p>
+      {/* Mac fork */}
+      <p className="m-0 text-xs text-mut">{voiceCopy().setting}</p>
     </>
   )
 }

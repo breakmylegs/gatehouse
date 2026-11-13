@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { inlineScriptArgs, powerShellExe } from "@gatehouse/policy"
+import { keychainProtector } from "./protector-mac.js" // Mac fork
 
 /** Keeps secrets off the disk in the clear. On Windows this is DPAPI for the current user. */
 export interface Protector {
@@ -109,6 +110,7 @@ export function sealerFor(o: {
   if (o.given) return o.given
   const exe = o.helper()
   if (exe) return new HelperProtector(exe)
+  if ((o.platform ?? process.platform) === "darwin") return keychainProtector() // Mac fork
   return (o.platform ?? process.platform) === "win32" ? new DpapiProtector() : new PlainProtector()
 }
 

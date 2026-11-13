@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { onMac } from "../lib/platform-mac" // Mac fork
 
 interface SlackStatus {
   enabled: boolean
@@ -233,7 +234,7 @@ export function SlackPanel() {
         </p>
       ) : null}
       <p className="m-0 text-xs text-mut">
-        The tokens are kept encrypted on this computer with Windows' own protection, never in the
+        {onMac("The tokens are kept encrypted on this computer with Windows' own protection,", "The tokens are kept encrypted on this Mac with a key in your login Keychain,")} never in the
         settings file. Slack can read what it carries, so a message shows only the project, tool,
         risk and a short redacted summary. Each button works once, and Severe requests always need
         you at the desk.

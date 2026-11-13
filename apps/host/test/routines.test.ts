@@ -12,6 +12,9 @@ import {
   type Routine,
 } from "../src/routines.js"
 
+// Mac fork: a full folder in this system's own form (C:\dev\shop is /dev/shop on a Mac).
+const F = (p: string) => (process.platform === "win32" ? p : p.replace(/^[A-Za-z]:/, "").replace(/\\/g, "/"))
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-routines-"))
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
 // Wednesday 4 November 2026, local time.
@@ -19,7 +22,7 @@ const at = (h: number, m: number, day = 4) => new Date(2026, 10, day, h, m)
 const morning: Routine = {
   id: "r1",
   name: "Triage",
-  folder: "C:/dev/shop",
+  folder: F("C:/dev/shop"),
   prompt: "Look at the new issues and sort them.",
   time: "07:30",
   days: ["mon", "tue", "wed", "thu", "fri"],

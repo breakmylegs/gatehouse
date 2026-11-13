@@ -297,10 +297,22 @@ export async function listCheckpoints(cwd: string, sessionId?: string): Promise<
     scope,
   ])
   if (out === "") return []
-  return out.split("\n").map((line) => {
-    const [ref = "", commit = "", createdAt = "", subject = ""] = line.split("\t")
-    return { ref, commit, createdAt, label: subject.replace(/^gatehouse checkpoint: /, "") }
-  })
+  return out
+    .split("\n")
+    .map((line) => {
+      const [ref = "", commit = "", createdAt = "", subject = ""] = line.split("\t")
+      return { ref, commit, createdAt: stampedAt(ref) ?? createdAt, label: subject.replace(/^gatehouse checkpoint: /, "") }
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+/**
+ * When a checkpoint was made, to the millisecond, from its ref's name (`stamp`). Git's own date is to the second, so
+ * a checkpoint made just after some edits, in the same second, read as made before them, and a rebuild started from it.
+ */
+function stampedAt(ref: string): string | undefined {
+  const m = /\/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})Z(?:-\d+)?$/.exec(ref)
+  return m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}Z` : undefined
 }
 
 export type FileChange = "added" | "modified" | "deleted"

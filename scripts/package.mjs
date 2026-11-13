@@ -41,7 +41,9 @@ const run = (cmd, a, opts = {}) => {
   if (r.status !== 0) throw new Error(`${cmd} ${a.join(" ")} failed (${r.status})`)
 }
 
-if (process.platform !== "win32") throw new Error("Codehouse.exe is built for Windows.")
+// Mac fork: --stage-only builds the app folder alone, on any system; scripts/package-mac.mjs puts it in Codehouse.app.
+if (process.platform !== "win32" && !has("--stage-only"))
+  throw new Error("Codehouse.exe is built for Windows.")
 const major = Number(process.versions.node.split(".")[0])
 if (major < 22)
   throw new Error(`Node ${process.versions.node} is too old: Codehouse needs 22 or newer.`)
@@ -182,6 +184,12 @@ if (!exeOnly) {
   // The Host, the Approver and the Relay built into one file each, so a start reads a handful of files.
   say("building the Host, the Approver and the Relay into single files")
   run(process.execPath, [path.join(root, "scripts", "bundle.mjs"), app], { cwd: root })
+
+  // Mac fork: the Mac app brings its own Node and window (scripts/package-mac.mjs).
+  if (has("--stage-only")) {
+    say(`staged ${app}`)
+    process.exit(0)
+  }
 
   say("copying Node")
   fs.mkdirSync(path.join(dest, "runtime"), { recursive: true })

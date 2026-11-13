@@ -81,7 +81,7 @@ verified.json says what both checks found when the export was made.
 export function runPowerShellVerifier(script: string, dir: string): Promise<{ ok: boolean | null; problems?: unknown; error?: string }> {
   return new Promise((resolve) => {
     execFile(
-      "powershell.exe",
+      process.platform === "win32" ? "powershell.exe" : "pwsh", // Mac fork: PowerShell 7 on a Mac, when installed
       ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", script, "-Dir", dir, "-Json"],
       { windowsHide: true, timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
       (_e, stdout) => {

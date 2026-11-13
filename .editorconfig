@@ -1,0 +1,15 @@
+# One repository, edited on Windows and on a Mac: every editor writes what .gitattributes keeps (LF).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+indent_style = space
+indent_size = 2
+
+[*.{cs,ps1,psm1}]
+indent_size = 4
+
+[*.md]
+trim_trailing_whitespace = false

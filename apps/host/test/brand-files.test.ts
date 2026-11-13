@@ -65,6 +65,7 @@ describe("the tray and the installer", () => {
     const iss = fs.readFileSync(path.join(REPO, "packaging", "installer.iss"), "utf8")
     const named = [...iss.matchAll(/^Wizard(?:Small)?ImageFile=(.+)$/gm)].map((m) => m[1]!.trim())
     expect(named).toEqual(["brand\\installer-side.png", "brand\\installer-small.png"])
-    for (const f of named) expect(fs.existsSync(path.join(REPO, "packaging", f)), f).toBe(true)
+    // Mac fork: the installer names them the Windows way; split on its backslashes so a Mac finds them too.
+    for (const f of named) expect(fs.existsSync(path.join(REPO, "packaging", ...f.split("\\"))), f).toBe(true)
   })
 })

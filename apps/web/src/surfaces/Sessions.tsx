@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { cleanName, projectName } from "@gatehouse/shared/project-name"
 import { money } from "../lib/format"
+import { systemName } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { api } from "../lib/api"
 import {
@@ -113,8 +114,8 @@ export function StartProgress({
         <span className="basis-full pl-[19px] text-[13px] text-mut">
           {note ??
             (chat
-              ? "The first chat after Codehouse is installed or updated can take a minute or more while Windows checks the program."
-              : "Starting runs Claude Code itself. The first start after Codehouse is installed or updated can take a minute or more while Windows checks the program.")}
+              ? `The first chat after Codehouse is installed or updated can take a minute or more while ${systemName()} checks the program.` // Mac fork: systemName
+              : `Starting runs Claude Code itself. The first start after Codehouse is installed or updated can take a minute or more while ${systemName()} checks the program.`)}
         </span>
       ) : null}
     </div>

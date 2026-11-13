@@ -8,6 +8,7 @@ import { SastCommitGuard } from "./sast.js"
 import { InstructionPins } from "./instruction-pins.js"
 import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
+import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
@@ -33,10 +34,12 @@ import { runHeldOutFor } from "./heldout-session.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
 import { helperPickers, pickFolderWithWindows, saveAsWithWindows } from "./folder-picker.js"
+import { pickFolderWithMac, saveAsWithMac } from "./folder-picker-mac.js" // Mac fork
 import { findCodehouseHelper } from "./win-helper.js"
 import { ChatStore } from "./chat/db.js"
 import { ChatRecorder } from "./chat/recorder.js"
 import { findEdge, hasAppLink, realLauncher } from "./chat/handoff.js"
+import { macLauncher } from "./chat/handoff-mac.js" // Mac fork
 import { DEFAULT_SEED } from "./chat/continue.js"
 import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
@@ -365,7 +368,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // C-004: above the commit charge in Settings, nothing heavy of Codehouse's own starts. Read through the helper, found
   // when first needed (below); a reading it cannot have refuses nothing.
   const governor = new MemoryGovernor({
-    read: helperReader(() => helper()),
+    read: process.platform === "darwin" ? macMemoryReader() : helperReader(() => helper()), // Mac fork
     point: () => memoryPoint(config.memoryGovernor),
     audit,
     log,
@@ -691,6 +694,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
   const phone = new PhoneService({
     store: phoneStore,
+    // Mac fork: Settings, Phone and notifications can keep the phone to decisions only (live, read each time).
+    notifyAllowed: () => config.phoneAlerts !== "decisions",
     broker,
     kill,
     // D-025: anything signed on the phone starts the dead-man timers again.
@@ -814,7 +819,8 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   const updates = new UpdateService({
     installDir,
-    sourceVersion: installDir ? "0.0.0-source" : sourceVersion(),
+    // Mac fork: Codehouse.app says its own version (packaging/mac/Host.swift).
+    sourceVersion: installDir ? "0.0.0-source" : (env.GATEHOUSE_MAC_APP_VERSION ?? sourceVersion()),
     dir: path.join(gatehouseDataDir(env), "updates"),
     source: updateSource,
     ...(testKey ? { keys: [testKey] } : {}),
@@ -1183,10 +1189,12 @@ export function createHost(opts: HostOptions = {}): Host {
       phone,
       usage,
       pickFolder: (start) => {
+        if (process.platform === "darwin") return pickFolderWithMac(start) // Mac fork
         const exe = helper()
         return exe ? helperPickers(exe).pickFolder(start) : pickFolderWithWindows(start)
       },
       saveAs: (name) => {
+        if (process.platform === "darwin") return saveAsWithMac(name) // Mac fork
         const exe = helper()
         return exe ? helperPickers(exe).saveAs(name) : saveAsWithWindows(name)
       },
@@ -1272,7 +1280,7 @@ export function createHost(opts: HostOptions = {}): Host {
       chatHandoff: {
         store: chatStore,
         settings: () => config.chatHandoff ?? {},
-        launcher: realLauncher(helper),
+        launcher: process.platform === "darwin" ? macLauncher : realLauncher(helper), // Mac fork
         findEdge: () => findEdge(),
         hasAppLink: () => hasAppLink(),
         audit,

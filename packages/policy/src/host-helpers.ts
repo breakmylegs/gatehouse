@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
-import { writeFileAtomic } from "@gatehouse/shared/node"
+import { isFullFolder, writeFileAtomic } from "@gatehouse/shared/node" // Mac fork: isFullFolder
 import { analyse, FILE_TOOLS, SHELL_TOOLS } from "./analyse.js"
 import type { PolicyEngine } from "./engine.js"
 import { checkCallFloor, type FloorHit } from "./floor.js"
@@ -127,7 +127,7 @@ export async function checkRemember(
     if (features.targets.length !== 1 || !target) {
       return { ok: false, reason: "Only a single file path can be remembered." }
     }
-    if (target.unc || target.device || !/^[a-zA-Z]:[\\/]/.test(target.abs)) {
+    if (target.unc || target.device || !isFullFolder(target.abs)) { // Mac fork: a Mac's /Users/... too
       return { ok: false, reason: "Only a local path on a drive can be remembered." }
     }
     return {

@@ -68,6 +68,11 @@ export interface PhoneServiceDeps {
   now?: () => number
   fetchImpl?: typeof fetch
   /**
+   * Mac fork (owner, 12 Nov): false when the phone should hear only of decisions waiting for it (Settings, Phone
+   * and notifications). Read at each notification. Requests are sent whatever it says: they are the decisions.
+   */
+  notifyAllowed?: () => boolean
+  /**
    * G32: the open sessions a signed phone message or Interrupt may reach. Absent: the phone can only decide. A session
    * not open, or not shown to the phone (an evaluation), is refused.
    */
@@ -447,6 +452,7 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     kind: "stop" | "idle" | "notify" | "info",
     message: { title: string; body: string; project: string },
   ): Promise<void> {
+    if (this.#d.notifyAllowed && !this.#d.notifyAllowed()) return // Mac fork: decisions only
     const phones = this.#d.store.phones()
     if (!this.#d.store.relay() || phones.length === 0) return
     const client = await this.#authed()

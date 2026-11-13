@@ -4,11 +4,22 @@ import { composeIn, quoteOutput } from "../lib/compose"
 import { send, useStore } from "../store"
 
 /**
- * Your own terminal in a session's folder: type a PowerShell command, see what it prints. One command runs at a
- * time; Up and Down bring back earlier ones. It is not Claude's: commands here do not pass the Approver, the same as
- * a PowerShell window you open yourself, and each is recorded in the audit log.
+ * Mac fork: the shell the Host runs your commands in: zsh on a Mac, PowerShell on Windows. The page is always on the same
+ * computer as the Host, so the browser can say which.
+ */
+export function terminalShell(userAgent = globalThis.navigator?.userAgent ?? "") {
+  return /Macintosh|Mac OS X/.test(userAgent)
+    ? { name: "zsh", window: "a Terminal window" }
+    : { name: "PowerShell", window: "a PowerShell window" }
+}
+
+/**
+ * Your own terminal in a session's folder: type a command, see what it prints. One command runs at a time; Up and
+ * Down bring back earlier ones. It is not Claude's: commands here do not pass the Approver, the same as a terminal
+ * window you open yourself, and each is recorded in the audit log.
  */
 export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: string }) {
+  const shell = terminalShell()
   const term = useStore((s) => s.term[sessionId])
   const termAppend = useStore((s) => s.termAppend)
   const termStarted = useStore((s) => s.termStarted)
@@ -55,7 +66,10 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
     const text = command.trim()
     if (!text || running || busy) return
     setBusy(true)
-    termAppend(sessionId, { stream: "cmd", text: `PS ${cwd}> ${text}\n` })
+    termAppend(sessionId, {
+      stream: "cmd",
+      text: shell.name === "zsh" ? `${cwd} % ${text}\n` : `PS ${cwd}> ${text}\n`,
+    })
     setHistory((h) => (h.at(-1) === text ? h : [...h, text].slice(-100)))
     setBack(-1)
     setCommand("")
@@ -87,7 +101,7 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
       <pre ref={out} className="term-out" tabIndex={0} aria-label="Terminal output" aria-live="off">
         {chunks.length === 0 ? (
           <span className="text-mut">
-            Commands run with PowerShell in {cwd}. Output appears here.
+            Commands run with {shell.name} in {cwd}. Output appears here.
           </span>
         ) : (
           chunks.map((c, i) => (
@@ -99,7 +113,7 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
       </pre>
       <form onSubmit={run} className="flex items-center gap-2">
         <label htmlFor={id} className="mono shrink-0 text-xs text-mut">
-          PS&gt;
+          {shell.name === "zsh" ? "%" : "PS>"}
         </label>
         <input
           id={id}
@@ -137,10 +151,10 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
         </button>
       </form>
       <p className="m-0 text-[12.5px] text-mut">
-        Your own commands, one at a time. They do not go through the Approver, like a PowerShell
-        window you open yourself, and each is recorded in the audit log. A program that asks a
-        question as it runs gets no answer: Stop ends it. Ask Claude about this puts what you
-        selected, or the last command and its output, in the prompt box for your question.
+        Your own commands, one at a time. They do not go through the Approver, like {shell.window}{" "}
+        you open yourself, and each is recorded in the audit log. A program that asks a question as
+        it runs gets no answer: Stop ends it. Ask Claude about this puts what you selected, or the
+        last command and its output, in the prompt box for your question.
       </p>
     </div>
   )

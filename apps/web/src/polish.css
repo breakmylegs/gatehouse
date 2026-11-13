@@ -1,0 +1,48 @@
+/*
+ * Mac fork: interface fixes from the design audit (Emil Kowalski's design engineering and Apple's interface
+ * guidelines), on every platform. Loaded after styles.css so upstream's file is never edited, which keeps its changes
+ * merging cleanly (see docs/mac.md).
+ */
+
+/*
+ * A button answers the press, not only the release: it gives a little under the pointer. Upstream's buttons changed
+ * colour on hover but did nothing on press. transform is listed with upstream's own transitions, which this rule
+ * replaces, and only where motion is welcome.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .btn {
+    transition:
+      background-color 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.16s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .btn:active:not(:disabled, [aria-disabled="true"]) {
+    transform: scale(0.97);
+  }
+  /* Settings, Appearance, Motion: Reduce means no movement, whatever the system says. */
+  :root[data-motion="reduced"] .btn:active {
+    transform: none;
+  }
+
+  /* The load bars filled over 0.4s: under 300ms keeps a figure that is changing from looking behind. */
+  .load-bar > span {
+    transition: width 0.24s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+/*
+ * Increased contrast (macOS Accessibility, Display; Windows contrast themes): lines strong enough to see the edges of
+ * cards, fields and the sidebar. Upstream had no answer to prefers-contrast.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --c-line: #64748b;
+    --c-shell-line: #64748b;
+    --c-mut: #334155;
+  }
+  :root[data-theme="dark"] {
+    --c-line: #8b95a7;
+    --c-shell-line: #8b95a7;
+    --c-mut: #c3c9d4;
+  }
+}

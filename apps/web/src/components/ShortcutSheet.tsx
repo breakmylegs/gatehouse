@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 import { BINDINGS } from "../lib/commands"
+import { isMac, keyLabel } from "../lib/platform-mac" // Mac fork
+
+// Mac fork: Command-comma opens Settings, as in every Mac app (App.tsx).
+const MAC_BINDINGS = isMac() ? [{ keys: "Ctrl ,", label: "Settings" }] : []
 
 /**
  * Ctrl+/ lists every key Codehouse answers to, from the same list the palette shows its keys from (owner's plan, W1-05).
@@ -58,10 +62,10 @@ export function ShortcutSheet() {
       >
         <h2 className="m-0 text-[17px]">Keyboard shortcuts</h2>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-          {BINDINGS.map((b) => (
+          {[...BINDINGS, ...MAC_BINDINGS].map((b) => (
             <div key={b.keys} className="contents">
               <dt>
-                <kbd>{b.keys}</kbd>
+                <kbd>{keyLabel(b.keys)}</kbd>
               </dt>
               <dd className="m-0">{b.label}</dd>
             </div>

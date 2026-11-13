@@ -1,13 +1,13 @@
 # Critical system paths. The floor covers Edit, Write, MultiEdit, Bash and PowerShell only (spec rule critical-paths).
-- { t: Write, p: "C:/Windows/System32/x.dll", o: deny, r: critical-paths }
-- { t: Edit, p: 'C:\Windows\win.ini', o: deny, r: critical-paths }
-- { t: MultiEdit, p: "C:/Program Files/x/y.txt", o: deny, r: critical-paths }
-- { t: Write, p: "C:/Program Files (x86)/a/b.txt", o: deny, r: critical-paths }
-- { t: Write, p: "c:/WINDOWS/x", o: deny, r: critical-paths }
-- { t: Edit, p: "C:/Windows", o: deny, r: critical-paths }
-- { t: Write, p: "${WS}/../../../../../../../../../../../../Windows/System32/x", o: deny, r: critical-paths }
+- { t: Write, p: "C:/Windows/System32/x.dll", o: deny, r: critical-paths, needs: windows }
+- { t: Edit, p: 'C:\Windows\win.ini', o: deny, r: critical-paths, needs: windows }
+- { t: MultiEdit, p: "C:/Program Files/x/y.txt", o: deny, r: critical-paths, needs: windows }
+- { t: Write, p: "C:/Program Files (x86)/a/b.txt", o: deny, r: critical-paths, needs: windows }
+- { t: Write, p: "c:/WINDOWS/x", o: deny, r: critical-paths, needs: windows }
+- { t: Edit, p: "C:/Windows", o: deny, r: critical-paths, needs: windows }
+- { t: Write, p: "${WS}/../../../../../../../../../../../../Windows/System32/x", o: deny, r: critical-paths, needs: windows }
 - { t: Bash, cmd: "cat C:/Windows/win.ini", o: deny, r: critical-paths }
-- { t: Bash, cmd: "ls /c/Windows", o: deny, r: critical-paths }
+- { t: Bash, cmd: "ls /c/Windows", o: deny, r: critical-paths, needs: windows }
 - { t: Bash, cmd: "cat 'C:\\Windows\\win.ini'", o: deny, r: critical-paths }
 - { t: Bash, cmd: "git status C:/Windows", o: deny, r: critical-paths }
 - { t: PowerShell, cmd: "Get-Content C:\\Windows\\win.ini", o: deny, r: critical-paths }

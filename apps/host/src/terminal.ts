@@ -91,6 +91,8 @@ export class TerminalManager extends EventEmitter {
       cwd,
       env: sanitiseEnv(this.#deps.env ?? process.env),
       windowsHide: true,
+      // Mac fork: away from Windows the command leads its own process group, so Stop can end everything it started.
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     })
     const run: Running = { runId, child, bytes: 0 }
@@ -130,9 +132,17 @@ export class TerminalManager extends EventEmitter {
   }
 }
 
-function defaultShell(): { file: string; args: (c: string) => string[] } {
+/**
+ * pwsh or Windows PowerShell on Windows. On a Mac, zsh, its own shell, with -f in place of -NoProfile so no startup
+ * file runs; the Host's PATH still applies. Elsewhere pwsh, as before.
+ */
+export function defaultShell(platform: NodeJS.Platform = process.platform): {
+  file: string
+  args: (c: string) => string[]
+} {
+  if (platform === "darwin") return { file: "/bin/zsh", args: (c) => ["-f", "-c", c] } // Mac fork
   const args = (c: string) => ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", c]
-  return { file: process.platform === "win32" ? pwshOrWindowsPowerShell() : "pwsh", args }
+  return { file: platform === "win32" ? pwshOrWindowsPowerShell() : "pwsh", args }
 }
 
 let shellFile: string | undefined
@@ -152,5 +162,11 @@ function killTree(child: ChildProcess): void {
       { windowsHide: true },
       () => undefined,
     )
-  else child.kill("SIGKILL")
+  else
+    try {
+      // Mac fork: the whole group the command leads (it was started detached), not only the shell.
+      process.kill(-child.pid, "SIGKILL")
+    } catch {
+      child.kill("SIGKILL")
+    }
 }

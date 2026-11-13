@@ -8,7 +8,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import type { FastifyInstance } from "fastify"
-import { writeFileAtomic } from "@gatehouse/shared/node"
+import { folderExample, isFullFolder, writeFileAtomic } from "@gatehouse/shared/node" // Mac fork: folders
 import type { HostAudit } from "./hostaudit.js"
 
 export const COLUMNS = ["todo", "running", "review", "done"] as const
@@ -37,8 +37,8 @@ export function checkCard(c: Partial<Card>): Pick<Card, "title" | "prompt" | "fo
   if (!title || title.length > 120)
     throw new BoardError("A card needs a title of up to 120 characters.")
   if (prompt.length > 8000) throw new BoardError("A card's prompt is up to 8,000 characters.")
-  if (folder && !/^[A-Za-z]:[\\/]/.test(folder))
-    throw new BoardError("A card's folder is a full path, such as C:\\dev\\shop.")
+  if (folder && !isFullFolder(folder)) // Mac fork: a Mac's /Users/... too
+    throw new BoardError(`A card's folder is a full path, such as ${folderExample("shop")}.`)
   return { title, prompt, folder }
 }
 

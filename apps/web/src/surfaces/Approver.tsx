@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { RiskBadge } from "../components/RiskBadge"
 import { api } from "../lib/api"
+import { onMac } from "../lib/platform-mac" // Mac fork
 import { useStore } from "../store"
 
 interface ApproverInfo {
@@ -129,9 +130,8 @@ export function Approver() {
           )}
           {!info.pwsh.running ? (
             <p className="m-0 text-mut">
-              Without the PowerShell parser, every PowerShell command waits for you. It uses
-              PowerShell 7 when installed and the Windows PowerShell that comes with Windows
-              otherwise, so if it stays off, PowerShell may be limited on this computer.
+              Without the PowerShell parser, every PowerShell command waits for you.{" "}
+              {onMac("It uses PowerShell 7 when installed and the Windows PowerShell that comes with Windows otherwise, so if it stays off, PowerShell may be limited on this computer.", "It needs PowerShell 7 (pwsh), which a Mac does not have unless you install it. Shell commands are checked as usual.")}
             </p>
           ) : null}
           {info.supervised ? (

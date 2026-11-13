@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { z } from "zod"
 import { gatehouseDataDir } from "./paths.js"
+import { MAC_PROJECTS_FOLDER } from "./folders-mac.js" // Mac fork
 
 /** How often Codehouse looks for a new version, in minutes. 0 means never. */
 /** A folder on a drive, below its root, outside Windows and Program Files. */
@@ -72,8 +73,10 @@ function build(loose: boolean) {
       .string()
       .max(240)
       .regex(
-        PROJECTS_FOLDER,
-        "must be a full folder path, not a drive, a network path or a Windows folder",
+        process.platform === "darwin" ? MAC_PROJECTS_FOLDER : PROJECTS_FOLDER, // Mac fork
+        process.platform === "darwin"
+          ? "must be a full folder path such as /Users/you/dev, not / or a system folder"
+          : "must be a full folder path, not a drive, a network path or a Windows folder",
       )
       .optional(),
     /** Replaces the quiet hours in the rules file. Absent means use the rules file. */
@@ -90,6 +93,12 @@ function build(loose: boolean) {
     globalInstructions: z.string().max(8000).optional(),
     /** Keep the computer awake while a session works (owner, 4 Nov). Absent is on; false turns it off. */
     keepAwake: z.boolean().optional(),
+    /**
+     * Mac fork (owner, 12 Nov): what the phone is told through the Relay. "decisions": only requests waiting for you
+     * (permissions, plans, questions), as ntfy is; sessions finishing, notes from Claude, the digest and alerts are
+     * not sent. Absent or "all": everything, as before.
+     */
+    phoneAlerts: z.enum(["all", "decisions"]).optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
     /** Continue locally (CH-07): the turns kept word for word, and the characters of history before the rest is summed up. */

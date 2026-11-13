@@ -2,7 +2,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterAll, describe, expect, it } from "vitest"
-import { TerminalError, TerminalManager } from "../src/terminal.js"
+import { defaultShell, TerminalError, TerminalManager } from "../src/terminal.js"
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-term-"))
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
@@ -42,7 +42,8 @@ describe("the terminal pane", () => {
     const s = setup()
     await s.t.run("s1", dir, "console.log(process.cwd()); console.error('warned'); process.exit(3)")
     await s.done()
-    expect(s.out.join("")).toContain(`out:${dir}`)
+    // Mac fork: a Mac's temporary folder is also /private/var/..., which is what the process says it is in.
+    expect([dir, fs.realpathSync(dir)].some((d) => s.out.join("").includes(`out:${d}`))).toBe(true)
     expect(s.out.join("")).toContain("err:warned")
     expect(s.exits).toEqual([expect.objectContaining({ code: 3 })])
     expect(s.t.isRunning("s1")).toBe(false)
@@ -100,5 +101,12 @@ describe("the terminal pane", () => {
     await s.t.run("s1", dir, "console.log('key=' + (process.env.ANTHROPIC_API_KEY ?? 'none'))")
     await s.done()
     expect(s.out.join("")).toContain("key=none")
+  })
+
+  it("uses zsh on a Mac, with no startup files, and PowerShell on Windows", () => {
+    const mac = defaultShell("darwin")
+    expect(mac.file).toBe("/bin/zsh")
+    expect(mac.args("ls -la")).toEqual(["-f", "-c", "ls -la"])
+    expect(defaultShell("win32").args("dir")).toContain("-NoProfile")
   })
 })

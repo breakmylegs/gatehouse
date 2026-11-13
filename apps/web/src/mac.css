@@ -1,0 +1,40 @@
+/*
+ * Mac fork: the interface on a Mac. Only applies under :root[data-platform="mac"], which lib/platform-mac.ts sets, so
+ * Windows is unchanged. Loaded after styles.css, so upstream's file is never edited for the Mac (see docs/mac.md).
+ */
+
+/*
+ * The Mac's own type: SF Pro for the interface and SF Mono for code. Upstream names Segoe UI and Cascadia Mono, which
+ * a Mac does not have; its fallbacks were system-ui (fine) and ui-monospace, which only Safari knows, so Chrome fell
+ * to its generic monospace. The system font brings Apple's optical sizing and tracking with it, so no letter-spacing
+ * is set here.
+ */
+:root[data-platform="mac"] {
+  --font-ui: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-sign: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-code: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+}
+/* Upstream narrows the page title for Segoe UI Variable's width axis; on SF Pro that picks a condensed cut. */
+:root[data-platform="mac"] h1 {
+  font-stretch: normal;
+}
+
+/*
+ * The Mac's own scrollbars: thin ones that show while you scroll and fade after. Upstream's thin, coloured bars make
+ * Chrome draw permanent classic scrollbars on a Mac. :where() keeps this at zero specificity, so the places that hide
+ * a scrollbar on purpose still do.
+ */
+:where(:root[data-platform="mac"]) *,
+:where(:root[data-platform="mac"]) {
+  scrollbar-color: auto;
+  scrollbar-width: auto;
+}
+
+/*
+ * Buttons on a Mac use the arrow, not the hand: the hand is for links (Apple's Human Interface Guidelines). Links
+ * keep it.
+ */
+:root[data-platform="mac"]
+  :is(button, .btn, [role="tab"], [role="menuitem"], [role="option"], summary) {
+  cursor: default;
+}

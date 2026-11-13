@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { onMac } from "../lib/platform-mac" // Mac fork
 
 interface NtfyStatus {
   enabled: boolean
@@ -322,7 +323,7 @@ export function PushPanel() {
         ) : null}
         {signIn !== "none" ? (
           <p className="m-0 max-w-[72ch] text-xs text-mut">
-            Kept sealed for your Windows account on this computer, never in the settings file or the
+            {onMac("Kept sealed for your Windows account on this computer,", "Kept sealed with a key in your login Keychain on this Mac,")} never in the settings file or the
             log. The Approve and Deny buttons carry it too, because your phone sends them itself, so
             use an ntfy user (or its token) that may read and write only Codehouse&apos;s two
             topics.

@@ -22,6 +22,7 @@ import {
 import { describeActivity, type Activity } from "@gatehouse/shared/activity"
 import type { PhoneActivity, PhoneSessions } from "@gatehouse/shared/phone-protocol"
 import { storage, type DeviceInfo, type KeyMaterial, type Settings } from "./storage"
+import { Icon, TabBar, type Tab } from "./TabBar" // Mac fork: Liquid Glass
 
 type Route =
   | { name: "home" }
@@ -166,9 +167,20 @@ export function App() {
       </Frame>
     )
 
+  // Mac fork: the tab bar of the three screens you move between, with how many requests wait on you.
+  const bar = (active: Tab) => (
+    <TabBar
+      active={active}
+      waiting={items.filter((i) => !i.resolved).length}
+      go={(t) =>
+        setRoute(t === "home" ? { name: "home" } : t === "settings" ? { name: "settings" } : { name: "sessions" })
+      }
+    />
+  )
+
   if (route.name === "settings")
     return (
-      <Frame title="Settings" back={() => setRoute({ name: "home" })}>
+      <Frame title="Settings" bar={bar("settings")}>
         <SettingsScreen
           device={device}
           session={session}
@@ -195,6 +207,7 @@ export function App() {
         device={device}
         open={route.open}
         go={(open) => setRoute(open === null ? { name: "home" } : { name: "sessions", ...(open ? { open } : {}) })}
+        bar={bar("sessions")}
       />
     )
 
@@ -230,19 +243,7 @@ export function App() {
   const waiting = items.filter((i) => !i.resolved)
   const done = items.filter((i) => i.resolved)
   return (
-    <Frame
-      title="Waiting on you"
-      action={
-        <span className="flex gap-2">
-          <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "sessions" })}>
-            Sessions
-          </button>
-          <button className="btn !min-h-11 !px-4" onClick={() => setRoute({ name: "settings" })}>
-            Settings
-          </button>
-        </span>
-      }
-    >
+    <Frame title="Waiting on you" bar={bar("home")}>
       <div className="grid gap-4 p-4">
         {error ? (
           <p role="alert" className="m-0 font-semibold text-sev">
@@ -261,7 +262,7 @@ export function App() {
             {waiting.map((i) => (
               <li key={i.relayId}>
                 <button
-                  className="panel grid w-full gap-1.5 p-4 text-left"
+                  className="panel row-link grid w-full gap-1.5 p-4 text-left"
                   onClick={() => setRoute({ name: "detail", id: i.relayId })}
                 >
                   <span className="font-semibold">
@@ -313,29 +314,41 @@ function friendly(e: unknown): string {
   return m
 }
 
+// Mac fork: Liquid Glass (glass.css). The content scrolls under the header and, on the three screens you move between,
+// under the tab bar; a screen opened from one of them has the glass back button instead.
 function Frame({
   title,
   back,
   action,
+  bar,
   children,
 }: {
   title: string
   back?: () => void
   action?: React.ReactNode
+  bar?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
-    <div className="mx-auto grid h-full max-w-[560px] grid-rows-[auto_1fr]">
-      <header className="safe-top flex items-center gap-3 border-b border-line bg-s1 px-4 pb-3">
+    <div className="frame mx-auto h-full max-w-[560px]" data-bar={bar ? "" : undefined}>
+      <main className="frame-main">{children}</main>
+      <header className="frame-head safe-top flex gap-3 px-4 pb-2">
         {back ? (
-          <button className="btn !min-h-11 !px-4" onClick={back} aria-label="Back to the list">
-            Back
+          <button className="back glass" onClick={back} aria-label="Back to the list">
+            <Icon name="back" />
           </button>
         ) : null}
-        <h1 className="m-0 min-w-0 flex-1 truncate text-[26px] font-semibold">{title}</h1>
+        <h1
+          className={clsx(
+            "m-0 min-w-0 flex-1 truncate",
+            back ? "inline-title self-center" : "large-title",
+          )}
+        >
+          {title}
+        </h1>
         {action}
       </header>
-      <main className="min-h-0 overflow-auto">{children}</main>
+      {bar}
     </div>
   )
 }
@@ -661,7 +674,7 @@ function Detail({
         ) : null}
       </div>
 
-      <div className="safe-bottom grid gap-3 border-t border-line bg-s1 px-4 pt-3">
+      <div className="action-bar glass grid gap-3">{/* Mac fork: pinned, in glass */}
         <div role="status" aria-live="polite" className="font-semibold empty:hidden">
           {resolved ? resolved.summary : sent ? "Sent. Waiting for your computer to apply it." : ""}
         </div>
@@ -789,6 +802,7 @@ function SessionsScreen({
   device,
   open,
   go,
+  bar,
 }: {
   session: Session
   keys: KeyMaterial | undefined
@@ -796,6 +810,8 @@ function SessionsScreen({
   open: string | undefined
   /** A session's id opens it, undefined is the list, null is the home screen. */
   go: (open: string | undefined | null) => void
+  /** Mac fork: the tab bar, shown on the list. */
+  bar: React.ReactNode
 }) {
   const [data, setData] = useState<PhoneSessions>()
   const [error, setError] = useState<string>()
@@ -882,6 +898,26 @@ function SessionsScreen({
     body = (
       <>
         {old}
+        {/* Mac fork: the sessions first, then what you can start and the audit log. */}
+        {data.sessions.length ? (
+          <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
+            {data.sessions.map((s) => (
+              <li key={s.id}>
+                <button
+                  className="panel row-link grid w-full gap-1 p-4 text-left text-[inherit]"
+                  onClick={() => go(s.id)}
+                >
+                  <span className="font-semibold [overflow-wrap:anywhere]">{s.title ?? s.project}</span>
+                  <StateLine s={s} now={now} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="m-0 p-5 text-mut">
+            No sessions to show yet. They appear here a moment after your computer shares them.
+          </p>
+        )}
         {data.templates?.length ? (
           <section aria-label="Start" className="grid gap-2 px-4 pt-4">
             <h2 className="m-0 text-[17px] font-semibold">Start</h2>
@@ -924,29 +960,14 @@ function SessionsScreen({
             </button>
           </section>
         ) : null}
-        {data.sessions.length ? (
-          <ul className="m-0 grid list-none gap-3 p-4" aria-label="Sessions">
-            {data.sessions.map((s) => (
-              <li key={s.id}>
-                <button
-                  className="panel grid w-full gap-1 p-4 text-left text-[inherit]"
-                  onClick={() => go(s.id)}
-                >
-                  <span className="font-semibold [overflow-wrap:anywhere]">{s.title ?? s.project}</span>
-                  <StateLine s={s} now={now} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="m-0 p-5 text-mut">
-            No sessions to show yet. They appear here a moment after your computer shares them.
-          </p>
-        )}
       </>
     )
   return (
-    <Frame title={chosen ? (chosen.title ?? chosen.project) : "Sessions"} back={() => go(open ? undefined : null)}>
+    // Mac fork: the list is a tab; a session opened from it has the back button.
+    <Frame
+      title={chosen ? (chosen.title ?? chosen.project) : "Sessions"}
+      {...(open ? { back: () => go(undefined) } : { bar })}
+    >
       {body}
     </Frame>
   )
@@ -959,7 +980,7 @@ function StateLine({ s, now }: { s: PhoneSession; now: number }) {
   return (
     <span className="grid gap-0.5 text-[15px] text-mut">
       <span className="flex items-center gap-2">
-        {working ? <Working /> : null}
+        {working ? <Working /> : <span className={`dot dot-${s.state}`} aria-hidden="true" />}
         <span>
           {STATE_WORDS[s.state] ?? s.state}
           {s.waiting ? `, ${s.waiting === 1 ? "1 request waits" : `${s.waiting} requests wait`} for you` : ""}
@@ -1047,7 +1068,7 @@ function SessionView({
         <div ref={end} />
       </div>
       <form
-        className="safe-bottom sticky bottom-0 grid gap-2 border-t border-line bg-s1 px-4 pt-3"
+        className="action-bar glass grid gap-2" // Mac fork: in glass
         onSubmit={(e) => {
           e.preventDefault()
           if (!message.trim()) return
@@ -1064,7 +1085,8 @@ function SessionView({
             onChange={(e) => setMessage(e.target.value)}
           />
         </label>
-        <div className="grid grid-cols-2 gap-3">
+        {/* Mac fork: Send takes the room it needs on one line. */}
+        <div className="grid grid-cols-[1fr_auto] gap-3">
           <button type="submit" className="btn btn-primary" disabled={busy || !message.trim()}>
             {busy ? "Waiting for Face ID…" : "Send with Face ID"}
           </button>

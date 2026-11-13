@@ -54,7 +54,7 @@ async function staged(name: string): Promise<{ dir: string; ok: boolean; fingerp
 
 const ps = (dir: string) => {
   try {
-    execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(dir, "verify-audit.ps1"), "-Dir", dir], { windowsHide: true, stdio: "ignore" })
+    execFileSync(process.platform === "win32" ? "powershell.exe" : "pwsh", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", path.join(dir, "verify-audit.ps1"), "-Dir", dir], { windowsHide: true, stdio: "ignore" })
     return true
   } catch {
     return false
