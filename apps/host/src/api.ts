@@ -15,6 +15,7 @@ import { registerDoctorRoutes } from "./doctor.js"
 import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
+import { registerTitleRoutes, type TitleDeps } from "./title-api.js"
 import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
@@ -130,6 +131,8 @@ export interface AdminContext {
   chat?: ChatDeps
   /** While you were away, written by Claude (owner, 4 Nov). */
   recap?: RecapDeps
+  /** T-018: session titles written by Claude. */
+  titles?: TitleDeps
   /** /btw: a side question about a session, answered without interrupting it (owner, 4 Nov). */
   btw?: BtwDeps
   /** CH-04: importing a claude.ai export. */
@@ -862,6 +865,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerShellRoutes(app, new NavigationAudit(ctx.audit, () => ctx.store.current?.hash ?? ""))
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
+  if (ctx.titles) registerTitleRoutes(app, ctx.titles)
   if (ctx.btw) registerBtwRoutes(app, ctx.btw)
   if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
   if (ctx.chatHandoff) registerHandoffRoutes(app, ctx.chatHandoff)
@@ -1785,6 +1789,8 @@ const LIVE_SETTINGS = [
   "keepAwake",
   "phoneAlerts", // Mac fork: relay/service.ts reads it at each notification
   "recapByClaude",
+  "titleByClaude",
+  "titleInstructions",
   "chatHandoff",
   "chatContinue",
   "providers",

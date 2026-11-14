@@ -76,6 +76,8 @@ interface Config {
   keepAwake?: boolean
   phoneAlerts?: "all" | "decisions" // Mac fork
   recapByClaude?: boolean
+  titleByClaude?: boolean
+  titleInstructions?: string
   chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
 
@@ -169,6 +171,9 @@ interface Values {
   phoneAlerts: "all" | "decisions"
   /** While you were away, written by Claude. */
   recap: boolean
+  /** T-018, T-019: sessions named by Claude, and how. */
+  titles: boolean
+  titleInstr: string
   /** Open in Claude (CH-06). */
   handoff: "edge" | "browser" | "app"
   edgeProfile: string
@@ -227,6 +232,8 @@ function valuesOf(d: SettingsData): Values {
     awake: c.keepAwake !== false,
     phoneAlerts: c.phoneAlerts === "decisions" ? "decisions" : "all", // Mac fork
     recap: c.recapByClaude !== false,
+    titles: c.titleByClaude !== false,
+    titleInstr: c.titleInstructions ?? "",
     handoff: c.chatHandoff?.target ?? "edge",
     edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
     appLink: c.chatHandoff?.appLink === true,
@@ -267,6 +274,10 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
   else body.recapByClaude = false
+  if (v.titles) delete body.titleByClaude
+  else body.titleByClaude = false
+  if (v.titleInstr.trim()) body.titleInstructions = v.titleInstr.trim().slice(0, 300)
+  else delete body.titleInstructions
   // Open in Claude: what this page sets, over anything else kept there (the address templates).
   const handoff: Record<string, unknown> = {
     ...((d.saved.chatHandoff as Record<string, unknown> | undefined) ?? {}),
@@ -446,6 +457,8 @@ export const DEFAULT_VALUES: Values = {
   awake: true,
   phoneAlerts: "all", // Mac fork
   recap: true,
+  titles: true,
+  titleInstr: "",
   handoff: "edge",
   edgeProfile: "Default",
   appLink: false,
@@ -987,6 +1000,35 @@ export function Settings() {
                   onBlur={() => commit("Instructions")}
                 />
               </Field>
+            </Group>
+
+            <Group section="sessions" title="Session titles" gap="gap-2" changed={differs(v, ["titles", "titleInstr"])}>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={v.titles}
+                  onChange={(e) => change({ titles: e.target.checked }, "Session titles")}
+                />
+                Have Claude name a session after its first turn
+              </label>
+              <Field
+                label="How you like titles"
+                help="For example: start with the ticket number, or name the part of the code. Up to 300 characters."
+              >
+                <input
+                  className="field"
+                  maxLength={300}
+                  value={v.titleInstr}
+                  onChange={(e) => edit({ titleInstr: e.target.value })}
+                  onBlur={() => commit("Session titles")}
+                />
+              </Field>
+              <p className="m-0 text-xs text-mut">
+                A small model reads what you first said and what Claude first replied, with your private words taken
+                out, and writes a title of a few words. It has no tools and is recorded in the audit log. A title you
+                gave yourself is never changed, a session on a model on this computer is never sent, and Name it again
+                in a session's menu asks once more.
+              </p>
             </Group>
 
             <Group section="sessions" title="Extreme approval" gap="gap-3" changed={extremeChanged}>

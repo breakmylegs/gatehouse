@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useEffect, useRef, useState } from "react"
 import { sessionRibbon } from "../lib/codes"
+import { useAutoTitles } from "../lib/autoTitle"
 import { notifyLine } from "../lib/rail"
 import { titleOf } from "../lib/sessionActions"
 import { MAIN_ACCOUNT, send, useSessionList, useStore } from "../store"
@@ -37,6 +38,8 @@ export const byActivity = <T extends { activeAt?: string; createdAt: string }>(s
  * the kill switch and your profile menu. The kill switch asks once before it acts; Ctrl+Shift+K opens that question.
  */
 export function CommandDeck() {
+  // T-018: the deck is always there, so it names sessions once their first turn ends.
+  useAutoTitles()
   const setRoute = useStore((s) => s.setRoute)
   const selectSession = useStore((s) => s.selectSession)
   const health = useStore((s) => s.health)

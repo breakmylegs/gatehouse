@@ -101,6 +101,10 @@ function build(loose: boolean) {
     phoneAlerts: z.enum(["all", "decisions"]).optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** T-018: sessions named by Claude after their first turn. Absent is on; false turns it off. */
+    titleByClaude: z.boolean().optional(),
+    /** T-019: how you like titles, told to the model that writes them. */
+    titleInstructions: z.string().max(300).optional(),
     /** Continue locally (CH-07): the turns kept word for word, and the characters of history before the rest is summed up. */
     chatContinue: z
       .object({

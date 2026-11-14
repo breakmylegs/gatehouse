@@ -51,6 +51,7 @@ import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise, failureItems, summaryItems } from "../lib/groups"
 import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
+import { nameSession } from "../lib/autoTitle"
 import { EditRevert } from "../components/EditRevert"
 import { findIn } from "../lib/find"
 import { FindBar } from "../components/FindBar"
@@ -567,6 +568,15 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
+    // T-019: Claude names it again from its first messages, over the title it has.
+    {
+      label: "Name it again",
+      disabled: !session.sdkSessionId,
+      onSelect: () =>
+        void nameSession(session, transcript.items, true).then((t) =>
+          toast(t ? `Named ${t}.` : "It could not be named now.", { id: "session" }),
+        ),
+    },
     // Owner, 9 Nov: past the limits in Settings only by a bypass for this session, with a time or a most it may spend.
     session.bypass
       ? { label: "End the limit bypass", onSelect: () => void setBypass(session.id, null) }
