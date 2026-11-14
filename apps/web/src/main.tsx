@@ -10,6 +10,7 @@ import { markPlatform } from "./lib/platform-mac" // Mac fork
 import { startConnection, useStore } from "./store"
 import { Quick } from "./surfaces/Quick"
 import { PanePage } from "./surfaces/PanePage"
+import { NotchMac } from "./surfaces/NotchMac" // Mac fork
 
 markPlatform() // Mac fork
 
@@ -18,13 +19,14 @@ const params = new URLSearchParams(location.search)
 const quick = params.get("view") === "quick"
 // A session in a window of its own (B16): ?view=pane&session=<id>, that session only.
 const pane = params.get("view") === "pane" ? params.get("session") : null
-if (quick || pane) document.getElementById("boot")?.remove()
+const notch = params.get("view") === "notch" // Mac fork: the wing beside the notch (NotchMac.tsx)
+if (quick || pane || notch) document.getElementById("boot")?.remove()
 const root = createRoot(document.getElementById("root") as HTMLElement)
 if (startConnection()) {
   root.render(
     <StrictMode>
       <ErrorBoundary>
-        {quick ? <Quick /> : pane ? <PanePage sessionId={pane} /> : <App />}
+        {quick ? <Quick /> : pane ? <PanePage sessionId={pane} /> : notch ? <NotchMac /> : <App />}
       </ErrorBoundary>
     </StrictMode>,
   )
