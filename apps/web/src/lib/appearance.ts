@@ -1,4 +1,5 @@
 import type { Detail } from "./paneView"
+import type { Announce } from "./titleStatus"
 
 /**
  * How the window looks, from Settings, General, Appearance (owner, 4 Nov: Claude's desktop app has these). Kept in the
@@ -17,6 +18,10 @@ export interface Appearance {
   textSize: 90 | 100 | 115 | 130
   /** How much of the work a pane shows when it opens, until you change that pane. */
   detail: Detail
+  /** T-057: what a screen reader is told: new requests and what happened, only new requests, or nothing. */
+  announce: Announce
+  /** T-057: "Needs you" or "Working" at the start of the window title. Off until you turn it on. */
+  titleStatus: boolean
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -26,10 +31,13 @@ export const DEFAULT_APPEARANCE: Appearance = {
   codeSize: 0,
   textSize: 100,
   detail: "normal",
+  announce: "all",
+  titleStatus: false,
 }
 
 export const CODE_SIZES = [0, 11, 12, 13, 14, 15, 16] as const
 const KEY = "gatehouse.appearance"
+export const APPEARANCE_EVENT = "gatehouse-appearance"
 const WIDTH = { narrow: "860px", wide: "1200px" } as const
 
 /** A font name with nothing that could break out of the CSS value: letters, digits, spaces and hyphens. */
@@ -56,6 +64,8 @@ export function readAppearance(): Appearance {
         ? (v!.textSize as Appearance["textSize"])
         : d.textSize,
       detail: v?.detail === "summary" || v?.detail === "verbose" ? v.detail : d.detail,
+      announce: v?.announce === "requests" || v?.announce === "off" ? v.announce : d.announce,
+      titleStatus: v?.titleStatus === true,
     }
   } catch {
     return DEFAULT_APPEARANCE
@@ -91,4 +101,6 @@ export function saveAppearance(a: Appearance): void {
     // storage blocked: the choice lasts until the window closes
   }
   applyAppearance(a)
+  // What reads it as it goes (the announcer and the title) picks the change up at once.
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(APPEARANCE_EVENT))
 }

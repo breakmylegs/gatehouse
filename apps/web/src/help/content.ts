@@ -480,7 +480,7 @@ The Relay only ever carries encrypted data. Your phone signs every answer, and t
 
 The sections come in three groups. **Preferences**: General, Account and plan, Privacy, Usage, Capabilities, Sessions, Phone and notifications. **This computer**: System, Updates, Developer. **Customize**: Skills, Connectors, Plugins, each a way to the page that holds them.
 
-**Appearance** (General) sets the theme (or following Windows), the text size and detail a conversation opens at until you change that pane, how wide a conversation runs, whether movement is reduced, and the font and size for code, files, diffs and command output. These are kept in this window only.
+**Appearance** (General) sets the theme (or following Windows), the text size and detail a conversation opens at until you change that pane, how wide a conversation runs, whether movement is reduced, and the font and size for code, files, diffs and command output. It also sets what a screen reader is told (new requests and what happened, only new requests, or nothing), and can put **Needs you** or **Working** at the start of the window title so the taskbar shows it; that is off until you turn it on, and the title never names a command, a file or a project. These are kept in this window only.
 
 **Your usage limits** (Usage) shows how much of your plan's 5-hour and weekly limits is used and when each resets, as the ring beside the prompt box does, with Refresh and a way to the Usage page.
 

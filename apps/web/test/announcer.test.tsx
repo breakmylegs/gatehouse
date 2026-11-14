@@ -3,6 +3,8 @@
 import { act, cleanup, render } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { Announcer } from "../src/components/Announcer"
+import { saveAppearance, DEFAULT_APPEARANCE } from "../src/lib/appearance"
+import { titleStatus, withStatus } from "../src/lib/titleStatus"
 import { useStore } from "../src/store"
 
 const view = (id: string, project: string) =>
@@ -35,7 +37,11 @@ const view = (id: string, project: string) =>
     hardDeadline: new Date(Date.now() + 1_800_000).toISOString(),
   }) as never
 
-beforeEach(() => useStore.setState({ pending: { old: view("old", "atlas") }, notices: [] }))
+beforeEach(() => {
+  localStorage.clear()
+  document.title = "Codehouse"
+  useStore.setState({ pending: { old: view("old", "atlas") }, notices: [], sessions: {} })
+})
 afterEach(cleanup)
 
 const said = (c: HTMLElement) => c.querySelector("[data-announcer]")?.textContent ?? ""
@@ -60,5 +66,40 @@ describe("the announcer", () => {
       }),
     )
     expect(said(container)).toBe("shop: A turn finished.")
+  })
+})
+
+const notice = (id: string) => ({ notices: [{ id, at: Date.now(), sessionId: "s1", text: `shop: ${id}` }] })
+
+describe("how much is said, and the title (T-057)", () => {
+  it("says only new requests, or nothing, as Settings chooses", () => {
+    saveAppearance({ ...DEFAULT_APPEARANCE, announce: "requests" })
+    const { container } = render(<Announcer />)
+    act(() => useStore.setState(notice("n1")))
+    act(() => useStore.setState(notice("n2")))
+    expect(said(container)).toBe("")
+    act(() => useStore.setState((s) => ({ pending: { ...s.pending, r1: view("r1", "shop") } })))
+    expect(said(container)).toBe("New request waiting on you: Run shell command, in shop.")
+    act(() => saveAppearance({ ...DEFAULT_APPEARANCE, announce: "off" }))
+    act(() => useStore.setState((s) => ({ pending: { ...s.pending, r2: view("r2", "atlas") } })))
+    expect(said(container)).toBe("New request waiting on you: Run shell command, in shop.")
+  })
+
+  it("leaves the title alone until it is turned on, and never names what is waiting", () => {
+    render(<Announcer />)
+    expect(document.title).toBe("Codehouse")
+    act(() => saveAppearance({ ...DEFAULT_APPEARANCE, titleStatus: true }))
+    expect(document.title).toBe("Needs you · Codehouse")
+    expect(document.title).not.toMatch(/git|atlas|Bash/)
+    act(() => useStore.setState({ pending: {}, sessions: { s1: { state: "running" } } } as never))
+    expect(document.title).toBe("Working · Codehouse")
+    act(() => saveAppearance(DEFAULT_APPEARANCE))
+    expect(document.title).toBe("Codehouse")
+  })
+
+  it("puts a waiting session before a working one, and never stacks the word", () => {
+    expect(titleStatus([{ state: "running" }, { state: "waiting" }], 0)).toBe("Needs you")
+    expect(titleStatus([{ state: "idle" }], 0)).toBeUndefined()
+    expect(withStatus(withStatus("Codehouse", "Working"), "Needs you")).toBe("Needs you · Codehouse")
   })
 })

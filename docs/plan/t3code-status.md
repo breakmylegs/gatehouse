@@ -68,7 +68,7 @@ Slices, in order:
 | T-054 | Tool calls grouped into an expandable summary, with Open diff. | Have | built (Codehouse had it) | | |
 | T-055 | Live output of a running command. | Partly | todo | | |
 | T-056 | Hide successful tool calls, hide all, or Zen (only your message and the final reply); approvals and errors always show. | Partly | built | slice/T1-sidebar | Failures only, a fourth level beside Summary, Normal and Verbose |
-| T-057 | Screen reader announcement levels, and the session's status at the start of the window title. | Partly | todo | | |
+| T-057 | Screen reader announcement levels, and the session's status at the start of the window title. | Partly | built | slice/T1-a11y | Settings, Appearance: announcement level, title status off by default |
 | T-058 | Visual replies: an HTML page (chart, table, diagram) in any thread, following the theme, sandboxed, with zoom. | Partly | todo | | |
 | T-059 | MCP Apps: interactive apps returned by MCP tools, which can call tools and post to the thread. | Conflicts | listed for decision | | |
 | T-060 | Find in the thread, including older messages and plans. | Have | built (Codehouse had it) | | |

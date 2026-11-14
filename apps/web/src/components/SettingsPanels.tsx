@@ -121,6 +121,36 @@ export function AppearancePanel() {
         )}
       </Row>
       <Row
+        label="Screen reader announcements"
+        help="What a screen reader is told as it happens, once each, without interrupting."
+      >
+        {(id) => (
+          <select
+            id={id}
+            className="field w-auto"
+            value={a.announce}
+            onChange={(e) => set({ announce: e.target.value as Appearance["announce"] })}
+          >
+            <option value="all">New requests and what happened</option>
+            <option value="requests">Only new requests</option>
+            <option value="off">Nothing</option>
+          </select>
+        )}
+      </Row>
+      <Row
+        label="Status in the window title"
+        help="Puts Needs you or Working at the start of the title, so the taskbar shows it. It never names a command or a file."
+      >
+        {(id) => (
+          <input
+            id={id}
+            type="checkbox"
+            checked={a.titleStatus}
+            onChange={(e) => set({ titleStatus: e.target.checked })}
+          />
+        )}
+      </Row>
+      <Row
         label="Motion"
         help={`Reduce turns off movement and animation, whatever ${systemName()} says.`}
       >
