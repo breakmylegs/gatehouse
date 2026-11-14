@@ -22,7 +22,7 @@ beforeAll(async () => {
 afterAll(() => s.stop())
 
 describe("tests-first contract mode (D-036)", () => {
-  it("sends an implementation edit to a person before the tests are approved, even in Extreme approval", async () => {
+  it("sends an implementation edit to a person before the tests are approved", async () => {
     const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
     const deps = {
       sessionId: "s1",
@@ -36,7 +36,7 @@ describe("tests-first contract mode (D-036)", () => {
       engine: {},
       pwsh: undefined,
       decided: new Set<string>(),
-      extreme: () => true,
+      extreme: () => false,
       notifyAutoApproved: () => undefined,
       log: () => undefined,
       testsFirst: () => true,

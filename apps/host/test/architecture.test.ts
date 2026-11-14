@@ -54,7 +54,7 @@ describe("architecture rules as policy (D-041)", () => {
     else expect(v.map((x) => x.rule)).toContain(c.rule)
   })
 
-  it("has enough cases, and sends a violation to a person with the rule named, even in Extreme approval", async () => {
+  it("has enough cases, and sends a violation to a person with the rule named", async () => {
     expect(cases.length).toBeGreaterThanOrEqual(10)
     const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
     const deps = {
@@ -69,7 +69,7 @@ describe("architecture rules as policy (D-041)", () => {
       engine: {},
       pwsh: undefined,
       decided: new Set<string>(),
-      extreme: () => true,
+      extreme: () => false,
       notifyAutoApproved: () => undefined,
       log: () => undefined,
     } as unknown as CanUseDeps

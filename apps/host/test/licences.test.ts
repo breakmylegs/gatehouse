@@ -44,12 +44,13 @@ function setup(ruleId: string, auditOk = true) {
 }
 
 describe("licence policy in canUseTool (D-055)", () => {
-  it("records licence_escalated and Extreme approval leaves a licence outside the list to you", async () => {
+  it("records licence_escalated, and Extreme approval approves a licence outside the list, saying so (owner, 14 Nov)", async () => {
     const t = setup(LICENCE_NOT_ALLOWED)
-    await t.call()
+    expect((await t.call())?.behavior).toBe("allow")
     expect(t.records[0]).toMatchObject({ event: "licence_escalated", verdict: { ruleId: LICENCE_NOT_ALLOWED } })
-    expect(t.request).toHaveBeenCalledTimes(1)
-    // An unreadable licence is recorded too; Extreme approval may approve it, and says so in the record.
+    expect(t.request).not.toHaveBeenCalled()
+    expect(t.records[1]?.verdict).toMatchObject({ decidedBy: "extreme-mode", outcome: "allow" })
+    // An unreadable licence is recorded too, and approved the same way.
     const u = setup(LICENCE_UNKNOWN)
     expect((await u.call())?.behavior).toBe("allow")
     expect(u.records.map((r) => r.event)).toEqual(["licence_escalated", "human_decision"])

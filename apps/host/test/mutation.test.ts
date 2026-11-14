@@ -67,7 +67,7 @@ describe("mutation testing of the changed lines (D-004)", () => {
 })
 
 describe("a task for a surviving mutant (D-005)", () => {
-  it("sends an edit outside the test files to a person, even in Extreme approval", async () => {
+  it("sends an edit outside the test files to a person", async () => {
     const survivor = { file: "src/age.js", line: 2, original: "return age >= 18 && age < 150", mutated: "return age >= 18 || age < 150" }
     const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
     const deps = {
@@ -82,7 +82,7 @@ describe("a task for a surviving mutant (D-005)", () => {
       engine: {},
       pwsh: undefined,
       decided: new Set<string>(),
-      extreme: () => true,
+      extreme: () => false,
       notifyAutoApproved: () => undefined,
       log: () => undefined,
       mutantTask: () => survivor,

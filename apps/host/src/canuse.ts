@@ -442,8 +442,10 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         )
       }
       if (deps.extreme?.() === true) {
-        const cannotUndo = effects !== undefined && !effects.reversible
-        if (!NEVER_AUTO_APPROVED.has(verdict.ruleId) && !cannotUndo) {
+        // Owner, 14 Nov: "When I have extreme approval on I shouldnt be asked to approve any risks even if they are
+        // 100." Every escalation a rule made is approved, whatever its risk or whether it can be undone; only a failure
+        // (invariant 1) and a test you locked (D-007) still wait for you, and a strict project's tests above.
+        if (!EXTREME_ASKS.has(verdict.ruleId)) {
           const approved = await extremeApprove(deps, toolName, input, toolUseID, verdict)
           // D-001, the default: approved and flagged, so the session says its tests were weakened.
           if (weakens && approved.behavior === "allow")
@@ -459,10 +461,7 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           {
             ...verdict,
             // A locked test's reason already says Extreme approval does not approve it.
-            reason:
-              verdict.ruleId === LOCKED_TEST_RULE || verdict.ruleId === INSTALLER_RULE || verdict.ruleId === INSTRUCTIONS_RULE
-                ? verdict.reason
-                : `${verdict.reason} ${cannotUndo && !NEVER_AUTO_APPROVED.has(verdict.ruleId) ? CANNOT_UNDO_ASKS : EXTREME_CANNOT_APPROVE}`,
+            reason: verdict.ruleId === LOCKED_TEST_RULE ? verdict.reason : `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
           },
           effects,
         )
@@ -528,6 +527,25 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   "parse-error",
   "kill-switch",
 ])
+
+/** Escalations that come from something going wrong (invariant 1: a failure ends in a person or a denial, never an allow). */
+export const FAILURE_ESCALATIONS: ReadonlySet<string> = new Set([
+  "evaluator-unavailable",
+  "audit-failure",
+  "policy-unavailable",
+  "engine-error",
+  "malformed-input",
+  "pwsh-unavailable",
+  "parse-error",
+  "kill-switch",
+])
+
+/**
+ * Owner, 14 Nov: all that Extreme approval still never answers. The failures, and a test you locked yourself, which is
+ * your own "ask me" rather than a judgement of risk. Everything else in NEVER_AUTO_APPROVED still asks in Manual and is
+ * never answered by a grant or the judge.
+ */
+export const EXTREME_ASKS: ReadonlySet<string> = new Set([...FAILURE_ESCALATIONS, LOCKED_TEST_RULE])
 
 /** D-001: added to the reason when a project is strict about its tests and Extreme approval meets a weakening. */
 export const STRICT_TESTS_ASKS =

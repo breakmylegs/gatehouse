@@ -13,7 +13,7 @@ import crypto from "node:crypto"
 import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
-import { NEVER_AUTO_APPROVED } from "./canuse.js"
+import { EXTREME_ASKS } from "./canuse.js"
 import type { HostAudit } from "./hostaudit.js"
 import { levelArgs } from "./limits.js"
 import { macActionShell } from "./limits-mac.js" // Mac fork
@@ -127,7 +127,7 @@ export async function runCodehouseAction(r: ActionRequest, d: ActionDeps): Promi
   if (verdict.outcome === "deny") return await notRun(`${verdict.reason} (rule ${verdict.ruleId})`)
   let decidedBy: string = verdict.decidedBy
   if (verdict.outcome === "escalate") {
-    if (d.extreme() && !NEVER_AUTO_APPROVED.has(verdict.ruleId)) decidedBy = "extreme-mode"
+    if (d.extreme() && !EXTREME_ASKS.has(verdict.ruleId)) decidedBy = "extreme-mode"
     else {
       const resolution = await d.broker.request({
         kind: "permission",

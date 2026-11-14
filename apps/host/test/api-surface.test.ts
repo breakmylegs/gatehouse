@@ -48,7 +48,7 @@ describe("the public API break guard (D-046)", () => {
       engine: {},
       pwsh: undefined,
       decided: new Set<string>(),
-      extreme: () => true,
+      extreme: () => false,
       notifyAutoApproved: () => undefined,
       log: () => undefined,
     } as unknown as CanUseDeps

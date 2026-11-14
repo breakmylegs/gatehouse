@@ -55,9 +55,9 @@ function setup(o: { extreme?: boolean; edited?: "allow" | "deny" }) {
 describe("install-script default deny in canUseTool (D-064)", () => {
   it("re-checks Run without scripts and runs it with --ignore-scripts, never rewriting by itself", async () => {
     expect(withoutScripts(COMMAND)).toBe("npm install --ignore-scripts left-pad && npm test")
-    const t = setup({ extreme: true })
+    const t = setup({})
     const r = await t.call()
-    // Extreme approval did not approve it: it went to a person.
+    // It went to a person.
     expect(t.request).toHaveBeenCalledTimes(1)
     // The person's choice was checked again, as an edited input.
     expect(t.evaluated).toEqual([{ command: COMMAND }, { command: "npm install --ignore-scripts left-pad && npm test" }])

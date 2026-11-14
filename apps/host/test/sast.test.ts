@@ -114,7 +114,7 @@ describe("the local analysis of changed code (D-062)", () => {
     }
   })
 
-  it("sends a commit of Severe code to a person, even in Extreme approval, and one it cannot read too", async () => {
+  it("sends a commit of Severe code to a person, and one it cannot read too", async () => {
     for (const sast of [
       { severe: async () => [{ file: "src/find.ts", line: 9, kind: "eval" as const, severity: "Severe" as const, title: "Code run from a string" }] },
       { severe: async () => Promise.reject(new Error("unreadable")) },
@@ -132,7 +132,7 @@ describe("the local analysis of changed code (D-062)", () => {
         engine: {},
         pwsh: undefined,
         decided: new Set<string>(),
-        extreme: () => true,
+        extreme: () => false,
         notifyAutoApproved: () => undefined,
         log: () => undefined,
         sast,

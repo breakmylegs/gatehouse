@@ -1,10 +1,8 @@
 import { LOCKED_TEST_RULE } from "../src/test-locks.js"
-import { INSTRUCTIONS_RULE } from "../src/instruction-pins.js"
-import { INSTALLER_RULE } from "@gatehouse/policy"
 import { describe, expect, it, vi } from "vitest"
 import {
-  CANNOT_UNDO_ASKS,
   createCanUseTool,
+  EXTREME_ASKS,
   EXTREME_CANNOT_APPROVE,
   NEVER_AUTO_APPROVED,
   type CanUseDeps,
@@ -100,23 +98,28 @@ describe("Extreme approval mode", () => {
     expect(t.notified).toEqual([])
   })
 
-  it("never approves an escalation that came from a failure", async () => {
-    for (const id of NEVER_AUTO_APPROVED) {
+  it("never approves an escalation that came from a failure, nor a locked test", async () => {
+    for (const id of EXTREME_ASKS) {
       const t = setup({ extreme: true, v: verdict("escalate", id) })
       await t.call()
       expect(t.request, id).toHaveBeenCalledTimes(1)
       expect(t.notified, id).toEqual([])
-      // The card says why Extreme approval did not approve it.
+      // The card says why Extreme approval did not approve it; a locked test's own reason already says so.
       expect(t.request.mock.calls[0]?.[0], id).toMatchObject({
-        // D-007: a locked test's own reason already says Extreme approval does not approve it.
-        verdict: {
-          ruleId: id,
-          reason: id === LOCKED_TEST_RULE || id === INSTALLER_RULE || id === INSTRUCTIONS_RULE ? "because" : `because ${EXTREME_CANNOT_APPROVE}`,
-        },
+        verdict: { ruleId: id, reason: id === LOCKED_TEST_RULE ? "because" : `because ${EXTREME_CANNOT_APPROVE}` },
       })
     }
-    expect(NEVER_AUTO_APPROVED.has("evaluator-unavailable")).toBe(true)
-    expect(NEVER_AUTO_APPROVED.has("audit-failure")).toBe(true)
+    expect(EXTREME_ASKS.has("evaluator-unavailable")).toBe(true)
+    expect(EXTREME_ASKS.has("audit-failure")).toBe(true)
+  })
+
+  it("approves every escalation a rule made, whatever its risk, as the owner asked (14 Nov)", async () => {
+    // "When I have extreme approval on I shouldnt be asked to approve any risks even if they are 100."
+    for (const id of [...NEVER_AUTO_APPROVED].filter((x) => !EXTREME_ASKS.has(x))) {
+      const t = setup({ extreme: true, v: { ...verdict("escalate", id), risk: 100 } })
+      expect((await t.call())?.behavior, id).toBe("allow")
+      expect(t.request, id).not.toHaveBeenCalled()
+    }
   })
 
   it("does not approve when the decision cannot be recorded", async () => {
@@ -126,35 +129,13 @@ describe("Extreme approval mode", () => {
     expect(t.notified).toEqual([])
   })
 
-  it("never approves by itself what cannot be undone, and the card shows what would go (G20)", async () => {
+  it("approves what cannot be undone too, in Extreme approval (owner, 14 Nov), and shows what would go in Manual (G20)", async () => {
     const t = setup({ extreme: true, v: verdict("escalate", "no-rule"), effects: async () => lost })
-    await t.call("Bash", { command: "rm a.txt b.txt" })
-    expect(t.request).toHaveBeenCalledTimes(1)
-    expect(t.notified).toEqual([])
-    expect(t.request.mock.calls[0]?.[0]).toMatchObject({
-      effects: lost,
-      verdict: { reason: `because ${CANNOT_UNDO_ASKS}` },
-    })
-    // What git can bring back is still approved, with nothing shown that is not there.
-    const back = setup({
-      extreme: true,
-      v: verdict("escalate", "no-rule"),
-      effects: async () => ({ ...lost, reversible: true }),
-    })
-    expect((await back.call("Bash", { command: "rm a.txt" }))?.behavior).toBe("allow")
-  })
-
-  it("takes a failure working out the effects of a command as cannot be undone (G20)", async () => {
-    const t = setup({
-      extreme: true,
-      v: verdict("escalate", "no-rule"),
-      effects: async () => {
-        throw new Error("no")
-      },
-    })
-    await t.call("Bash", { command: "rm -rf x" })
-    expect(t.request).toHaveBeenCalledTimes(1)
-    expect(t.request.mock.calls[0]?.[0]).toMatchObject({ effects: { reversible: false } })
+    expect((await t.call("Bash", { command: "rm a.txt b.txt" }))?.behavior).toBe("allow")
+    expect(t.request).not.toHaveBeenCalled()
+    const manual = setup({ extreme: false, v: verdict("escalate", "no-rule"), effects: async () => lost })
+    await manual.call("Bash", { command: "rm a.txt b.txt" })
+    expect(manual.request.mock.calls[0]?.[0]).toMatchObject({ effects: lost })
   })
 
   it("does not let the judge allow what cannot be undone (G20)", async () => {

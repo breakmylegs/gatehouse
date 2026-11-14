@@ -106,7 +106,7 @@ describe("on real sessions (D-059)", () => {
     await s.stop()
   })
 
-  it("an agent's edit of a skill escalates, Extreme approval leaves it to you, and once allowed it is pinned again", async () => {
+  it("an agent's edit of a skill escalates to you, and once allowed it is pinned again", async () => {
     let r: ToolCallResult | undefined
     const skill = path.join(s.repo, ".claude", "skills", "deploy", "SKILL.md")
     s.sdk.turn = async (api, text) => {
@@ -117,7 +117,7 @@ describe("on real sessions (D-059)", () => {
       s.broker.resolve(s.pendingId(), { kind: "decision", decision: "allow" }, "desktop")
       r = await call
     }
-    const session = await s.manager.start({ cwd: s.repo, extreme: true })
+    const session = await s.manager.start({ cwd: s.repo })
     const done = new Promise<void>((res) => session.on("message", (m) => m.type === "result" && res()))
     session.prompt("edit the skill")
     await done

@@ -79,7 +79,7 @@ describe("the offline vulnerability snapshot (D-057)", () => {
     expect(new VulnSnapshot(path.join(root, "absent")).status()).toEqual({ state: "none" })
   })
 
-  it("sends a commit that adds a vulnerable version to a person, even in Extreme approval", async () => {
+  it("sends a commit that adds a vulnerable version to a person", async () => {
     const top = path.join(root, "repo")
     fs.mkdirSync(top)
     fs.writeFileSync(path.join(top, "package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: { "": {}, "node_modules/lodash": { version: "4.17.15" } } }))
@@ -104,7 +104,7 @@ describe("the offline vulnerability snapshot (D-057)", () => {
       engine: {},
       pwsh: undefined,
       decided: new Set<string>(),
-      extreme: () => true,
+      extreme: () => false,
       notifyAutoApproved: () => undefined,
       log: () => undefined,
       vulns,
