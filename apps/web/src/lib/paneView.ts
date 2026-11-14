@@ -7,9 +7,10 @@ import { readAppearance } from "./appearance"
 export type Density = "comfortable" | "compact"
 /**
  * How much of the work shows (W1-12): Summary keeps what you say, what Claude says, errors, why-lines and anything
- * refused or waiting on you; Normal folds each run of tool calls into a line; Verbose opens every call and thinking.
+ * refused or waiting on you; Normal folds each run of tool calls into a line; Verbose opens every call and thinking;
+ * Failures only (T-056) keeps what you said and only what failed, was stopped or waits on you.
  */
-export type Detail = "summary" | "normal" | "verbose"
+export type Detail = "summary" | "normal" | "verbose" | "failures"
 
 export interface PaneView {
   /** The text size as a percentage of the usual 14 px. */
@@ -41,7 +42,7 @@ export function readPaneView(sessionId: string): PaneView {
       density: v?.density === "compact" ? "compact" : "comfortable",
       // Kept by a newer version; an older one never wrote it and reads the rest as before.
       detail:
-        v?.detail === "summary" || v?.detail === "verbose" || v?.detail === "normal"
+        v?.detail === "summary" || v?.detail === "verbose" || v?.detail === "normal" || v?.detail === "failures"
           ? v.detail
           : base.detail,
     }

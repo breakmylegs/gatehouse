@@ -48,7 +48,7 @@ import {
 } from "../lib/transcript"
 import { usePictures } from "../lib/pictures"
 import { describeActivity, describePulse } from "../lib/activity"
-import { groupItems, summarise, summaryItems } from "../lib/groups"
+import { groupItems, summarise, failureItems, summaryItems } from "../lib/groups"
 import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
 import { findIn } from "../lib/find"
@@ -263,6 +263,7 @@ const DETAIL_LABEL: Record<Detail, string> = {
   summary: "Summary: what was said, and what needs you",
   normal: "Normal: each run of work on one line",
   verbose: "Verbose: every tool call and Claude's thinking, open",
+  failures: "Failures only: what went wrong, and what needs you",
 }
 /** The view the transcript is drawn in, for the parts that open by themselves in Verbose. */
 const DetailView = createContext<Detail>("normal")
@@ -426,7 +427,9 @@ function SessionPane({
       groupItems(
         view.detail === "summary"
           ? summaryItems(transcript.items, new Set(keepIds))
-          : transcript.items,
+          : view.detail === "failures"
+            ? failureItems(transcript.items, new Set(keepIds))
+            : transcript.items,
       ),
     [transcript.items, view.detail, keepIds],
   )
@@ -629,7 +632,7 @@ function SessionPane({
         setView({ ...view, density: view.density === "compact" ? "comfortable" : "compact" }),
     },
     { kind: "separator" },
-    ...(["summary", "normal", "verbose"] as const).map((d) => ({
+    ...(["summary", "normal", "verbose", "failures"] as const).map((d) => ({
       label: DETAIL_LABEL[d],
       checked: view.detail === d,
       onSelect: () => setView({ ...view, detail: d }),

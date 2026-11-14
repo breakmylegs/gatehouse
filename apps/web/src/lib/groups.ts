@@ -27,6 +27,27 @@ export function summaryItems(items: Item[], keep: ReadonlySet<string>): Item[] {
 }
 
 /**
+ * T-056 (t3code review, O31): Failures only. Your messages, to see what each was about; tool calls that failed, were
+ * refused or wait on you; turns that ended in an error or were stopped; and Codehouse's own notices. Claude's words
+ * and the calls that worked are left out, so what went wrong stands out.
+ */
+export function failureItems(items: Item[], keep: ReadonlySet<string>): Item[] {
+  return items.filter((it) => {
+    switch (it.kind) {
+      case "user":
+      case "system":
+        return true
+      case "result":
+        return it.isError || it.stopped === true
+      case "tool":
+        return keep.has(it.toolUseId) || it.result?.isError === true
+      default:
+        return false
+    }
+  })
+}
+
+/**
  * Folds each run of tool calls in a transcript into one group, so the work reads as "Ran 2 commands, read
  * schema.ts" and opens to each call. A subagent's calls stay in their own runs.
  */
