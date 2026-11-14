@@ -10,6 +10,7 @@ import { composeIn } from "../lib/compose"
 import { describeDecision } from "../lib/decision"
 import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
 import { commentKey, reviewMessage, type ReviewComment } from "../lib/reviewComments"
+import { isViewed, readViewed, setViewed } from "../lib/viewed"
 
 /** One change in a file (as packages/shared/src/node/checkpoint.ts counts them). */
 interface Hunk {
@@ -118,6 +119,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [ref, setRef] = useState<string>()
   const [error, setError] = useState<string>()
   const [open, setOpen] = useState<Record<string, boolean>>({})
+  // T-077: files you marked as viewed, kept per session; a file changed since comes back unmarked.
+  const [viewed, setViewedState] = useState(() => readViewed(sessionId))
+  useEffect(() => setViewedState(readViewed(sessionId)), [sessionId])
   const [confirm, setConfirm] = useState<string[]>()
   const [busy, setBusy] = useState(false)
   const [comments, setComments] = useState<Comments>({})
@@ -368,6 +372,11 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               </ul>
             </section>
           ) : null}
+          {files.length > 1 ? (
+            <p className="m-0 text-[12.5px] text-mut" aria-live="polite">
+              {files.filter((f) => isViewed(viewed, f)).length} of {files.length} files viewed
+            </p>
+          ) : null}
           <ul className="m-0 grid list-none gap-1 p-0" aria-label="Changed files">
             {files.map((f) => (
               <li key={f.path} className="panel overflow-hidden">
@@ -395,6 +404,20 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                       {f.binary ? "binary" : `+${f.added} -${f.removed}`}
                     </span>
                   </button>
+                  <label className="flex shrink-0 items-center gap-1 text-[12.5px] text-mut">
+                    <input
+                      type="checkbox"
+                      aria-label={`Viewed ${f.path}`}
+                      checked={isViewed(viewed, f)}
+                      onChange={(e) => {
+                        const on = e.target.checked
+                        setViewedState((v) => setViewed(sessionId, v, f.path, on ? f.diff : undefined))
+                        // A file you have seen folds away, as on a review site.
+                        if (on) setOpen((o) => ({ ...o, [f.path]: false }))
+                      }}
+                    />
+                    Viewed
+                  </label>
                   <button
                     type="button"
                     className="btn !min-h-7 !px-2 !text-[12.5px]"

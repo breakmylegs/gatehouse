@@ -87,7 +87,7 @@ Slices, in order:
 | T-074 | Commit, push and open a pull request with one button; commit messages and PR text written from the changes and the repository's conventions. | Build (safe variant), S | todo | | |
 | T-075 | A Pull requests page: review, comments, request reviewers, check out, merge, auto-merge, revert, tick description checkboxes, link previews. | Build (safe variant), L | todo | | |
 | T-076 | Review guides: a tour of a change in reading order, Look closely stops, Ask about this stop, Finish review. | Partly | todo | | |
-| T-077 | Mark files as viewed, with a count; a file changed since comes back marked. | Build, S | todo | | |
+| T-077 | Mark files as viewed, with a count; a file changed since comes back marked. | Build, S | built | slice/T1-changes | a changed file comes back unmarked |
 | T-078 | Several linked PRs per thread, linked automatically when the agent runs `gh pr create`, with badges. | Build, M | todo | | |
 | T-080 | Watch a pull request: wake the agent when a check fails, someone comments or the branch conflicts. | Build (safe variant), M | todo | | |
 | T-081 | GitHub stacks: Merge stack, Rebase stack. | Build (safe variant), L | todo | | |
