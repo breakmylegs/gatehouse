@@ -51,7 +51,7 @@ Slices, in order:
 | T-037 | Rich-text Markdown composer (styled as you type, list continuation, code blocks with a language). | Build, M | todo | | |
 | T-038 | Many attachments, images, videos, HEIC converted. | Have | built (Codehouse had it) | | |
 | T-039 | Follow-ups queued or steered into the running turn; queued messages listed, edited, removed, Send now; a held queue resumed. | Partly | todo | | |
-| T-040 | Quote part of a reply into the composer with a comment (Cite in composer). | Build, S | todo | | |
+| T-040 | Quote part of a reply into the composer with a comment (Cite in composer). | Build, S | built | slice/T1-composer | |
 | T-041 | Recall sent prompts with Up and Down in an empty composer. | Build, S | built | slice/T1-composer | |
 | T-042 | Edit from here, with Revert files too (worktree only, refused when another session shares the folder). | Partly | todo | | |
 | T-043 | Prompt stash (save a draft with its attachments and bring it back). | Build, S | todo | | |

@@ -1,4 +1,6 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { QuoteSelection } from "../components/QuoteSelection"
+import { withQuote } from "../lib/quote"
 import { recallStep, rememberSent, type Recall } from "../lib/promptRecall"
 import { Decisions } from "../components/Decisions"
 import { Architecture } from "../components/Architecture"
@@ -1959,6 +1961,18 @@ function Composer({
   const [active, setActive] = useState(0)
   // T-041: Up in an empty box brings back what you sent before; typing ends it.
   const [recall, setRecall] = useState<Recall>()
+  // T-040: part of Claude's reply in this pane, quoted in for you to comment on.
+  const quotePane = useCallback(() => area.current?.closest(".pane") ?? null, [])
+  const quoteIn = useCallback((selected: string) => {
+    setText((cur) => withQuote(cur, selected))
+    setRecall(undefined)
+    requestAnimationFrame(() => {
+      const el = area.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(el.value.length, el.value.length)
+    })
+  }, [])
   // F15: the @ word at the cursor, and the session's files that match it.
   const [mention, setMention] = useState<{ start: number; query: string }>()
   const [found, setFound] = useState<string[]>([])
@@ -2294,6 +2308,7 @@ function Composer({
 
   return (
     <div className="relative grid gap-1">
+      <QuoteSelection pane={quotePane} onQuote={quoteIn} disabled={disabled} />
       {matches.length > 0 ? (
         <ul
           role="listbox"
