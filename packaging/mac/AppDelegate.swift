@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   private var stageSince = Date()
   private var clock: Timer?
   private var quick: QuickPanel?
+  private var notch: NotchWing?
+  private var notchItem: NSMenuItem?
   private var quickItem: NSMenuItem?
   private let hotkey = GlobalHotkey()
   private var popouts: [String: PopoutWindow] = [:]
@@ -108,17 +110,66 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   private func pageLoaded(_ ok: Bool, _ detail: String) {
     if check {
       say("Window page: \(detail)")
-      return finish(
-        ok ? 0 : 1,
-        ok
-          ? "Check passed: the window loaded the interface from the packaged Host."
-          : "Check failed: the window did not show the interface, the page was not ready for the Mac's sidebar material, its toolbar under the title bar did not work, or its bridge to the page answered something other than Codehouse's own page.")
+      guard ok else {
+        return finish(
+          1,
+          "Check failed: the window did not show the interface, the page was not ready for the Mac's sidebar material, its toolbar under the title bar did not work, or its bridge to the page answered something other than Codehouse's own page.")
+      }
+      return checkNotch { [self] notchOk in
+        finish(
+          notchOk ? 0 : 1,
+          notchOk
+            ? "Check passed: the window loaded the interface from the packaged Host, and the wing beside the notch loaded its page."
+            : "Check failed: the wing beside the notch did not load its page, or showed with nothing waiting.")
+      }
     }
     clock?.invalidate()
     clock = nil
     guard ok else { return }
     sayIfRestarted()
     prepareQuick()
+    prepareNotch()
+  }
+
+  // MARK: what waits on you, beside the notch (owner, 14 Nov)
+
+  private static let notchKey = "Codehouse shows requests beside the notch"
+  private var notchOn: Bool { UserDefaults.standard.object(forKey: Self.notchKey) as? Bool ?? true }
+
+  private func prepareNotch() {
+    guard let url, notchOn else { return }
+    let n = notch ?? NotchWing()
+    n.onOpen = { [weak self] id in
+      self?.showWindow()
+      self?.main.tell("open-request:\(id)")
+    }
+    notch = n
+    n.prepare(url)
+  }
+
+  @objc private func toggleNotch() {
+    UserDefaults.standard.set(!notchOn, forKey: Self.notchKey)
+    if notchOn { prepareNotch() } else { notch?.putAway() }
+  }
+
+  /// --check: the wing loads its page, and with nothing waiting it says to hide.
+  private func checkNotch(done: @escaping (Bool) -> Void) {
+    guard let url else { return done(false) }
+    let n = NotchWing()
+    notch = n
+    var answered = false
+    n.onSaid = { [self] m in
+      guard !answered, m.hasPrefix("notch") else { return }
+      answered = true
+      say("Notch wing: said \(m)")
+      done(m == "notch:hide")
+    }
+    n.prepare(url)
+    DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
+      guard !answered else { return }
+      answered = true
+      done(false)
+    }
   }
 
   // MARK: what the page asks of the window
@@ -286,6 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     // The new Host has a new token, so the other windows' pages would be refused: they open again from the new one.
     for w in popouts.values { w.window.close() }
     quick?.putAway()
+    notch?.putAway()
     let again = { [weak self] in
       self?.url = nil
       self?.startHost()
@@ -423,6 +475,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     q.target = self
     quickItem = q
     menu.addItem(.separator())
+    let wing = menu.addItem(withTitle: "Show Requests Beside the Notch", action: #selector(toggleNotch), keyEquivalent: "")
+    wing.target = self
+    notchItem = wing
     let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
     login.target = self
     loginItem = login
@@ -465,6 +520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   /// The tick shows what macOS has now, read each time the menu opens: you can also change it in System Settings,
   /// General, Login Items.
   func menuWillOpen(_ menu: NSMenu) {
+    notchItem?.state = notchOn ? .on : .off
     loginItem?.state = SMAppService.mainApp.status == .enabled ? .on : .off
   }
 

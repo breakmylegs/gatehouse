@@ -27,6 +27,10 @@ export type ShellMessage =
   // CH-08: a picture of part of the screen, or of the window you were in, from the quick prompt.
   | "capture:region"
   | "capture:window"
+  // Mac fork: the wing beside the notch (NotchMac.tsx): its size, hiding it, and a request to open in the window.
+  | "notch:hide"
+  | `notch:size:${number}:${number}`
+  | `notch-open:${string}`
 
 export function tellShell(message: ShellMessage): void {
   try {

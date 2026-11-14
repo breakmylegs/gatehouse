@@ -75,6 +75,14 @@ export function startShell(): () => void {
       if (!st.panes.includes(id)) st.openBeside(id)
       return
     }
+    // Mac fork: a request opened from the wing beside the notch (NotchMac.tsx), on Approvals.
+    if (m.startsWith("open-request:")) {
+      const st = useStore.getState()
+      if (!st.pending[m.slice(13)]) return
+      st.selectRequest(m.slice(13))
+      st.setRoute("approvals")
+      return
+    }
     if (m.startsWith("open-session:")) {
       try {
         const sent = JSON.parse(m.slice(13)) as { session?: unknown; text?: unknown }

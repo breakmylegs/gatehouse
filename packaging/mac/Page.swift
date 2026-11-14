@@ -25,6 +25,12 @@ let bridgeScript = """
   })();
   """
 
+/// A page that takes the click that brings its window forward, for a panel that never becomes the active window (the
+/// wing beside the notch): otherwise the first click only focuses it and a button needs a second.
+private final class FirstClickWebView: WKWebView {
+  override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 /// WebKit keeps its message handler for as long as the page, so it holds this window weakly.
 private final class WeakHandler: NSObject, WKScriptMessageHandler {
   weak var page: PageWindow?
@@ -46,14 +52,14 @@ class PageWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate
   // The night sky from docs/brand/palette.json, so a window does not flash white before the page paints.
   static let night = NSColor(srgbRed: 0x0a / 255, green: 0x0b / 255, blue: 0x1e / 255, alpha: 1)
 
-  init(window: NSWindow) {
+  init(window: NSWindow, firstClick: Bool = false) {
     self.window = window
     let config = WKWebViewConfiguration()
     config.preferences.javaScriptCanOpenWindowsAutomatically = false
     config.preferences.isElementFullscreenEnabled = true
     let script = WKUserScript(source: bridgeScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
     config.userContentController.addUserScript(script)
-    web = WKWebView(frame: .zero, configuration: config)
+    web = firstClick ? FirstClickWebView(frame: .zero, configuration: config) : WKWebView(frame: .zero, configuration: config)
     web.allowsMagnification = true
     web.allowsBackForwardNavigationGestures = false
     super.init()

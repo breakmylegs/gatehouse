@@ -1,11 +1,12 @@
 // The pictures in the README: the real interface with realistic sample data and a stand-in for the Host, so nothing
 // personal or from a real project appears. Served by the dev server only (screens.html), never packaged.
-//   screens.html?view=approvals|workspace|update|settings|policy|sessions|usage|dashboard|setup&theme=light|dark
+//   screens.html?view=approvals|notch|workspace|update|settings|policy|sessions|usage|dashboard|setup&theme=light|dark
 // scripts/screenshots.ts opens each view in Edge and saves the picture into docs/images.
 import type { PendingView, SessionInfo } from "@gatehouse/shared"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { App } from "../App"
+import { NotchMac } from "../surfaces/NotchMac" // Mac fork: ?view=notch
 import "../styles.css"
 import type { UpdateStatus } from "../lib/update"
 import { startConnection, useStore } from "../store"
@@ -620,9 +621,17 @@ for (const r of ["r1", "r2", "r3"]) useStore.getState().markSeen?.(r)
 
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
-    <div className="h-full">
-      <App />
-    </div>
+    {view === "notch" ? (
+      // Mac fork: the wing beside the notch, on a stand-in for the menu bar and the notch it sits against.
+      <div style={{ display: "flex", background: "#2b2b30", height: 520, alignItems: "flex-start" }}>
+        <div style={{ width: 180, height: 32, background: "#000", borderRadius: "0 0 10px 10px", marginLeft: 120 }} />
+        <NotchMac />
+      </div>
+    ) : (
+      <div className="h-full">
+        <App />
+      </div>
+    )}
   </StrictMode>,
 )
 
