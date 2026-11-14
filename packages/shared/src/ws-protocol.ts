@@ -398,6 +398,8 @@ export const SessionInfo = z.object({
   sdkSessionId: z.string().optional(),
   pendingApprovals: z.number().int(),
   createdAt: z.string(),
+  /** O35: when its state last changed (a turn began, waited on you or ended). Absent from older Hosts: use createdAt. */
+  activeAt: z.string().optional(),
   error: z.string().optional(),
   /** Yours: a title, a pin, archived. */
   title: z.string().optional(),

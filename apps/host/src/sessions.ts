@@ -290,6 +290,7 @@ export interface SessionInfo {
   sdkSessionId?: string
   pendingApprovals: number
   createdAt: string
+  activeAt?: string
   error?: string
   /** Yours: a title, a pin, archived. */
   title?: string
@@ -650,6 +651,8 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly cwd: string
   readonly project: string
   readonly createdAt: string
+  /** O35: when the state last changed, for ordering the session strip by activity. */
+  #activeAt: string
   readonly #deps: SessionDeps
   readonly #input = new InputQueue()
   readonly #decided = new Set<string>()
@@ -882,6 +885,8 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#opts = opts
     this.id = opts.restore?.id ?? uuidv7()
     this.createdAt = opts.restore?.createdAt ?? new Date().toISOString()
+    // A session brought back after a restart starts as old as it is, so what you work in next comes first.
+    this.#activeAt = this.createdAt
     // Resuming carries on in the same conversation, unless it forks; the first message says for certain.
     this.#sdkSessionId = opts.resume !== undefined && opts.fork !== true ? opts.resume : undefined
     this.cwd = opts.cwd
@@ -922,6 +927,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#sdkSessionId !== undefined ? { sdkSessionId: this.#sdkSessionId } : {}),
       pendingApprovals: this.#deps.broker.countFor(this.id),
       createdAt: this.createdAt,
+      activeAt: this.#activeAt,
       ...(this.#error !== undefined ? { error: this.#error } : {}),
       ...(this.#opts.resume !== undefined ? { historyFrom: this.#opts.resume } : {}),
       ...(this.#opts.resumeAt !== undefined ? { historyUntil: this.#opts.resumeAt } : {}),
@@ -1007,6 +1013,7 @@ export class Session extends EventEmitter<SessionEvents> {
     // An error is final. A result or an end-of-stream that arrives afterwards must not hide it.
     if (this.#state === "error") return
     this.#state = state
+    this.#activeAt = new Date().toISOString()
     this.emit("state", this.info())
   }
 

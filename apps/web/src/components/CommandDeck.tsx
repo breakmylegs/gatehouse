@@ -1,5 +1,6 @@
 import clsx from "clsx"
 import { useEffect, useRef, useState } from "react"
+import { sessionRibbon } from "../lib/codes"
 import { notifyLine } from "../lib/rail"
 import { titleOf } from "../lib/sessionActions"
 import { MAIN_ACCOUNT, send, useSessionList, useStore } from "../store"
@@ -27,6 +28,10 @@ function stateWord(s: {
   return undefined
 }
 
+/** O35 (owner, 14 Nov): the strip runs most recently active first. An older Host sends no activeAt: its start time. */
+export const byActivity = <T extends { activeAt?: string; createdAt: string }>(sessions: T[]): T[] =>
+  [...sessions].sort((a, b) => (b.activeAt ?? b.createdAt).localeCompare(a.activeAt ?? a.createdAt))
+
 /**
  * The command deck across the top (Stitch, owner 1 Nov): the wordmark, every live session with its state, the phone,
  * the kill switch and your profile menu. The kill switch asks once before it acts; Ctrl+Shift+K opens that question.
@@ -35,7 +40,7 @@ export function CommandDeck() {
   const setRoute = useStore((s) => s.setRoute)
   const selectSession = useStore((s) => s.selectSession)
   const health = useStore((s) => s.health)
-  const live = useSessionList().filter((s) => s.state !== "ended")
+  const live = byActivity(useSessionList().filter((s) => s.state !== "ended"))
   const killed = health?.killSwitch.engaged ?? false
   const [confirmKill, setConfirmKill] = useState(false)
   const killButton = useRef<HTMLButtonElement>(null)
@@ -62,7 +67,15 @@ export function CommandDeck() {
         </span>
       </button>
 
-      <div className="deck-sessions" role="group" aria-label="Live sessions">
+      <div
+        className="deck-sessions"
+        role="group"
+        aria-label="Live sessions"
+        // A mouse wheel scrolls the strip along when there are more sessions than fit.
+        onWheel={(e) => {
+          if (e.deltaY && !e.deltaX) e.currentTarget.scrollLeft += e.deltaY
+        }}
+      >
         {live.map((s) => {
           const w = stateWord(s)
           return (
@@ -76,7 +89,11 @@ export function CommandDeck() {
                 setRoute("workspace")
               }}
             >
-              <SessionCode session={s} className="!text-[12px]" />
+              {/* O35: the session's name, with its ribbon colour, rather than its code. */}
+              <span className="deck-name" style={{ ["--ribbon" as string]: sessionRibbon(s) }} title={titleOf(s)}>
+                <i aria-hidden="true" />
+                <span className="truncate">{titleOf(s)}</span>
+              </span>
               {w ? (
                 <span className={clsx("deck-state", w.tone)} title={w.text}>
                   <Icon
