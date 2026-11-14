@@ -497,6 +497,39 @@ export function createHost(opts: HostOptions = {}): Host {
           ? {
               about: {
                 read: async () => ({ text: await readAbout(about, aboutDeps()) }),
+                // O34: runs only after you approved the call on the desktop (rule session-handoff, nothing else
+                // answers it). Sent as your message, after the same instruction check as one you type; recorded.
+                offer: async (prompt: string, why: string) => {
+                  const target = manager.get(about.id)
+                  if (!target || target.info().state === "ended")
+                    return { text: "The code session is not open, so nothing was sent.", isError: true }
+                  try {
+                    await target.checkInstructions()
+                    target.prompt(prompt)
+                  } catch (e) {
+                    return { text: `Nothing was sent: ${(e as Error).message}`, isError: true }
+                  }
+                  await audit.record({
+                    session: about.id,
+                    event: "chat_prompt_handed",
+                    channel: "desktop",
+                    tool: "session",
+                    cwd: target.cwd,
+                    input: { from: sessionId, to: about.id, chars: prompt.length, ...(why ? { why } : {}) },
+                    verdict: {
+                      outcome: "allow",
+                      ruleId: "session-handoff",
+                      reason: "You approved a prompt from an Ask about code chat for its code session.",
+                      risk: 0,
+                      decidedBy: "human-desktop",
+                      policyHash: store.current?.hash ?? "",
+                    },
+                    latencyMs: 0,
+                  })
+                  return {
+                    text: "Sent to the code session as the person's message. It runs there; read_session shows how it goes.",
+                  }
+                },
               },
             }
           : {}),

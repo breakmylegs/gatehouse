@@ -8,6 +8,7 @@ import {
 import { redact } from "@gatehouse/policy"
 import { Broker, type BrokerOptions, type PhoneChannel, type Resolution } from "../src/broker.js"
 import type { QuietHours } from "../src/quiet-hours.js"
+import { HANDOFF_RULE } from "../src/about-session.js"
 
 const verdict: Verdict = {
   outcome: "escalate",
@@ -179,6 +180,26 @@ describe("first valid answer wins", () => {
 })
 
 describe("answer validation (invariant 11: the phone cannot edit or create rules)", () => {
+  it("lets only you, on the desktop, allow a chat's prompt for a code session, and never remembered (O34)", async () => {
+    const { broker } = make()
+    const handoff = { ...verdict, ruleId: HANDOFF_RULE, risk: 85 }
+    const p = broker.request(spec({ toolName: "mcp__companion__offer_to_session", input: { prompt: "Fix it" }, verdict: handoff }))
+    const id = firstId(broker)
+    for (const ch of ["phone", "push"] as const)
+      expect(broker.resolve(id, { kind: "decision", decision: "allow" }, ch), ch).toMatchObject({
+        ok: false,
+        reason: "not-allowed-on-channel",
+      })
+    expect(broker.resolve(id, { kind: "decision", decision: "allow", remember: true }, "desktop")).toMatchObject({
+      ok: false,
+    })
+    expect(broker.resolve(id, { kind: "decision", decision: "allow" }, "desktop")).toMatchObject({ ok: true })
+    expect((await p).outcome).toBe("allow")
+    // Declining needs no desk: the phone may say no.
+    void broker.request(spec({ toolUseId: "tu2", verdict: handoff }))
+    expect(broker.resolve(firstId(broker), { kind: "decision", decision: "deny" }, "phone")).toMatchObject({ ok: true })
+  })
+
   it("lets the desktop edit the input and ask to remember, and the phone do neither", () => {
     const { broker } = make()
     void broker.request(spec())

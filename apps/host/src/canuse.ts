@@ -11,6 +11,7 @@ import { dryRunPlan, estimateWords } from "./plan-dry-run.js"
 import { INSTALL_SCRIPTS_RULE, INSTALLER_RULE, INTEGRITY_PREFIX, LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
 import { EGRESS_RULE, GRANTABLE_TOOLS, TAINT_RULE, withProvenance, type Provenance } from "./provenance.js"
 import { recommendedAnswers } from "./carry-on.js"
+import { HANDOFF_RULE, HANDOFF_TOOL } from "./about-session.js"
 import type { CanUseTool, PermissionResult } from "@anthropic-ai/claude-agent-sdk"
 import {
   checkRemember,
@@ -227,6 +228,17 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         ))
       // B32: the hook already applied it to an early verdict; applying it again changes nothing.
       let verdict = withProvenance(judged, toolName, input, deps.provenance, deps.cwd)
+      // O34: a chat's prompt for its code session always goes to you, whatever a rules file says (one that leaves the
+      // rule out, or a remembered rule that would allow it), unless the rules denied it.
+      if (toolName === HANDOFF_TOOL && verdict.outcome !== "deny")
+        verdict = {
+          ...verdict,
+          outcome: "escalate",
+          ruleId: HANDOFF_RULE,
+          reason: "A chat in Ask about code offers this prompt to its code session. You approve each one yourself.",
+          risk: Math.max(verdict.risk, 85),
+          decidedBy: "rules",
+        }
       // D-007: a call that would change a locked test goes to a person, whatever the rules said, unless they denied it.
       // Locks that cannot be read count as touched (fail closed). Recorded before anything is decided.
       if (deps.locks && verdict.outcome !== "deny") {
@@ -461,7 +473,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
           {
             ...verdict,
             // A locked test's reason already says Extreme approval does not approve it.
-            reason: verdict.ruleId === LOCKED_TEST_RULE ? verdict.reason : `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
+            reason:
+              verdict.ruleId === LOCKED_TEST_RULE
+                ? verdict.reason
+                : verdict.ruleId === HANDOFF_RULE
+                  ? `${verdict.reason} ${HANDOFF_ASKS}`
+                  : `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
           },
           effects,
         )
@@ -518,6 +535,8 @@ export const NEVER_AUTO_APPROVED: ReadonlySet<string> = new Set([
   ADR_RULE,
   // D-046: a library's public API is the owner's to break.
   API_RULE,
+  // O34: a chat's prompt for a code session goes there only with you.
+  HANDOFF_RULE,
   "evaluator-unavailable",
   "audit-failure",
   "policy-unavailable",
@@ -541,11 +560,15 @@ export const FAILURE_ESCALATIONS: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Owner, 14 Nov: all that Extreme approval still never answers. The failures, and a test you locked yourself, which is
- * your own "ask me" rather than a judgement of risk. Everything else in NEVER_AUTO_APPROVED still asks in Manual and is
+ * Owner, 14 Nov: all that Extreme approval still never answers. The failures, a test you locked yourself, which is
+ * your own "ask me" rather than a judgement of risk, and (O34, the same day) a chat's prompt for a code session. Everything else in NEVER_AUTO_APPROVED still asks in Manual and is
  * never answered by a grant or the judge.
  */
-export const EXTREME_ASKS: ReadonlySet<string> = new Set([...FAILURE_ESCALATIONS, LOCKED_TEST_RULE])
+export const EXTREME_ASKS: ReadonlySet<string> = new Set([...FAILURE_ESCALATIONS, LOCKED_TEST_RULE, HANDOFF_RULE])
+
+/** O34: added to the reason when Extreme approval meets a chat's offer of a prompt to its code session. */
+export const HANDOFF_ASKS =
+  "You asked to approve each of these yourself, so Extreme approval does not answer it."
 
 /** D-001: added to the reason when a project is strict about its tests and Extreme approval meets a weakening. */
 export const STRICT_TESTS_ASKS =

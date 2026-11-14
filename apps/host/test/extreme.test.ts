@@ -1,9 +1,11 @@
 import { LOCKED_TEST_RULE } from "../src/test-locks.js"
+import { HANDOFF_RULE, HANDOFF_TOOL } from "../src/about-session.js"
 import { describe, expect, it, vi } from "vitest"
 import {
   createCanUseTool,
   EXTREME_ASKS,
   EXTREME_CANNOT_APPROVE,
+  HANDOFF_ASKS,
   NEVER_AUTO_APPROVED,
   type CanUseDeps,
 } from "../src/canuse.js"
@@ -106,11 +108,32 @@ describe("Extreme approval mode", () => {
       expect(t.notified, id).toEqual([])
       // The card says why Extreme approval did not approve it; a locked test's own reason already says so.
       expect(t.request.mock.calls[0]?.[0], id).toMatchObject({
-        verdict: { ruleId: id, reason: id === LOCKED_TEST_RULE ? "because" : `because ${EXTREME_CANNOT_APPROVE}` },
+        verdict: {
+          ruleId: id,
+          reason:
+            id === LOCKED_TEST_RULE
+              ? "because"
+              : id === HANDOFF_RULE
+                ? `because ${HANDOFF_ASKS}`
+                : `because ${EXTREME_CANNOT_APPROVE}`,
+        },
       })
     }
     expect(EXTREME_ASKS.has("evaluator-unavailable")).toBe(true)
     expect(EXTREME_ASKS.has("audit-failure")).toBe(true)
+    // O34 (owner, 14 Nov): a chat's prompt for a code session is always your own approval.
+    expect(EXTREME_ASKS.has(HANDOFF_RULE)).toBe(true)
+  })
+
+  it("sends a chat's prompt for its code session to you whatever the rules said, in Extreme approval too (O34)", async () => {
+    for (const v of [verdict("allow", "some-remembered-rule"), verdict("escalate", "no-rule")]) {
+      const t = setup({ extreme: true, v })
+      await t.call(HANDOFF_TOOL, { prompt: "Fix it" })
+      expect(t.request, v.ruleId).toHaveBeenCalledTimes(1)
+      expect(t.request.mock.calls[0]?.[0], v.ruleId).toMatchObject({ verdict: { ruleId: HANDOFF_RULE, risk: 85 } })
+    }
+    const denied = setup({ extreme: true, v: verdict("deny", "chat-no-shell") })
+    expect((await denied.call(HANDOFF_TOOL, { prompt: "Fix it" }))?.behavior).toBe("deny")
   })
 
   it("approves every escalation a rule made, whatever its risk, as the owner asked (14 Nov)", async () => {

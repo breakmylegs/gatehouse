@@ -14,6 +14,15 @@ export interface SessionLink {
   sdkSessionId?: string
 }
 
+/**
+ * O34 (owner, 14 Nov: "every single time it needs it should require a user approval and it has to be a manual
+ * approval"): the rule a chat's offer of a prompt to its code session is held by. Only you, on the desktop, answer it:
+ * no rule, remembered rule, session grant, Extreme approval, phone or push channel allows it.
+ */
+export const HANDOFF_RULE = "session-handoff"
+/** The Companion tool that makes the offer. */
+export const HANDOFF_TOOL = "mcp__companion__offer_to_session"
+
 /** The most of the session's conversation a chat is given at a time: the latest part, which says where things stand. */
 export const ABOUT_CHARS = 30_000
 

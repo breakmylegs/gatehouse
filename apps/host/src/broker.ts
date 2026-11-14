@@ -9,6 +9,7 @@ import {
 } from "@gatehouse/shared"
 import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import { msUntilPhoneAllowed, phoneHeld, type QuietHours } from "./quiet-hours.js"
+import { HANDOFF_RULE } from "./about-session.js"
 
 /** `push` is an outbound notification channel such as ntfy: it answers with a one-time code. */
 export type Channel = "desktop" | "phone" | "push"
@@ -296,6 +297,17 @@ export class Broker extends EventEmitter<BrokerEvents> {
 
   #validate(entry: Entry, answer: Answer, channel: Channel): ResolveResult | undefined {
     const kind = entry.view.request.kind
+    // O34: a chat's prompt for a code session is allowed only by you, on the desktop, each time: never remembered.
+    if (entry.view.request.verdict.ruleId === HANDOFF_RULE && answer.kind !== "answers") {
+      if (answer.remember || answer.rememberFor)
+        return { ok: false, reason: "invalid-answer", detail: "This is approved each time; it cannot be remembered" }
+      if (answer.decision === "allow" && channel !== "desktop")
+        return {
+          ok: false,
+          reason: "not-allowed-on-channel",
+          detail: "Only you, on the desktop, can send a chat's prompt to a session",
+        }
+    }
     if (answer.kind === "answers") {
       if (kind !== "question")
         return { ok: false, reason: "invalid-answer", detail: "This request is not a question" }

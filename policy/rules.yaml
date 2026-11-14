@@ -44,6 +44,10 @@ escalate:
   - { id: network, tools: [WebFetch, WebSearch], commands: ["curl*", "Invoke-WebRequest*", "Invoke-RestMethod*"], risk: 60 }
   - { id: git-remote, commands: ["git push*", "git remote*", "gh *"], risk: 80 }
   - { id: mcp-external, tools: ["mcp__*"], exceptTools: ["mcp__companion__*"], risk: 60 }
+  # O34 (owner, 14 Nov): a chat in Ask about code offers a prompt to the code session it is about. It always asks you,
+  # every time, on the desktop: Severe, so no push channel offers Allow, and the Host lets no rule, grant or Extreme
+  # approval answer it (canuse.ts HANDOFF_RULE).
+  - { id: session-handoff, tools: ["mcp__companion__offer_to_session"], risk: 85 }
   - { id: unc-path, pathUnc: true, risk: 90 }
 
 allow:

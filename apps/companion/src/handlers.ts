@@ -6,6 +6,8 @@ import { secretGlobs, summarisePolicy } from "./summary.js"
 
 export const NOTIFY_MAX_CHARS = 140
 export const NOTIFY_INTERVAL_MS = 60_000
+/** O34: the longest prompt a chat may offer to its code session. */
+export const OFFER_MAX_CHARS = 8000
 
 /**
  * What a chat remembers about the person (owner's plan, W1-08). The Host keeps and audits it; these are the three
@@ -39,6 +41,11 @@ export interface PageClient {
  */
 export interface SessionReadClient {
   read(): Promise<ToolText>
+  /**
+   * O34 (owner, 14 Nov): sends a prompt to the code session as the person's message, once they approved the call on the
+   * desktop. Absent: offer_to_session is not offered.
+   */
+  offer?(prompt: string, why: string): Promise<ToolText>
 }
 
 /** D-037: the session's assumption register, kept by the Host. */
@@ -161,6 +168,13 @@ export class CompanionHandlers {
     return await this.#deps.about.read()
   }
 
+  async offerToSession(prompt: string, why: string): Promise<ToolText> {
+    const clean = prompt.trim()
+    if (!clean) return { text: "Nothing was offered: the prompt is empty.", isError: true }
+    if (!this.#deps.about?.offer) return { text: "This chat is not about a code session.", isError: true }
+    return await this.#deps.about.offer(clean.slice(0, OFFER_MAX_CHARS), why.trim().slice(0, 500))
+  }
+
   async lookAtPage(url: string): Promise<ToolText> {
     if (!this.#deps.pages)
       return { text: "Browser tools are off for this session.", isError: true }
@@ -198,6 +212,7 @@ export interface CompanionToolDef {
     | "save_artifact"
     | "look_at_page"
     | "read_session"
+    | "offer_to_session"
     | "declare_assumption"
   description: string
   shape: z.ZodRawShape
@@ -355,6 +370,25 @@ export const ABOUT_TOOLS: readonly CompanionToolDef[] = [
       openWorldHint: false,
     },
     run: (h) => h.readSession(),
+  },
+]
+
+/**
+ * O34 (owner, 14 Nov): offered with read_session when the Host can hand a prompt over. Every call waits for the person
+ * on the desktop (the rule session-handoff); nothing else can answer it.
+ */
+export const OFFER_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "offer_to_session",
+    description: `Offer a prompt to the code session this chat is about, when answering shows its code needs a change and the person may want the session to make it. Write the prompt as the person would send it there, complete on its own, and say in why what it fixes. The person sees it and approves or declines it every time; if they approve, it is sent to the session as their message, and read_session then shows how it goes. Up to ${OFFER_MAX_CHARS} characters. Do not offer the same change twice.`,
+    shape: { prompt: z.string().min(1).max(OFFER_MAX_CHARS * 2), why: z.string().max(2000).optional() },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    run: (h, a) => h.offerToSession(String(a.prompt ?? ""), typeof a.why === "string" ? a.why : ""),
   },
 ]
 

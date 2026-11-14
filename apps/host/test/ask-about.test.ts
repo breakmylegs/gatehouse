@@ -113,5 +113,22 @@ describe("the read_session tool", () => {
     expect(Object.keys(tools(base))).not.toContain("read_session")
     const linked = tools({ ...base, about: { read: async () => ({ text: "It is idle." }) } })
     expect(Object.keys(linked)).toContain("read_session")
+    // O34: offering a prompt to the session comes only where the Host can hand one over.
+    expect(Object.keys(linked)).not.toContain("offer_to_session")
+    const sent: string[] = []
+    const offering = tools({
+      ...base,
+      about: {
+        read: async () => ({ text: "It is idle." }),
+        offer: async () => ({ text: "Sent." }),
+      },
+    })
+    expect(Object.keys(offering)).toContain("offer_to_session")
+    const { CompanionHandlers } = await import("@gatehouse/companion")
+    const about = { read: async () => ({ text: "" }), offer: async (p: string) => (sent.push(p), { text: "Sent." }) }
+    await new CompanionHandlers({ ...base, about }).offerToSession("  Fix the date bug  ", "UTC")
+    expect(sent).toEqual(["Fix the date bug"])
+    expect((await new CompanionHandlers({ ...base, about }).offerToSession("  ", "")).isError).toBe(true)
+    expect(sent).toHaveLength(1)
   })
 })
