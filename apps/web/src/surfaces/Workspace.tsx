@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { stashDraft } from "../lib/stash"
 import { QuoteSelection } from "../components/QuoteSelection"
 import { withQuote } from "../lib/quote"
 import { recallStep, rememberSent, type Recall } from "../lib/promptRecall"
@@ -2463,6 +2464,20 @@ function Composer({
           onInsert={insert}
           onPictures={(rels) => void addSavedPictures(rels)}
           onFiles={addFiles}
+          onStash={() => {
+            const project = useStore.getState().sessions[sessionId]?.project
+            if (!stashDraft(text, files.map((x) => x.rel), project)) return false
+            setText("")
+            setFiles([])
+            setRecall(undefined)
+            toast("Stashed. Bring it back from + then Stashed drafts.", { id: "stash" })
+            return true
+          }}
+          onRestore={(d) => {
+            setText((cur) => (cur.trim() ? `${cur.trimEnd()}\n\n${d.text}` : d.text))
+            if (d.files.length) addFiles(d.files)
+            area.current?.focus()
+          }}
           disabled={disabled}
         />
         <textarea

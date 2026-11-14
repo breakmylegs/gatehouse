@@ -3,9 +3,10 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { fillPrompt, variablesOf, type SavedPrompt } from "../lib/prompts"
 import type { SessionMeta } from "../lib/sessionMeta"
+import { dropStashed, stashed, stashLabel, takeStashed, type StashedDraft } from "../lib/stash"
 import { Icon } from "./Icon"
 
-type Panel = "none" | "prompts" | "commands" | "connectors" | "plugins"
+type Panel = "none" | "prompts" | "stash" | "commands" | "connectors" | "plugins"
 
 /**
  * The composer's plus menu: attach files or photos, mention a folder, use a saved prompt, and see the session's slash commands, skills,
@@ -17,6 +18,8 @@ export function PlusMenu({
   onInsert,
   onPictures,
   onFiles,
+  onStash,
+  onRestore,
   disabled,
 }: {
   sessionId: string
@@ -26,6 +29,10 @@ export function PlusMenu({
   onPictures?: (rels: string[]) => void
   /** Other files it attached, shown as icons by the prompt box rather than mentioned in its text. */
   onFiles?: (rels: string[]) => void
+  /** T-043: put what is in the prompt box aside; false when there is nothing to stash. */
+  onStash?: () => boolean
+  /** T-043: bring a stashed draft back into the prompt box. */
+  onRestore?: (d: StashedDraft) => void
   disabled?: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -141,6 +148,19 @@ export function PlusMenu({
                 }}
                 more
               />
+              {onStash ? (
+                <MenuItem
+                  label="Stash this draft"
+                  hint="Put it aside; the box clears"
+                  onClick={() => {
+                    if (!onStash()) toast("There is nothing in the prompt box to stash.", { id: "stash" })
+                    close()
+                  }}
+                />
+              ) : null}
+              {onRestore ? (
+                <MenuItem label="Stashed drafts" hint={`${stashed().length} put aside`} onClick={() => setPanel("stash")} more />
+              ) : null}
               <MenuItem
                 label="Slash commands and skills"
                 hint={`${commands.length} available`}
@@ -175,6 +195,13 @@ export function PlusMenu({
                     prompts={prompts}
                     onUse={(text) => {
                       onInsert(text)
+                      close()
+                    }}
+                  />
+                ) : panel === "stash" ? (
+                  <StashPanel
+                    onRestore={(d) => {
+                      onRestore?.(d)
                       close()
                     }}
                   />
@@ -328,6 +355,40 @@ function SavedPromptsPanel({
             }
             onClick={() => (variablesOf(p.text).length ? setChosen(p) : onUse(p.text))}
           />
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** T-043: the drafts you put aside, newest first; choose one to bring it back, or delete it. */
+function StashPanel({ onRestore }: { onRestore: (d: StashedDraft) => void }) {
+  const [list, setList] = useState(stashed)
+  if (!list.length)
+    return <Empty text="Nothing stashed. Stash this draft puts what you are writing aside, with its files, to bring back later in any session." />
+  return (
+    <ul className="m-0 grid list-none gap-0.5 p-0" aria-label="Stashed drafts">
+      {list.map((d) => (
+        <li key={d.id} className="flex items-center gap-1">
+          <MenuItem
+            label={stashLabel(d)}
+            hint={[d.project, d.at ? new Date(d.at).toLocaleDateString() : ""].filter(Boolean).join(", ") || undefined}
+            onClick={() => {
+              const taken = takeStashed(d.id)
+              if (taken) onRestore(taken)
+            }}
+          />
+          <button
+            type="button"
+            className="btn !min-h-7 !px-2 !text-[12.5px]"
+            aria-label={`Delete the stashed draft ${stashLabel(d)}`}
+            onClick={() => {
+              dropStashed(d.id)
+              setList(stashed())
+            }}
+          >
+            Delete
+          </button>
         </li>
       ))}
     </ul>
