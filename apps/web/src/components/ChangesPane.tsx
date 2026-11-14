@@ -11,6 +11,7 @@ import { describeDecision } from "../lib/decision"
 import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
 import { commentKey, reviewMessage, type ReviewComment } from "../lib/reviewComments"
 import { isViewed, readViewed, setViewed } from "../lib/viewed"
+import { findInDiffs } from "../lib/diffFind"
 
 /** One change in a file (as packages/shared/src/node/checkpoint.ts counts them). */
 interface Hunk {
@@ -121,6 +122,8 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   const [open, setOpen] = useState<Record<string, boolean>>({})
   // T-077: files you marked as viewed, kept per session; a file changed since comes back unmarked.
   const [viewed, setViewedState] = useState(() => readViewed(sessionId))
+  // T-062: find across every changed file, folded ones included.
+  const [find, setFind] = useState("")
   useEffect(() => setViewedState(readViewed(sessionId)), [sessionId])
   const [confirm, setConfirm] = useState<string[]>()
   const [busy, setBusy] = useState(false)
@@ -372,6 +375,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               </ul>
             </section>
           ) : null}
+          {files.length > 1 ? <FindInChanges files={files} query={find} onQuery={setFind} onOpen={(p) => setOpen((o) => ({ ...o, [p]: true }))} /> : null}
           {files.length > 1 ? (
             <p className="m-0 text-[12.5px] text-mut" aria-live="polite">
               {files.filter((f) => isViewed(viewed, f)).length} of {files.length} files viewed
@@ -924,5 +928,66 @@ function DiffText({ text }: { text: string }) {
       ))}
       <MoreLines total={lines.length} all={all} onShow={() => setAll(true)} />
     </pre>
+  )
+}
+
+/** T-062: a find box over every file of the change; each match opens its file. */
+function FindInChanges({
+  files,
+  query,
+  onQuery,
+  onOpen,
+}: {
+  files: FileChange[]
+  query: string
+  onQuery: (q: string) => void
+  onOpen: (path: string) => void
+}) {
+  const found = findInDiffs(files, query)
+  return (
+    <div className="grid gap-1">
+      <label className="flex items-center gap-2 text-[12.5px]">
+        <span className="shrink-0">Find in every file</span>
+        <input
+          type="search"
+          className="field mono !min-h-7 min-w-0 flex-1 text-[12.5px]"
+          value={query}
+          onChange={(e) => onQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") onQuery("")
+          }}
+        />
+      </label>
+      {query.trim() ? (
+        <>
+          <p className="m-0 text-[12.5px] text-mut" aria-live="polite">
+            {found.total === 0
+              ? "No changed line has that."
+              : `${found.total} ${found.total === 1 ? "match" : "matches"} in ${found.files} ${found.files === 1 ? "file" : "files"}${found.total > found.matches.length ? `, the first ${found.matches.length} listed` : ""}`}
+          </p>
+          {found.matches.length ? (
+            <ul aria-label="Matches" className="m-0 grid max-h-64 list-none gap-0.5 overflow-auto p-0">
+              {found.matches.map((m, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    className="mono flex w-full min-w-0 cursor-pointer gap-2 border-0 bg-transparent p-0.5 text-left text-[12px] hover:bg-s2"
+                    onClick={() => onOpen(m.path)}
+                  >
+                    <span className="shrink-0 text-mut">
+                      {m.path}:{m.line}
+                    </span>
+                    <span className={clsx("w-2 shrink-0", m.sign === "+" ? "text-ok" : m.sign === "-" ? "text-sev" : "text-mut")}>
+                      {m.sign === " " ? "" : m.sign}
+                    </span>
+                    <span className="min-w-0 truncate">{m.text}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </>
+      ) : null}
+    </div>
   )
 }

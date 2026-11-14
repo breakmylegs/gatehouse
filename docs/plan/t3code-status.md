@@ -72,7 +72,7 @@ Slices, in order:
 | T-058 | Visual replies: an HTML page (chart, table, diagram) in any thread, following the theme, sandboxed, with zoom. | Partly | todo | | |
 | T-059 | MCP Apps: interactive apps returned by MCP tools, which can call tools and post to the thread. | Conflicts | listed for decision | | |
 | T-060 | Find in the thread, including older messages and plans. | Have | built (Codehouse had it) | | |
-| T-062 | Find across every file of a diff, folded files included. | Build, S | todo | | |
+| T-062 | Find across every file of a diff, folded files included. | Build, S | built | slice/T1-find | Find in every file, in the Changes pane |
 | T-063 | A thread details card with chosen rows: context window with the autocompact mark, usage limits, local servers with Stop, side chats. | Partly | todo | | |
 | T-064 | Permission modes per thread: Supervised, Auto-accept edits, Auto. | Have | built (Codehouse had it) | | |
 | T-065 | Full access: commands and edits with no approval. | Conflicts | listed for decision | | |
