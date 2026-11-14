@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import type { Item } from "../lib/transcript"
+import { MAX_ROWS, parseDelimited, separatorOf, TABLE } from "../lib/delimited"
 
 export type Opened = { kind: "file"; rel: string } | { kind: "browser"; url: string }
 
@@ -300,14 +301,14 @@ export function Viewer({
         {opened.kind === "file" ? (
           <>
             <span className="mono min-w-0 flex-1 truncate text-[13px]">{rel}</span>
-            {HTML.test(rel) ? (
+            {HTML.test(rel) || TABLE.test(rel) ? (
               <button
                 type="button"
                 className="btn !min-h-7 !px-2 text-[13px]"
                 aria-pressed={source}
                 onClick={() => setSource((v) => !v)}
               >
-                {source ? "Show the page" : "Show the source"}
+                {source ? (TABLE.test(rel) ? "Show the table" : "Show the page") : "Show the source"}
               </button>
             ) : null}
             {read?.kind === "text" ? <CopyButton text={read.text} what="the text" /> : null}
@@ -441,6 +442,8 @@ export function Viewer({
             sandbox="allow-scripts"
             className="h-full min-h-[480px] w-full border-0 bg-white"
           />
+        ) : TABLE.test(rel) && !source ? (
+          <Table text={read.text} sep={separatorOf(rel)} label={rel} />
         ) : MARKDOWN.test(rel) && !source ? (
           <div className="help-body px-5 py-4">
             <Markdown remarkPlugins={[remarkGfm]}>{read.text}</Markdown>
@@ -459,5 +462,43 @@ export function Viewer({
         ) : null}
       </div>
     </section>
+  )
+}
+
+/** A CSV or TSV file as a table: the first row as headings, up to MAX_ROWS rows, the rest counted. */
+function Table({ text, sep, label }: { text: string; sep: "," | "\t"; label: string }) {
+  const { rows, more } = parseDelimited(text, sep)
+  const [head, ...body] = rows
+  if (!head) return <p className="m-0 p-4 text-mut">This file is empty.</p>
+  return (
+    <div className="p-3">
+      <table className="mono w-max border-collapse text-[13px]" aria-label={`${label}, as a table`}>
+        <thead>
+          <tr>
+            {head.map((h, i) => (
+              <th key={i} scope="col" className="sticky top-0 border border-line bg-s2 px-2 py-1 text-left">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {body.map((r, i) => (
+            <tr key={i}>
+              {r.map((c, j) => (
+                <td key={j} className="border border-line px-2 py-1 align-top whitespace-pre-wrap">
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {more ? (
+        <p className="m-0 pt-2 text-xs text-mut">
+          The first {MAX_ROWS} rows are shown, and {more} more are not. Show the source has them all.
+        </p>
+      ) : null}
+    </div>
   )
 }
