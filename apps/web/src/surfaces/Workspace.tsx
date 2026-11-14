@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { recallStep, rememberSent, type Recall } from "../lib/promptRecall"
 import { Decisions } from "../components/Decisions"
 import { Architecture } from "../components/Architecture"
 import { TestsFirstBanner, TestsFirstStart } from "../components/TestsFirst"
@@ -1956,6 +1957,8 @@ function Composer({
     else localStorage.removeItem(draftKey)
   }, [text, draftKey])
   const [active, setActive] = useState(0)
+  // T-041: Up in an empty box brings back what you sent before; typing ends it.
+  const [recall, setRecall] = useState<Recall>()
   // F15: the @ word at the cursor, and the session's files that match it.
   const [mention, setMention] = useState<{ start: number; query: string }>()
   const [found, setFound] = useState<string[]>([])
@@ -2123,6 +2126,8 @@ function Composer({
   async function submit() {
     const t = text.trim()
     if (!t && pictures.length === 0 && files.length === 0 && pasted.length === 0) return
+    rememberSent(sessionId, t)
+    setRecall(undefined)
     if (starting) {
       toast(
         "This session is still starting. What you wrote stays here: send it once it is ready.",
@@ -2472,6 +2477,7 @@ function Composer({
           value={text}
           onChange={(e) => {
             setText(e.target.value)
+            setRecall(undefined)
             setActive(0)
             setMention(mentionAt(e.target.value, e.target.selectionStart ?? e.target.value.length))
           }}
@@ -2503,6 +2509,20 @@ function Composer({
             } else if (matches.length > 0 && e.key === "Tab") {
               e.preventDefault()
               setText((matches[active]?.cmd ?? text) + " ")
+            } else if (
+              (e.key === "ArrowUp" || e.key === "ArrowDown") &&
+              !e.shiftKey &&
+              !e.altKey &&
+              !e.ctrlKey &&
+              !e.metaKey
+            ) {
+              const el = e.currentTarget
+              const step = recallStep(sessionId, e.key, text, el.selectionStart === 0 && el.selectionEnd === 0, recall)
+              if (step) {
+                e.preventDefault()
+                setText(step.text)
+                setRecall(step.recall)
+              }
             } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               void submit()
