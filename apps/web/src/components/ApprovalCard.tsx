@@ -10,6 +10,9 @@ import { isMac, keyLabel, onMac } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
+import { FileChip } from "./FileChip"
+import { api } from "../lib/api"
+import { attachedName } from "../lib/attachments"
 import { RiskBadge } from "./RiskBadge"
 import { SessionCode } from "./SessionCode"
 import { hasHidden, ShowHidden } from "./ShowHidden"
@@ -819,6 +822,8 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
   const qs = (Array.isArray(view.rawInput.questions) ? view.rawInput.questions : []) as Q[]
   const [answers, setAnswers] = useState<Record<string, string[]>>({})
   const [other, setOther] = useState<Record<string, string>>({})
+  // T-051: files attached to an answer, saved in the session's folder through the same checks as Add files.
+  const [files, setFiles] = useState<Record<string, string[]>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const id = view.request.id
@@ -827,7 +832,23 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
     [
       ...(answers[q.question] ?? []),
       ...(other[q.question]?.trim() ? [other[q.question]!.trim()] : []),
-    ].join(", ")
+    ].join(", ") + (files[q.question]?.length ? `${answers[q.question]?.length || other[q.question]?.trim() ? " " : ""}${files[q.question]!.map((rel) => `@${rel}`).join(" ")}` : "")
+
+  async function attach(q: Q) {
+    const session = view.request.sessionId
+    const picked = await api<{ paths: string[] }>("POST", "/api/files/pick-files", { session })
+    if (!picked.ok) return void toast.error(picked.error ?? "The file window could not open")
+    const paths = picked.data?.paths ?? []
+    if (!paths.length) return
+    const r = await api<{ files: Array<{ path: string; rel?: string; error?: string }> }>("POST", "/api/files/attach", {
+      session,
+      paths,
+    })
+    if (!r.ok || !r.data) return void toast.error(r.error ?? "The files were not attached")
+    const rels = r.data.files.flatMap((x) => (x.rel ? [x.rel] : []))
+    if (rels.length) setFiles((fs) => ({ ...fs, [q.question]: [...new Set([...(fs[q.question] ?? []), ...rels])] }))
+    for (const x of r.data.files.filter((y) => y.error)) toast.error(`${x.path.split(/[\\/]/).pop()}: ${x.error}`)
+  }
   const complete = qs.length > 0 && qs.every((q) => value(q) !== "")
 
   async function submit() {
@@ -892,6 +913,18 @@ function QuestionCard({ view, resolvedSummary }: { view: PendingView; resolvedSu
               onChange={(e) => setOther((o) => ({ ...o, [q.question]: e.target.value }))}
             />
           </label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(files[q.question] ?? []).map((rel) => (
+              <FileChip
+                key={rel}
+                name={attachedName(rel)}
+                onRemove={() => setFiles((fs) => ({ ...fs, [q.question]: (fs[q.question] ?? []).filter((x) => x !== rel) }))}
+              />
+            ))}
+            <button type="button" className="btn !min-h-7 !px-2 text-[13px]" disabled={busy} onClick={() => void attach(q)}>
+              Attach files...
+            </button>
+          </div>
         </fieldset>
       ))}
       {error ? (

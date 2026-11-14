@@ -28,6 +28,7 @@ export const PAGE_HELP: Record<Route, Article> = {
 **Deciding**
 
 - The pass on the right shows exactly what will run, where, which rule held it and why.
+- When Claude asks you a question, choose an answer or write your own, and **Attach files...** adds files to that answer (a picture, a document): each is checked as Add files checks it, a blocked one is refused, and Claude is told where each is, as in a prompt. The phone answers without files.
 - The highlighted part of the command is the part that caused the escalation.
 - **Deny** is always one step. **Allow once** needs Ctrl+Enter or a click inside the card, so you cannot allow by accident. At High and Severe risk a red band says so and Deny is the filled button.
 - While focus is inside the card, one letter does what its button says: **D** denies, **M** opens Deny with message, **E** Edit then allow, **R** Remember, **Shift+S** Stop session. No letter ever allows, and letters typed in a box are only words.
