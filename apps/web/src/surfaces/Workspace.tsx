@@ -1,4 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
+import { clearSession } from "../lib/fork"
 import { stashDraft } from "../lib/stash"
 import { QuoteSelection } from "../components/QuoteSelection"
 import { withQuote } from "../lib/quote"
@@ -140,6 +141,7 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
   { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
+  { cmd: "/clear", help: "Start afresh in this pane, set up as now; the earlier session stays in the sidebar" },
   {
     cmd: "/tell",
     help: "Send a message to another session by its code, e.g. /tell GT 407 run the tests",
@@ -2183,6 +2185,12 @@ function Composer({
         case "/model":
           r = await send({ type: "set_model", sessionId, ...(arg ? { model: arg } : {}) })
           break
+        case "/clear": {
+          // T-046: a fresh session in this pane, set up as this one; this one stays in the sidebar.
+          setText("")
+          await clearSession(sessionId)
+          return
+        }
         case "/btw": {
           // A side question, answered from what was said while the session carries on; never sent to it.
           if (!arg) {

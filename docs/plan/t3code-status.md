@@ -57,7 +57,7 @@ Slices, in order:
 | T-043 | Prompt stash (save a draft with its attachments and bring it back). | Build, S | built | slice/T1-composer | |
 | T-044 | Commands with `/`, skills with `$`, Restart agent session after a skills change. | Have | built (Codehouse had it) | | |
 | T-045 | `/compact`, idle compaction before the prompt cache expires with a Compact or Keep choice, and an auto-compact threshold. | Partly | todo | | |
-| T-046 | `/clear`: a fresh agent session in the same thread, marked in the transcript. | Build, S | todo | | |
+| T-046 | `/clear`: a fresh agent session in the same thread, marked in the transcript. | Build, S | built | slice/T1-sidebar | |
 | T-047 | `/goal`, working until a stated goal is met. | Have | built (Codehouse had it) | | |
 | T-048 | Context chips inline in the text: a terminal excerpt, a review comment, a diff note, a file. | Partly | todo | | |
 | T-049 | Another thread as context (`@` a thread, read on demand), a PR as `#123`, and `@model` to name a model. | Partly | todo | | |

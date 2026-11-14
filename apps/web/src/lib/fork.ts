@@ -61,6 +61,42 @@ export async function forkSession(sessionId: string): Promise<string | undefined
 }
 
 /**
+ * T-046 (t3code review, O31): /clear starts a fresh session in the same folder and the same pane, set up as this one
+ * is (mode, approval, model, effort and account: never looser), through the normal start (the org guard, the mode set
+ * explicitly, audited by the Host). The earlier session stays in the sidebar as it was.
+ */
+export async function clearSession(sessionId: string): Promise<string | undefined> {
+  const st = useStore.getState()
+  const s = st.sessions[sessionId]
+  if (!s) return undefined
+  if (busy(s)) {
+    toast("Claude is still working here. Stop it, or wait for it to finish, then /clear.", { id: "clear" })
+    return undefined
+  }
+  const r = await send(
+    {
+      type: "create_session",
+      cwd: s.cwd,
+      ...(s.kind ? { kind: s.kind } : {}),
+      ...inherited(s),
+      ...(s.chatProject ? { chatProject: s.chatProject } : {}),
+    },
+    START_WAIT_MS,
+  )
+  if (!r.ok) {
+    toast.error(r.error?.message ?? "A fresh session could not be started.", { id: "clear" })
+    return undefined
+  }
+  const id = (r.data as { sessionId: string }).sessionId
+  const at = st.panes.indexOf(sessionId)
+  if (at >= 0) st.setPane(at, id)
+  else st.selectSession(id)
+  st.setRoute("workspace")
+  toast("A fresh session, set up as the last one. The earlier one is still in the sidebar.", { id: "clear" })
+  return id
+}
+
+/**
  * Hand off a side task (B13): a new coding session for something that came up, told what to do and where it came
  * from, in a new worktree of the repository if you like, so it never touches the files of the session you are in. It
  * keeps the original's mode, approval, model, effort and account.
