@@ -1,4 +1,6 @@
 import { ImportedChats } from "./ImportedChats"
+import { toast } from "sonner"
+import { inAnHour, isSnoozed, snoozedUntil, snoozeSession, tomorrowMorning, wakeSession } from "../lib/snooze"
 import NumberFlow from "@number-flow/react"
 import clsx from "clsx"
 import { useEffect, useState } from "react"
@@ -88,6 +90,16 @@ function readFolded(): Record<string, boolean> {
  * state of Codehouse, the kill switch and your profile menu, which holds every other page. The arrangement follows the
  * desktop coding apps people know (owner, 30 Oct); the look is Codehouse's own.
  */
+/** T-025, with T-026: snoozes a session and offers to undo it for a few seconds. */
+function snoozeWithUndo(s: SessionInfo, until: Date): void {
+  snoozeSession(s.id, until)
+  toast(`Snoozed ${titleOf(s)} until ${until.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}. It wakes at once if it needs you.`, {
+    id: "session",
+    duration: 5000,
+    action: { label: "Undo", onClick: () => wakeSession(s.id) },
+  })
+}
+
 export function Rail({ onHide }: { onHide: () => void }) {
   const route = useStore((s) => s.route)
   const setRoute = useStore((s) => s.setRoute)
@@ -115,6 +127,19 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [moving, setMoving] = useState<SessionInfo>()
   const [handingOff, setHandingOff] = useState<SessionInfo>()
   const mode = useRailMode()
+  // T-025: snoozed sessions, looked at again each minute and whenever a snooze changes.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const again = () => setTick((n) => n + 1)
+    const timer = setInterval(again, 60_000)
+    window.addEventListener("codeh:snooze", again)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener("codeh:snooze", again)
+    }
+  }, [])
+  const pending = useStore((s) => s.pending)
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
   // The switch follows what you open: a chat shows the Chat side, a coding session the Code side.
   const selectedKind = sessions.find((s) => s.id === selected)?.kind
   useEffect(() => {
@@ -137,7 +162,11 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const shown = new Set(route === "workspace" ? (panes.length ? panes : [selected]) : [])
   // An ended session you have open stays in the list, so the pane you are reading never loses its entry.
   // Each side lists only its own: chats on Chat, coding sessions on Code.
-  const listed = sessions.filter((s) => (mode === "chat" ? s.kind === "chat" : s.kind !== "chat"))
+  const onSide = sessions.filter((s) => (mode === "chat" ? s.kind === "chat" : s.kind !== "chat"))
+  // T-025: a snoozed session leaves the list until its time, unless it needs you or is open in a pane.
+  const waiting = new Set(Object.values(pending).map((v) => v.request.sessionId))
+  const snoozed = onSide.filter((s) => !shown.has(s.id) && isSnoozed(s.id, waiting.has(s.id) || s.state === "error"))
+  const listed = onSide.filter((s) => !snoozed.includes(s))
   const groups =
     mode === "chat"
       ? groupChats(listed, { ended: hideEnded, keep: shown })
@@ -485,6 +514,12 @@ export function Rail({ onHide }: { onHide: () => void }) {
                                   s.pinned ? `Unpinned ${titleOf(s)}.` : `Pinned ${titleOf(s)}.`,
                                 ),
                             },
+                            ...(snoozedUntil(s.id)
+                              ? [{ label: "Wake now", onSelect: () => wakeSession(s.id) }]
+                              : [
+                                  { label: "Snooze for an hour", onSelect: () => snoozeWithUndo(s, inAnHour()) },
+                                  { label: "Snooze until tomorrow morning", onSelect: () => snoozeWithUndo(s, tomorrowMorning()) },
+                                ]),
                             {
                               label: "Copy conversation",
                               onSelect: () => void copyConversation(s),
@@ -522,6 +557,33 @@ export function Rail({ onHide }: { onHide: () => void }) {
           </section>
         ))}
         {mode === "chat" ? <ImportedChats /> : null}
+        {snoozed.length ? (
+          <section aria-label="Snoozed sessions" className="grid gap-0.5 px-2">
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-0 text-left text-[13px] text-shell-mut"
+              aria-expanded={snoozeOpen}
+              onClick={() => setSnoozeOpen((o) => !o)}
+            >
+              Snoozed ({snoozed.length})
+            </button>
+            {snoozeOpen ? (
+              <ul className="m-0 grid list-none gap-0.5 p-0">
+                {snoozed.map((s) => (
+                  <li key={s.id} className="flex items-center gap-1 text-[13px]">
+                    <button type="button" className="min-w-0 flex-1 cursor-pointer truncate border-0 bg-transparent p-0 text-left text-shell-tx" onClick={() => open(s.id)}>
+                      {titleOf(s)}
+                    </button>
+                    <span className="text-shell-mut">until {snoozedUntil(s.id)?.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}</span>
+                    <button type="button" className="btn !min-h-6 !px-1.5 !text-[12px]" onClick={() => wakeSession(s.id)}>
+                      Wake
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
         {hiddenEnded > 0 ? (
           <p className="m-0 px-2 text-[13px] text-shell-mut">
             {hiddenEnded === 1

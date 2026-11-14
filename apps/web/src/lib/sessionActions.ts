@@ -12,7 +12,7 @@ export const titleOf = (s: Pick<SessionInfo, "title" | "project">): string => s.
  * Codehouse its id yet (it is still starting) cannot be changed.
  */
 export async function setSessionMeta(
-  s: { sdkSessionId?: string; cwd?: string },
+  s: { sdkSessionId?: string; cwd?: string; title?: string; pinned?: boolean; archived?: boolean; group?: string; project?: string },
   change: { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null },
   said: string,
 ): Promise<boolean> {
@@ -30,8 +30,29 @@ export async function setSessionMeta(
     toast.error(r.error?.message ?? "That did not change", { id: "session" })
     return false
   }
-  toast(said, { id: "session" })
+  // T-026 (t3code review): an Undo for a few seconds, putting back what the session had before.
+  const before = undoOf(s, change)
+  toast(said, {
+    id: "session",
+    ...(before
+      ? { duration: 5000, action: { label: "Undo", onClick: () => void setSessionMeta(s, before, change.archived ? "Brought back to the sidebar. It stays stopped: Resume starts it again." : "Undone.") } }
+      : {}),
+  })
   return true
+}
+
+/** T-026: the change that puts a session back as it was, from what it carries; undefined when it carries nothing. */
+export function undoOf(
+  s: { title?: string; pinned?: boolean; archived?: boolean; group?: string; project?: string },
+  change: { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null },
+): { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null } | undefined {
+  const known = (k: string) => k in s
+  const out: { title?: string | null; pinned?: boolean; archived?: boolean; group?: string | null } = {}
+  if ("title" in change && (known("title") || known("project"))) out.title = s.title ?? null
+  if ("pinned" in change) out.pinned = s.pinned === true
+  if ("archived" in change) out.archived = s.archived === true
+  if ("group" in change && (known("group") || known("project"))) out.group = s.group ?? null
+  return Object.keys(out).length ? out : undefined
 }
 
 /** Archives an open session: it stops, and leaves the sidebar. Earlier sessions on Sessions can show it again. */

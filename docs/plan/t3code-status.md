@@ -1,4 +1,4 @@
-# t3code features in Codehouse (O31)
+builtslice/T1-sidebar |builtslice/T1-sidebar |# t3code features in Codehouse (O31)
 
 The review is `docs/research/t3code-review-2026-11.md` (owner, 14 Nov: "Review this and implement all the features into codehouse. This is the priority task and top of queue"). Build the Build and Partly items in the review's slice order, each slice on its own branch and released soon after; Conflicts items are listed for the owner, with the invariant each would weaken, in the review. Read this file first after a restart.
 

@@ -92,6 +92,8 @@ Sessions waiting on you are lit and come first. Each has a code and colour that 
 
 **Ended sessions in the sidebar** are hidden by default, so the list shows what is working or needs you. A line at the bottom says how many are hidden and **Show** brings them back. The ... menu above the list switches this on or off, and **Archive all ended** puts every ended session away at once; they stay under Earlier sessions. A session that stopped with an error is never hidden, and neither is an ended one you have open.
 
+**Snooze** a session from its ... menu in the sidebar, for an hour or until tomorrow morning: it moves to a folded **Snoozed** list at the bottom until then, and comes back at once if it needs you (a request, a question or an error). Requests are never hidden: they stay on Needs you. **Wake now**, or **Wake** in the list, brings it back sooner. Pinning, archiving, renaming and moving a session each show a notice with **Undo** for a few seconds.
+
 **Earlier sessions**
 
 Sessions from before Codehouse last started, and Claude Code sessions from elsewhere on this computer. **Resume** carries one on where it stopped; **Fork** starts a copy and leaves the original as it was. Its ... menu renames, pins, exports or archives it. **Search what was said** looks inside past conversations (your words and Claude's, not tool output); it reads up to 100 sessions and stops after 20 seconds, and says so if it stopped early. Archived sessions are left out unless you tick Show archived.`,
