@@ -244,12 +244,15 @@ export function createHost(opts: HostOptions = {}): Host {
   let approverClient: ApproverClient
   const spawnApprover = opts.approver === undefined || opts.approver === "spawn"
   const approverToken = spawnApprover ? generateToken() : (opts.approver as { token: string }).token
+  // O30: an evaluation that timed out is tried once more; say so, so a stalled Approver shows in host.log.
+  const approverRetry = (call: { toolName: string }) => log(`approver: an evaluation of ${call.toolName} timed out; trying once more with twice the time`)
   const approverPortPromise = spawnApprover ? freePort() : Promise.resolve(0)
   let approverUrl = spawnApprover ? "" : (opts.approver as { url: string }).url
   approverClient = new ApproverClient({
     url: approverUrl || "http://127.0.0.1:9/mcp",
     token: approverToken,
     timeoutMs: approverTimeout,
+    onRetry: approverRetry,
   })
 
   // Assigned once, below, after the kill switch that needs it is built, so it cannot be a const here.
@@ -1412,6 +1415,7 @@ export function createHost(opts: HostOptions = {}): Host {
           url: approverUrl,
           token: approverToken,
           timeoutMs: approverTimeout,
+          onRetry: approverRetry,
         })
       }
       await kill.syncApprover()

@@ -77,6 +77,36 @@ describe("ApproverClient fails closed (invariant 1)", () => {
     expect(v.reason).toContain("timed out")
   })
 
+  it("tries once more after a timeout, with twice the time, and takes the answer (O30)", async () => {
+    // The Approver stalls on the first call (as it did under memory pressure, 12 and 14 Nov) and answers the second.
+    let n = 0
+    handler = (_q, res) => {
+      n++
+      if (n === 1) return // stalls past the limit
+      setTimeout(() => reply(res, { structuredContent: good, content: [] }), 350)
+    }
+    const retried: string[] = []
+    const c = new ApproverClient({ url: `http://127.0.0.1:${port}/mcp`, token: "tok", timeoutMs: 300, onRetry: (call) => retried.push(call.toolName) })
+    // 350 ms is past the first limit (300) but within the second (600).
+    expect(await c.evaluate(call, ctx)).toEqual(good)
+    expect(n).toBe(2)
+    expect(retried).toEqual(["Bash"])
+  })
+
+  it("still escalates when the second try times out too, and retries nothing but a timeout", async () => {
+    let n = 0
+    handler = () => void n++ // never answers
+    expect(await client(200).evaluate(call, ctx)).toMatchObject({ outcome: "escalate", ruleId: "evaluator-unavailable" })
+    expect(n).toBe(2)
+    n = 0
+    handler = (_q, res) => {
+      n++
+      reply(res, { structuredContent: { outcome: "allow" }, content: [] })
+    }
+    expect(await client(200).evaluate(call, ctx)).toMatchObject({ outcome: "escalate", reason: expect.stringContaining("malformed") })
+    expect(n).toBe(1)
+  })
+
   const bad: [string, Handler][] = [
     ["an HTTP error", (_q, res) => res.writeHead(500).end("boom")],
     ["a refusal (wrong token)", (_q, res) => res.writeHead(401).end("{}")],

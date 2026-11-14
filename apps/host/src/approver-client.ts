@@ -10,6 +10,11 @@ export interface ApproverClientOptions {
    * it on.
    */
   timeoutMs?: number | (() => number)
+  /**
+   * O30: told when an evaluation timed out and is tried once more (with twice the time), so a stalled Approver shows
+   * in the Host's log instead of looking like rules that do not work.
+   */
+  onRetry?: (call: EvaluateCall, why: string) => void
 }
 
 export interface EvaluateCall {
@@ -52,20 +57,37 @@ export function unavailableVerdict(why: string): Verdict {
  * invariant 1: the Host never turns a failure into an allow, and this never throws.
  */
 export class ApproverClient {
-  readonly #opts: Required<ApproverClientOptions>
+  readonly #opts: Omit<Required<ApproverClientOptions>, "onRetry"> & Pick<ApproverClientOptions, "onRetry">
   #id = 0
 
   constructor(opts: ApproverClientOptions) {
     this.#opts = { timeoutMs: APPROVER_TIMEOUT_MS, ...opts }
   }
 
+  /**
+   * O30 (owner, 14 Nov: "the rules working sometimes"): an evaluation that times out is tried once more with twice the
+   * time, because the Approver stalls now and then when the computer is short of memory (its PowerShell parser took
+   * 20 and 32 seconds on 12 and 14 Nov) while a decision usually takes a few milliseconds. Only a timeout is retried;
+   * a second timeout, or any other failure, still escalates (invariant 1).
+   */
   async evaluate(call: EvaluateCall, ctx: EvaluateCtx): Promise<Verdict> {
+    const first = await this.#evaluateOnce(call, ctx, 1)
+    if (first.ruleId !== "evaluator-unavailable" || !first.reason.includes("(timed out)")) return first
+    this.#opts.onRetry?.(call, "timed out")
+    return await this.#evaluateOnce(call, ctx, 2)
+  }
+
+  async #evaluateOnce(call: EvaluateCall, ctx: EvaluateCtx, factor: number): Promise<Verdict> {
     try {
-      const result = await this.#callTool("evaluate_permission", {
-        toolName: call.toolName,
-        input: call.input,
-        ctx,
-      })
+      const result = await this.#callTool(
+        "evaluate_permission",
+        {
+          toolName: call.toolName,
+          input: call.input,
+          ctx,
+        },
+        factor,
+      )
       const parsed = Verdict.safeParse(result.structuredContent)
       if (!parsed.success) return unavailableVerdict("malformed answer")
       return parsed.data
@@ -104,6 +126,7 @@ export class ApproverClient {
   async #callTool(
     name: string,
     args: Record<string, unknown>,
+    factor = 1,
   ): Promise<{ structuredContent?: unknown; isError?: boolean }> {
     const res = await fetch(this.#opts.url, {
       method: "POST",
@@ -119,7 +142,7 @@ export class ApproverClient {
         params: { name, arguments: args },
       }),
       signal: AbortSignal.timeout(
-        typeof this.#opts.timeoutMs === "function" ? this.#opts.timeoutMs() : this.#opts.timeoutMs,
+        factor * (typeof this.#opts.timeoutMs === "function" ? this.#opts.timeoutMs() : this.#opts.timeoutMs),
       ),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
