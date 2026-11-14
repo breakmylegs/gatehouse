@@ -30,6 +30,7 @@ import fs from "node:fs"
 import type { SignInFlow } from "./signin.js"
 import type net from "node:net"
 import path from "node:path"
+import { cannotRevert, EDIT_REVERT_RULE } from "./edit-revert.js"
 import fastifyStatic from "@fastify/static"
 import websocket from "@fastify/websocket"
 import Fastify, { type FastifyInstance } from "fastify"
@@ -1336,6 +1337,35 @@ export class HostServer {
         if (!cmd.confirm)
           throw new CommandError("not-confirmed", "Restoring needs confirmation after the preview")
         return await a.checkpoints.restore(cmd.cwd, cmd.ref, cmd.sessionId, true)
+      case "edit_revert": {
+        // T-042: only a session in its own worktree that no other open session shares, only to one of its own
+        // checkpoints, and recorded before anything is put back (a checkpoint of how things are now is saved too).
+        const s = this.#session(cmd.sessionId)
+        const why = cannotRevert({ id: s.id, cwd: s.cwd, worktree: s.info().worktree }, a.manager.list())
+        if (why) throw new CommandError("not-allowed", why)
+        const mine = await a.checkpoints.list(s.cwd, s.id)
+        if (!mine.some((c) => c.ref === cmd.ref))
+          throw new CommandError("invalid", "That checkpoint is not one of this session's.")
+        const written = await a.audit.record({
+          session: s.id,
+          event: "edit_files_reverted",
+          channel: "desktop",
+          tool: "checkpoint",
+          cwd: s.cwd,
+          input: { ref: cmd.ref },
+          verdict: {
+            outcome: "allow",
+            ruleId: EDIT_REVERT_RULE,
+            reason: "You edited a message and asked for the files to be put back as they were when you sent it.",
+            risk: 0,
+            decidedBy: "human-desktop",
+            policyHash: "",
+          },
+          latencyMs: 0,
+        })
+        if (!written) throw new CommandError("audit-failure", "It could not be recorded, so nothing was put back.")
+        return await a.checkpoints.restore(s.cwd, cmd.ref, s.id, true)
+      }
       case "list_history":
         return await a.listHistory(cmd.dir)
       case "session_meta": {

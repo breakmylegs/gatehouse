@@ -219,6 +219,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     cwd: z.string().min(1).max(4096),
     ref: z.string().min(1).max(500),
   }),
+  /** T-042: Edit from here puts the session's files back as they were at one of its own checkpoints, recorded first. */
+  z.object({ type: z.literal("edit_revert"), sessionId: Id, ref: z.string().min(1).max(500) }),
   z.object({
     type: z.literal("checkpoint_restore"),
     cwd: z.string().min(1).max(4096),

@@ -51,6 +51,7 @@ import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise, failureItems, summaryItems } from "../lib/groups"
 import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
+import { EditRevert } from "../components/EditRevert"
 import { findIn } from "../lib/find"
 import { FindBar } from "../components/FindBar"
 import { RecapCard } from "../components/RecapCard"
@@ -2770,8 +2771,11 @@ function UserMessage({
   sessionId,
   point,
   itemId,
+  at,
 }: {
   text: string
+  /** When it was sent, for putting files back from Edit (T-042). */
+  at?: number
   /** The item it is on screen, for its versions (CH-03). */
   itemId?: string
   images?: Shown[]
@@ -2781,6 +2785,7 @@ function UserMessage({
 }) {
   const [viewing, setViewing] = useState<{ url: string; name: string }>()
   const [editing, setEditing] = useState<string>()
+  const [revertRef, setRevertRef] = useState<string>()
   const canFork = Boolean(sessionId && point && (point.before || point.first))
   const { shown, retry } = usePictures(sessionId, images)
   const { words, files } = splitAttachments(text)
@@ -2826,7 +2831,9 @@ function UserMessage({
             e.preventDefault()
             const said = editing.trim()
             if (said)
-              void carryOnFrom(sessionId, point, said).then((ok) => ok && setEditing(undefined))
+              void carryOnFrom(sessionId, point, said, revertRef ? { revertRef } : {}).then(
+                (ok) => ok && setEditing(undefined),
+              )
           }}
         >
           <textarea
@@ -2843,6 +2850,7 @@ function UserMessage({
               }
             }}
           />
+          {at && point.before ? <EditRevert sessionId={sessionId} at={at} onRef={setRevertRef} /> : null}
           <span className="flex justify-end gap-2">
             <button type="button" className="btn !min-h-7" onClick={() => setEditing(undefined)}>
               Cancel
@@ -3007,6 +3015,7 @@ export const ItemView = memo(function ItemView({
             images={item.images}
             sessionId={sessionId}
             itemId={item.id}
+            {...(item.at ? { at: item.at } : {})}
             point={{
               ...(item.before ? { before: item.before } : {}),
               ...(item.first ? { first: true } : {}),

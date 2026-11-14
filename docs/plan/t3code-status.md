@@ -53,7 +53,7 @@ Slices, in order:
 | T-039 | Follow-ups queued or steered into the running turn; queued messages listed, edited, removed, Send now; a held queue resumed. | Partly | todo | | |
 | T-040 | Quote part of a reply into the composer with a comment (Cite in composer). | Build, S | built | slice/T1-composer | |
 | T-041 | Recall sent prompts with Up and Down in an empty composer. | Build, S | built | slice/T1-composer | |
-| T-042 | Edit from here, with Revert files too (worktree only, refused when another session shares the folder). | Partly | todo | | |
+| T-042 | Edit from here, with Revert files too (worktree only, refused when another session shares the folder). | Partly | built | slice/T2-edit-revert | worktree only, refused when another open session shares the folder, recorded first |
 | T-043 | Prompt stash (save a draft with its attachments and bring it back). | Build, S | built | slice/T1-composer | |
 | T-044 | Commands with `/`, skills with `$`, Restart agent session after a skills change. | Have | built (Codehouse had it) | | |
 | T-045 | `/compact`, idle compaction before the prompt cache expires with a Compact or Keep choice, and an auto-compact threshold. | Partly | todo | | |

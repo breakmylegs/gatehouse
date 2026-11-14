@@ -11,12 +11,14 @@ const START_WAIT_MS = 120_000
  * just before one of your messages, with that message (Retry) or a changed one (Edit). It is a fork of the conversation
  * (the SDK's resume, forkSession and resumeSessionAt), so the version left behind stays under Earlier sessions; it
  * replaces the session in its pane. The first message starts a new conversation with the words. Files a coding
- * session changed after that point stay changed.
+ * session changed after that point stay changed, unless (T-042) you ask Edit to put them back: `revertRef` is the
+ * checkpoint to put them back to, which the Host checks, records and restores before anything else happens.
  */
 export async function carryOnFrom(
   sessionId: string,
   point: { before?: string; first?: boolean },
   text: string,
+  o: { revertRef?: string } = {},
 ): Promise<boolean> {
   const st = useStore.getState()
   const s = st.sessions[sessionId]
@@ -30,6 +32,13 @@ export async function carryOnFrom(
       ? { resume: s.sdkSessionId, fork: true, resumeAt: point.before }
       : undefined
   if (!fork && !point.first) return false
+  if (o.revertRef) {
+    const back = await send({ type: "edit_revert", sessionId, ref: o.revertRef })
+    if (!back.ok) {
+      toast.error(back.error?.message ?? "The files could not be put back, so nothing was sent.", { id: "redo" })
+      return false
+    }
+  }
   const chat = s.kind === "chat"
   const r = await send(
     {
