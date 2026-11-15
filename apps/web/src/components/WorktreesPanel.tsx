@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { WorktreeCleanup } from "./WorktreeCleanup"
 
 /** A worktree Codehouse made, as the Host lists it (apps/host/src/worktrees.ts). */
 export interface WorktreeRow {
@@ -111,6 +112,7 @@ export function WorktreesPanel() {
         back shows what a branch brings before it merges. Removing one takes the folder away and
         keeps its branch.
       </p>
+      <WorktreeCleanup onDone={() => void load()} />
       <ul className="m-0 grid list-none gap-2 p-0">
         {rows.map((w) => (
           <li key={w.path} className="panel grid gap-1 p-3 text-[14px]">

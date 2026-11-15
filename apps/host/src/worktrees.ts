@@ -13,6 +13,7 @@ import type { FastifyInstance } from "fastify"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 import { MergeError, mergeBack, previewMerge } from "./worktree-merge.js"
+import { cleanUp } from "./worktree-cleanup.js"
 
 export class WorktreeError extends Error {}
 
@@ -326,6 +327,15 @@ export function registerWorktreeRoutes(
   app: FastifyInstance,
   ctx: { worktrees?: Worktrees; audit: HostAudit; openIn?: (folder: string) => boolean },
 ): void {
+  // T-089: Clean up now, with the rules you chose on the page; it says what went and what stayed, and why.
+  app.post("/api/worktrees/cleanup", async (req, reply) => {
+    if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const days = typeof b.inactiveDays === "number" && b.inactiveDays >= 1 && b.inactiveDays <= 365 ? Math.floor(b.inactiveDays) : undefined
+    const policy = { unchanged: b.unchanged === true, merged: b.merged === true, ...(days ? { inactiveDays: days } : {}) }
+    if (!policy.unchanged && !policy.merged && !days) return reply.code(422).send({ error: "Choose at least one rule." })
+    return await cleanUp(ctx.worktrees, policy, { open: (p) => ctx.openIn?.(p) ?? false, audit: ctx.audit, channel: "desktop" })
+  })
   app.get("/api/worktrees", async (_req, reply) => {
     if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
     const list = await ctx.worktrees.list()

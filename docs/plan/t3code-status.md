@@ -97,7 +97,7 @@ Slices, in order:
 | T-085 | A worktree per thread; a new thread in an existing worktree; reuse the previous worktree. | Partly | built | slice/T3-here | New session in this worktree, in the pane menu |
 | T-086 | Worktree branch names: a static prefix, a model-chosen prefix such as `feat/`, or custom instructions. | Partly | built | slice/T3-branches | named from the task, without a model: kind of change and words, your prefix kept |
 | T-088 | Worktree location. | Have | built (Codehouse had it) | | |
-| T-089 | Automatic worktree cleanup by inactivity, after a merge, or when unchanged; Delete now with results; unused folders listed with sizes. | Partly | todo | | |
+| T-089 | Automatic worktree cleanup by inactivity, after a merge, or when unchanged; Delete now with results; unused folders listed with sizes. | Partly | built | slice/T3-cleanup | rules off by default, never a dirty, untracked or ignored worktree, recorded first |
 | T-090 | Fast worktree checkout by copy-on-write on macOS; submodule depth. | Build, S | todo | | |
 | T-091 | Project actions: setup scripts on a new worktree, run or stop on settle, shortcuts, preview addresses, declared in a repository file (`t3.json`). | Build (safe variant), M | todo | | |
 | T-092 | Project icons and monograms; pin and archive projects; settings per project with an inheritance chain. | Partly | todo | | |

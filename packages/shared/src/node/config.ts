@@ -101,6 +101,15 @@ function build(loose: boolean) {
     phoneAlerts: z.enum(["all", "decisions"]).optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** T-089: worktrees removed by rules, all off unless set; never one with any uncommitted, untracked or ignored file. */
+    worktreeCleanup: z
+      .object({
+        unchanged: z.boolean().optional(),
+        merged: z.boolean().optional(),
+        inactiveDays: z.number().int().min(1).max(365).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** T-018: sessions named by Claude after their first turn. Absent is on; false turns it off. */
     titleByClaude: z.boolean().optional(),
     /** T-019: how you like titles, told to the model that writes them. */

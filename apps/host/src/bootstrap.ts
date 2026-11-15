@@ -48,6 +48,7 @@ import { createRecapWriter } from "./recap-writer.js"
 import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
 import { chatFolderOf } from "./triage.js"
+import { cleanUp } from "./worktree-cleanup.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -350,6 +351,20 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
+  // T-089: your worktree clean-up rules, if you turned any on, applied an hour after start and then every six hours.
+  const cleanupTick = () => {
+    const p = config.worktreeCleanup
+    if (!p || !(p.unchanged || p.merged || p.inactiveDays)) return
+    void cleanUp(worktrees, p, {
+      open: (folder) => manager.list().some((s) => s.state !== "ended" && path.resolve(s.cwd).toLowerCase() === path.resolve(folder).toLowerCase()),
+      audit,
+      channel: "host",
+    })
+      .then((r) => r.removed.length && log(`worktree clean-up removed ${r.removed.length}`))
+      .catch((e) => log(`worktree clean-up failed: ${(e as Error).message}`))
+  }
+  const cleanupTimers = [setTimeout(cleanupTick, 3_600_000), setInterval(cleanupTick, 6 * 3_600_000)]
+  for (const t of cleanupTimers) t.unref?.()
   // T-121: how many sessions each session has started.
   const childCount = new Map<string, number>()
   // T-122: routines a session drafted, for you to save on the desktop.
@@ -1665,6 +1680,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
+      for (const t of cleanupTimers) clearTimeout(t)
       routineTriggers?.stop()
       ntfy.stop()
       updates.stop()
