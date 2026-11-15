@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import {
   blame,
   changes,
+  commitView,
   conflicts,
   history,
   markResolved,
@@ -44,6 +45,16 @@ describe("the git panel", { timeout: 120_000 }, () => {
     expect(b[0]).toMatchObject({ line: 1, author: "Ada", summary: "first", text: "line 1" })
     await expect(blame(repo, "../outside")).rejects.toThrow(/not a path/)
     await expect(blame(repo, "--output=x")).rejects.toThrow(/not a path/)
+  })
+
+  it("shows one commit, what it says and each file's diff, and accepts only a commit hash (T-072)", async () => {
+    const hash = git("rev-parse", "--short", "HEAD").trim()
+    const c = await commitView(repo, hash)
+    expect(c).toMatchObject({ subject: "add b", author: "Ada", truncated: false })
+    expect(c.files.map((x) => x.path)).toEqual(["b.txt"])
+    expect(c.files[0]!.diff).toContain("+b")
+    for (const bad of ["--output=x", "HEAD", "../x", "abc", 7])
+      await expect(commitView(repo, bad)).rejects.toThrow(/not a commit/)
   })
 
   it("stages one change of a file and leaves the other, then unstages it, never touching the file", async () => {

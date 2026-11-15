@@ -74,6 +74,40 @@ export async function history(cwd: string, run: Git = git): Promise<HistoryLine[
     })
 }
 
+export interface CommitView {
+  hash: string
+  subject: string
+  author: string
+  date: string
+  files: Array<{ path: string; diff: string }>
+  truncated: boolean
+}
+
+/** The most of one commit's diff read, so a huge commit cannot fill the window. */
+export const MAX_COMMIT_DIFF = 400_000
+
+/**
+ * T-072 (t3code review, O31): one commit as the Changes pane shows it: what it says and each file's diff. Only a
+ * commit hash (four to forty hex characters) is accepted, so nothing else can reach git's arguments.
+ */
+export async function commitView(cwd: string, hash: unknown, run: Git = git): Promise<CommitView> {
+  if (typeof hash !== "string" || !/^[0-9a-f]{4,40}$/i.test(hash)) throw new GitPanelError("That is not a commit.")
+  const out = await run(cwd, ["show", "--no-color", "--date=short", "--format=%H%x1f%s%x1f%an%x1f%ad%x1e", hash, "--"])
+  const cut = out.indexOf("\x1e")
+  if (cut < 0) throw new GitPanelError("That commit could not be read.")
+  const [full, subject, author, date] = out.slice(0, cut).split("\x1f")
+  const patch = out.slice(cut + 1)
+  const truncated = patch.length > MAX_COMMIT_DIFF
+  const files = (truncated ? patch.slice(0, MAX_COMMIT_DIFF) : patch)
+    .split(/^diff --git /m)
+    .slice(1)
+    .map((chunk) => {
+      const head = /^a\/(.+?) b\/(.+)$/m.exec(chunk)
+      return { path: head?.[2] ?? head?.[1] ?? "(a file)", diff: chunk.slice(chunk.indexOf("\n") + 1).trimEnd() }
+    })
+  return { hash: (full ?? hash).trim(), subject: subject ?? "", author: author ?? "", date: date ?? "", files, truncated }
+}
+
 /** A path inside the repository, never an option or a way out of it. */
 const PATH = /^(?!-)(?!.*(^|[\\/])\.\.([\\/]|$))[^\0]{1,1000}$/
 
@@ -269,6 +303,10 @@ export function registerGitPanelRoutes(app: FastifyInstance, ctx: GitPanelContex
   app.get(
     "/api/git/changes",
     reading(async (cwd) => ({ files: await changes(cwd) })),
+  )
+  app.get(
+    "/api/git/commit",
+    reading(async (cwd, q) => await commitView(cwd, q.hash)),
   )
   app.get(
     "/api/git/conflicts",

@@ -12,6 +12,7 @@ import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
 import { commentKey, reviewMessage, type ReviewComment } from "../lib/reviewComments"
 import { isViewed, readViewed, setViewed } from "../lib/viewed"
 import { findInDiffs } from "../lib/diffFind"
+import { api } from "../lib/api"
 
 /** One change in a file (as packages/shared/src/node/checkpoint.ts counts them). */
 interface Hunk {
@@ -375,6 +376,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               </ul>
             </section>
           ) : null}
+          <CommitPicker sessionId={sessionId} />
           {files.length > 1 ? <FindInChanges files={files} query={find} onQuery={setFind} onOpen={(p) => setOpen((o) => ({ ...o, [p]: true }))} /> : null}
           {files.length > 1 ? (
             <p className="m-0 text-[12.5px] text-mut" aria-live="polite">
@@ -989,5 +991,90 @@ function FindInChanges({
         </>
       ) : null}
     </div>
+  )
+}
+
+interface Commit {
+  hash: string
+  subject: string
+  author: string
+  date: string
+  files: Array<{ path: string; diff: string }>
+  truncated: boolean
+}
+
+/**
+ * T-072 (t3code review, O31): look at one commit of the repository here: choose it from the latest, and see what it
+ * says and each file's diff. Read only.
+ */
+function CommitPicker({ sessionId }: { sessionId: string }) {
+  const [list, setList] = useState<Array<{ hash: string; subject: string; date: string }>>()
+  const [chosen, setChosen] = useState("")
+  const [commit, setCommit] = useState<Commit>()
+  const [error, setError] = useState<string>()
+  async function load() {
+    const r = await api<{ lines: Array<{ hash?: string; subject?: string; date?: string }> }>(
+      "GET",
+      `/api/git/history?session=${encodeURIComponent(sessionId)}`,
+    )
+    if (!r.ok || !r.data) return setError(r.error ?? "The history could not be read.")
+    setList(
+      r.data.lines
+        .filter((l) => l.hash)
+        .slice(0, 50)
+        .map((l) => ({ hash: l.hash!, subject: l.subject ?? "", date: l.date ?? "" })),
+    )
+  }
+  async function choose(hash: string) {
+    setChosen(hash)
+    setCommit(undefined)
+    setError(undefined)
+    if (!hash) return
+    const r = await api<Commit>("GET", `/api/git/commit?session=${encodeURIComponent(sessionId)}&hash=${encodeURIComponent(hash)}`)
+    if (r.ok && r.data) setCommit(r.data)
+    else setError(r.error ?? "That commit could not be read.")
+  }
+  if (!list)
+    return (
+      <button type="button" className="btn w-fit !min-h-7 !text-[12.5px]" onClick={() => void load()}>
+        Look at a commit...
+      </button>
+    )
+  return (
+    <section aria-label="A commit" className="grid gap-1.5">
+      <label className="flex items-center gap-2 text-[12.5px]">
+        <span className="shrink-0">Commit</span>
+        <select className="field mono !min-h-7 min-w-0 flex-1 text-[12.5px]" value={chosen} onChange={(e) => void choose(e.target.value)}>
+          <option value="">Choose one of the latest {list.length}</option>
+          {list.map((c) => (
+            <option key={c.hash} value={c.hash}>
+              {c.hash} {c.date} {c.subject}
+            </option>
+          ))}
+        </select>
+      </label>
+      {error ? (
+        <p role="alert" className="m-0 text-[12.5px] font-semibold text-sev">
+          {error}
+        </p>
+      ) : null}
+      {commit ? (
+        <div className="grid gap-1">
+          <p className="m-0 text-[13px]">
+            <strong>{commit.subject}</strong>{" "}
+            <span className="text-mut">
+              {commit.author}, {commit.date}, {commit.files.length === 1 ? "1 file" : `${commit.files.length} files`}
+            </span>
+          </p>
+          {commit.files.map((f) => (
+            <details key={f.path} className="panel overflow-hidden">
+              <summary className="mono cursor-pointer px-2.5 py-1.5 text-[13px]">{f.path}</summary>
+              <DiffText text={f.diff} />
+            </details>
+          ))}
+          {commit.truncated ? <p className="m-0 text-xs text-mut">The commit is large: only the start is shown.</p> : null}
+        </div>
+      ) : null}
+    </section>
   )
 }
