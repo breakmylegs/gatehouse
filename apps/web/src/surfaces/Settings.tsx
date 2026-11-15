@@ -76,6 +76,7 @@ interface Config {
   keepAwake?: boolean
   phoneAlerts?: "all" | "decisions" // Mac fork
   recapByClaude?: boolean
+  extremeRiskLimit?: number
   titleByClaude?: boolean
   forges?: { github?: boolean }
   titleInstructions?: string
@@ -161,6 +162,8 @@ interface Values {
   telFile: boolean
   telEndpoint: string
   ecUsd: string
+  /** O36: the risk at or above which Rules-based Extreme approval asks you; "none" never on risk. */
+  exLimit: string
   /** What every session is told at its start. */
   instr: string
   /** What Claude should call you, and your work (Profile). */
@@ -229,6 +232,7 @@ function valuesOf(d: SettingsData): Values {
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
+    exLimit: c.extremeRiskLimit === 101 ? "none" : String(c.extremeRiskLimit ?? 80),
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
@@ -313,6 +317,9 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     ...(v.ecTurns === "none" ? { noTurnLimit: true } : {}),
     ...(v.ecUsd === "none" ? { noSpendLimit: true } : {}),
   }
+  // O36: 80 is what an absent setting means, so the file only says so when you choose another.
+  if (v.exLimit === "80") delete body.extremeRiskLimit
+  else body.extremeRiskLimit = v.exLimit === "none" ? 101 : Number(v.exLimit)
   if (v.effortCap) body.effortCap = v.effortCap
   else delete body.effortCap
   if (v.maxSessions) body.maxSessions = Number(v.maxSessions)
@@ -462,6 +469,7 @@ export const DEFAULT_VALUES: Values = {
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
+  exLimit: "80",
   instr: "",
   callMe: "",
   work: "",
@@ -720,7 +728,7 @@ export function Settings() {
   const phoneChanged = v.quiet || differs(v, ["phoneMin", "hardMin"])
   const digestChanged =
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
-  const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
+  const extremeChanged = differs(v, ["ecTurns", "ecUsd", "exLimit"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
@@ -1071,7 +1079,23 @@ export function Settings() {
                   >
                     {withCurrent(CARRY_USD, v.ecUsd).map((n) => (
                       <option key={n} value={n}>
-                        {n === "none" ? "No limit" : `$${Number(n).toLocaleString("en-GB")}`}
+                        {n === "none" ? "No limit" : `${Number(n).toLocaleString("en-GB")}`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field
+                  label="Rules-based: ask me at this risk and above"
+                  help="Extreme approval answers what would ask you below this risk and waits for you at or above it. Extreme max approval answers everything, whatever the risk."
+                >
+                  <select
+                    className="field"
+                    value={v.exLimit}
+                    onChange={(e) => change({ exLimit: e.target.value }, "Extreme approval")}
+                  >
+                    {withCurrent(["50", "60", "70", "80", "85", "90", "none"], v.exLimit).map((n) => (
+                      <option key={n} value={n}>
+                        {n === "none" ? "Never on risk" : `${n} and above${n === "80" ? " (usual)" : ""}`}
                       </option>
                     ))}
                   </select>

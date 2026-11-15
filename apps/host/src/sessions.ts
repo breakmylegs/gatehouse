@@ -37,7 +37,7 @@ import { folderExample } from "@gatehouse/shared/node" // Mac fork
 import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
-import { createCanUseTool } from "./canuse.js"
+import { createCanUseTool, DEFAULT_EXTREME_LIMIT } from "./canuse.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
 import {
@@ -286,6 +286,7 @@ export interface SessionInfo {
   mode: SessionMode
   effort?: Effort
   extreme?: boolean
+  extremeMax?: boolean
   state: SessionState
   sdkSessionId?: string
   pendingApprovals: number
@@ -404,6 +405,7 @@ export interface SessionEvents {
         | "mutant_task_started"
         | "intent_drift"
         | "mutant_rechecked"
+        | "handed_prompt"
       data: Record<string, unknown>
     },
   ]
@@ -529,6 +531,8 @@ export interface StartSessionOptions {
   mode?: SessionMode
   effort?: Effort
   extreme?: boolean
+  /** O36: Extreme max approval rather than Rules-based. */
+  extremeMax?: boolean
   resume?: string
   fork?: boolean
   /** A new project in the projects folder: the folder must be new (a number is added if the name is taken). */
@@ -874,6 +878,8 @@ export class Session extends EventEmitter<SessionEvents> {
   #model: string | undefined
   #effort: Effort | undefined
   #extreme: boolean
+  /** O36: Extreme max approval rather than Rules-based. */
+  #extremeMax: boolean
   /** Owner, 13 Nov: the tools you allowed for the whole session on the desktop. */
   readonly #toolGrants = new Set<string>()
   #sdkSessionId: string | undefined
@@ -902,6 +908,7 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#effort =
       opts.localModel !== undefined ? undefined : capEffort(opts.effort, deps.config().effortCap)
     this.#extreme = opts.extreme === true
+    this.#extremeMax = opts.extreme === true && opts.extremeMax === true
     this.#resources = opts.resources ?? "high"
     this.#account = opts.account ?? MAIN_ACCOUNT
     if (opts.kind === "chat" && opts.title) this.#label = chatTitle(opts.title)
@@ -937,6 +944,7 @@ export class Session extends EventEmitter<SessionEvents> {
       mode: this.#mode,
       ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
       extreme: this.#extreme,
+      ...(this.#extreme && this.#extremeMax ? { extremeMax: true } : {}),
       state: this.#state,
       ...(this.#sdkSessionId !== undefined ? { sdkSessionId: this.#sdkSessionId } : {}),
       pendingApprovals: this.#deps.broker.countFor(this.id),
@@ -1263,6 +1271,8 @@ export class Session extends EventEmitter<SessionEvents> {
       decided: this.#decided,
       verdicts: this.#verdicts,
       extreme: () => this.#extreme,
+      // O36: Max, or Rules-based at the limit in Settings, read at each call.
+      extremeLevel: () => ({ max: this.#extremeMax, limit: d.config().extremeRiskLimit ?? DEFAULT_EXTREME_LIMIT }),
       toolGranted: (tool: string) => this.#toolGrants.has(tool),
       mode: () => this.#mode,
       // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
@@ -2335,6 +2345,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#model !== undefined ? { model: this.#model } : {}),
       ...(this.#effort !== undefined ? { effort: this.#effort } : {}),
       extreme: this.#extreme,
+      ...(this.#extremeMax ? { extremeMax: true } : {}),
       resources: this.#resources,
       ...(this.#account !== MAIN_ACCOUNT ? { account: this.#account } : {}),
       ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
@@ -2470,9 +2481,10 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /** Extreme approval for this session only. Written to the audit log, because it changes what gets asked. */
-  async setExtreme(on: boolean): Promise<void> {
+  async setExtreme(on: boolean, max = false): Promise<void> {
     if (this.#opts.kind === "chat" && on) throw new ChatModeError()
     this.#extreme = on
+    this.#extremeMax = on && max
     await this.#deps.audit.record({
       session: this.id,
       event: "settings_changed",
@@ -2480,12 +2492,14 @@ export class Session extends EventEmitter<SessionEvents> {
       tool: "extreme-approval",
       cwd: this.cwd,
       project: this.project,
-      input: { on },
+      input: { on, ...(on ? { max } : {}) },
       verdict: {
         outcome: "allow",
-        ruleId: on ? "extreme-on" : "extreme-off",
+        ruleId: on ? (max ? "extreme-max-on" : "extreme-on") : "extreme-off",
         reason: on
-          ? "Extreme approval turned on for this session from the desktop."
+          ? max
+            ? "Extreme max approval turned on for this session from the desktop: every request a rule makes is answered."
+            : "Rules-based Extreme approval turned on for this session from the desktop."
           : "Extreme approval turned off for this session from the desktop.",
         risk: 0,
         decidedBy: "human-desktop",

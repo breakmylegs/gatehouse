@@ -137,8 +137,8 @@ import { runTestsUntilPass } from "../lib/testLoop"
 async function changeMode(session: SessionInfo, m: UiMode) {
   const w = wireOf(m)
   if (session.mode !== w.mode) await send({ type: "set_mode", sessionId: session.id, mode: w.mode })
-  if ((session.extreme === true) !== w.extreme)
-    await send({ type: "set_extreme", sessionId: session.id, on: w.extreme })
+  if ((session.extreme === true) !== w.extreme || (session.extremeMax === true) !== (w.extremeMax === true))
+    await send({ type: "set_extreme", sessionId: session.id, on: w.extreme, ...(w.extremeMax ? { max: true } : {}) })
 }
 
 const SLASH: Array<{ cmd: string; help: string }> = [

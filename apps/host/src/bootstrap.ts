@@ -606,6 +606,8 @@ export function createHost(opts: HostOptions = {}): Host {
                   try {
                     await target.checkInstructions()
                     target.prompt(prompt)
+                    // O40 (owner, 15 Nov): the code session shows the prompt, and where it came from.
+                    target.emit("event", { type: "handed_prompt", data: { from: manager.get(sessionId)?.info().title ?? "Ask about code", text: prompt } })
                   } catch (e) {
                     return { text: `Nothing was sent: ${(e as Error).message}`, isError: true }
                   }

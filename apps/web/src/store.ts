@@ -557,6 +557,20 @@ export const useStore = create<State>((set, get) => ({
           }))
           return
         }
+        if (e.event === "handed_prompt") {
+          // O40 (owner, 15 Nov): a prompt an Ask about code chat sent, once you approved it, shows here with where it came from.
+          const text = typeof e.data.text === "string" ? e.data.text : ""
+          const from = typeof e.data.from === "string" ? e.data.from : "Ask about code"
+          const st = get().sessions[e.sessionId]?.state
+          set((s) => ({
+            transcripts: {
+              ...s.transcripts,
+              [e.sessionId]: addSystem(s.transcripts[e.sessionId] ?? emptyTranscript(), `The Ask about code chat "${from}" sent this prompt, which you approved:`),
+            },
+          }))
+          if (text) get().addUserText(e.sessionId, text, undefined, st === "running" || st === "waiting")
+          return
+        }
         if (e.event === "notify_user") {
           const text = typeof e.data.text === "string" ? e.data.text : ""
           const name = get().sessions[e.sessionId]?.project ?? "A session"

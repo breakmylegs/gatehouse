@@ -48,6 +48,10 @@ describe("locked tests (D-007)", () => {
       "npx vitest run tests/acceptance.test.ts",
       "git diff tests/acceptance.test.ts",
       "grep expect tests/acceptance.test.ts",
+      // Owner, 15 Nov: a listing of a locked test was held as if it changed it.
+      "git branch --show-current && git log --oneline -6 && git status --short | head -40 && git ls-files tests/acceptance.test.ts",
+      "ls -l tests/acceptance.test.ts",
+      "git ls-tree HEAD tests/acceptance.test.ts",
     ])
       expect(await t("Bash", { command }), command).toEqual([])
     expect(await t("Edit", { file_path: "tests/other.test.ts" })).toEqual([])

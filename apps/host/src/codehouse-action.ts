@@ -13,7 +13,7 @@ import crypto from "node:crypto"
 import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
-import { EXTREME_ASKS } from "./canuse.js"
+import { DEFAULT_EXTREME_LIMIT, extremeAnswers, type ExtremeLevel } from "./canuse.js"
 import type { HostAudit } from "./hostaudit.js"
 import { levelArgs } from "./limits.js"
 import { macActionShell } from "./limits-mac.js" // Mac fork
@@ -57,6 +57,8 @@ export interface ActionDeps {
   kill: { isEngaged(): boolean }
   /** Extreme approval for the session, read now. */
   extreme: () => boolean
+  /** O36: which Extreme approval, read now. */
+  extremeLevel?: () => ExtremeLevel
   /** Codehouse-Limits.exe, for the job object; absent: a plain child process (tests, or no helper). */
   limitsExe?: string
   env?: NodeJS.ProcessEnv
@@ -127,7 +129,7 @@ export async function runCodehouseAction(r: ActionRequest, d: ActionDeps): Promi
   if (verdict.outcome === "deny") return await notRun(`${verdict.reason} (rule ${verdict.ruleId})`)
   let decidedBy: string = verdict.decidedBy
   if (verdict.outcome === "escalate") {
-    if (d.extreme() && !EXTREME_ASKS.has(verdict.ruleId)) decidedBy = "extreme-mode"
+    if (d.extreme() && extremeAnswers(verdict, d.extremeLevel?.() ?? { max: false, limit: DEFAULT_EXTREME_LIMIT })) decidedBy = "extreme-mode"
     else {
       const resolution = await d.broker.request({
         kind: "permission",

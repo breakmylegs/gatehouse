@@ -55,6 +55,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     effort: Effort.optional(),
     /** Extreme approval for this session: what would ask you is approved, audited and told to the phone. */
     extreme: z.boolean().optional(),
+    /** O36: Extreme max approval rather than Rules-based. Older Hosts ignore it. */
+    extremeMax: z.boolean().optional(),
     resume: Id.optional(),
     fork: z.boolean().optional(),
     /** A new project: cwd is a folder in the projects folder that must be new, so a number is added if it is taken. */
@@ -167,7 +169,7 @@ export const ClientCommand = z.discriminatedUnion("type", [
   }),
   z.object({ type: z.literal("set_mode"), sessionId: Id, mode: Mode }),
   z.object({ type: z.literal("set_effort"), sessionId: Id, effort: Effort }),
-  z.object({ type: z.literal("set_extreme"), sessionId: Id, on: z.boolean() }),
+  z.object({ type: z.literal("set_extreme"), sessionId: Id, on: z.boolean(), max: z.boolean().optional() }),
   z.object({
     type: z.literal("set_model"),
     sessionId: Id,
@@ -402,6 +404,8 @@ export const SessionInfo = z.object({
   mode: Mode,
   effort: Effort.optional(),
   extreme: z.boolean().optional(),
+  /** O36: Extreme max approval: every request a rule makes is answered. Absent: Rules-based. */
+  extremeMax: z.boolean().optional(),
   state: z.enum(["starting", "idle", "running", "waiting", "error", "ended"]),
   sdkSessionId: z.string().optional(),
   pendingApprovals: z.number().int(),

@@ -71,8 +71,11 @@ const READ_ONLY = new Set([
   "cat", "type", "head", "tail", "less", "more", "grep", "rg", "findstr", "wc", "diff", "fc",
   "get-content", "gc", "select-string", "sls", "measure-object", "test-path",
   "vitest", "jest", "mocha", "pytest", "invoke-pester",
+  // Owner, 15 Nov (a git ls-files of a locked test was held in Extreme approval): listing and hashing read too.
+  "ls", "dir", "get-childitem", "gci", "stat", "file", "sha256sum", "sha1sum", "md5sum", "get-filehash",
 ])
-const READ_ONLY_PAIRS = /^(git (diff|log|show|blame|status)|npm (test|run test)|npx (vitest|jest|mocha)|dotnet test|go test)\b/i
+const READ_ONLY_PAIRS =
+  /^(git (diff|log|show|blame|status|ls-files|ls-tree|grep|cat-file|check-ignore|annotate|rev-parse)|npm (test|run test)|npx (vitest|jest|mocha)|dotnet test|go test|python -m pytest|py -m pytest)\b/i
 
 /** The words of each command of a shell line, quotes taken off; good enough to tell what a command names. */
 function commandsOf(line: string): string[][] {

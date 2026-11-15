@@ -501,6 +501,7 @@ export class HostServer {
           ...(cmd.resume ? { resume: cmd.resume } : {}),
           ...(cmd.fork !== undefined ? { fork: cmd.fork } : {}),
           ...(cmd.freshFolder ? { freshFolder: true } : {}),
+          ...(cmd.extremeMax ? { extremeMax: true } : {}),
           ...(cmd.kind ? { kind: cmd.kind } : {}),
           ...(cmd.title ? { title: cmd.title } : {}),
           ...(cmd.chatProject ? { chatProject: cmd.chatProject } : {}),
@@ -804,7 +805,7 @@ export class HostServer {
         await this.#session(cmd.sessionId).setGoal(cmd.check ?? undefined)
         return undefined
       case "set_extreme":
-        await this.#session(cmd.sessionId).setExtreme(cmd.on)
+        await this.#session(cmd.sessionId).setExtreme(cmd.on, cmd.max === true)
         return undefined
       case "set_model":
         await this.#session(cmd.sessionId).setModel(cmd.model)

@@ -4,7 +4,7 @@ import { LICENCE_NOT_ALLOWED, LICENCE_UNKNOWN } from "@gatehouse/policy"
 import { describe, expect, it, vi } from "vitest"
 import { createCanUseTool, type CanUseDeps } from "../src/canuse.js"
 
-function setup(ruleId: string, auditOk = true) {
+function setup(ruleId: string, auditOk = true, max = true) {
   const records: Array<{ event?: string; verdict: { decidedBy: string; outcome: string; ruleId: string } }> = []
   const request = vi.fn(async (_r: unknown) => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
   const deps = {
@@ -34,6 +34,8 @@ function setup(ruleId: string, auditOk = true) {
     pwsh: undefined,
     decided: new Set<string>(),
     extreme: () => true,
+    // O36 (owner, 15 Nov): Extreme max approval; Rules-based asks at 80 and above.
+    extremeLevel: () => ({ max, limit: 80 }),
     notifyAutoApproved: () => undefined,
     log: () => undefined,
   } as unknown as CanUseDeps
@@ -44,7 +46,7 @@ function setup(ruleId: string, auditOk = true) {
 }
 
 describe("licence policy in canUseTool (D-055)", () => {
-  it("records licence_escalated, and Extreme approval approves a licence outside the list, saying so (owner, 14 Nov)", async () => {
+  it("records licence_escalated; Extreme max approval approves a licence outside the list, Rules-based asks at its risk (owner, 15 Nov)", async () => {
     const t = setup(LICENCE_NOT_ALLOWED)
     expect((await t.call())?.behavior).toBe("allow")
     expect(t.records[0]).toMatchObject({ event: "licence_escalated", verdict: { ruleId: LICENCE_NOT_ALLOWED } })
@@ -55,6 +57,9 @@ describe("licence policy in canUseTool (D-055)", () => {
     expect((await u.call())?.behavior).toBe("allow")
     expect(u.records.map((r) => r.event)).toEqual(["licence_escalated", "human_decision"])
     expect(u.records[1]?.verdict).toMatchObject({ decidedBy: "extreme-mode", outcome: "allow" })
+    const rules = setup(LICENCE_NOT_ALLOWED, true, false)
+    await rules.call()
+    expect(rules.request).toHaveBeenCalledTimes(1)
   })
 
   it("does not go on when licence_escalated cannot be recorded", async () => {

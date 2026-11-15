@@ -58,6 +58,11 @@ export interface CanUseDeps {
   decided: Set<string>
   /** Extreme approval mode, read at each call so it applies at once. */
   extreme?: () => boolean
+  /**
+   * O36 (owner, 15 Nov): which Extreme approval. Max answers every request a rule makes; Rules-based answers those
+   * under the risk limit in Settings and waits for you at or above it. Absent: Rules-based at 80.
+   */
+  extremeLevel?: () => ExtremeLevel
   /** Owner, 13 Nov: whether you allowed every call of this tool in the session, on the desktop. */
   toolGranted?: (tool: string) => boolean
   /** D-018: Extreme approval approved an escalation (it spends the risk budget). */
@@ -442,7 +447,8 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       // asking each time, except what Extreme approval may never approve either (a fetch after a prompt-injection flag).
       if (GRANTABLE_TOOLS.has(toolName) && deps.toolGranted?.(toolName) === true && !NEVER_AUTO_APPROVED.has(verdict.ruleId))
         return await grantApprove(deps, toolName, input, toolUseID, verdict)
-      if (deps.extreme?.() === true && weakens && deps.strictTests?.()) {
+      const level = deps.extremeLevel?.() ?? { max: false, limit: DEFAULT_EXTREME_LIMIT }
+      if (deps.extreme?.() === true && !level.max && weakens && deps.strictTests?.()) {
         // D-001, strict for this project: a weakening waits for a person even in Extreme approval.
         return await escalate(
           deps,
@@ -454,10 +460,11 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         )
       }
       if (deps.extreme?.() === true) {
-        // Owner, 14 Nov: "When I have extreme approval on I shouldnt be asked to approve any risks even if they are
-        // 100." Every escalation a rule made is approved, whatever its risk or whether it can be undone; only a failure
-        // (invariant 1) and a test you locked (D-007) still wait for you, and a strict project's tests above.
-        if (!EXTREME_ASKS.has(verdict.ruleId)) {
+        // Owner, 15 Nov: two kinds. Extreme max approval answers every request a rule makes; Rules-based Extreme
+        // approval answers those under the risk limit in Settings and waits for you at or above it. Either way a
+        // failure (invariant 1) and a chat's hand-off (O34) wait for you; Rules-based also waits for a locked test and a
+        // strict project's tests.
+        if (extremeAnswers(verdict, level)) {
           const approved = await extremeApprove(deps, toolName, input, toolUseID, verdict)
           // D-001, the default: approved and flagged, so the session says its tests were weakened.
           if (weakens && approved.behavior === "allow")
@@ -478,7 +485,9 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
                 ? verdict.reason
                 : verdict.ruleId === HANDOFF_RULE
                   ? `${verdict.reason} ${HANDOFF_ASKS}`
-                  : `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
+                  : !FAILURE_ESCALATIONS.has(verdict.ruleId) && verdict.risk >= level.limit
+                    ? `${verdict.reason} ${overLimit(level.limit)}`
+                    : `${verdict.reason} ${EXTREME_CANNOT_APPROVE}`,
           },
           effects,
         )
@@ -565,6 +574,33 @@ export const FAILURE_ESCALATIONS: ReadonlySet<string> = new Set([
  * never answered by a grant or the judge.
  */
 export const EXTREME_ASKS: ReadonlySet<string> = new Set([...FAILURE_ESCALATIONS, LOCKED_TEST_RULE, HANDOFF_RULE])
+
+/**
+ * O36 (owner, 15 Nov: "Extreme Max Approval mode which doesnt use any rules and approves everything"): what even Max
+ * waits for. A failure (invariant 1: an error is never an allow) and a chat's prompt for a code session (O34: the
+ * owner asked for his own approval every single time). Decided under the standing instruction; for the owner to
+ * confirm. A floor deny is a deny in every mode.
+ */
+export const MAX_ASKS: ReadonlySet<string> = new Set([...FAILURE_ESCALATIONS, HANDOFF_RULE])
+
+/** O36: the risk at or above which Rules-based Extreme approval waits for you, unless Settings says otherwise. */
+export const DEFAULT_EXTREME_LIMIT = 80
+
+export interface ExtremeLevel {
+  /** Extreme max approval. */
+  max: boolean
+  /** Rules-based: the risk at or above which it waits for you, 1 to 101 (101: never on risk). */
+  limit: number
+}
+
+/** Whether Extreme approval answers this escalation by itself. */
+export function extremeAnswers(v: { ruleId: string; risk: number }, l: ExtremeLevel): boolean {
+  return l.max ? !MAX_ASKS.has(v.ruleId) : !EXTREME_ASKS.has(v.ruleId) && v.risk < l.limit
+}
+
+/** O36: added to the reason when Rules-based Extreme approval meets a risk at or above its limit. */
+export const overLimit = (limit: number): string =>
+  `Its risk is at or above ${limit}, the limit for Rules-based Extreme approval (Settings, Sessions), so it waits for you.`
 
 /** O34: added to the reason when Extreme approval meets a chat's offer of a prompt to its code session. */
 export const HANDOFF_ASKS =
