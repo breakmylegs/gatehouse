@@ -32,6 +32,7 @@ import { ProjectStore } from "./projects.js"
 import { findLimitsExe, limiter } from "./limits.js"
 import { HeldOutChecks, type HeldOutExec } from "./heldout.js"
 import { runCodehouseAction } from "./codehouse-action.js"
+import { PULL_FF } from "./git-panel.js"
 import { runHeldOutFor } from "./heldout-session.js"
 import os from "node:os"
 import { LocalRelay } from "./relay/local.js"
@@ -1337,6 +1338,12 @@ export function createHost(opts: HostOptions = {}): Host {
       ntfy,
       ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      // T-083: a fast-forward pull as a Codehouse action, judged like the same command from the session.
+      pullFastForward: (id, cwd) =>
+        runCodehouseAction(
+          { sessionId: id, cwd, project: manager.get(id)?.project ?? "", command: PULL_FF, why: "bringing the checkout up to date by fast-forward", level: manager.get(id)?.info().resources ?? "high", timeoutMs: 120_000 },
+          { approver: deps.approver, broker, audit, kill, extreme: () => manager.get(id)?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+        ),
       sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
       chat: { store: chatStore, recorder: chatRecorder },
       sessionMemory: (id) => manager.get(id)?.memoryGiven(),

@@ -266,7 +266,15 @@ export async function markResolved(
 export interface GitPanelContext {
   sessionCwd?: (sessionId: string) => string | undefined
   audit: HostAudit
+  /**
+   * T-083: git pull --ff-only run as a Codehouse action for the session: judged by the policy like the same command
+   * from the session (so it asks you), without credentials in its environment, recorded with its outcome.
+   */
+  pullFastForward?: (sessionId: string, cwd: string) => Promise<{ ran: boolean; refused?: string; exitCode: number | null; output: string }>
 }
+
+/** T-083: the command a fast-forward pull runs, fixed. */
+export const PULL_FF = "git pull --ff-only"
 
 /**
  * GET /api/git/history, /api/git/blame, /api/git/changes and /api/git/conflicts read; POST /api/git/stage and
@@ -304,6 +312,23 @@ export function registerGitPanelRoutes(app: FastifyInstance, ctx: GitPanelContex
     "/api/git/changes",
     reading(async (cwd) => ({ files: await changes(cwd) })),
   )
+  // T-083: bring the checkout up to date by fast-forward only, and only when it is clean.
+  app.post("/api/git/pull-ff", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const cwd = cwdOf(b)
+    if (!cwd || typeof b.session !== "string") return bad(reply, 404, "That session is not running.")
+    if (!ctx.pullFastForward) return bad(reply, 501, "Pulling is not available here.")
+    let dirty: boolean
+    try {
+      dirty = (await git(cwd, ["status", "--porcelain"])).trim().length > 0
+    } catch (e) {
+      return bad(reply, 409, (e as Error).message)
+    }
+    if (dirty) return bad(reply, 409, "The checkout has changes not committed, so it was not pulled.")
+    const r = await ctx.pullFastForward(b.session, cwd)
+    if (!r.ran) return bad(reply, 403, r.refused ?? "It was not run.")
+    return { ok: r.exitCode === 0, output: r.output.slice(-4000) }
+  })
   app.get(
     "/api/git/commit",
     reading(async (cwd, q) => await commitView(cwd, q.hash)),

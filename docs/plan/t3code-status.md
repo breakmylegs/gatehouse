@@ -92,7 +92,7 @@ Slices, in order:
 | T-080 | Watch a pull request: wake the agent when a check fails, someone comments or the branch conflicts. | Build (safe variant), M | todo | | |
 | T-081 | GitHub stacks: Merge stack, Rebase stack. | Build (safe variant), L | todo | | |
 | T-082 | Remove agent credits when merging. | Conflicts | listed for decision | | |
-| T-083 | Keep the default branch current by fast-forward pulls when the checkout is clean. | Build (safe variant), S | todo | | |
+| T-083 | Keep the default branch current by fast-forward pulls when the checkout is clean. | Build (safe variant), S | partly built | slice/T3-pull | Pull (fast-forward only) in the Git pane, through the policy; pulling by itself is not built |
 | T-084 | Pull request access shared between machines. | Conflicts | listed for decision | | |
 | T-085 | A worktree per thread; a new thread in an existing worktree; reuse the previous worktree. | Partly | built | slice/T3-here | New session in this worktree, in the pane menu |
 | T-086 | Worktree branch names: a static prefix, a model-chosen prefix such as `feat/`, or custom instructions. | Partly | built | slice/T3-branches | named from the task, without a model: kind of change and words, your prefix kept |

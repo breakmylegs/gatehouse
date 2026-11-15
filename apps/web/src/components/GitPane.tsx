@@ -63,6 +63,7 @@ export function GitPane({ sessionId, onOpen }: { sessionId: string; onOpen: (o: 
             {label}
           </button>
         ))}
+        <PullButton sessionId={sessionId} />
       </div>
       <div role="tabpanel" className="min-h-0">
         {tab === "history" ? (
@@ -292,5 +293,30 @@ function Blame({ q }: { q: string }) {
         </ol>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * T-083 (t3code review, O31): bring the checkout up to date by fast-forward only, when nothing is uncommitted. It
+ * runs as Codehouse's own action, judged by your rules like the same command from the session, so it asks you.
+ */
+function PullButton({ sessionId }: { sessionId: string }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <button
+      type="button"
+      className="pane-tool ml-auto"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true)
+        const r = await api<{ ok: boolean; output: string }>("POST", "/api/git/pull-ff", { session: sessionId })
+        setBusy(false)
+        if (!r.ok || !r.data) toast.error(r.error ?? "It was not pulled.", { id: "pull" })
+        else if (r.data.ok) toast("Up to date: pulled by fast-forward.", { id: "pull" })
+        else toast.error(`It could not fast-forward: ${r.data.output.trim().split("\n").at(-1) ?? ""}`, { id: "pull" })
+      }}
+    >
+      {busy ? "Pulling..." : "Pull (fast-forward only)"}
+    </button>
   )
 }

@@ -12,6 +12,7 @@ import {
   conflicts,
   history,
   markResolved,
+  PULL_FF,
   registerGitPanelRoutes,
   stageHunk,
 } from "../src/git-panel.js"
@@ -97,6 +98,32 @@ describe("the git panel", { timeout: 120_000 }, () => {
     expect(await conflicts(repo)).toEqual([])
     await expect(markResolved(repo, "a.txt", "x")).rejects.toThrow(/no conflict/)
     git("merge", "--abort")
+  })
+
+  it("pulls by fast-forward only through the policy, and never a checkout with changes (T-083)", async () => {
+    const ran: Array<{ session: string; cwd: string }> = []
+    let refuse = false
+    const app = Fastify()
+    registerGitPanelRoutes(app, {
+      sessionCwd: (id) => (id === "s1" ? repo : undefined),
+      audit: { record: async () => true } as never,
+      pullFastForward: async (session, cwd) => {
+        ran.push({ session, cwd })
+        return refuse ? { ran: false, refused: "You declined it.", exitCode: null, output: "" } : { ran: true, exitCode: 0, output: "Already up to date." }
+      },
+    })
+    const pull = () => app.inject({ method: "POST", url: "/api/git/pull-ff", payload: { session: "s1" } })
+    expect((await pull()).json()).toEqual({ ok: true, output: "Already up to date." })
+    expect(ran).toEqual([{ session: "s1", cwd: repo }])
+    refuse = true
+    expect((await pull()).statusCode).toBe(403)
+    write("a.txt", fs.readFileSync(path.join(repo, "a.txt"), "utf8") + "more\n")
+    const dirty = await pull()
+    expect(dirty.statusCode).toBe(409)
+    expect(ran).toHaveLength(2)
+    git("checkout", "--quiet", "--", "a.txt")
+    expect(PULL_FF).toBe("git pull --ff-only")
+    await app.close()
   })
 
   it("records a staging before doing it, and does nothing it cannot record", async () => {

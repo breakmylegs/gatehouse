@@ -24,7 +24,7 @@ import { registerContinueRoutes, type ContinueDeps } from "./chat/continue-api.j
 import { usageDrivers } from "./usage-drivers.js"
 import { registerWorktreeRoutes, type Worktrees } from "./worktrees.js"
 import { registerBoardRoutes, type BoardStore, type Card } from "./board.js"
-import { registerGitPanelRoutes } from "./git-panel.js"
+import { type GitPanelContext, registerGitPanelRoutes } from "./git-panel.js"
 import type { Health } from "@gatehouse/shared"
 import { registerProviderRoutes } from "./providers/api.js"
 import { readItModels } from "./providers/it-models.js"
@@ -155,6 +155,8 @@ export interface AdminContext {
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** T-083: a fast-forward pull as a Codehouse action. */
+  pullFastForward?: GitPanelContext["pullFastForward"]
   /** Whether a running session wrote or edited the file at this full path. */
   sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** An account's plan limits, read on one of its open sessions. */
