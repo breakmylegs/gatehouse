@@ -12,7 +12,8 @@ import { msUntilPhoneAllowed, phoneHeld, type QuietHours } from "./quiet-hours.j
 import { HANDOFF_RULE } from "./about-session.js"
 
 /** `push` is an outbound notification channel such as ntfy: it answers with a one-time code. */
-export type Channel = "desktop" | "phone" | "push"
+/** O41: "cnw" is Codehouse Neighbourhood Watch, your own server, with the desktop's scope. */
+export type Channel = "desktop" | "phone" | "push" | "cnw"
 export type RequestKind = EscalationRequest["kind"]
 
 export type Answer =
@@ -301,7 +302,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
     if (entry.view.request.verdict.ruleId === HANDOFF_RULE && answer.kind !== "answers") {
       if (answer.remember || answer.rememberFor)
         return { ok: false, reason: "invalid-answer", detail: "This is approved each time; it cannot be remembered" }
-      if (answer.decision === "allow" && channel !== "desktop")
+      if (answer.decision === "allow" && channel !== "desktop" && channel !== "cnw")
         return {
           ok: false,
           reason: "not-allowed-on-channel",
@@ -352,6 +353,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
     // Invariant 11: the phone and push channels can allow, deny, answer and kill. They cannot edit input or create rules.
     if (
       channel !== "desktop" &&
+      channel !== "cnw" &&
       (answer.updatedInput !== undefined || answer.remember || answer.rememberFor)
     ) {
       return {

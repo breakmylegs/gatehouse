@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks"
 import { RubberStamp } from "./rubber-stamp.js"
 import { NEVER_AUTO_APPROVED } from "./canuse.js"
 import { arc42, deploymentFiles } from "./arc42.js"
@@ -139,6 +140,15 @@ export interface HostServerOptions {
   /** Built UI files. Without it, a short placeholder page is served. */
   staticDir?: string
 }
+
+/** O41: who a command from Neighbourhood Watch came from. */
+export interface RemoteVia {
+  user: string
+  signedIn: boolean
+}
+const VIA = new AsyncLocalStorage<RemoteVia>()
+/** The deciding channel for the command running now. */
+const channelNow = (): "desktop" | "cnw" => (VIA.getStore() ? "cnw" : "desktop")
 
 class CommandError extends Error {
   constructor(
@@ -404,6 +414,17 @@ export class HostServer {
 
   // ---- commands in ----
 
+  /**
+   * O41: a connection from Codehouse Neighbourhood Watch, as one more client. Its commands run with who sent them, so
+   * decisions are recorded with the channel cnw, and a Severe approval needs a signed-in sender.
+   */
+  attachRemote(socket: WebSocket, via: RemoteVia): void {
+    this.#via.set(socket, via)
+    this.#onSocket(socket)
+  }
+
+  readonly #via = new WeakMap<WebSocket, RemoteVia>()
+
   #onSocket(socket: WebSocket): void {
     this.#clients.add(socket)
     this.#send(socket, this.#snapshot())
@@ -445,7 +466,8 @@ export class HostServer {
       return
     }
     try {
-      const data = await this.#handle(parsed.data.command)
+      const via = this.#via.get(socket)
+      const data = await (via ? VIA.run(via, () => this.#handle(parsed.data.command)) : this.#handle(parsed.data.command))
       this.#send(socket, {
         type: "reply",
         ...(parsed.data.cmdId ? { cmdId: parsed.data.cmdId } : {}),
@@ -861,6 +883,10 @@ export class HostServer {
             )
           }
         }
+        // O41: from Neighbourhood Watch, a Severe approval needs someone signed in, not just an allowed network.
+        const via = VIA.getStore()
+        if (via && !via.signedIn && risk >= SEVERE_RISK)
+          throw new CommandError("sign-in", "Sign in to Neighbourhood Watch to approve a Severe request.")
         const r = a.broker.resolve(
           cmd.requestId,
           {
@@ -871,7 +897,7 @@ export class HostServer {
             ...(cmd.remember ? { remember: true } : {}),
             ...(cmd.remember && cmd.rememberFor ? { rememberFor: cmd.rememberFor } : {}),
           },
-          "desktop",
+          channelNow(),
         )
         if (r.ok && view) {
           this.#frictionAt.delete(cmd.requestId)
@@ -891,12 +917,12 @@ export class HostServer {
               decision: "deny",
               ...(cmd.message !== undefined ? { message: cmd.message } : {}),
             },
-            "desktop",
+            channelNow(),
           ),
         )
       case "answer":
         return resolveResult(
-          a.broker.resolve(cmd.requestId, { kind: "answers", answers: cmd.answers }, "desktop"),
+          a.broker.resolve(cmd.requestId, { kind: "answers", answers: cmd.answers }, channelNow()),
         )
       case "remember_preview": {
         const view = a.broker.get(cmd.requestId)

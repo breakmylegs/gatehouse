@@ -15,7 +15,8 @@ FROM node:22-alpine
 ENV NODE_ENV=production CNW_DATA=/data PORT=8080
 WORKDIR /app
 # git and the Docker command line are for the updater service, which runs from the same image.
-RUN apk add --no-cache git docker-cli docker-cli-compose \n && addgroup -S cnw && adduser -S cnw -G cnw && mkdir -p /data && chown cnw:cnw /data
+RUN apk add --no-cache git docker-cli docker-cli-compose \
+ && addgroup -S cnw && adduser -S cnw -G cnw && mkdir -p /data && chown cnw:cnw /data
 COPY --from=build --chown=cnw:cnw /src /app
 USER cnw
 VOLUME ["/data"]
