@@ -1,0 +1,8 @@
+{
+  "name": "Codehouse Neighbourhood Watch",
+  "short_name": "Neighbourhood Watch",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#14161c",
+  "theme_color": "#14161c"
+}

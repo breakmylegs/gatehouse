@@ -13,6 +13,12 @@ export const MAX_FRAME = 4 * 1024 * 1024
 /** Commands one browser may send in a minute. */
 export const MAX_COMMANDS_A_MINUTE = 240
 
+export interface HttpAnswer {
+  status: number
+  contentType: string
+  body: Buffer
+}
+
 export interface Socket {
   send(data: string): void
   close(code?: number, reason?: string): void
@@ -38,6 +44,7 @@ export class Hub {
   readonly #agents = new Map<string, Agent>()
   readonly #watchers = new Map<string, Set<Watcher>>()
   readonly #challenges = new WeakMap<Socket, string>()
+  readonly #http = new Map<string, { resolve: (r: HttpAnswer) => void; timer: ReturnType<typeof setTimeout> }>()
   readonly #now: () => number
 
   constructor(
@@ -83,6 +90,15 @@ export class Hub {
     const [id, agent] = known
     agent.lastSeen = this.#now()
     if (m.type === "event") this.#broadcast(id, { type: "event", data: m.data })
+    if (m.type === "http_reply" && typeof (m as { id?: unknown }).id === "string") {
+      const r = m as unknown as { id: string; status: number; contentType?: string; body?: string }
+      const p = this.#http.get(r.id)
+      if (p) {
+        clearTimeout(p.timer)
+        this.#http.delete(r.id)
+        p.resolve({ status: Number(r.status) || 502, contentType: String(r.contentType ?? "application/json"), body: Buffer.from(String(r.body ?? ""), "base64") })
+      }
+    }
     // A reply to one tab's command goes to that tab only.
     if (m.type === "reply" && typeof m.to === "string") {
       for (const w of this.#watchers.get(id) ?? []) if (w.user === m.to.split("#")[0]) w.socket.send(JSON.stringify({ type: "reply", to: m.to, data: m.data }))
@@ -127,6 +143,24 @@ export class Hub {
     if (!agent) return "offline"
     agent.socket.send(JSON.stringify({ type: "command", from: w.user, signedIn: w.signedIn, data }))
     return "sent"
+  }
+
+  /**
+   * A page's call to its computer's own API (files, settings and the rest), passed to the computer and answered by its
+   * Host, as at the desk. 60 s at most; the user it came from goes with it.
+   */
+  http(computerId: string, req: { method: string; path: string; body?: string; user: string; signedIn: boolean }): Promise<HttpAnswer> {
+    const agent = this.#agents.get(computerId)
+    if (!agent) return Promise.resolve({ status: 503, contentType: "application/json", body: Buffer.from(JSON.stringify({ error: "That computer is not connected." })) })
+    const id = crypto.randomUUID()
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.#http.delete(id)
+        resolve({ status: 504, contentType: "application/json", body: Buffer.from(JSON.stringify({ error: "The computer did not answer in time." })) })
+      }, 60_000)
+      this.#http.set(id, { resolve, timer })
+      agent.socket.send(JSON.stringify({ type: "http", id, ...req }))
+    })
   }
 
   /** Each paired computer, and whether it is connected now. */

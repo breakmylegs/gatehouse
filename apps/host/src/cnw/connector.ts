@@ -23,6 +23,8 @@ export interface ConnectorOptions {
   /** Joins the Host as a client; returns the socket-like object the Host sends events to. */
   attach: (socket: VirtualSocket, via: RemoteVia) => void
   log: (line: string) => void
+  /** A call to this Host's own API, as the desktop makes it; for CNW's pages. */
+  localHttp?: (req: { method: string; path: string; body?: string; user: string; signedIn: boolean }) => Promise<{ status: number; contentType: string; body: Buffer }>
   /** For tests. */
   createSocket?: (url: string, opts: WebSocket.ClientOptions) => WebSocket
 }
@@ -125,6 +127,16 @@ export class CnwConnector extends EventEmitter {
       clearInterval(this.#ping)
       this.#ping = setInterval(() => this.#ws?.ping(), 25_000)
       this.#ping.unref?.()
+      return
+    }
+    const h = m as { type?: string; id?: string; method?: string; path?: string; body?: string; user?: string; signedIn?: boolean }
+    if (h.type === "http" && typeof h.id === "string" && typeof h.path === "string" && h.path.startsWith("/api/")) {
+      const id = h.id
+      const call = this.#o.localHttp
+      if (!call) return this.#raw({ type: "http_reply", id, status: 501, contentType: "application/json", body: Buffer.from('{"error":"Not available."}').toString("base64") })
+      void call({ method: String(h.method ?? "GET"), path: h.path, ...(h.body !== undefined ? { body: h.body } : {}), user: String(h.user ?? "?"), signedIn: h.signedIn !== false })
+        .then((r) => this.#raw({ type: "http_reply", id, status: r.status, contentType: r.contentType, body: r.body.toString("base64") }))
+        .catch((e: Error) => this.#raw({ type: "http_reply", id, status: 502, contentType: "application/json", body: Buffer.from(JSON.stringify({ error: e.message })).toString("base64") }))
       return
     }
     if ((m.type === "snapshot" || m.type === "command") && typeof m.from === "string") {

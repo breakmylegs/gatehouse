@@ -1,4 +1,5 @@
 import { ClaudeImport } from "../components/ClaudeImport"
+import { NeighbourhoodWatchPanel } from "../components/NeighbourhoodWatchPanel"
 import { SECTION_KEY } from "../lib/settingsSection"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { UpdatesPanel } from "../components/UpdatesPanel"
@@ -1651,6 +1652,11 @@ export function Settings() {
                 Connectors your organisation set up in Claude show under + in a session, in
                 Connectors. Each call to one goes to your rules like any other tool call.
               </p>
+            </Group>
+
+            {/* O41: pair this computer with your Codehouse Neighbourhood Watch server. */}
+            <Group section="connectors" title="Neighbourhood Watch" gap="gap-2">
+              <NeighbourhoodWatchPanel />
             </Group>
 
             <Group section="connectors" title="GitHub" gap="gap-2" changed={differs(v, ["github"])}>

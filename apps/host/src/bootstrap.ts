@@ -49,6 +49,7 @@ import { createRecapWriter } from "./recap-writer.js"
 import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
 import { chatFolderOf } from "./triage.js"
+import { CnwService } from "./cnw/service.js"
 import { cleanUp } from "./worktree-cleanup.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
@@ -829,6 +830,16 @@ export function createHost(opts: HostOptions = {}): Host {
     return helperExe ?? undefined
   }
   const sealer = (): Protector => sealerFor({ given: opts.phoneProtector, helper })
+  // O41: Neighbourhood Watch: the pairing, this computer's key sealed for this user, and the connector, which starts
+  // once the Host's server is up (main.ts).
+  const cnw = new CnwService({
+    dataDir: gatehouseDataDir(env),
+    version: env.GATEHOUSE_VERSION ?? "dev",
+    audit,
+    seal: async (b) => Buffer.from(await sealer().protect(new Uint8Array(b))),
+    open: async (b) => Buffer.from(await sealer().unprotect(new Uint8Array(b))),
+    log,
+  })
   const phoneStore = new PhoneStore(path.join(gatehouseDataDir(env), "phone.json"), sealer())
   const phone = new PhoneService({
     store: phoneStore,
@@ -1289,6 +1300,7 @@ export function createHost(opts: HostOptions = {}): Host {
 
   const app: HostApp = {
     updates,
+    cnw,
     manager,
     terminal,
     signIn,
@@ -1519,6 +1531,7 @@ export function createHost(opts: HostOptions = {}): Host {
   return {
     app,
     updates,
+    cnw,
     config,
     get approverProcess() {
       return approverProcess
@@ -1689,6 +1702,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
+      cnw.stop()
       for (const t of cleanupTimers) clearTimeout(t)
       routineTriggers?.stop()
       ntfy.stop()

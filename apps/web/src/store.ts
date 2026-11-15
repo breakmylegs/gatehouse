@@ -13,6 +13,7 @@ import { useMemo } from "react"
 import { create } from "zustand"
 import { tellShell } from "./lib/shell"
 import { Connection, type ConnState, type Reply, takeToken } from "./lib/connection"
+import { CnwConnection, cnwComputer } from "./lib/cnwConnection"
 import {
   addSystem,
   addUser,
@@ -184,7 +185,7 @@ export interface State {
   termClear: (sessionId: string) => void
 }
 
-let connection: Connection | undefined
+let connection: Connection | CnwConnection | undefined
 
 export const send = (command: ClientCommand, timeoutMs?: number): Promise<Reply> =>
   connection
@@ -956,6 +957,18 @@ function announce(v: PendingView, s: State): void {
 }
 
 export function startConnection(): boolean {
+  // O41: served by Neighbourhood Watch, the page talks to the computer chosen there, signed in by CNW's cookie.
+  const computer = cnwComputer()
+  if (computer) {
+    useStore.setState({ hasToken: true })
+    connection = new CnwConnection(
+      computer,
+      (e) => useStore.getState().handleEvent(e),
+      (conn, attempt) => useStore.setState({ conn, attempt }),
+    )
+    connection.start()
+    return true
+  }
   const token = takeToken()
   if (!token) return false
   useStore.setState({ hasToken: true })

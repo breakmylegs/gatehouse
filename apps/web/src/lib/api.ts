@@ -1,3 +1,16 @@
+import { cnwComputer } from "./cnwConnection"
+
+/**
+ * O41: served by Neighbourhood Watch, a call to /api/... goes to the chosen computer through CNW (/c/<computer>/api/...),
+ * signed in by CNW's cookie, with CNW's CSRF token on every change.
+ */
+function where(url: string): { url: string; headers: Record<string, string> } {
+  const computer = cnwComputer()
+  if (computer && url.startsWith("/api/"))
+    return { url: `/c/${encodeURIComponent(computer)}${url}`, headers: { "x-csrf-token": sessionStorage.getItem("cnw.csrf") ?? "" } }
+  return { url, headers: { authorization: `Bearer ${sessionStorage.getItem("gatehouse.token") ?? ""}` } }
+}
+
 /** Calls to the Host's admin endpoints. The per-launch token travels as a bearer header, never in a URL. */
 export interface ApiResult<T> {
   ok: boolean
@@ -14,13 +27,13 @@ export async function api<T = unknown>(
   url: string,
   body?: unknown,
 ): Promise<ApiResult<T>> {
-  const token = sessionStorage.getItem("gatehouse.token") ?? ""
+  const to = where(url)
   let res: Response
   try {
-    res = await fetch(url, {
+    res = await fetch(to.url, {
       method,
       headers: {
-        authorization: `Bearer ${token}`,
+        ...to.headers,
         ...(body !== undefined ? { "content-type": "application/json" } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -54,8 +67,8 @@ export async function api<T = unknown>(
 }
 
 export async function download(url: string, filename: string): Promise<string | undefined> {
-  const token = sessionStorage.getItem("gatehouse.token") ?? ""
-  const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } })
+  const to = where(url)
+  const res = await fetch(to.url, { headers: to.headers })
   if (!res.ok) return `The Host answered ${res.status}.`
   const blob = await res.blob()
   const a = document.createElement("a")

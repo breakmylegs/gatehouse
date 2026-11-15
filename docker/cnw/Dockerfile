@@ -9,7 +9,7 @@ COPY packages/shared packages/shared
 COPY apps/cnw apps/cnw
 COPY apps/web apps/web
 RUN npm ci --workspace @gatehouse/cnw --workspace @gatehouse/web --workspace @gatehouse/shared --include-workspace-root \
- && CODEHOUSE_REMOTE=cnw npm run build -w @gatehouse/web
+ && VITE_CODEHOUSE_REMOTE=cnw npm run build -w @gatehouse/web
 
 FROM node:22-alpine
 ENV NODE_ENV=production CNW_DATA=/data PORT=8080

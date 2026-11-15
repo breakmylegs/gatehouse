@@ -17,6 +17,7 @@ import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { registerTitleRoutes, type TitleDeps } from "./title-api.js"
 import { registerTriageRoutes } from "./triage.js"
+import { registerCnwRoutes, type CnwService } from "./cnw/service.js"
 import { registerForgeRoutes } from "./forge/routes.js"
 import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
@@ -138,6 +139,8 @@ export interface AdminContext {
   recap?: RecapDeps
   /** T-018: session titles written by Claude. */
   titles?: TitleDeps
+  /** O41: Neighbourhood Watch, paired and run from Settings. */
+  cnw?: CnwService
   /** T-125: the folder of a chat Codehouse made, for triage files. */
   triageFolder?: (sessionId: string) => string | undefined
   /** /btw: a side question about a session, answered without interrupting it (owner, 4 Nov). */
@@ -880,6 +883,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const cwdOf = ctx.sessionCwd
     registerForgeRoutes(app, { enabled: () => ctx.config().forges?.github === true, sessionCwd: (id) => cwdOf(id), audit: ctx.audit })
   }
+  if (ctx.cnw) registerCnwRoutes(app, ctx.cnw)
   if (ctx.triageFolder)
     registerTriageRoutes(app, {
       chatFolder: ctx.triageFolder,

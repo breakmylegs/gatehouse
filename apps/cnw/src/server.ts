@@ -1,6 +1,10 @@
 import crypto from "node:crypto"
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify"
 import websocket from "@fastify/websocket"
+import fastifyStatic from "@fastify/static"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { z } from "zod"
 import { accessOf, COOKIE, csrfOk, may, Sessions, Throttle, type Access } from "./auth.js"
 import { parseRange, type Range } from "./allowlist.js"
@@ -21,6 +25,8 @@ export interface CnwOptions {
   publicUrl: string
   /** caddy's address, the only one whose X-Forwarded-For is believed. */
   trustedProxy?: string
+  /** The built Codehouse interface (apps/web/dist), served at /app/. */
+  webDir?: string
   now?: () => number
   log?: (line: string) => void
 }
@@ -195,6 +201,23 @@ export async function createCnw(o: CnwOptions) {
     socket.on("close", () => hub.agentClosed(s))
   })
 
+  app.all("/c/:computer/api/*", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a) return
+    const { computer } = req.params as { computer: string }
+    const rest = req.url.slice(`/c/${computer}`.length)
+    if (!rest.startsWith("/api/")) return reply.code(404).send({ error: "Not found." })
+    const body = req.body === undefined ? undefined : typeof req.body === "string" ? req.body : JSON.stringify(req.body)
+    const r = await hub.http(computer, {
+      method: req.method,
+      path: rest,
+      ...(body !== undefined ? { body } : {}),
+      user: a.kind === "user" ? a.user : "allowed network",
+      signedIn: a.kind === "user",
+    })
+    return reply.code(r.status).type(r.contentType).send(r.body)
+  })
+
   app.get("/ws/:computer", { websocket: true }, (socket, req) => {
     const a = access(req)
     if (!may(a, "view")) return socket.close(4401, "sign in")
@@ -208,6 +231,13 @@ export async function createCnw(o: CnwOptions) {
     })
     socket.on("close", stop)
   })
+
+  // CNW's own pages at /, and the full Codehouse interface, built for remote use, at /app/.
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  await app.register(fastifyStatic, { root: path.resolve(here, "../public"), prefix: "/", index: ["index.html"], wildcard: false })
+  const web = o.webDir ?? path.resolve(here, "../../web/dist")
+  if (fs.existsSync(path.join(web, "index.html")))
+    await app.register(fastifyStatic, { root: web, prefix: "/app/", decorateReply: false, index: ["index.html"] })
 
   return { app, hub }
 }
