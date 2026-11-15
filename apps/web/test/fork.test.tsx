@@ -109,7 +109,8 @@ describe("handing off a side task", () => {
       model: "claude-opus-5-5",
       effort: "high",
       account: "work",
-      worktree: {},
+      // T-086: the branch is named from the task.
+      worktree: { about: "Write tests for the coupon code" },
     })
     expect(String(sent.find((c) => c.type === "prompt")?.text)).toMatch(
       /^Write tests for the coupon code\n\n\(Handed off from the session "Checkout work", which works in C:\\dev\\shop\.\)$/,
