@@ -53,6 +53,7 @@ import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
 import { HeldList } from "../components/HeldList"
 import { linkSessions } from "../lib/linkSessions"
+import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
 import { nameSession } from "../lib/autoTitle"
 import { EditRevert } from "../components/EditRevert"
@@ -147,6 +148,7 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
   { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
   { cmd: "/clear", help: "Start afresh in this pane, set up as now; the earlier session stays in the sidebar" },
+  { cmd: "/side", help: "Ask in a side session beside this one, in Plan mode; Bring back its answer here" },
   {
     cmd: "/tell",
     help: "Send a message to another session by its code, e.g. /tell GT 407 run the tests",
@@ -571,6 +573,8 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
+    // T-034: a side session takes its latest answer back to the session it came from.
+    ...(sideOf(session.id) ? [{ label: "Bring back the answer", onSelect: () => void bringBack(session.id) }] : []),
     // T-019: Claude names it again from its first messages, over the title it has.
     {
       label: "Name it again",
@@ -2206,6 +2210,16 @@ function Composer({
           // T-046: a fresh session in this pane, set up as this one; this one stays in the sidebar.
           setText("")
           await clearSession(sessionId)
+          return
+        }
+        case "/side": {
+          // T-034: a side session beside this one, in Plan mode, for something that came up.
+          if (!arg) {
+            toast("Write your question after /side, for example /side how is the cache invalidated?", { id: "side" })
+            return
+          }
+          setText("")
+          await startSide(sessionId, arg)
           return
         }
         case "/btw": {

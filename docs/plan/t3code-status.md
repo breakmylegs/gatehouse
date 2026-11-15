@@ -45,7 +45,7 @@ Slices, in order:
 | T-031 | Copy a link or id for a thread. | Build, S | todo | | |
 | T-032 | Subagent threads, an Agents view, and Stop that stops subagents too. | Have | built (Codehouse had it) | | |
 | T-033 | Limited state with Resume, Resume at reset and Snooze until reset. | Have | built (Codehouse had it) | | |
-| T-034 | Side chats (`/side`, `/btw`) with tools, their own composer, and Bring back. | Partly | todo | | |
+| T-034 | Side chats (`/side`, `/btw`) with tools, their own composer, and Bring back. | Partly | built | slice/T2-side | /side opens beside the pane (not a tab), Plan mode, Bring back |
 | T-035 | Threads from older versions migrated on first start. | Have | built (Codehouse had it) | | |
 | T-036 | A large paste becomes an attachment. | Have | built (Codehouse had it) | | |
 | T-037 | Rich-text Markdown composer (styled as you type, list continuation, code blocks with a language). | Build, M | todo | | |
