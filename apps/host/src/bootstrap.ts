@@ -17,6 +17,7 @@ import { ExtraSpendToday, LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
 import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
 import { RoutineDrafts } from "./routine-drafts.js"
+import { START_RULE, startChild, waitForSession } from "./orchestrate.js"
 import { TriggerWatcher } from "./routine-triggers.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
@@ -349,6 +350,8 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
+  // T-121: how many sessions each session has started.
+  const childCount = new Map<string, number>()
   // T-122: routines a session drafted, for you to save on the desktop.
   const routineDrafts = new RoutineDrafts()
   const board = new BoardStore(path.join(gatehouseDataDir(env), "board.json"))
@@ -489,6 +492,44 @@ export function createHost(opts: HostOptions = {}): Host {
                   if (!s) return { text: "The session is not open.", isError: true }
                   const id = await s.declareAssumption(text, check)
                   return { text: `Recorded as assumption ${id}. The person sees it until they verify it.` }
+                },
+              },
+            }
+          : {}),
+        // T-121: start a session in this folder (asked of you by the rule agent-start-session), and wait for one.
+        ...(kind !== "chat"
+          ? {
+              orchestrate: {
+                start: (prompt: string, title?: string) =>
+                  startChild(manager.get(sessionId), prompt, title, {
+                    counts: childCount,
+                    start: (o) => manager.start(o),
+                    record: (input) =>
+                      audit.record({
+                        session: sessionId,
+                        event: "session_started_by_agent",
+                        channel: "host",
+                        tool: "session",
+                        cwd: manager.get(sessionId)?.cwd ?? "",
+                        input,
+                        verdict: {
+                          outcome: "allow",
+                          ruleId: START_RULE,
+                          reason: "A session started another, as allowed for this call.",
+                          risk: 0,
+                          decidedBy: "rules",
+                          policyHash: store.current?.hash ?? "",
+                        },
+                        latencyMs: 0,
+                      }),
+                  }),
+                wait: async (id: string, minutes: number) => {
+                  const me = manager.get(sessionId)
+                  if (!me?.linked().has(id))
+                    return { text: "Only a session this one started, or one the person named, can be waited for.", isError: true }
+                  const w = await waitForSession(() => manager.get(id)?.info(), minutes)
+                  const read = await readLinked(me.linked(), id, (x) => manager.get(x)?.info(), aboutDeps())
+                  return { text: `${w.done ? `It has ${w.state === "idle" ? "finished its turn" : w.state}.` : "It is still working; wait again or read it later."}\n${read.text}` }
                 },
               },
             }

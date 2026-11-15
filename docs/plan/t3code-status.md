@@ -132,7 +132,7 @@ Slices, in order:
 | T-118 | A device panel: live iOS Simulator or Android Emulator next to the thread, device tools for agents, SSH device hosts. | Build, L | todo | | |
 | T-119 | Scheduled tasks: recurring or once, run now, pause; runs go to a new thread each time, one continuing thread, or one thread with a fresh session each run. | Partly | todo | | |
 | T-120 | Webhook automations: a public URL, placeholders from the request, signature check, filters, duplicate and burst handling, held while offline. | Build (safe variant), M | todo | | |
-| T-121 | Orchestration tools for agents: delegate a task to another model, create threads, list, read, send, wait, interrupt. | Partly | todo | | |
+| T-121 | Orchestration tools for agents: delegate a task to another model, create threads, list, read, send, wait, interrupt. | Partly | built | slice/T2-orchestrate | start (asks you), read and wait; delegate to another model and interrupt not built |
 | T-122 | Agents scheduling their own recurring work. | Build (safe variant), S | built | slice/T2-routine-drafts | drafted by a session, saved only by you on the desktop |
 | T-123 | Outside agents (Claude Code in a terminal, ChatGPT, bots) drive threads through the app's MCP server after an OAuth sign-in. | Conflicts | listed for decision | | |
 | T-124 | Scripts on the machine: `thread start`, `send --wait`, `show`, `list`. | Build (safe variant), M | todo | | |

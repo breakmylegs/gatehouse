@@ -319,6 +319,8 @@ describe("golden corpus floor (the suite must not pass by finding nothing)", () 
       "session-handoff",
       "linked-session-tools",
       "routine-draft-tools",
+      "agent-start-session",
+      "session-wait-tools",
       "claude-code-internal",
       "parse-error",
       "malformed-input",

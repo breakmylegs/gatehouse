@@ -917,6 +917,11 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#linked
   }
 
+  /** T-121: a session this one started, which it may read and wait for. */
+  adopt(childId: string): void {
+    if (childId !== this.id) this.#linked.add(childId)
+  }
+
   /** Whether this session wrote or edited the file at this full path. */
   wrote(absPath: string): boolean {
     return this.#written.has(writtenKey(absPath, this.cwd))

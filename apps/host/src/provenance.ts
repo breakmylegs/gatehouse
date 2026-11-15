@@ -67,6 +67,7 @@ export const fromOutside = (tool: string): boolean =>
   tool === "WebSearch" ||
   // T-049: another session's conversation is read as untrusted, so a command copied from it is flagged (B32).
   tool === "mcp__companion__read_linked_session" ||
+  tool === "mcp__companion__wait_for_session" ||
   (tool.startsWith("mcp__") && !tool.startsWith("mcp__companion__"))
 
 const norm = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase()
