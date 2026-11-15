@@ -50,7 +50,7 @@ Slices, in order:
 | T-036 | A large paste becomes an attachment. | Have | built (Codehouse had it) | | |
 | T-037 | Rich-text Markdown composer (styled as you type, list continuation, code blocks with a language). | Build, M | todo | | |
 | T-038 | Many attachments, images, videos, HEIC converted. | Have | built (Codehouse had it) | | |
-| T-039 | Follow-ups queued or steered into the running turn; queued messages listed, edited, removed, Send now; a held queue resumed. | Partly | todo | | |
+| T-039 | Follow-ups queued or steered into the running turn; queued messages listed, edited, removed, Send now; a held queue resumed. | Partly | partly built | slice/T2-held | held until the turn ends: listed, edited, removed, sent now, resumed; steering a running turn waits for an SDK call recorded in sdk-notes |
 | T-040 | Quote part of a reply into the composer with a comment (Cite in composer). | Build, S | built | slice/T1-composer | |
 | T-041 | Recall sent prompts with Up and Down in an empty composer. | Build, S | built | slice/T1-composer | |
 | T-042 | Edit from here, with Revert files too (worktree only, refused when another session shares the folder). | Partly | built | slice/T2-edit-revert | worktree only, refused when another open session shares the folder, recorded first |

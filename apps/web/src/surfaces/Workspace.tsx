@@ -51,6 +51,8 @@ import { describeActivity, describePulse } from "../lib/activity"
 import { groupItems, summarise, failureItems, summaryItems } from "../lib/groups"
 import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
+import { HeldList } from "../components/HeldList"
+import { useHeld } from "../lib/held"
 import { nameSession } from "../lib/autoTitle"
 import { EditRevert } from "../components/EditRevert"
 import { findIn } from "../lib/find"
@@ -2154,7 +2156,7 @@ function Composer({
   const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
   const matches = showMenu ? SLASH.filter((c) => c.cmd.startsWith(text.toLowerCase())) : []
 
-  async function submit() {
+  async function submit(hold = false) {
     const t = text.trim()
     if (!t && pictures.length === 0 && files.length === 0 && pasted.length === 0) return
     rememberSent(sessionId, t)
@@ -2310,6 +2312,16 @@ function Composer({
       .join("\n\n")
     // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.
     const st = useStore.getState().sessions[sessionId]?.state
+    // T-039: Alt+Enter while Claude works holds it until the turn ends instead, in the list above the prompt box.
+    if (hold && (st === "running" || st === "waiting")) {
+      useHeld.getState().hold(sessionId, full)
+      setText("")
+      setPictures([])
+      setFiles([])
+      setPasted([])
+      toast("Held: it is sent when this turn ends.", { id: "held" })
+      return
+    }
     addUserText(
       sessionId,
       [said, named].filter(Boolean).join("\n\n"),
@@ -2332,6 +2344,7 @@ function Composer({
   return (
     <div className="relative grid gap-1">
       <QuoteSelection pane={quotePane} onQuote={quoteIn} disabled={disabled} />
+      <HeldList sessionId={sessionId} onEdit={(held) => setText((cur) => (cur.trim() ? `${cur}\n\n${held}` : held))} />
       {matches.length > 0 ? (
         <ul
           role="listbox"
@@ -2577,7 +2590,7 @@ function Composer({
               }
             } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
-              void submit()
+              void submit(e.altKey)
             }
           }}
         />

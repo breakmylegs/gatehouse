@@ -190,3 +190,23 @@ describe("the prompt box", () => {
     expect(bar.querySelector("#lvl-s1")?.textContent).toMatch(/Half the processor/)
   })
 })
+
+describe("holding a message until the turn ends (T-039)", () => {
+  it("Alt+Enter while Claude works holds it, and plain Enter still sends it to Claude's next step", async () => {
+    const { useHeld } = await import("../src/lib/held")
+    useHeld.setState({ held: {}, paused: {} })
+    useStore.setState((s) => ({ sessions: { s1: { ...s.sessions.s1!, state: "running" } } }))
+    render(<Workspace />)
+    const box = screen.getByRole("textbox", { name: "Prompt" }) as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: "then run the tests" } })
+    fireEvent.keyDown(box, { key: "Enter", altKey: true })
+    await waitFor(() => expect(useHeld.getState().held.s1?.map((h) => h.text)).toEqual(["then run the tests"]))
+    expect(vi.mocked(send).mock.calls.some(([c]) => (c as { type: string }).type === "prompt")).toBe(false)
+    expect(await screen.findByRole("region", { name: "Held until this turn ends" })).toBeTruthy()
+    fireEvent.change(box, { target: { value: "and this now" } })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await waitFor(() =>
+      expect(vi.mocked(send).mock.calls.map(([c]) => c)).toContainEqual({ type: "prompt", sessionId: "s1", text: "and this now" }),
+    )
+  })
+})
