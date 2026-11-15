@@ -53,6 +53,7 @@ import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
 import { HeldList } from "../components/HeldList"
 import { linkSessions } from "../lib/linkSessions"
+import { prLinks } from "../lib/prLinks"
 import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
 import { nameSession } from "../lib/autoTitle"
@@ -513,6 +514,7 @@ function SessionPane({
   // A turn that ended can leave subagents or commands working; the session is busy until they finish.
   const background = session.background ?? []
   const busy = running || background.length > 0
+  const prs = useMemo(() => prLinks(transcript.items), [transcript.items])
   const ended = session.state === "ended" || session.state === "error"
   const chat = session.kind === "chat"
   // Each artifact a chat saves shows in its panel at once.
@@ -732,6 +734,16 @@ function SessionPane({
           ) : (
             <span className="mono truncate text-xs text-mut">{session.cwd}</span>
           )}
+          {/* T-078: the pull requests this session opened, from its own gh pr create. */}
+          {prs.length ? (
+            <span role="group" aria-label="Pull requests this session opened" className="flex flex-wrap gap-1.5 text-xs">
+              {prs.map((p) => (
+                <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="font-semibold" title={p.url}>
+                  {p.repo.split("/")[1]} #{p.number}
+                </a>
+              ))}
+            </span>
+          ) : null}
         </span>
         {/* A chat has no project, so none of the project panels; it has what it made to show you. */}
         {chat ? (
