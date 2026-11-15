@@ -43,7 +43,7 @@ describe("the CNW hub (O41)", () => {
     hub.agentOpened(agent.s)
     hub.agentMessage(agent.s, JSON.stringify({ type: "hello", computer: "c1", signature: sign(agent.sent[0]!.challenge as string) }))
     expect(hub.command("c1", tab.s, JSON.stringify({ type: "approve", requestId: "r1" }))).toBe("sent")
-    expect(agent.sent.at(-1)).toEqual({ type: "command", from: "ana", data: { type: "approve", requestId: "r1" } })
+    expect(agent.sent.at(-1)).toEqual({ type: "command", from: "ana", signedIn: true, data: { type: "approve", requestId: "r1" } })
     hub.agentMessage(agent.s, JSON.stringify({ type: "event", data: { type: "session_state", id: "s1" } }))
     expect(tab.sent.at(-1)).toEqual({ type: "event", data: { type: "session_state", id: "s1" } })
     const stranger = sock()

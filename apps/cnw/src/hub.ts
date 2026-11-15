@@ -29,6 +29,8 @@ interface Agent {
 interface Watcher {
   socket: Socket
   user: string
+  /** Signed in, rather than on an allow-listed network; the computer refuses a Severe approval without it. */
+  signedIn: boolean
   sent: number[]
 }
 
@@ -96,8 +98,8 @@ export class Hub {
       }
   }
 
-  watch(computerId: string, socket: Socket, user: string): () => void {
-    const w: Watcher = { socket, user, sent: [] }
+  watch(computerId: string, socket: Socket, user: string, signedIn = true): () => void {
+    const w: Watcher = { socket, user, signedIn, sent: [] }
     const set = this.#watchers.get(computerId) ?? new Set()
     set.add(w)
     this.#watchers.set(computerId, set)
@@ -123,7 +125,7 @@ export class Hub {
     }
     const agent = this.#agents.get(computerId)
     if (!agent) return "offline"
-    agent.socket.send(JSON.stringify({ type: "command", from: w.user, data }))
+    agent.socket.send(JSON.stringify({ type: "command", from: w.user, signedIn: w.signedIn, data }))
     return "sent"
   }
 
