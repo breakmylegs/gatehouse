@@ -16,6 +16,7 @@ import { NavigationAudit, registerShellRoutes } from "./shell-nav.js"
 import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { registerTitleRoutes, type TitleDeps } from "./title-api.js"
+import { registerTriageRoutes } from "./triage.js"
 import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
@@ -34,7 +35,7 @@ import { ChangelogStore, registerChangelogRoutes } from "./update/changelog.js"
 import { makeAuditBundle } from "./audit-bundle.js"
 import { sessionRecords, sessionTimeline } from "./timeline.js"
 import { makeTimelineExport, type TimelineSigner } from "./timeline-export.js"
-import { listCheckpoints } from "@gatehouse/shared/node"
+import { gatehouseDataDir, listCheckpoints } from "@gatehouse/shared/node"
 import type { UpdateService } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
@@ -136,6 +137,8 @@ export interface AdminContext {
   recap?: RecapDeps
   /** T-018: session titles written by Claude. */
   titles?: TitleDeps
+  /** T-125: the folder of a chat Codehouse made, for triage files. */
+  triageFolder?: (sessionId: string) => string | undefined
   /** /btw: a side question about a session, answered without interrupting it (owner, 4 Nov). */
   btw?: BtwDeps
   /** CH-04: importing a claude.ai export. */
@@ -869,6 +872,13 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
   if (ctx.titles) registerTitleRoutes(app, ctx.titles)
+  if (ctx.triageFolder)
+    registerTriageRoutes(app, {
+      chatFolder: ctx.triageFolder,
+      logFile: path.join(gatehouseDataDir(ctx.env), "host.log"),
+      audit: ctx.audit,
+      policyHash: () => ctx.store.current?.hash ?? "",
+    })
   if (ctx.btw) registerBtwRoutes(app, ctx.btw)
   if (ctx.chatImport) registerImportRoutes(app, ctx.chatImport)
   if (ctx.chatHandoff) registerHandoffRoutes(app, ctx.chatHandoff)

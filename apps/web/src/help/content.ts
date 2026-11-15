@@ -126,7 +126,7 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 
 - **What it checks:** Claude Code is here (and its version), you are signed in, the account belongs to the organisation Codehouse expects, the Approver runs with every rule file loaded, the kill switch, that Codehouse listens on this computer only, the PowerShell checker, your phone and notifications, models on this computer if you switched them on, free disk space, and updates.
 - **Fine, something to look at, or a problem:** a problem stops sessions or makes Codehouse less safe; something to look at means Codehouse asks you more, or reaches you less. Each says what to do.
-- **Copy the report** to send it to whoever helps you. It names no email address, token or file path of yours.`,
+- **Copy the report** to send it to whoever helps you. It names no email address, token or file path of yours. **Ask Claude to triage** starts a chat that reads this report and the end of Codehouse's log, both with private details taken out, and drafts an issue: what goes wrong, the evidence, the likely cause and what to try. It runs in Plan mode in a folder of its own and changes nothing; any restart steps are for you.`,
   },
   marketplace: {
     id: "marketplace",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { CopyButton } from "../components/CopyButton"
 import { Icon, type IconName } from "../components/Icon"
 import { api } from "../lib/api"
+import { startTriage } from "../lib/triage"
 
 /** What the Host's checks found (apps/host/src/doctor.ts). */
 export interface DoctorCheck {
@@ -112,12 +113,19 @@ export function Doctor() {
             className="btn"
           />
         ) : null}
+        {result ? (
+          // T-125: a read-only chat reads the log and these checks, redacted, and drafts an issue.
+          <button type="button" className="btn" onClick={() => void startTriage(result.report)}>
+            Ask Claude to triage
+          </button>
+        ) : null}
       </div>
       {result ? (
         <p className="m-0 text-xs text-mut">
           Codehouse {result.version}, checked at{" "}
           {new Date(result.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. The
-          report names no email address, token or file path of yours.
+          report names no email address, token or file path of yours. Ask Claude to triage starts a chat that
+          reads it and the end of Codehouse&apos;s log, both redacted, and drafts an issue; it changes nothing.
         </p>
       ) : null}
     </section>

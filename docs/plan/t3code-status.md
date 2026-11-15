@@ -136,7 +136,7 @@ Slices, in order:
 | T-122 | Agents scheduling their own recurring work. | Build (safe variant), S | built | slice/T2-routine-drafts | drafted by a session, saved only by you on the desktop |
 | T-123 | Outside agents (Claude Code in a terminal, ChatGPT, bots) drive threads through the app's MCP server after an OAuth sign-in. | Conflicts | listed for decision | | |
 | T-124 | Scripts on the machine: `thread start`, `send --wait`, `show`, `list`. | Build (safe variant), M | todo | | |
-| T-125 | Triage an issue: an agent reads the app's logs and its source for that version and drafts an issue, asking before any fix. | Build (safe variant), S | todo | | |
+| T-125 | Triage an issue: an agent reads the app's logs and its source for that version and drafts an issue, asking before any fix. | Build (safe variant), S | built | slice/T2-triage | a Plan-mode chat given the redacted log and Doctor report; drafts an issue |
 | T-126 | Threads carry on after an update, crash or restart, at most three automatic resumes in a row. | Have | built (Codehouse had it) | | |
 | T-127 | Usage: tokens, cache savings, model breakdown, estimated cost, periods with shortcuts. | Have | built (Codehouse had it) | | |
 | T-128 | Custom model prices and counting one model as another. | Build, S | todo | | |

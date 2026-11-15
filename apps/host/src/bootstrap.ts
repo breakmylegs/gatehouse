@@ -46,6 +46,7 @@ import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
 import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
+import { chatFolderOf } from "./triage.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -1297,6 +1298,8 @@ export function createHost(opts: HostOptions = {}): Host {
         audit,
         policyHash: () => store.current?.hash ?? "",
       },
+      // T-125: triage files go only into a chat's own folder, one Codehouse made for chats.
+      triageFolder: (id) => chatFolderOf(manager.get(id)?.info(), path.join(gatehouseDataDir(env), "chats")),
       // T-018: titles written by Claude, with the recap's limits; recorded, and only when the account passed the check.
       titles: {
         writer: createTitleWriter(),
