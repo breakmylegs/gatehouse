@@ -24,7 +24,7 @@ export function WorktreeCleanup({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     void api<{ saved: Record<string, unknown> }>("GET", "/api/settings").then((r) => {
-      const p = r.ok ? (r.data?.saved.worktreeCleanup as Partial<Rules> | undefined) : undefined
+      const p = r.ok ? (r.data?.saved?.worktreeCleanup as Partial<Rules> | undefined) : undefined
       if (!p) return
       setRules({ unchanged: p.unchanged === true, merged: p.merged === true, inactiveDays: typeof p.inactiveDays === "number" ? p.inactiveDays : "" })
       setAuto(true)
@@ -50,7 +50,7 @@ export function WorktreeCleanup({ onDone }: { onDone: () => void }) {
   async function keep(on: boolean) {
     const s = await api<{ saved: Record<string, unknown> }>("GET", "/api/settings")
     if (!s.ok || !s.data) return toast.error(s.error ?? "Settings could not be read.", { id: "cleanup" })
-    const next = { ...s.data.saved }
+    const next = { ...(s.data.saved ?? {}) }
     if (on && chosen) next.worktreeCleanup = body()
     else delete next.worktreeCleanup
     const r = await api("PUT", "/api/settings", next)
