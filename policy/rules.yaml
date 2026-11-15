@@ -75,6 +75,8 @@ allow:
   - { id: session-read-tools, tools: ["mcp__companion__read_session"], mcpSource: [sdk], sessionKinds: [chat] }
   # T-049: a session you named in your own message, read redacted and as untrusted; only through the in-process Companion.
   - { id: linked-session-tools, tools: ["mcp__companion__read_linked_session"], mcpSource: [sdk] }
+  # T-122: a coding session drafts a routine for you to save on the desktop; it saves and starts nothing.
+  - { id: routine-draft-tools, tools: ["mcp__companion__draft_routine"], mcpSource: [sdk], sessionKinds: [code] }
   # Browser tools (Settings, off unless turned on): a coding session looks at a page on this computer. The Host takes
   # the picture only of localhost or 127.0.0.1, in a profile made for the one look, and redacts the text.
   - { id: page-look-tools, tools: ["mcp__companion__look_at_page"], mcpSource: [sdk], sessionKinds: [code] }

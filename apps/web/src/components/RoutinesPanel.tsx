@@ -23,6 +23,16 @@ interface Routine {
 
 type Starts = "schedule" | "commit" | "files"
 
+/** T-122: a routine a session drafted, for you to read and save, or dismiss. */
+interface Draft {
+  id: string
+  folder: string
+  name: string
+  prompt: string
+  time: string
+  days: string[]
+}
+
 /** When a routine starts, in words. */
 export function startsText(x: Pick<Routine, "time" | "days" | "trigger">): string {
   if (x.trigger?.kind === "commit") return "on a new commit"
@@ -153,9 +163,23 @@ export function RoutinesPanel() {
     phone: false,
     starts: "schedule" as Starts,
   })
+  const [drafts, setDrafts] = useState<Draft[]>([])
   const load = async () => {
     const r = await api<{ routines: Routine[] }>("GET", "/api/routines")
     setList(r.ok && r.data ? r.data.routines : [])
+    const d = await api<{ drafts: Draft[] }>("GET", "/api/routines/drafts")
+    setDrafts((d.ok && d.data?.drafts) || [])
+  }
+  async function dismiss(d: Draft) {
+    const r = await api("DELETE", `/api/routines/drafts/${encodeURIComponent(d.id)}`)
+    if (!r.ok) return toast.error(r.error ?? "Not dismissed", { id: "routines" })
+    void load()
+  }
+  /** Puts a draft into the form below, for you to read, change and save; Extreme approval stays off. */
+  function useDraft(d: Draft) {
+    setDraft({ ...draft, name: d.name, folder: d.folder, prompt: d.prompt, time: d.time, days: d.days, extreme: false, starts: "schedule" })
+    void dismiss(d)
+    toast("The draft is in the form below. Read it, change what you like, then save it.", { id: "routines" })
   }
   useEffect(() => void load(), [])
 
@@ -194,6 +218,35 @@ export function RoutinesPanel() {
         instead on a new commit in its folder, or when files in it change: never because of its own
         session&apos;s work, at most once in 15 minutes and 12 times a day.
       </p>
+      {drafts.length ? (
+        <section aria-label="Drafted by a session" className="grid gap-1.5">
+          <h3 className="m-0 text-sm">Drafted by a session</h3>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {drafts.map((d) => (
+              <li key={d.id} className="panel grid gap-1 p-2">
+                <span className="flex flex-wrap items-center gap-2">
+                  <strong className="min-w-0 flex-1 truncate">{d.name}</strong>
+                  <button type="button" className="btn !min-h-7 !text-[13px]" onClick={() => useDraft(d)}>
+                    Use this draft
+                  </button>
+                  <button
+                    type="button"
+                    className="btn !min-h-7 !text-[13px]"
+                    aria-label={`Dismiss ${d.name}`}
+                    onClick={() => void dismiss(d)}
+                  >
+                    Dismiss
+                  </button>
+                </span>
+                <span className="mono truncate text-xs text-mut">
+                  {startsText({ time: d.time, days: d.days as Routine["days"] })}, {d.folder}
+                </span>
+                <span className="line-clamp-3 whitespace-pre-wrap text-[13px]">{d.prompt}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {list?.length ? (
         <ul className="m-0 grid list-none gap-2 p-0" aria-label="Your routines">
           {list.map((x) => (

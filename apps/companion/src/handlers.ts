@@ -56,6 +56,11 @@ export interface LinkedReadClient {
   read(sessionId: string): Promise<ToolText>
 }
 
+/** T-122: a routine drafted for the person to save on the desktop. The Host keeps it as a draft and records it. */
+export interface RoutineDraftClient {
+  draft(d: { name: string; prompt: string; time?: string; days?: string[] }): Promise<ToolText>
+}
+
 /** D-037: the session's assumption register, kept by the Host. */
 export interface AssumptionClient {
   declare(text: string, check?: string): Promise<ToolText>
@@ -76,6 +81,8 @@ export interface CompanionDeps {
   pages?: PageClient
   /** The code session a chat is about. Absent: read_session is not offered. */
   about?: SessionReadClient
+  /** T-122: routine drafts. Absent: draft_routine is not offered. */
+  routineDrafts?: RoutineDraftClient
   /** T-049: sessions named as context. Absent: read_linked_session is not offered. */
   linked?: LinkedReadClient
   /** D-037: a coding session's assumptions. Absent: declare_assumption is not offered. */
@@ -185,6 +192,12 @@ export class CompanionHandlers {
     return await this.#deps.about.offer(clean.slice(0, OFFER_MAX_CHARS), why.trim().slice(0, 500))
   }
 
+  async draftRoutine(d: { name: string; prompt: string; time?: string; days?: string[] }): Promise<ToolText> {
+    if (!this.#deps.routineDrafts) return { text: "Routines cannot be drafted from here.", isError: true }
+    if (!d.name.trim() || !d.prompt.trim()) return { text: "Not drafted: a routine needs a name and a prompt.", isError: true }
+    return await this.#deps.routineDrafts.draft(d)
+  }
+
   async readLinkedSession(id: string): Promise<ToolText> {
     if (!this.#deps.linked) return { text: "No session can be read from here.", isError: true }
     const clean = id.trim()
@@ -231,6 +244,7 @@ export interface CompanionToolDef {
     | "read_session"
     | "offer_to_session"
     | "read_linked_session"
+    | "draft_routine"
     | "declare_assumption"
   description: string
   shape: z.ZodRawShape
@@ -427,6 +441,31 @@ export const PAGE_TOOLS: readonly CompanionToolDef[] = [
       openWorldHint: false,
     },
     run: (h, a) => h.lookAtPage(String(a.url ?? "")),
+  },
+]
+
+/**
+ * T-122: offered to a coding session. It drafts a routine for the person; it never saves, changes or starts one.
+ */
+export const ROUTINE_DRAFT_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "draft_routine",
+    description:
+      "Draft a routine for the person: a session that would start by itself in this folder on the days and at the time given (time as HH:MM local, days as sun, mon, tue, wed, thu, fri, sat) and be sent the prompt. Use it when the person wants recurring work. It is only a draft: the person reads it under Settings, Routines and saves it themselves, or not. It never starts anything.",
+    shape: {
+      name: z.string().min(1).max(80),
+      prompt: z.string().min(1).max(8000),
+      time: z.string().max(5).optional(),
+      days: z.array(z.string().max(3)).max(7).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    run: (h, a) =>
+      h.draftRoutine({
+        name: String(a.name ?? ""),
+        prompt: String(a.prompt ?? ""),
+        ...(typeof a.time === "string" ? { time: a.time } : {}),
+        ...(Array.isArray(a.days) ? { days: a.days.map(String) } : {}),
+      }),
   },
 ]
 

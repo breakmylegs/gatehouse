@@ -84,6 +84,7 @@ import type { PlanUsage } from "./plan-usage.js"
 import { ArtifactError, artifactHeaders, EXT, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
+import type { RoutineDrafts } from "./routine-drafts.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
 import type { PhoneService } from "./relay/service.js"
 
@@ -118,6 +119,8 @@ export interface AdminContext {
   memory?: MemoryStore
   /** B34: routines, sessions that start themselves on a schedule. */
   routines?: RoutineStore
+  /** T-122: routines a session drafted, for you to save. */
+  routineDrafts?: RoutineDrafts
   /** G24: the task board, and how a card's session starts. */
   board?: { store: BoardStore; start: (card: Card) => Promise<string> }
   /** What chats show in a sandbox. */
@@ -1409,6 +1412,14 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
       if (e instanceof RoutineError) return bad(reply, 422, e.message)
       throw e
     }
+  })
+  // T-122: drafts a session made. You save one through PUT /api/routines like your own; dismissing is recorded.
+  app.get("/api/routines/drafts", async () => ({ drafts: ctx.routineDrafts?.list() ?? [] }))
+  app.delete("/api/routines/drafts/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    if (!ctx.routineDrafts?.remove(id)) return bad(reply, 404, "There is no such draft.")
+    await record("routine_draft_dismissed", { id })
+    return { ok: true }
   })
   app.delete("/api/routines/:id", async (req, reply) => {
     const id = (req.params as { id: string }).id

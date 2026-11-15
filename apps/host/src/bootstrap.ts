@@ -16,6 +16,7 @@ import { NtfyChannel, NtfySecretStore } from "./push/ntfy.js"
 import { ExtraSpendToday, LimitPauser, pausePoint } from "./limit-pause.js"
 import { Telemetry } from "./telemetry.js"
 import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } from "./routines.js"
+import { RoutineDrafts } from "./routine-drafts.js"
 import { TriggerWatcher } from "./routine-triggers.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
@@ -347,6 +348,8 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   // B34: routines, started as normal sessions on their days and times while Codehouse is open.
   const routines = new RoutineStore(path.join(gatehouseDataDir(env), "routines.json"))
+  // T-122: routines a session drafted, for you to save on the desktop.
+  const routineDrafts = new RoutineDrafts()
   const board = new BoardStore(path.join(gatehouseDataDir(env), "board.json"))
   // What chats remember: redacted before it is written, with the same word list as everything else.
   const memory = new MemoryStore(path.join(gatehouseDataDir(env), "memory"), (t) =>
@@ -485,6 +488,39 @@ export function createHost(opts: HostOptions = {}): Host {
                   if (!s) return { text: "The session is not open.", isError: true }
                   const id = await s.declareAssumption(text, check)
                   return { text: `Recorded as assumption ${id}. The person sees it until they verify it.` }
+                },
+              },
+            }
+          : {}),
+        // T-122: a coding session drafts a routine; it waits for you under Settings, Routines, and starts nothing.
+        ...(kind !== "chat"
+          ? {
+              routineDrafts: {
+                draft: async (d: { name: string; prompt: string; time?: string; days?: string[] }) => {
+                  let made
+                  try {
+                    made = routineDrafts.add({ ...d, sessionId, folder: cwd })
+                  } catch (e) {
+                    return { text: `Not drafted: ${(e as Error).message}`, isError: true }
+                  }
+                  await audit.record({
+                    session: sessionId,
+                    event: "routine_drafted",
+                    channel: "host",
+                    tool: "routines",
+                    cwd,
+                    input: { id: made.id, name: made.name, time: made.time, days: made.days },
+                    verdict: {
+                      outcome: "allow",
+                      ruleId: "routine-draft",
+                      reason: "A session drafted a routine for you to save or dismiss; it starts nothing.",
+                      risk: 0,
+                      decidedBy: "rules",
+                      policyHash: store.current?.hash ?? "",
+                    },
+                    latencyMs: 0,
+                  })
+                  return { text: `Drafted "${made.name}". The person sees it under Settings, Routines and saves it if they want it.` }
                 },
               },
             }
@@ -1290,6 +1326,7 @@ export function createHost(opts: HostOptions = {}): Host {
       projects,
       memory,
       routines,
+      routineDrafts,
       // G24: a card moved to Running starts a normal session in its folder, with its prompt.
       board: {
         store: board,

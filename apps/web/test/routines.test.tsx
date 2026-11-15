@@ -7,6 +7,7 @@ import { RoutinesPanel } from "../src/components/RoutinesPanel"
 const calls: Array<{ method: string; url: string; body?: unknown }> = []
 let routines: Array<Record<string, unknown>> = []
 let runs: Array<Record<string, unknown>> = []
+let drafts: Array<Record<string, unknown>> = []
 vi.mock("sonner", () => ({
   toast: Object.assign(() => undefined, { error: () => undefined }),
   Toaster: () => null,
@@ -17,6 +18,7 @@ vi.mock("../src/lib/api", () => ({
     if (url === "/api/routines" && method === "GET")
       return { ok: true, status: 200, data: { routines } }
     if (url === "/api/routines/runs") return { ok: true, status: 200, data: { runs } }
+    if (url === "/api/routines/drafts" && method === "GET") return { ok: true, status: 200, data: { drafts } }
     return { ok: true, status: 200, data: {} }
   }),
 }))
@@ -34,6 +36,7 @@ const { useStore } = await import("../src/store")
 beforeEach(() => {
   calls.length = 0
   runs = []
+  drafts = []
   routines = [
     {
       id: "r1",
@@ -188,5 +191,20 @@ describe("routines started by a trigger", () => {
         trigger: { kind: "commit" },
       }),
     )
+  })
+})
+
+describe("a routine a session drafted (T-122)", () => {
+  it("is shown for you to use or dismiss, and using it fills the form with Extreme approval off", async () => {
+    drafts = [{ id: "d1", folder: "C:\dev\shop", name: "Nightly tests", prompt: "Run the tests and report", time: "02:00", days: ["mon"] }]
+    render(<RoutinesPanel />)
+    const box = await screen.findByRole("region", { name: "Drafted by a session" })
+    expect(box.textContent).toContain("Run the tests and report")
+    expect(calls.some((c) => c.method === "PUT")).toBe(false)
+    fireEvent.click(within(box).getByRole("button", { name: "Use this draft" }))
+    await waitFor(() => expect(calls).toContainEqual(expect.objectContaining({ method: "DELETE", url: "/api/routines/drafts/d1" })))
+    expect((screen.getByDisplayValue("Nightly tests") as HTMLInputElement).value).toBe("Nightly tests")
+    expect(screen.getByDisplayValue("Run the tests and report")).toBeTruthy()
+    expect(calls.some((c) => c.method === "PUT")).toBe(false)
   })
 })
