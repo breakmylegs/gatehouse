@@ -48,3 +48,26 @@ describe("a commit in the Changes pane (T-072)", () => {
     expect(urls.at(-1)).toBe("/api/git/commit?session=s1&hash=abc1234")
   })
 })
+
+describe("Commit, push and open a pull request (T-074)", () => {
+  it("puts a ready-made request in the prompt box, and runs nothing itself", async () => {
+    const { COMPOSE_EVENT } = await import("../src/lib/compose")
+    const { SHIP_PROMPTS } = await import("../src/components/ChangesPane")
+    const { send } = await import("../src/store")
+    const composed: unknown[] = []
+    const on = (e: Event) => composed.push((e as CustomEvent).detail)
+    window.addEventListener(COMPOSE_EVENT, on)
+    render(<ChangesPane sessionId="s1" cwd="C:\dev\shop" />)
+    vi.mocked(send).mockClear()
+    fireEvent.click(await screen.findByRole("button", { name: "Open a pull request..." }))
+    fireEvent.click(screen.getByRole("button", { name: "Commit..." }))
+    window.removeEventListener(COMPOSE_EVENT, on)
+    expect(composed).toEqual([
+      { sessionId: "s1", text: SHIP_PROMPTS.pr },
+      { sessionId: "s1", text: SHIP_PROMPTS.commit },
+    ])
+    expect(SHIP_PROMPTS.commit).toContain("Do not push")
+    expect(SHIP_PROMPTS.pr).toContain("gh pr create")
+    expect(vi.mocked(send).mock.calls.filter(([c]) => (c as { type: string }).type === "prompt")).toEqual([])
+  })
+})

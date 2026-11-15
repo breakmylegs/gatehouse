@@ -100,6 +100,20 @@ interface Changes {
   truncated?: boolean
 }
 
+/**
+ * T-074 (t3code review, O31): Commit, Commit and push, and Open a pull request put a request in the prompt box for you
+ * to send. Claude writes the message from the changes and the repository's conventions and runs the commands itself,
+ * so each goes through the Approver like any other call: a push or gh pr create asks you in Manual mode (rule
+ * git-remote), and Extreme approval follows its own rules.
+ */
+export const SHIP_PROMPTS = {
+  commit:
+    "Commit the changes in this folder. Look at git log first and write the message the way this repository does. Do not push.",
+  push: "Commit the changes in this folder with a message written the way this repository does (look at git log first), then push the branch.",
+  pr: "Commit the changes in this folder with a message written the way this repository does (look at git log first), push the branch, and open a pull request with gh pr create, with a title and description written from the changes. Tell me its address.",
+} as const
+const SHIP_LABELS = { commit: "Commit...", push: "Commit and push...", pr: "Open a pull request..." } as const
+
 const KIND: Record<FileChange["change"], string> = {
   added: "Made",
   modified: "Changed",
@@ -546,6 +560,20 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
             >
               Ask for a review
             </button>
+            {/* T-074: ready-made requests; Claude runs the commands, each through the Approver as usual. */}
+            {(["commit", "push", "pr"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                className="btn"
+                onClick={() => {
+                  composeIn(sessionId, SHIP_PROMPTS[k])
+                  toast("The request is in the prompt box. Send it when ready.", { id: "changes" })
+                }}
+              >
+                {SHIP_LABELS[k]}
+              </button>
+            ))}
             <button
               type="button"
               className="btn"
