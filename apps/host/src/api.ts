@@ -17,6 +17,7 @@ import { registerChatRoutes, type ChatDeps } from "./chat/api.js"
 import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { registerTitleRoutes, type TitleDeps } from "./title-api.js"
 import { registerTriageRoutes } from "./triage.js"
+import { registerForgeRoutes } from "./forge/routes.js"
 import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
@@ -874,6 +875,11 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   if (ctx.chat) registerChatRoutes(app, ctx.chat)
   if (ctx.recap) registerRecapRoutes(app, ctx.recap)
   if (ctx.titles) registerTitleRoutes(app, ctx.titles)
+  // T-061: read-only GitHub, only while switched on.
+  if (ctx.sessionCwd) {
+    const cwdOf = ctx.sessionCwd
+    registerForgeRoutes(app, { enabled: () => ctx.config().forges?.github === true, sessionCwd: (id) => cwdOf(id), audit: ctx.audit })
+  }
   if (ctx.triageFolder)
     registerTriageRoutes(app, {
       chatFolder: ctx.triageFolder,
@@ -1812,6 +1818,7 @@ const LIVE_SETTINGS = [
   "keepAwake",
   "phoneAlerts", // Mac fork: relay/service.ts reads it at each notification
   "recapByClaude",
+  "forges",
   "worktreeCleanup",
   "titleByClaude",
   "titleInstructions",

@@ -80,7 +80,7 @@ Slices, in order:
 | T-067 | Managed policy: cap the broadest mode, lock settings with a "Managed by" label, allow-list providers, limit clients, turn off remote access and webhooks, update from a mirror; refuse to start on a policy it cannot enforce; `policy check` and `policy show`. | Partly | todo | | |
 | T-068 | Subagents' approval requests shown in the parent with the subagent's name; a typed reply declines with feedback. | Have | built (Codehouse had it) | | |
 | T-069 | Remembered approvals ("Allow all edits this session"). | Have | built (Codehouse had it) | | |
-| T-061 | Forge connections: GitHub, GitLab, Forgejo and Gitea, Bitbucket, Azure DevOps, others, using the forge's CLI or a saved token. | Build (safe variant), M | todo | | |
+| T-061 | Forge connections: GitHub, GitLab, Forgejo and Gitea, Bitbucket, Azure DevOps, others, using the forge's CLI or a saved token. | Build (safe variant), M | partly built | slice/T4-forge | GitHub, read only, through gh, off until switched on; other forges and the Doctor line not built |
 | T-070 | A turn's own changes in the diff, with restore. | Have | built (Codehouse had it) | | |
 | T-072 | A Commits picker in the diff pane, and commit links opening there. | Partly | partly built | slice/T3-commits | Look at a commit in Changes; commit links in Claude's words not built |
 | T-073 | New project with a first commit and optional private GitHub repository; clone from a URL with progress, in host folders. | Build (safe variant), S | built (safe variant) | slice/T3-clone | /clone and /publish as requests Claude runs through the Approver |

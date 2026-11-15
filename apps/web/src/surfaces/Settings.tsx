@@ -77,6 +77,7 @@ interface Config {
   phoneAlerts?: "all" | "decisions" // Mac fork
   recapByClaude?: boolean
   titleByClaude?: boolean
+  forges?: { github?: boolean }
   titleInstructions?: string
   chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
@@ -173,6 +174,8 @@ interface Values {
   recap: boolean
   /** T-018, T-019: sessions named by Claude, and how. */
   titles: boolean
+  /** T-061: read-only GitHub through gh. */
+  github: boolean
   titleInstr: string
   /** Open in Claude (CH-06). */
   handoff: "edge" | "browser" | "app"
@@ -233,6 +236,7 @@ function valuesOf(d: SettingsData): Values {
     phoneAlerts: c.phoneAlerts === "decisions" ? "decisions" : "all", // Mac fork
     recap: c.recapByClaude !== false,
     titles: c.titleByClaude !== false,
+    github: c.forges?.github === true,
     titleInstr: c.titleInstructions ?? "",
     handoff: c.chatHandoff?.target ?? "edge",
     edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
@@ -274,6 +278,13 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
   else body.recapByClaude = false
+  // T-061: anything else kept in forges by a newer version stays.
+  {
+    const { github: _g, ...rest } = (d.saved.forges as Record<string, unknown> | undefined) ?? {}
+    const forges = { ...rest, ...(v.github ? { github: true } : {}) }
+    if (Object.keys(forges).length) body.forges = forges
+    else delete body.forges
+  }
   if (v.titles) delete body.titleByClaude
   else body.titleByClaude = false
   if (v.titleInstr.trim()) body.titleInstructions = v.titleInstr.trim().slice(0, 300)
@@ -458,6 +469,7 @@ export const DEFAULT_VALUES: Values = {
   phoneAlerts: "all", // Mac fork
   recap: true,
   titles: true,
+  github: false,
   titleInstr: "",
   handoff: "edge",
   edgeProfile: "Default",
@@ -1612,6 +1624,18 @@ export function Settings() {
               <p className="m-0 text-[13.5px] text-mut">
                 Connectors your organisation set up in Claude show under + in a session, in
                 Connectors. Each call to one goes to your rules like any other tool call.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="GitHub" gap="gap-2" changed={differs(v, ["github"])}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.github} onChange={(e) => change({ github: e.target.checked }, "GitHub")} />
+                Read pull requests and their checks through gh
+              </label>
+              <p className="m-0 text-xs text-mut">
+                Off until you switch it on. Codehouse asks the gh command line, with its own sign-in, so Codehouse holds no
+                token; it only reads, for the repository a session works in, and each read is recorded. Anything that
+                writes, such as a comment, a merge or a push, stays a request Claude makes through your rules.
               </p>
             </Group>
 

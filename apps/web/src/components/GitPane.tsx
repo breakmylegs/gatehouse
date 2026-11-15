@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { Virtuoso } from "react-virtuoso"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { PullRequests } from "./PullRequests"
 import type { Opened } from "./FilesPanel"
 
 interface HistoryLine {
@@ -31,12 +32,13 @@ interface BlameLine {
   text: string
 }
 
-type Tab = "history" | "changes" | "conflicts" | "blame"
+type Tab = "history" | "changes" | "conflicts" | "blame" | "prs"
 const TABS: Array<[Tab, string]> = [
   ["history", "History"],
   ["changes", "Stage"],
   ["conflicts", "Conflicts"],
   ["blame", "Blame"],
+  ["prs", "Pull requests"],
 ]
 
 /**
@@ -72,6 +74,8 @@ export function GitPane({ sessionId, onOpen }: { sessionId: string; onOpen: (o: 
           <Stage q={q} sessionId={sessionId} />
         ) : tab === "conflicts" ? (
           <Conflicts q={q} sessionId={sessionId} onOpen={onOpen} />
+        ) : tab === "prs" ? (
+          <PullRequests q={q} />
         ) : (
           <Blame q={q} />
         )}
