@@ -95,7 +95,7 @@ Slices, in order:
 | T-083 | Keep the default branch current by fast-forward pulls when the checkout is clean. | Build (safe variant), S | todo | | |
 | T-084 | Pull request access shared between machines. | Conflicts | listed for decision | | |
 | T-085 | A worktree per thread; a new thread in an existing worktree; reuse the previous worktree. | Partly | built | slice/T3-here | New session in this worktree, in the pane menu |
-| T-086 | Worktree branch names: a static prefix, a model-chosen prefix such as `feat/`, or custom instructions. | Partly | todo | | |
+| T-086 | Worktree branch names: a static prefix, a model-chosen prefix such as `feat/`, or custom instructions. | Partly | built | slice/T3-branches | named from the task, without a model: kind of change and words, your prefix kept |
 | T-088 | Worktree location. | Have | built (Codehouse had it) | | |
 | T-089 | Automatic worktree cleanup by inactivity, after a merge, or when unchanged; Delete now with results; unused folders listed with sizes. | Partly | todo | | |
 | T-090 | Fast worktree checkout by copy-on-write on macOS; submodule depth. | Build, S | todo | | |

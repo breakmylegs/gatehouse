@@ -62,6 +62,39 @@ function git(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
 }
 
 /** A branch prefix from Settings: never an option, "..", "//" or a .lock name; git checks the rest. */
+/**
+ * T-086 (t3code review, O31): a worktree's branch says what the work is, from the task it was made for: a kind of
+ * change (fix/, feat/, docs/, test/, refactor/) when you set no prefix, and a few words of the task, lower case, with
+ * three random hex characters so two tasks never share a name. Plain words only, so git takes it as it is.
+ */
+export function semanticBranch(about: string, prefix?: string): { prefix: string; name: string } | undefined {
+  const words = about
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/[\s-]+/)
+    .filter((w) => w && !STOP.has(w))
+  if (!words.length) return undefined
+  const first = words[0]!
+  const kind = /^(fix|fixes|fixed|bug|repair|correct)$/.test(first)
+    ? "fix/"
+    : /^(docs?|document|readme)$/.test(first)
+      ? "docs/"
+      : /^(test|tests|testing)$/.test(first)
+        ? "test/"
+        : /^(refactor|tidy|clean|rename|simplify)$/.test(first)
+          ? "refactor/"
+          : /^(add|build|create|implement|make|new|support)$/.test(first)
+            ? "feat/"
+            : "codehouse/"
+  // The word that gave the kind is not said twice: fix/login-page, not fix/fix-login-page.
+  const rest = kind !== "codehouse/" && words.length > 1 ? words.slice(1) : words
+  const slug = rest.slice(0, 5).join("-").slice(0, 40).replace(/-+$/, "")
+  return { prefix: prefix && BRANCH_PREFIX.test(prefix) ? prefix : kind, name: `${slug}-${crypto.randomBytes(2).toString("hex").slice(0, 3)}` }
+}
+
+const STOP = new Set(["a", "an", "the", "to", "of", "for", "in", "on", "and", "or", "please", "can", "you", "it", "this", "that", "with"])
+
 export const BRANCH_PREFIX = /^(?![-/.])(?!.*\.\.)(?!.*\/\/)(?!.*\.lock\/?$)[A-Za-z0-9._/-]{1,40}$/
 
 /** A base is a branch, tag or commit name, never an option or a path out of the repository. */
@@ -161,7 +194,7 @@ export class Worktrees {
    * Makes a worktree of the repository that holds `folder`, from `base` (its current commit when absent), where
    * Settings says (beside the repository unless told otherwise), on the branch codehouse/<name>.
    */
-  async create(folder: string, base?: string): Promise<WorktreeRecord> {
+  async create(folder: string, base?: string, about?: string): Promise<WorktreeRecord> {
     const baseName = base?.trim() || "HEAD"
     if (!BASE.test(baseName))
       throw new WorktreeError(`"${baseName.slice(0, 40)}" is not a branch, tag or commit name.`)
@@ -193,10 +226,11 @@ export class Worktrees {
       throw new WorktreeError(
         `There is no branch, tag or commit called ${baseName} in that repository.`,
       )
-    const name = `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(3).toString("hex")}`
-    const where = await this.#where(repo, name)
     const asked = this.#prefix()
-    const branch = `${asked && BRANCH_PREFIX.test(asked) ? asked : "codehouse/"}${name}`
+    const meant = about ? semanticBranch(about, asked) : undefined
+    const name = meant?.name ?? `${new Date().toISOString().slice(0, 10)}-${crypto.randomBytes(3).toString("hex")}`
+    const where = await this.#where(repo, name)
+    const branch = `${meant?.prefix ?? (asked && BRANCH_PREFIX.test(asked) ? asked : "codehouse/")}${name}`
     fs.mkdirSync(path.dirname(where), { recursive: true })
     await git(repo, ["worktree", "add", "-b", branch, "--", where, commit], 180_000)
     const rec: WorktreeRecord = {

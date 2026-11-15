@@ -81,7 +81,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
     /** The session this one replaces in its pane (Retry and Edit), so Chat keeps both as branches. */
     replaces: Id.optional(),
     /** Start in a new git worktree of the repository cwd is in (B10), from a branch, tag or commit. */
-    worktree: z.object({ base: z.string().max(100).optional() }).optional(),
+    worktree: z
+      .object({
+        base: z.string().max(100).optional(),
+        /** T-086: what the work is, to name the branch. Older Hosts ignore it. */
+        about: z.string().max(300).optional(),
+      })
+      .optional(),
   }),
   z.object({ type: z.literal("close_session"), sessionId: Id }),
   /** C-004: how committed this computer's memory is, the point in Settings, and the idle sessions that could be suspended. */

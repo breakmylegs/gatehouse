@@ -576,7 +576,7 @@ export interface StartSessionOptions {
   /** CH-07: carried on from an imported chat, at this message of it. */
   forkOf?: { conversation: string; message: string }
   /** Start in a new git worktree of the repository cwd is in, from this base (its current commit when absent). */
-  worktree?: { base?: string }
+  worktree?: { base?: string; about?: string }
   /** The worktree it works in, once made (set by the manager, not the screen). */
   inWorktree?: { branch: string; repo: string }
   /**
@@ -2755,7 +2755,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
       if (!this.#deps.worktrees) throw new SessionFolderError("Worktrees are not available here.")
       let wt: Awaited<ReturnType<Worktrees["create"]>>
       try {
-        wt = await this.#deps.worktrees.create(opts.cwd, opts.worktree.base)
+        wt = await this.#deps.worktrees.create(opts.cwd, opts.worktree.base, opts.worktree.about)
       } catch (e) {
         throw new SessionFolderError((e as Error).message)
       }

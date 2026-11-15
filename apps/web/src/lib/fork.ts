@@ -136,7 +136,8 @@ export async function handOff(
       type: "create_session",
       cwd: s.worktree?.repo ?? s.cwd,
       ...inherited(s),
-      ...(o.worktree ? { worktree: {} } : {}),
+      // T-086: the branch is named from the task.
+      ...(o.worktree ? { worktree: { about: said } } : {}),
     },
     START_WAIT_MS,
   )
