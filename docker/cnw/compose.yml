@@ -1,0 +1,85 @@
+# Codehouse Neighbourhood Watch (O41): docker compose up -d, from this folder.
+# Only caddy publishes a port. cnw listens on the private network; the updater alone talks to Docker, and only
+# through a socket proxy that allows what an update needs.
+name: codehouse-cnw
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "443:443"
+      - "80:80"
+    environment:
+      CNW_HOST: ${CNW_HOST:?Set CNW_HOST in .env, such as cnw.home.arpa}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    networks:
+      front:
+        ipv4_address: 172.30.0.10
+    depends_on: [cnw]
+
+  cnw:
+    image: codehouse-cnw:${CNW_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: docker/cnw/Dockerfile
+    restart: unless-stopped
+    environment:
+      CNW_PUBLIC_URL: https://${CNW_HOST}
+      CNW_TRUSTED_PROXY: 172.30.0.10
+      CNW_UPDATER: http://updater:8090
+    volumes:
+      - cnw-data:/data
+    networks:
+      front:
+        ipv4_address: 172.30.0.20
+      back: {}
+
+  # The updater (O41): it alone can recreate the stack, through the socket proxy below. It takes one request from cnw
+  # ("update to this signed release"), checks the release's signature against the key built into it, builds the new
+  # image, recreates cnw and keeps the previous image to go back to.
+  updater:
+    image: codehouse-cnw:${CNW_VERSION:-latest}
+    restart: unless-stopped
+    command: ["npx", "tsx", "apps/cnw/src/updater.ts"]
+    environment:
+      DOCKER_HOST: tcp://docker-proxy:2375
+      CNW_COMPOSE_DIR: /stack
+      CNW_REPO_DIR: /repo
+    volumes:
+      - ./:/stack:ro
+      # The clone of the repository the stack is built from; the updater checks out the signed commit in it.
+      - ../..:/repo
+    networks: [back, docker]
+
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      BUILD: 1
+      POST: 1
+      NETWORKS: 1
+      VOLUMES: 0
+      EXEC: 0
+      SECRETS: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker]
+
+networks:
+  front:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  back:
+    internal: true
+  docker:
+    internal: true
+
+volumes:
+  cnw-data:
+  caddy-data:
