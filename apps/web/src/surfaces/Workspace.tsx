@@ -54,6 +54,7 @@ import { carryOnFrom } from "../lib/redo"
 import { HeldList } from "../components/HeldList"
 import { linkSessions } from "../lib/linkSessions"
 import { prLinks } from "../lib/prLinks"
+import { cloneRequest, PUBLISH_REQUEST } from "../lib/repoRequests"
 import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
 import { nameSession } from "../lib/autoTitle"
@@ -150,6 +151,8 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
   { cmd: "/clear", help: "Start afresh in this pane, set up as now; the earlier session stays in the sidebar" },
   { cmd: "/side", help: "Ask in a side session beside this one, in Plan mode; Bring back its answer here" },
+  { cmd: "/clone", help: "A request to clone a repository here, for you to send; it asks you before it reaches the network" },
+  { cmd: "/publish", help: "A request to publish this folder as a private GitHub repository, for you to send; it asks you" },
   {
     cmd: "/tell",
     help: "Send a message to another session by its code, e.g. /tell GT 407 run the tests",
@@ -2226,6 +2229,20 @@ function Composer({
           await clearSession(sessionId)
           return
         }
+        case "/clone": {
+          // T-073: a request for you to send; Claude runs git clone through your rules.
+          const req = cloneRequest(arg)
+          if (!req) {
+            toast("Write /clone and a repository address, for example /clone https://github.com/acme/shop.git", { id: "clone" })
+            return
+          }
+          setText(req)
+          return
+        }
+        case "/publish":
+          // T-073: a request for you to send; Claude runs gh repo create (private) and git push through your rules.
+          setText(PUBLISH_REQUEST)
+          return
         case "/side": {
           // T-034: a side session beside this one, in Plan mode, for something that came up.
           if (!arg) {

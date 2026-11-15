@@ -210,3 +210,15 @@ describe("holding a message until the turn ends (T-039)", () => {
     )
   })
 })
+
+describe("/clone and /publish (T-073)", () => {
+  it("put a request in the prompt box for you to send, and send nothing", async () => {
+    const { PUBLISH_REQUEST } = await import("../src/lib/repoRequests")
+    render(<Workspace />)
+    const box = screen.getByRole("textbox", { name: "Prompt" }) as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: "/publish" } })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await waitFor(() => expect(box.value).toBe(PUBLISH_REQUEST))
+    expect(vi.mocked(send).mock.calls.some(([c]) => (c as { type: string }).type === "prompt")).toBe(false)
+  })
+})
