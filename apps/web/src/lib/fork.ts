@@ -97,6 +97,27 @@ export async function clearSession(sessionId: string): Promise<string | undefine
 }
 
 /**
+ * T-085 (t3code review, O31): another session in the worktree this one works in, beside it, set up as this one (mode,
+ * approval, model, effort and account: never looser), through the normal start. The worktree stays as it is; both
+ * sessions now work in it.
+ */
+export async function sessionInWorktree(sessionId: string): Promise<string | undefined> {
+  const st = useStore.getState()
+  const s = st.sessions[sessionId]
+  if (!s?.worktree || s.kind === "chat") return undefined
+  const r = await send({ type: "create_session", cwd: s.cwd, ...inherited(s) }, START_WAIT_MS)
+  if (!r.ok) {
+    toast.error(r.error?.message ?? "The session could not start.", { id: "fork" })
+    return undefined
+  }
+  const id = (r.data as { sessionId: string }).sessionId
+  st.openBeside(id)
+  st.setRoute("workspace")
+  toast(`A new session in the worktree ${s.worktree.branch}, beside this one.`, { id: "fork" })
+  return id
+}
+
+/**
  * Hand off a side task (B13): a new coding session for something that came up, told what to do and where it came
  * from, in a new worktree of the repository if you like, so it never touches the files of the session you are in. It
  * keeps the original's mode, approval, model, effort and account.

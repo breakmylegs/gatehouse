@@ -17,7 +17,7 @@ vi.mock("../src/store", async (orig) => {
 })
 
 const { useStore } = await import("../src/store")
-const { clearSession } = await import("../src/lib/fork")
+const { clearSession, sessionInWorktree } = await import("../src/lib/fork")
 
 const session = (o: Record<string, unknown> = {}) => ({
   id: "s1",
@@ -57,6 +57,20 @@ describe("/clear (T-046)", () => {
     sent.length = 0
     useStore.setState({ sessions: { s1: session({ state: "running" }) } } as never)
     expect(await clearSession("s1")).toBeUndefined()
+    expect(sent).toEqual([])
+  })
+})
+
+describe("New session in this worktree (T-085)", () => {
+  it("starts beside it in the same worktree folder, set up as this one, and only for a worktree session", async () => {
+    useStore.setState({ sessions: { s1: session({ worktree: { branch: "fix", repo: "C:\dev\shop" }, cwd: "C:\dev\wt\fix" }) }, openBeside: () => undefined } as never)
+    expect(await sessionInWorktree("s1")).toBe("s2")
+    expect(sent).toEqual([
+      { type: "create_session", cwd: "C:\dev\wt\fix", mode: "acceptEdits", extreme: true, model: "claude-opus-5-5", effort: "high", account: "work" },
+    ])
+    sent.length = 0
+    useStore.setState({ sessions: { s1: session() } } as never)
+    expect(await sessionInWorktree("s1")).toBeUndefined()
     expect(sent).toEqual([])
   })
 })

@@ -1,5 +1,5 @@
 import { MemoryGiven, useMemoryGiven } from "../components/MemoryGiven"
-import { clearSession } from "../lib/fork"
+import { sessionInWorktree, clearSession } from "../lib/fork"
 import { stashDraft } from "../lib/stash"
 import { QuoteSelection } from "../components/QuoteSelection"
 import { withQuote } from "../lib/quote"
@@ -573,6 +573,8 @@ function SessionPane({
       onSelect: () => void send({ type: "stop_session", sessionId: session.id }),
     },
     { label: "Rename...", onSelect: () => setRenaming(true) },
+    // T-085: another session in this worktree, beside this one.
+    ...(session.worktree && session.kind !== "chat" ? [{ label: "New session in this worktree", onSelect: () => void sessionInWorktree(session.id) }] : []),
     // T-034: a side session takes its latest answer back to the session it came from.
     ...(sideOf(session.id) ? [{ label: "Bring back the answer", onSelect: () => void bringBack(session.id) }] : []),
     // T-019: Claude names it again from its first messages, over the title it has.
