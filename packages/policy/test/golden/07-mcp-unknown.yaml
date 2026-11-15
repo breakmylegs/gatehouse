@@ -15,6 +15,8 @@
 - { t: mcp__companion__read_session, in: {}, src: sdk, sk: chat, o: allow, r: session-read-tools }
 - { t: mcp__companion__offer_to_session, in: { prompt: "Fix the date bug", why: "it shows UTC" }, src: sdk, sk: chat, o: escalate, r: session-handoff, note: "O34: always a person's decision" }
 - { t: mcp__companion__offer_to_session, in: { prompt: "x" }, src: user, o: escalate, r: session-handoff, note: "from any source" }
+- { t: mcp__companion__read_linked_session, in: { session: "s2" }, src: sdk, sk: code, o: allow, r: linked-session-tools }
+- { t: mcp__companion__read_linked_session, in: { session: "s2" }, src: user, o: escalate, r: no-rule, note: "a server of the same name from your settings is not the Companion" }
 - { t: mcp__companion__read_session, in: {}, src: sdk, sk: code, o: escalate, r: no-rule, note: "only a chat about a code session reads one" }
 - { t: mcp__companion__remember, in: { topic: "Units", text: "metric" }, src: user, o: escalate, r: no-rule, note: "a server of the same name from your settings is not the Companion" }
 - { t: mcp__companion__forget, in: { id: "x" }, src: project, o: escalate, r: no-rule }

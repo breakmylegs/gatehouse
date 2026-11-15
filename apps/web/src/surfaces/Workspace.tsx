@@ -52,6 +52,7 @@ import { groupItems, summarise, failureItems, summaryItems } from "../lib/groups
 import { ProgressCard, StepList } from "../components/ProgressCard"
 import { carryOnFrom } from "../lib/redo"
 import { HeldList } from "../components/HeldList"
+import { linkSessions } from "../lib/linkSessions"
 import { useHeld } from "../lib/held"
 import { nameSession } from "../lib/autoTitle"
 import { EditRevert } from "../components/EditRevert"
@@ -2307,7 +2308,8 @@ function Composer({
     const named = [...files.map((f) => f.rel), ...pastedRels].map((rel) => `@${rel}`).join(" ")
     // F15: "@file:10-20" written out as "@file (lines 10 to 20)", so Claude reads those lines.
     const said = writeRanges(t)
-    const full = [said, named, pictures.map((p) => `@${p.rel}`).join(" ")]
+    // T-049: a session named as context goes as its title and mark, so Claude may read it.
+    const full = [linkSessions(said, Object.values(useStore.getState().sessions), sessionId), named, pictures.map((p) => `@${p.rel}`).join(" ")]
       .filter(Boolean)
       .join("\n\n")
     // While Claude works, the message waits for its next step (owner, 30 Oct), and says so until it is taken in.

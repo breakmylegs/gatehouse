@@ -60,7 +60,7 @@ Slices, in order:
 | T-046 | `/clear`: a fresh agent session in the same thread, marked in the transcript. | Build, S | built | slice/T1-sidebar | |
 | T-047 | `/goal`, working until a stated goal is met. | Have | built (Codehouse had it) | | |
 | T-048 | Context chips inline in the text: a terminal excerpt, a review comment, a diff note, a file. | Partly | todo | | |
-| T-049 | Another thread as context (`@` a thread, read on demand), a PR as `#123`, and `@model` to name a model. | Partly | todo | | |
+| T-049 | Another thread as context (`@` a thread, read on demand), a PR as `#123`, and `@model` to name a model. | Partly | partly built | slice/T2-linked | @session as context with read_linked_session; the PR chip waits for T-061 and @model is not built |
 | T-050 | Previews of attached files: highlighted code, CSV and TSV as a table, Markdown and HTML rendered, audio, a ZIP's file list, PDF. | Partly | partly built | slice/T1-previews | CSV and TSV as a table. PDF left out: previews are served with a sandbox policy, which stops the browser's PDF viewer, and loosening it is not worth it; pdf.js would be a new dependency. ZIP listing left for later |
 | T-051 | Files attached to answers of an agent's question. | Build, S | built | slice/T1-answers | desktop only, through Add files' route |
 | T-052 | LaTeX maths rendered in messages. | Build, S | todo | | |

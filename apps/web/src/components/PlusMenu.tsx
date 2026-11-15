@@ -5,8 +5,11 @@ import { fillPrompt, variablesOf, type SavedPrompt } from "../lib/prompts"
 import type { SessionMeta } from "../lib/sessionMeta"
 import { dropStashed, stashed, stashLabel, takeStashed, type StashedDraft } from "../lib/stash"
 import { Icon } from "./Icon"
+import { mentionOf } from "../lib/linkSessions"
+import { sessionCode } from "../lib/codes"
+import { useStore } from "../store"
 
-type Panel = "none" | "prompts" | "stash" | "commands" | "connectors" | "plugins"
+type Panel = "none" | "prompts" | "stash" | "commands" | "connectors" | "plugins" | "sessions"
 
 /**
  * The composer's plus menu: attach files or photos, mention a folder, use a saved prompt, and see the session's slash commands, skills,
@@ -162,6 +165,12 @@ export function PlusMenu({
                 <MenuItem label="Stashed drafts" hint={`${stashed().length} put aside`} onClick={() => setPanel("stash")} more />
               ) : null}
               <MenuItem
+                label="Sessions as context"
+                hint="Claude may read one you name"
+                onClick={() => setPanel("sessions")}
+                more
+              />
+              <MenuItem
                 label="Slash commands and skills"
                 hint={`${commands.length} available`}
                 onClick={() => setPanel("commands")}
@@ -202,6 +211,14 @@ export function PlusMenu({
                   <StashPanel
                     onRestore={(d) => {
                       onRestore?.(d)
+                      close()
+                    }}
+                  />
+                ) : panel === "sessions" ? (
+                  <SessionsPanel
+                    self={sessionId}
+                    onPick={(s) => {
+                      onInsert(mentionOf(s))
                       close()
                     }}
                   />
@@ -258,6 +275,22 @@ export function PlusMenu({
         </div>
       ) : null}
     </div>
+  )
+}
+
+/** T-049: the open sessions other than this one, newest first, to name as context. */
+function SessionsPanel({ self, onPick }: { self: string; onPick: (s: { id: string; project: string }) => void }) {
+  const sessions = useStore((st) => st.sessions)
+  const others = Object.values(sessions)
+    .filter((s) => s.id !== self && s.state !== "ended")
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  if (!others.length) return <Empty text="No other session is open." />
+  return (
+    <>
+      {others.map((s) => (
+        <MenuItem key={s.id} label={s.title ?? s.project} hint={sessionCode(s)} onClick={() => onPick(s)} />
+      ))}
+    </>
   )
 }
 

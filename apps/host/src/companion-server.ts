@@ -7,6 +7,7 @@ import {
   PAGE_TOOLS,
   ABOUT_TOOLS,
   OFFER_TOOLS,
+  LINKED_TOOLS,
   ASSUMPTION_TOOLS,
   type CompanionDeps,
 } from "@gatehouse/companion"
@@ -29,6 +30,7 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
       ...(deps.pages ? PAGE_TOOLS : []),
       ...(deps.about ? ABOUT_TOOLS : []),
       ...(deps.about?.offer ? OFFER_TOOLS : []),
+      ...(deps.linked ? LINKED_TOOLS : []),
       ...(deps.assumptions ? ASSUMPTION_TOOLS : []),
     ].map((def) =>
       tool(

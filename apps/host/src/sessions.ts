@@ -604,6 +604,9 @@ export const CHAT_TOOLS = ["WebSearch", "WebFetch", "Read", "Glob", "Grep"]
 export const chatPrompt = (now: Date = new Date()): string =>
   `${CHAT_PROMPT} Today's date is ${now.toISOString().slice(0, 10)}.`
 
+/** T-049: how a prompt names another session as context. */
+export const LINK_MARK = /\[\[session:([A-Za-z0-9_-]{1,100})\]\]/g
+
 /** A prompt stream the Host pushes user messages into. It makes interrupt, mode and model changes possible. */
 class InputQueue implements AsyncIterable<SDKUserMessage> {
   #items: SDKUserMessage[] = []
@@ -906,6 +909,12 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#onBrokerChange = () => this.#refreshWaiting()
     deps.broker.on("created", this.#onBrokerChange)
     deps.broker.on("resolved", this.#onBrokerChange)
+  }
+
+  /** T-049: the sessions your own prompts named as context ([[session:id]]), which read_linked_session may read. */
+  readonly #linked = new Set<string>()
+  linked(): ReadonlySet<string> {
+    return this.#linked
   }
 
   /** Whether this session wrote or edited the file at this full path. */
@@ -1737,6 +1746,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** Your next message. Messages sent while a turn runs are queued by the SDK. It starts a new run for Extreme. */
   prompt(text: string): void {
+    // T-049: only what you wrote names a session Claude may read; nothing Claude says can add one.
+    for (const m of text.matchAll(LINK_MARK)) if (m[1] !== this.id) this.#linked.add(m[1]!)
     // Owner, 9 Nov: the limits in Settings hold. A message does not go past them; a bypass for this session does.
     if (this.#paused) throw new LimitPausedError(this.#paused.reason)
     // D-018: your own message fills the risk budget again.

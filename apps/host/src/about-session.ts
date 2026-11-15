@@ -86,3 +86,25 @@ export async function readAbout(link: SessionLink, d: AboutDeps): Promise<string
     ].join("\n"),
   )
 }
+
+/**
+ * T-049: another session as context, read for the session whose own prompts named it, and only then: redacted and
+ * marked as a record by readAbout. It reads; it never writes to that session.
+ */
+export async function readLinked(
+  named: ReadonlySet<string> | undefined,
+  id: string,
+  info: (id: string) => { title?: string; project: string; cwd: string; sdkSessionId?: string } | undefined,
+  d: AboutDeps,
+): Promise<{ text: string; isError?: boolean }> {
+  if (!named?.has(id)) return { text: "Only a session the person named in their own message can be read.", isError: true }
+  const other = info(id)
+  if (!other) return { text: "That session is not open in Codehouse now.", isError: true }
+  const link: SessionLink = {
+    id,
+    title: other.title ?? other.project,
+    cwd: other.cwd,
+    ...(other.sdkSessionId ? { sdkSessionId: other.sdkSessionId } : {}),
+  }
+  return { text: await readAbout(link, d) }
+}

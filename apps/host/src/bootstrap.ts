@@ -94,7 +94,7 @@ import { CheckpointManager } from "./checkpoints.js"
 import { GrantUses } from "./grant-uses.js"
 import { createCompanionSdkServer } from "./companion-server.js"
 import { lookAtPage } from "./page-look.js"
-import { readAbout, type AboutDeps } from "./about-session.js"
+import { readAbout, readLinked, type AboutDeps } from "./about-session.js"
 import { noteFor } from "./carry-on.js"
 import { denyOutput } from "./hooks.js"
 import { HostAudit } from "./hostaudit.js"
@@ -489,6 +489,11 @@ export function createHost(opts: HostOptions = {}): Host {
               },
             }
           : {}),
+        // T-049: a session you named in a prompt, read redacted and marked as a record; only those you named.
+        linked: {
+          read: (id: string) =>
+            readLinked(manager.get(sessionId)?.linked(), id, (x) => manager.get(x)?.info(), aboutDeps()),
+        },
         // notify_user reaches the desktop through the session's event stream. The phone path is added with the relay.
         host: { notify: async (m) => (manager.notify(m.sessionId, m.text), true) },
         policy: () => store.current,

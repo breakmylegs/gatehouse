@@ -233,6 +233,7 @@ On the left: Needs you, New session, Search (Ctrl+K), the pages you pinned and M
 - When a turn has ended but subagents or commands are still working, the session says **Working in the background** and lists them.
 - A message you send while Claude works is **queued**: Claude reads it at its next step, between one action and the next, without stopping. It says Queued until Claude has it, and it cannot be taken back. **Interrupt now** beside it stops the turn, and Claude reads your message straight away.
 - **Alt+Enter** while Claude works **holds** the message instead, until the turn ends. Held messages are listed above the prompt box, where **Edit** puts one back in the prompt box, **Remove** drops it and **Send now** sends it at once (to Claude's next step). When a turn ends the first held message is sent, one per turn; a turn you stopped, or one that failed, leaves them waiting until you choose **Resume**. They are kept for the session while this window has them.
+- **Sessions as context**, in the + menu, puts another open session in your message as @session and its code (or write @session(GT 407) yourself). Claude is told its title, and may read how it stands and the latest of what was said in it, with your private words taken out; only a session you named can be read, what it says there is treated as untrusted, and nothing is ever sent to it.
 
 **The transcript**
 
