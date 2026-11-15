@@ -169,6 +169,23 @@ describe("get_policy_summary", () => {
     expect(text.length).toBeLessThanOrEqual(SUMMARY_MAX_CHARS)
   })
 
+  it("keeps what always waits for approval, shortening the list instead, when there are many rules", () => {
+    const many: Policy = {
+      ...policy,
+      rules: {
+        ...policy.rules,
+        allow: [
+          ...policy.rules.allow,
+          ...Array.from({ length: 40 }, (_, i) => ({ id: `r${i}`, commands: [`tool-number-${i} --with-some-flags*`] })),
+        ],
+      },
+    } as Policy
+    const text = summarisePolicy(many, DEV)
+    expect(text).toContain("Variables, substitutions, heredocs and output redirection always need approval")
+    expect(text).toMatch(/- and \d+ more\./)
+    expect(text.length).toBeLessThanOrEqual(SUMMARY_MAX_CHARS)
+  })
+
   it("takes no arguments, so it cannot be used to probe a command", () => {
     const { handlers } = make()
     expect(handlers.getPolicySummary.length).toBe(0)

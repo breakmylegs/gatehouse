@@ -38,11 +38,19 @@ export function summarisePolicy(policy: Policy | undefined, cwd: string): string
   const lines: string[] = [
     `Codehouse policy ${policy.hash.slice(0, 12)}. These run without asking:`,
   ]
+  // Codehouse's own tools on one line, so a rule for each new one does not crowd out the rest.
+  const own: string[] = []
   for (const rule of policy.rules.allow) {
     if (removed.has(rule.id)) continue
+    if (rule.mcpSource && rule.tools && !rule.pathInside && !rule.pathGlobs) {
+      own.push(...rule.tools.map((x) => x.replace(/^mcp__companion__/, "")))
+      continue
+    }
     const text = describeAllow(rule, roots)
     if (text) lines.push(`- ${text}`)
   }
+  if (own.length) lines.push(`- Codehouse's own tools: ${list(own)}.`)
+  const allowed = lines.length
   const blocked = policy.rules.floor.map((r) => r.message).filter((m): m is string => Boolean(m))
   lines.push(
     "Everything else waits for a person to approve and may take a long time or be refused.",
@@ -53,6 +61,9 @@ export function summarisePolicy(policy: Policy | undefined, cwd: string): string
     "To avoid waiting: keep commands simple. Variables, substitutions, heredocs and output redirection always need approval.",
   )
   if (overlay) lines.push("This project has extra restrictions on top of the above.")
-  const text = lines.join("\n")
+  // Over the limit, the list is shortened, never the closing lines that say what always waits.
+  let text = lines.join("\n")
+  for (let keep = allowed - 1; text.length > SUMMARY_MAX_CHARS && keep > 1; keep--)
+    text = [...lines.slice(0, keep), `- and ${allowed - keep} more.`, ...lines.slice(allowed)].join("\n")
   return text.length <= SUMMARY_MAX_CHARS ? text : text.slice(0, SUMMARY_MAX_CHARS - 3) + "..."
 }
