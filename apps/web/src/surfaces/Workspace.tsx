@@ -83,6 +83,7 @@ import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
 import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../components/ReviewCard"
+import { GUIDE_FENCE, GuideCard, parseGuide } from "../components/ReviewGuide"
 import { Walkthrough } from "../components/Walkthrough"
 import { Timeline } from "../components/Timeline"
 import { SearchPane } from "../components/SearchPane"
@@ -2994,6 +2995,9 @@ function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
       ? parseFindings(code.props.children)
       : undefined
   if (findings) return <ReviewCard findings={findings} />
+  // T-076: a review guide block shows as the guide card.
+  const stops = language === GUIDE_FENCE && typeof code?.props.children === "string" ? parseGuide(code.props.children) : undefined
+  if (stops) return <GuideCard stops={stops} />
   return (
     <div className="code-block">
       <div className="code-head">

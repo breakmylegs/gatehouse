@@ -86,7 +86,7 @@ Slices, in order:
 | T-073 | New project with a first commit and optional private GitHub repository; clone from a URL with progress, in host folders. | Build (safe variant), S | built (safe variant) | slice/T3-clone | /clone and /publish as requests Claude runs through the Approver |
 | T-074 | Commit, push and open a pull request with one button; commit messages and PR text written from the changes and the repository's conventions. | Build (safe variant), S | built (safe variant) | slice/T3-ship | requests in the prompt box; Claude runs each command through the Approver |
 | T-075 | A Pull requests page: review, comments, request reviewers, check out, merge, auto-merge, revert, tick description checkboxes, link previews. | Build (safe variant), L | todo | | |
-| T-076 | Review guides: a tour of a change in reading order, Look closely stops, Ask about this stop, Finish review. | Partly | todo | | |
+| T-076 | Review guides: a tour of a change in reading order, Look closely stops, Ask about this stop, Finish review. | Partly | built | slice/T3-guide | a side session in Plan mode writes it; local changes, PRs after T-061 |
 | T-077 | Mark files as viewed, with a count; a file changed since comes back marked. | Build, S | built | slice/T1-changes | a changed file comes back unmarked |
 | T-078 | Several linked PRs per thread, linked automatically when the agent runs `gh pr create`, with badges. | Build, M | partly built | slice/T3-prlinks | linked from gh pr create in the transcript; badges wait for T-061 |
 | T-080 | Watch a pull request: wake the agent when a check fails, someone comments or the branch conflicts. | Build (safe variant), M | todo | | |

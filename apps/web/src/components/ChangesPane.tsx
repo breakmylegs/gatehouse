@@ -6,6 +6,7 @@ import { structuredPatch } from "diff"
 import { DiffView } from "./CodeViews"
 import { MoreLines, shownLines } from "./MoreLines"
 import { REVIEW_PROMPT } from "./ReviewCard"
+import { askForGuide } from "./ReviewGuide"
 import { composeIn } from "../lib/compose"
 import { describeDecision } from "../lib/decision"
 import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
@@ -559,6 +560,10 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
               }}
             >
               Ask for a review
+            </button>
+            {/* T-076: a guide to the change, written by a side session in Plan mode. */}
+            <button type="button" className="btn" onClick={() => void askForGuide(sessionId)}>
+              Review guide...
             </button>
             {/* T-074: ready-made requests; Claude runs the commands, each through the Approver as usual. */}
             {(["commit", "push", "pr"] as const).map((k) => (
