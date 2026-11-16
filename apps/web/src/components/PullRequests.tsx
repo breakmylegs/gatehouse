@@ -24,6 +24,14 @@ export function PullRequests({ q }: { q: string }) {
   const [list, setList] = useState<Pr[]>()
   const [error, setError] = useState<string>()
   const [open, setOpen] = useState<Detail>()
+  const [watching, setWatching] = useState<Record<number, boolean>>({})
+  const session = new URLSearchParams(q).get("session") ?? ""
+  /** T-080: wake the session when a check newly fails or the branch newly conflicts. */
+  async function watch(n: number, on: boolean) {
+    const r = await api<{ watching: boolean }>("POST", "/api/forge/watch", { session, number: n, on })
+    if (r.ok && r.data) setWatching((w) => ({ ...w, [n]: r.data!.watching }))
+    else setError(r.error ?? "It could not be watched.")
+  }
   useEffect(() => {
     void api<{ prs: Pr[] }>("GET", `/api/forge/prs?${q}`).then((r) =>
       r.ok && r.data ? setList(r.data.prs) : setError(r.error ?? "The pull requests could not be read."),
@@ -70,6 +78,10 @@ export function PullRequests({ q }: { q: string }) {
               Open on GitHub
             </a>
           ) : null}
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={watching[open.number] === true} onChange={(e) => void watch(open.number, e.target.checked)} />
+            Tell this session when a check fails or the branch conflicts
+          </label>
           <ul className="m-0 grid list-none gap-0.5 p-0" aria-label="Checks">
             {open.checks.map((c, i) => (
               <li key={i} className="flex gap-2">

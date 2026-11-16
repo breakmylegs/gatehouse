@@ -54,6 +54,8 @@ import { bridgeFor } from "./mcp-builder/bridge.js"
 import { McpRunner } from "./mcp-builder/runner.js"
 import { BuiltServers } from "./mcp-builder/store.js"
 import { cleanUp } from "./worktree-cleanup.js"
+import { PrWatcher } from "./forge/watch.js"
+import { viewPullRequest } from "./forge/github.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
 import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
@@ -378,7 +380,24 @@ export function createHost(opts: HostOptions = {}): Host {
       .then((r) => r.removed.length && log(`worktree clean-up removed ${r.removed.length}`))
       .catch((e) => log(`worktree clean-up failed: ${(e as Error).message}`))
   }
-  const cleanupTimers = [setTimeout(cleanupTick, 3_600_000), setInterval(cleanupTick, 6 * 3_600_000)]
+  // T-080: pull requests watched for sessions, read at most every two minutes while the GitHub connection is on.
+  const prWatcher = new PrWatcher({
+    enabled: () => config.forges?.github === true,
+    view: (cwd, n) => viewPullRequest(cwd, n),
+    alive: (id) => {
+      const st = manager.get(id)?.info().state
+      return st !== undefined && st !== "ended"
+    },
+    wake: (id, text) => {
+      try {
+        manager.get(id)?.prompt(text)
+      } catch (e) {
+        log(`pull request watch could not wake ${id}: ${(e as Error).message}`)
+      }
+    },
+    audit,
+  })
+  const cleanupTimers = [setTimeout(cleanupTick, 3_600_000), setInterval(cleanupTick, 6 * 3_600_000), setInterval(() => void prWatcher.tick(), 30_000)]
   for (const t of cleanupTimers) t.unref?.()
   // T-121: how many sessions each session has started.
   const childCount = new Map<string, number>()
@@ -1399,6 +1418,7 @@ export function createHost(opts: HostOptions = {}): Host {
       ntfy,
       ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      prWatcher,
       // T-083: a fast-forward pull as a Codehouse action, judged like the same command from the session.
       pullFastForward: (id, cwd) =>
         runCodehouseAction(

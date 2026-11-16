@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify"
 import type { HostAudit } from "../hostaudit.js"
 import { ForgeError, listPullRequests, viewPullRequest, type Gh } from "./github.js"
+import type { PrWatcher } from "./watch.js"
 
 /**
  * T-061: GET /api/forge/prs and /api/forge/pr, for a running session's repository, only while the GitHub connection
@@ -13,6 +14,8 @@ export function registerForgeRoutes(
     sessionCwd: (id: string) => string | undefined
     audit: Pick<HostAudit, "record">
     gh?: Gh
+    /** T-080: watching pull requests for sessions. */
+    watcher?: PrWatcher
   },
 ): void {
   const read = async (
@@ -50,6 +53,24 @@ export function registerForgeRoutes(
   app.get("/api/forge/prs", async (req, reply) => {
     const q = req.query as Record<string, unknown>
     return read(q, { list: true }, async (cwd) => ({ prs: await listPullRequests(cwd, d.gh) }), reply)
+  })
+  // T-080: watch a pull request for a session, or stop; recorded. Desktop only, while the connection is on.
+  app.post("/api/forge/watch", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    if (!d.watcher) return reply.code(501).send({ error: "Watching is not available here." })
+    const n = Number(b.number)
+    if (!Number.isInteger(n) || n < 1) return reply.code(422).send({ error: "That is not a pull request number." })
+    if (b.on === false) d.watcher.unwatch(String(b.session), n)
+      return { watching: false }
+    return read(
+      b,
+      { watch: n },
+      async (cwd) => {
+        await d.watcher!.watch(String(b.session), cwd, n)
+        return { watching: true }
+      },
+      reply,
+    )
   })
   app.get("/api/forge/pr", async (req, reply) => {
     const q = req.query as Record<string, unknown>

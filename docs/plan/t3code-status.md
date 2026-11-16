@@ -89,7 +89,7 @@ Slices, in order:
 | T-076 | Review guides: a tour of a change in reading order, Look closely stops, Ask about this stop, Finish review. | Partly | built | slice/T3-guide | a side session in Plan mode writes it; local changes, PRs after T-061 |
 | T-077 | Mark files as viewed, with a count; a file changed since comes back marked. | Build, S | built | slice/T1-changes | a changed file comes back unmarked |
 | T-078 | Several linked PRs per thread, linked automatically when the agent runs `gh pr create`, with badges. | Build, M | partly built | slice/T3-prlinks | linked from gh pr create in the transcript; badges wait for T-061 |
-| T-080 | Watch a pull request: wake the agent when a check fails, someone comments or the branch conflicts. | Build (safe variant), M | todo | | |
+| T-080 | Watch a pull request: wake the agent when a check fails, someone comments or the branch conflicts. | Build (safe variant), M | built (safe variant) | slice/T4-watch | checks and conflicts only, never comments; trigger caps; recorded |
 | T-081 | GitHub stacks: Merge stack, Rebase stack. | Build (safe variant), L | todo | | |
 | T-082 | Remove agent credits when merging. | Conflicts | listed for decision | | |
 | T-083 | Keep the default branch current by fast-forward pulls when the checkout is clean. | Build (safe variant), S | partly built | slice/T3-pull | Pull (fast-forward only) in the Git pane, through the policy; pulling by itself is not built |

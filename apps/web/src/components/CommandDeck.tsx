@@ -2,6 +2,8 @@ import clsx from "clsx"
 import { useEffect, useRef, useState } from "react"
 import { sessionRibbon } from "../lib/codes"
 import { useAutoTitles } from "../lib/autoTitle"
+import { useF6 } from "../lib/f6"
+import { useNavHistory } from "../lib/navHistory"
 import { notifyLine } from "../lib/rail"
 import { titleOf } from "../lib/sessionActions"
 import { MAIN_ACCOUNT, send, useSessionList, useStore } from "../store"
@@ -40,6 +42,10 @@ export const byActivity = <T extends { activeAt?: string; createdAt: string }>(s
 export function CommandDeck() {
   // T-018: the deck is always there, so it names sessions once their first turn ends.
   useAutoTitles()
+  // T-108: F6 and Shift+F6 move between the areas of the window.
+  useF6()
+  // T-109: Alt+Left and Alt+Right go back and forward through the pages you visited.
+  useNavHistory()
   const setRoute = useStore((s) => s.setRoute)
   const selectSession = useStore((s) => s.selectSession)
   const health = useStore((s) => s.health)

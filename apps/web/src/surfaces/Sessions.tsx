@@ -5,6 +5,7 @@ import NumberFlow from "@number-flow/react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { cleanName, projectName } from "@gatehouse/shared/project-name"
+import { scratchName } from "../lib/scratch"
 import { money } from "../lib/format"
 import { systemName } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
@@ -391,6 +392,14 @@ export function Sessions() {
                   Change the name
                 </button>
               )}
+              {/* T-006: a dated scratch folder, for trying something out without naming a project. */}
+              <button
+                type="button"
+                className="cursor-pointer border-0 bg-transparent p-0 text-acc underline"
+                onClick={() => setTypedName(scratchName())}
+              >
+                Use a scratch folder
+              </button>
             </p>
             {/* After what you want to build, so the form reads top to bottom. */}
             <div>

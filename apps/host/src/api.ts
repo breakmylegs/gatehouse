@@ -20,6 +20,7 @@ import { registerTriageRoutes } from "./triage.js"
 import { registerCnwRoutes, type CnwService } from "./cnw/service.js"
 import { registerMcpBuilderRoutes, type McpRouteDeps } from "./mcp-builder/routes.js"
 import { registerForgeRoutes } from "./forge/routes.js"
+import type { PrWatcher } from "./forge/watch.js"
 import { registerBtwRoutes, type BtwDeps } from "./btw.js"
 import { registerImportRoutes, type ImportDeps } from "./chat/import-api.js"
 import { registerHandoffRoutes, type HandoffDeps } from "./chat/handoff-api.js"
@@ -162,6 +163,8 @@ export interface AdminContext {
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** T-080: pull requests watched for sessions. */
+  prWatcher?: PrWatcher
   /** T-083: a fast-forward pull as a Codehouse action. */
   pullFastForward?: GitPanelContext["pullFastForward"]
   /** Whether a running session wrote or edited the file at this full path. */
@@ -889,7 +892,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   // T-061: read-only GitHub, only while switched on.
   if (ctx.sessionCwd) {
     const cwdOf = ctx.sessionCwd
-    registerForgeRoutes(app, { enabled: () => ctx.config().forges?.github === true, sessionCwd: (id) => cwdOf(id), audit: ctx.audit })
+    registerForgeRoutes(app, {
+      enabled: () => ctx.config().forges?.github === true,
+      sessionCwd: (id) => cwdOf(id),
+      audit: ctx.audit,
+      ...(ctx.prWatcher ? { watcher: ctx.prWatcher } : {}),
+    })
   }
   if (ctx.cnw) registerCnwRoutes(app, ctx.cnw)
   if (ctx.mcp) registerMcpBuilderRoutes(app, ctx.mcp)
