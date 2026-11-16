@@ -1,6 +1,6 @@
 // The pictures in the README: the real interface with realistic sample data and a stand-in for the Host, so nothing
 // personal or from a real project appears. Served by the dev server only (screens.html), never packaged.
-//   screens.html?view=approvals|notch|workspace|update|settings|policy|sessions|usage|dashboard|setup&theme=light|dark
+//   screens.html?view=approvals|notch|working|workspace|update|settings|policy|sessions|usage|dashboard|setup&theme=light|dark
 // scripts/screenshots.ts opens each view in Edge and saves the picture into docs/images.
 import type { PendingView, SessionInfo } from "@gatehouse/shared"
 import { StrictMode } from "react"
@@ -592,6 +592,14 @@ else if (view === "sessions") useStore.setState({ route: "sessions" })
 else if (view === "usage") useStore.setState({ route: "usage" })
 else if (view === "dashboard") useStore.setState({ route: "dashboard" })
 else if (view === "setup") useStore.setState({ route: "setup" })
+// The little fighter at work: the workspace with nothing waiting, while the first session runs a command.
+else if (view === "working")
+  useStore.setState({
+    route: "workspace",
+    selectedSession: "s1",
+    pending: {},
+    activity: { s1: { phase: "running", since: Date.now() - 12_000, tool: "Bash", toolUseId: "t9", target: "npm test" } },
+  })
 else if (view === "perf") {
   // W1-18: one session with 10,000 messages, for scripts/perf-check.ts to scroll and measure.
   const fence = "```"

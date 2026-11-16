@@ -16,6 +16,7 @@ The owner supplied the Codehouse visual identity pack on 2 Nov 2026 (`codehouse-
 | `wordmarks/` | `apps/web/public/codehouse/brand/` | Kept with the app for the places a wordmark is wanted |
 | `installer/installer-side.png`, `installer-small.png` | `packaging/brand/` | The setup wizard's artwork (`packaging/installer.iss`) |
 | `installer/social-preview.png` | `docs/brand/` | The GitHub social preview. GitHub only takes it in the repository's settings page, so it is on the owner's to-do list |
+| (owner, 16 Nov) the little fighter, a 48 px pixel-art sprite sheet: stance, step, punch, kick | `apps/web/public/codehouse/fighter.png` | Sparring where a session shows it is working, and waiting beside each request in the Mac's notch list (`components/Fighter.tsx`); still with Reduce motion |
 | `docs/palette.json` | `docs/brand/palette.json` | The colours, for reference |
 | `interface-icons/interface-icons-preview.png` | `docs/brand/` | The labelled sheet of every icon |
 

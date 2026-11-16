@@ -93,6 +93,7 @@ import { RenameDialog } from "../components/RenameDialog"
 import { archiveSession, copyConversation, setSessionMeta, titleOf } from "../lib/sessionActions"
 import { useShallow } from "zustand/react/shallow"
 import { CopyButton } from "../components/CopyButton"
+import { Fighter } from "../components/Fighter"
 import { openExport } from "../components/ExportDialog"
 import { SourcesPane } from "../components/SourcesPane"
 import { sourcesOf } from "../lib/sources"
@@ -1960,13 +1961,14 @@ function ActivityLine({
     )
   return (
     <div className="activity">
-      <span className="activity-dot" aria-hidden="true" />
+      {/* The little fighter spars while Claude works (owner, 16 Nov), in place of the turning ring. */}
+      <Fighter mode="working" />
       <span role="status" className="font-semibold">
         {line.label}
       </span>
       {detail && !compact ? <span className="text-mut tabular-nums">{detail}</span> : null}
       {line.hint ? (
-        <span className="basis-full pl-[19px] text-[13px] text-mut">{line.hint}</span>
+        <span className="basis-full pl-[44px] text-[13px] text-mut">{line.hint}</span>
       ) : null}
     </div>
   )
