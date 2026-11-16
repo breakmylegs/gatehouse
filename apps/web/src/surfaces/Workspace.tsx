@@ -687,7 +687,9 @@ function SessionPane({
           setFinding(true)
         }
       }}
-      className="pane relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto]"
+      // One column as wide as the pane: an auto column grew to its widest content, so with two panes the request card
+      // and the prompt area ran over the next pane (16 Nov).
+      className="pane relative grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto]"
       data-rail={side ? "open" : undefined}
       data-density={view.density}
       style={{ "--pane-scale": view.size / 100 } as React.CSSProperties}

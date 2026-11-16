@@ -18,7 +18,7 @@ const now = Date.now()
 const iso = (ms: number) => new Date(now + ms).toISOString()
 
 const UPDATE: UpdateStatus = {
-  current: "1.0.74",
+  current: "2.0.395",
   kind: "release",
   canInstall: true,
   previous: "1.0.71",
@@ -30,15 +30,15 @@ const UPDATE: UpdateStatus = {
   nextCheck: iso(26 * 60_000),
   available: true,
   latest: {
-    version: "1.0.75",
+    version: "2.0.396",
     notes: [
-      "- Allow or deny a request inside the session that asked",
-      "- What Claude may do, in plain words, with three levels",
-      "- Start a new project from what you want to build",
+      "- Build MCP servers with Claude, and give them to a session with /mcp",
+      "- Watch and approve every computer's sessions from Neighbourhood Watch",
+      "- Two Extreme approval modes, with a risk limit you set",
     ].join("\n"),
   },
   phase: "ready",
-  ready: "1.0.75",
+  ready: "2.0.396",
 }
 
 const SETTINGS = {
@@ -174,7 +174,8 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       status: 200,
       headers: { "content-type": "application/json" },
     })
-  if (p === "/api/update") return json(UPDATE)
+  // Only the update view says an update is ready; the other pictures show Codehouse as it is day to day.
+  if (p === "/api/update") return json(view === "update" ? UPDATE : { ...UPDATE, available: false, phase: "idle", ready: undefined })
   if (p === "/api/usage/report") {
     const q = new URL(url, location.href).searchParams
     return json({
@@ -198,6 +199,15 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (p === "/api/library")
     return json({ path: "rules.user.yaml", errors: [], packs: PACKS, base: [], user: userRules })
+  // O39: servers built in the MCP builder, for its page.
+  if (p === "/api/mcp-servers")
+    return json({
+      servers: [
+        { name: "jira-lookup", autostart: true, cpu: 20, memoryMb: 512, entry: "server.cjs", state: "running", limited: true, tools: [{ name: "find_issue" }, { name: "my_open_issues" }, { name: "sprint_summary" }] },
+        { name: "release-notes", autostart: false, cpu: 10, memoryMb: 256, entry: "server.cjs", state: "running", limited: true, tools: [{ name: "draft_notes" }] },
+        { name: "weather-lookup", autostart: false, cpu: 20, memoryMb: 512, entry: "server.cjs", state: "stopped", limited: true, tools: [] },
+      ],
+    })
   if (p === "/api/policy") return json(POLICY)
   if (p === "/api/suggestions") return json(SUGGESTIONS)
   if (p === "/api/policy/test")
@@ -586,11 +596,15 @@ sessionStorage.setItem("gatehouse.token", "demo")
 startConnection()
 if (view === "workspace")
   useStore.setState({ route: "workspace", selectedSession: "s1", panes: ["s1", "s2"] })
+// One session filling the window, for the README's first picture.
+else if (view === "workspace-one")
+  useStore.setState({ route: "workspace", selectedSession: "s1", panes: ["s1"] })
 else if (view === "settings") useStore.setState({ route: "settings" })
 else if (view === "policy") useStore.setState({ route: "policy" })
 else if (view === "sessions") useStore.setState({ route: "sessions" })
 else if (view === "usage") useStore.setState({ route: "usage" })
 else if (view === "dashboard") useStore.setState({ route: "dashboard" })
+else if (view === "mcp") useStore.setState({ route: "mcp" })
 else if (view === "setup") useStore.setState({ route: "setup" })
 // The little fighter at work: the workspace with nothing waiting, while the first session runs a command.
 else if (view === "working")

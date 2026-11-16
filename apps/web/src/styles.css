@@ -557,6 +557,12 @@ mark.hidden-char {
 /* A request decided in the workspace of the session that asked, above the prompt box. */
 .quick-decision {
   display: grid;
+  /* With two panes side by side, a long command or the row of buttons made the card wider than its pane, over the
+     next one (16 Nov); it now keeps to its pane, and the command scrolls or wraps inside it. */
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   gap: 8px;
   margin-bottom: 8px;
   padding: 10px 14px 12px;

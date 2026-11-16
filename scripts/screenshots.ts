@@ -18,12 +18,15 @@ const edge = ["ProgramFiles(x86)", "ProgramFiles"]
 if (!edge) throw new Error("Microsoft Edge was not found.")
 
 const SHOTS = [
+  { file: "workspace-one.png", view: "workspace-one", theme: "dark" },
+  { file: "workspace.png", view: "workspace", theme: "dark" },
   { file: "approvals.png", view: "approvals", theme: "light" },
   { file: "approvals-dark.png", view: "approvals", theme: "dark" },
-  { file: "workspace.png", view: "workspace", theme: "dark" },
   { file: "policy.png", view: "policy", theme: "light" },
+  { file: "sessions.png", view: "sessions", theme: "dark" },
+  { file: "dashboard.png", view: "dashboard", theme: "dark" },
+  { file: "mcp.png", view: "mcp", theme: "dark" },
   { file: "update.png", view: "update", theme: "light" },
-  { file: "settings-updates.png", view: "settings", theme: "light" },
 ]
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -107,15 +110,18 @@ try {
   })
   fs.mkdirSync(out, { recursive: true })
   for (const s of SHOTS) {
-    await send("Page.navigate", { url: `${base}/screens.html?view=${s.view}&theme=${s.theme}` })
+    // A view that does not say it is ready is loaded once more: the same page twice in a row sometimes kept the old one.
     let ready = false
-    for (let i = 0; i < 80 && !ready; i++) {
-      await sleep(250)
-      const r = await send<{ result: { value?: string } }>("Runtime.evaluate", {
-        expression: "document.body.dataset.ready",
-        returnByValue: true,
-      })
-      ready = r.result.value === "1"
+    for (let attempt = 0; attempt < 2 && !ready; attempt++) {
+      await send("Page.navigate", { url: `${base}/screens.html?view=${s.view}&theme=${s.theme}&n=${attempt}` })
+      for (let i = 0; i < 80 && !ready; i++) {
+        await sleep(250)
+        const r = await send<{ result: { value?: string } }>("Runtime.evaluate", {
+          expression: "document.body.dataset.ready",
+          returnByValue: true,
+        })
+        ready = r.result.value === "1"
+      }
     }
     if (!ready) throw new Error(`${s.view} did not finish loading`)
     // Let the pictures and the fonts settle, and any opening animation finish.
