@@ -77,7 +77,7 @@ describe("what the phone is told", () => {
       /^Phone notifications/,
     )
     expect(everything).toBeChecked()
-    fireEvent.click(screen.getByRole("radio", { name: /^Only decisions waiting for you/ }))
+    fireEvent.click(screen.getByRole("radio", { name: /^Decisions waiting for you, and a finished queue/ }))
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0]).toMatchObject({ phoneAlerts: "decisions", futureSetting: { keep: true } })
     fireEvent.click(everything)
