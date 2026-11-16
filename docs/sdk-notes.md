@@ -229,6 +229,11 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 - Client: `Client` (`client/index.js`) with `connect(transport)`, `listTools()`, `callTool({ name, arguments })`. Transports: `StreamableHTTPClientTransport`, `StdioClientTransport`.
 - Agent SDK also offers `createSdkMcpServer` and `tool(...)` for in-process servers. Gatehouse does not use them. The Approver is a separate process and the Companion is stdio.
 
+### Servers you build (O39, 16 Nov)
+
+- An in-process server can be given as `{ type: "sdk", name, instance }` (`McpSdkServerConfigWithInstance`, sdk.d.ts), where `instance` is an `McpServer` from `@modelcontextprotocol/sdk/server/mcp.js`. The MCP builder's bridge (`apps/host/src/mcp-builder/bridge.ts`) makes one per session and answers `tools/list` and `tools/call` on its low-level `server` with `setRequestHandler(ListToolsRequestSchema | CallToolRequestSchema)`, passing each to the server's own process over stdio, so tool schemas are passed through unchanged (no zod shape is needed). An instance connects once, so each session gets a fresh one.
+- `Query.setMcpServers(servers)` (sdk.d.ts: "Dynamically set the MCP servers for this session") replaces every server the SDK added, including those given in `Options.mcpServers`, and returns `{ added, removed, errors }`. `/mcp <name>` therefore gives the Companion again with the built servers (`Session.useBuilt`, `sessions.ts`). A built server's tools reach `canUseTool` as `mcp__built-<name>__<tool>`, so the floor, the rules and the audit decide them like any server's; the in-process route is what this laptop's policy allows (table above).
+
 ## Effort (28 Oct)
 
 - `Options.effort` takes `'low' | 'medium' | 'high' | 'xhigh' | 'max'` (`EffortLevel`) and sets the reasoning effort when a session starts.
