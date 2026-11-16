@@ -28,6 +28,7 @@ import { notesFor, parseLog, type Change } from "./platforms.js"
 import { execFileSync, spawnSync } from "node:child_process"
 import { publishRelease } from "./release-upload.js"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import {
@@ -311,15 +312,26 @@ if (cmd === "version") {
   // to 237 test files, half an hour and more on this laptop). It runs the security invariant tests the gate always
   // runs, then the prohibited patterns and the packaged copy's own check below.
   if (!process.argv.includes("--skip-tests")) {
-    step("security invariant tests", node, [
-      path.join(root, "node_modules", "vitest", "vitest.mjs"),
-      "run",
-      "--maxWorkers=2",
+    const invariants = [
       "apps/host/test/invariants.test.ts",
       "apps/host/test/threat-model.test.ts",
       "apps/host/test/providers.test.ts",
       "apps/host/test/conformance.test.ts",
-    ])
+    ]
+    // 16 Nov: with under 4 GB free (Codehouse's own sessions running), two workers at once timed out or crashed, two
+    // releases in a row. The gate's rule then: each file in a process of its own as memory allows.
+    if (os.freemem() < 4 * 1024 ** 3)
+      step("security invariant tests, one file to a process (memory is short)", node, [
+        path.join(root, "scripts", "test-shards.mjs"),
+        ...invariants,
+      ])
+    else
+      step("security invariant tests", node, [
+        path.join(root, "node_modules", "vitest", "vitest.mjs"),
+        "run",
+        "--maxWorkers=2",
+        ...invariants,
+      ])
   }
   // Even with --skip-tests: a release never ships what the terms or the rules forbid (CH-01).
   step("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")])
