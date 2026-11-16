@@ -10,7 +10,8 @@ export interface PushMessage {
   sealed?: unknown
 }
 
-export type PushResult = "ok" | "gone" | "error"
+/** "error" with the push service's status, or "unreachable" when it did not answer, so a refusal can be logged. */
+export type PushResult = "ok" | "gone" | `error ${number | "unreachable"}`
 
 export interface PushSender {
   publicKey(): string
@@ -54,7 +55,7 @@ export class WebPushSender implements PushSender {
       return "ok"
     } catch (e) {
       const status = (e as { statusCode?: number }).statusCode
-      return status === 404 || status === 410 ? "gone" : "error"
+      return status === 404 || status === 410 ? "gone" : `error ${status ?? "unreachable"}`
     }
   }
 }

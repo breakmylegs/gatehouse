@@ -263,7 +263,12 @@ export async function buildRelay(opts: RelayOptions): Promise<Relay> {
   ) {
     if (!phone.push_sub) return
     const r = await push.send(phone.push_sub, message, urgent)
-    if (r === "gone") store.setPushSub(phone.id, null)
+    // A push that did not get through says so (16 Nov): it was silent, so a phone that stopped hearing gave no reason.
+    // The kind and the push service's answer only, never what the push carries.
+    if (r === "gone") {
+      store.setPushSub(phone.id, null)
+      log(`a ${message.t} push to ${phone.name} found its notifications no longer registered: turn them on again in the phone app`)
+    } else if (r !== "ok") log(`a ${message.t} push to ${phone.name} was refused by the push service (${r.slice(6)})`)
   }
 
   app.post("/api/device/requests", async (req, reply) => {

@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { QuickDecision } from "../components/QuickDecision"
 import { RiskBadge } from "../components/RiskBadge"
 import { riskBand } from "../lib/format"
-import { tellShell } from "../lib/shell"
+import { onShell, tellShell } from "../lib/shell"
 import { usePending } from "../store"
 import "../notch-mac.css"
 
@@ -30,6 +30,8 @@ const openInWindow = (id: string) => tellShell(`notch-open:${id}`)
 export function NotchMac() {
   const pending = usePending()
   const [open, setOpen] = useState(false)
+  // Against the notch, or under the menu bar of a screen without one (the window says which).
+  const [free, setFree] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   const top = pending.reduce((m, p) => Math.max(m, BANDS.indexOf(riskBand(p.request.verdict.risk))), 0)
 
@@ -38,6 +40,14 @@ export function NotchMac() {
     document.documentElement.dataset.view = "notch"
     document.documentElement.dataset.theme = "dark"
   }, [])
+  useEffect(
+    () =>
+      onShell((m) => {
+        if (m === "notch-place:free") setFree(true)
+        else if (m === "notch-place:notch") setFree(false)
+      }),
+    [],
+  )
   useEffect(() => {
     if (pending.length === 0) setOpen(false)
   }, [pending.length])
@@ -56,7 +66,13 @@ export function NotchMac() {
   if (pending.length === 0) return null
   const label = `${pending.length} waiting on you, the highest ${BANDS[top]} risk`
   return (
-    <div ref={box} className="notch" data-open={open ? "" : undefined} data-risk={BANDS[top]!.toLowerCase()}>
+    <div
+      ref={box}
+      className="notch"
+      data-open={open ? "" : undefined}
+      data-free={free ? "" : undefined}
+      data-risk={BANDS[top]!.toLowerCase()}
+    >
       <button
         type="button"
         className="notch-wing"

@@ -39,6 +39,16 @@
 .notch[data-open] .notch-wing {
   border-radius: 0;
 }
+/* Under the menu bar of a screen without a notch: a pill of its own, and the list hanging from it. */
+.notch[data-free] .notch-wing {
+  border-radius: 12px;
+}
+.notch[data-free][data-open] .notch-wing {
+  border-radius: 12px 12px 0 0;
+}
+.notch[data-free] .notch-list {
+  border-radius: 0 16px 16px 16px;
+}
 /* The highest risk waiting, as a colour; the button's label says it in words, and the count says how many. */
 .notch-dot {
   width: 9px;
