@@ -86,7 +86,9 @@ export async function createCnw(o: CnwOptions) {
   app.addHook("onRequest", async (req, reply) => {
     const o2 = req.headers.origin
     if (o2 && o2 !== origin && !req.url.startsWith("/agent")) return reply.code(403).send({ error: "Wrong origin." })
-    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login")) {
+    // /agent is a computer, not a browser: no cookie gives it anything, and it proves itself with the pairing code or
+    // its signed key, so a CSRF token means nothing there.
+    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login")) {
       if (!csrfOk(access(req), String(req.headers["x-csrf-token"] ?? ""))) return reply.code(403).send({ error: "Sign in again." })
     }
   })

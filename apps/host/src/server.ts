@@ -385,6 +385,34 @@ export class HostServer {
     })
   }
 
+  /** O41: a command from Neighbourhood Watch: what it was, and who sent it. Never its text. */
+  async #auditRemote(via: RemoteVia, cmd: { type: string }): Promise<boolean> {
+    const c = cmd as { type: string; requestId?: unknown; sessionId?: unknown }
+    return await this.#opts.app.audit
+      .record({
+        session: typeof c.sessionId === "string" ? c.sessionId : "cnw",
+        event: "cnw_command",
+        channel: "desktop",
+        tool: "cnw",
+        input: {
+          command: c.type,
+          user: via.user,
+          signedIn: via.signedIn,
+          ...(typeof c.requestId === "string" ? { requestId: c.requestId } : {}),
+        },
+        verdict: {
+          outcome: "allow",
+          ruleId: "cnw-command",
+          reason: `Sent from Codehouse Neighbourhood Watch by ${via.user}${via.signedIn ? "" : " (an allow-listed address, not signed in)"}.`,
+          risk: 0,
+          decidedBy: "human-desktop",
+          policyHash: "",
+        },
+        latencyMs: 0,
+      })
+      .catch(() => false)
+  }
+
   /** An undo from the Changes pane, after it was made (a safety checkpoint was saved first). */
   async #auditUndo(
     event: string,
@@ -467,6 +495,10 @@ export class HostServer {
     }
     try {
       const via = this.#via.get(socket)
+      // O41: each command from Neighbourhood Watch is recorded first, with who sent it (invariant 13). The record uses
+      // the desktop channel, which older copies can read; one that cannot be written is refused.
+      if (via && !(await this.#auditRemote(via, parsed.data.command)))
+        throw new CommandError("audit", "The command could not be recorded in the audit log, so it was not run.")
       const data = await (via ? VIA.run(via, () => this.#handle(parsed.data.command)) : this.#handle(parsed.data.command))
       this.#send(socket, {
         type: "reply",

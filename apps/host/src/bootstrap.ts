@@ -154,6 +154,8 @@ export interface Host {
   approverProcess: ApproverProcess | undefined
   store: PolicyStore
   pwsh: PwshWorker
+  /** O41: the connection to Codehouse Neighbourhood Watch, off until paired and switched on. */
+  cnw: CnwService
   start(): Promise<void>
   stop(): Promise<void>
 }
@@ -1300,7 +1302,6 @@ export function createHost(opts: HostOptions = {}): Host {
 
   const app: HostApp = {
     updates,
-    cnw,
     manager,
     terminal,
     signIn,

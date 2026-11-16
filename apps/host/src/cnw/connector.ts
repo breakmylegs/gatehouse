@@ -89,7 +89,9 @@ export class CnwConnector extends EventEmitter {
     this.#set("connecting")
     const url = new URL("/agent", this.#o.url)
     url.protocol = url.protocol === "http:" ? "ws:" : "wss:"
-    const opts: WebSocket.ClientOptions = {
+    // ws hands these options to tls.connect, whose checkServerIdentity returns an Error or undefined; ws's own type
+    // describes another (servername, CertMeta) => boolean form, hence the cast.
+    const opts = {
       handshakeTimeout: 15_000,
       maxPayload: 4 * 1024 * 1024,
       ...(this.#o.certSha256
@@ -100,7 +102,7 @@ export class CnwConnector extends EventEmitter {
                 : new Error("Neighbourhood Watch's certificate is not the one it had when you paired."),
           }
         : {}),
-    }
+    } as unknown as WebSocket.ClientOptions
     const ws = (this.#o.createSocket ?? ((u, o) => new WebSocket(u, o)))(url.toString(), opts)
     this.#ws = ws
     ws.on("message", (raw: Buffer) => this.#message(raw.toString("utf8")))

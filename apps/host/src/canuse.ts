@@ -24,7 +24,7 @@ import {
   type PwshWorker,
 } from "@gatehouse/policy"
 import { canonicalize, type Effects, type Verdict } from "@gatehouse/shared"
-import type { Broker, Resolution } from "./broker.js"
+import { auditChannelOf, type Broker, type Resolution } from "./broker.js"
 import { effectsOf, UNKNOWN_EFFECTS } from "./effects.js"
 import type { GrantUses } from "./grant-uses.js"
 import type { RememberFor } from "@gatehouse/shared/ws-protocol"
@@ -133,7 +133,7 @@ function sameInput(a: Record<string, unknown>, b: Record<string, unknown>): bool
 
 function humanVerdict(base: Verdict, r: Resolution): Verdict {
   const decidedBy: Verdict["decidedBy"] =
-    r.channel === "desktop"
+    r.channel === "desktop" || r.channel === "cnw"
       ? "human-desktop"
       : r.channel === "phone"
         ? "human-phone"
@@ -143,11 +143,12 @@ function humanVerdict(base: Verdict, r: Resolution): Verdict {
             ? "timeout"
             : "rules"
   const outcome: Verdict["outcome"] = r.outcome === "allow" ? "allow" : "deny"
+  const on = r.channel === "cnw" ? "Neighbourhood Watch" : r.channel
   const reason =
     r.outcome === "allow"
-      ? `Approved on ${r.channel}.`
+      ? `Approved on ${on}.`
       : r.outcome === "deny"
-        ? `Denied on ${r.channel}${r.message ? `: ${r.message}` : "."}`
+        ? `Denied on ${on}${r.message ? `: ${r.message}` : "."}`
         : r.outcome === "timeout"
           ? "Timed out waiting for approval."
           : `Cancelled: ${r.message ?? "the session was interrupted"}.`
@@ -777,7 +778,7 @@ async function escalate(
   const written = await deps.audit.record({
     session: deps.sessionId,
     event: "human_decision",
-    channel: resolution.channel === "host" ? "host" : resolution.channel,
+    channel: auditChannelOf(resolution.channel),
     tool: toolName,
     toolUseId: toolUseID,
     cwd: deps.cwd,
@@ -992,7 +993,7 @@ async function ask(
   const written = await deps.audit.record({
     session: deps.sessionId,
     event: kind === "question" ? "question_answered" : "plan_decision",
-    channel: resolution.channel === "host" ? "host" : resolution.channel,
+    channel: auditChannelOf(resolution.channel),
     tool: toolName,
     toolUseId: toolUseID,
     cwd: deps.cwd,

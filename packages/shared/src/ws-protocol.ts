@@ -591,7 +591,8 @@ export type PendingView = z.infer<typeof PendingView>
 
 export const Resolution = z.object({
   outcome: z.enum(["allow", "deny", "timeout", "cancelled"]),
-  channel: z.enum(["desktop", "phone", "push", "timeout", "host"]),
+  // "cnw" (O41): decided from Codehouse Neighbourhood Watch.
+  channel: z.enum(["desktop", "phone", "push", "timeout", "host", "cnw"]),
   message: z.string().optional(),
   at: z.string(),
   waitedMs: z.number(),

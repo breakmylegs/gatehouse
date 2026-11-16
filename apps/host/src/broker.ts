@@ -14,6 +14,14 @@ import { HANDOFF_RULE } from "./about-session.js"
 /** `push` is an outbound notification channel such as ntfy: it answers with a one-time code. */
 /** O41: "cnw" is Codehouse Neighbourhood Watch, your own server, with the desktop's scope. */
 export type Channel = "desktop" | "phone" | "push" | "cnw"
+
+/**
+ * The channel the audit log records. Neighbourhood Watch drives the desktop interface, so its decisions are recorded
+ * as the desktop's (older copies read the log after an update is undone, and know no other channel); each command
+ * from it is recorded first as cnw_command, with the CNW user (server.ts).
+ */
+export const auditChannelOf = (c: Channel | "timeout" | "host"): Exclude<Channel, "cnw"> | "timeout" | "host" =>
+  c === "cnw" ? "desktop" : c
 export type RequestKind = EscalationRequest["kind"]
 
 export type Answer =
