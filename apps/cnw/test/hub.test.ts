@@ -48,6 +48,13 @@ describe("the CNW hub (O41)", () => {
     expect(tab.sent.at(-1)).toEqual({ type: "event", data: { type: "session_state", id: "s1" } })
     const stranger = sock()
     expect(hub.command("c1", stranger.s, "{}")).toBe("refused")
+    // An event the computer addressed to one user (their replies) reaches only that user's tabs.
+    const bob = sock()
+    hub.watch("c1", bob.s, "bob")
+    const before = bob.sent.length
+    hub.agentMessage(agent.s, JSON.stringify({ type: "event", to: "ana", data: { type: "reply", cmdId: "x", ok: true } }))
+    expect(tab.sent.at(-1)).toEqual({ type: "event", data: { type: "reply", cmdId: "x", ok: true } })
+    expect(bob.sent.slice(before).some((e) => (e.data as { cmdId?: string } | undefined)?.cmdId === "x")).toBe(false)
   })
 
   it("limits how fast one tab can send, and disconnects a computer you remove", () => {

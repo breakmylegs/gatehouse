@@ -89,7 +89,12 @@ export class Hub {
     }
     const [id, agent] = known
     agent.lastSeen = this.#now()
-    if (m.type === "event") this.#broadcast(id, { type: "event", data: m.data })
+    // An event the computer addressed to one CNW user (its Host connection for that user: their replies and what it
+    // sends them) goes to that user's tabs only; one with no address goes to every tab.
+    if (m.type === "event") {
+      const text = JSON.stringify({ type: "event", data: m.data })
+      for (const w of this.#watchers.get(id) ?? []) if (typeof m.to !== "string" || w.user === m.to) w.socket.send(text)
+    }
     if (m.type === "http_reply" && typeof (m as { id?: unknown }).id === "string") {
       const r = m as unknown as { id: string; status: number; contentType?: string; body?: string }
       const p = this.#http.get(r.id)
