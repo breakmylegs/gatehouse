@@ -55,7 +55,7 @@ export function registerMcpBuilderRoutes(app: FastifyInstance, d: McpRouteDeps):
     return view(n.data)
   })
 
-  app.patch("/api/mcp-servers/:name", async (req, reply) => {
+  app.put("/api/mcp-servers/:name", async (req, reply) => {
     const n = nameOf(req.params)
     const c = Change.safeParse(req.body)
     if (!n.success || !d.store.get(n.data)) return reply.code(404).send({ error: "There is no such server." })

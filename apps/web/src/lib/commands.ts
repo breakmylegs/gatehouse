@@ -60,6 +60,7 @@ export const PAGES: Array<{ route: Route; label: string; keywords?: string }> = 
   { route: "memory", label: "Memory", keywords: "remember forget chats preferences" },
   { route: "prompts", label: "Prompts", keywords: "saved library templates skills" },
   { route: "marketplace", label: "Marketplace", keywords: "plugins skills install extensions" },
+  { route: "mcp", label: "MCP servers", keywords: "mcp build server tools make start stop" },
   { route: "doctor", label: "Doctor", keywords: "check health problems diagnose fix troubleshoot" },
   { route: "settings", label: "Settings", keywords: "options preferences" },
   { route: "guide", label: "User guide", keywords: "help manual" },

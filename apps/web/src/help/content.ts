@@ -140,6 +140,19 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - **Evaluate…** on an installed plugin shows whether it helps. Choose a folder and write a few tasks, each with what a good answer says (words it must contain, or a pattern between slashes). **Run the evaluation** runs each task twice in Plan mode, once with the plugin and once without it, so nothing in the folder changes and every tool call goes through your rules. Then it shows how many passed each way. It uses your plan twice for each task, and only one evaluation runs at a time.
 - A **mod** (a plugin that changes how Claude Code itself behaves) could let a tool run without the Approver, so Codehouse never installs one, and a session that loads one installed some other way, for example with Claude Code in a terminal, stops before it runs anything and names the plugin to remove.`,
   },
+  mcp: {
+    id: "mcp",
+    title: "MCP servers",
+    body: `MCP servers you build with Claude, run by Codehouse while it is open, for your code sessions to use.
+
+- **Make it** with a name. Its folder starts with a small example tool, so it runs straight away, and a note that tells Claude how Codehouse runs it.
+- **Build it in a session** opens a code session in its folder. Ask Claude to add the tools you want. Servers that are already running are given to that session, so it can call them while it works.
+- **Start**, **Stop** and **Restart** run it. Restart it after Claude changes it. **Start with Codehouse** starts it each time Codehouse opens.
+- **Processor** and **Memory** are the most it may use, applied by Windows to it and everything it starts. A change applies when it next starts.
+- In a code session, type **/mcp** and the start of a name: Tab completes it. The session can then use that server's tools. Each call is checked by your rules like any other server's, so the first ones ask you, and what it returns is treated as text from outside.
+- It never sees your Claude sign-in. It runs as you otherwise, so it can reach what you can: read what Claude writes before you start it.
+- **Remove** takes it off the list and stops it. Its folder stays, so nothing you built is lost.`,
+  },
   prompts: {
     id: "prompts",
     title: "Prompts",

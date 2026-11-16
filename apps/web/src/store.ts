@@ -51,6 +51,8 @@ export type Route =
   | "memory"
   | "prompts"
   | "marketplace"
+  /** O39: the MCP servers you build. */
+  | "mcp"
   | "doctor"
   | "home"
   /** G24: the task board. */
@@ -219,6 +221,7 @@ const KEPT_ROUTES: Route[] = [
   "memory",
   "prompts",
   "marketplace",
+  "mcp",
   "doctor",
   "home",
   "board",

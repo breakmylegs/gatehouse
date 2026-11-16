@@ -55,6 +55,7 @@ import { HeldList } from "../components/HeldList"
 import { linkSessions } from "../lib/linkSessions"
 import { prLinks } from "../lib/prLinks"
 import { PrLinksMenu } from "../components/PrLinksMenu"
+import { listServers, mcpMatches, giveServer, type BuiltServerView } from "../lib/mcpServers"
 import { cloneRequest, PUBLISH_REQUEST } from "../lib/repoRequests"
 import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
@@ -156,6 +157,7 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/side", help: "Ask in a side session beside this one, in Plan mode; Bring back its answer here" },
   { cmd: "/clone", help: "A request to clone a repository here, for you to send; it asks you before it reaches the network" },
   { cmd: "/publish", help: "A request to publish this folder as a private GitHub repository, for you to send; it asks you" },
+  { cmd: "/mcp", help: "Give this session an MCP server you built and started in MCP; Tab completes its name" },
   {
     cmd: "/tell",
     help: "Send a message to another session by its code, e.g. /tell GT 407 run the tests",
@@ -2173,7 +2175,23 @@ function Composer({
   }
 
   const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
-  const matches = showMenu ? SLASH.filter((c) => c.cmd.startsWith(text.toLowerCase())) : []
+  // O39: /mcp and the start of a name lists the servers you built that are running, so Tab completes the name.
+  const typingMcp = /^\/mcp(?: \S*)?$/i.test(text)
+  const [built, setBuilt] = useState<BuiltServerView[]>([])
+  useEffect(() => {
+    if (!typingMcp) return
+    let live = true
+    void listServers().then((r) => live && r.ok && setBuilt(r.data?.servers ?? []))
+    return () => {
+      live = false
+    }
+  }, [typingMcp])
+  const mcpOptions = typingMcp && text.includes(" ") ? mcpMatches(text, built) : []
+  const matches = mcpOptions.length
+    ? mcpOptions
+    : showMenu
+      ? [...SLASH.filter((c) => c.cmd.startsWith(text.toLowerCase())), ...(text.toLowerCase() === "/mcp" ? mcpMatches(text, built) : [])]
+      : []
 
   async function submit(hold = false) {
     const t = text.trim()
@@ -2240,6 +2258,21 @@ function Composer({
           // T-073: a request for you to send; Claude runs gh repo create (private) and git push through your rules.
           setText(PUBLISH_REQUEST)
           return
+        case "/mcp": {
+          // O39: a server you built, given to this session; each of its calls still asks the Approver.
+          if (!arg) {
+            toast("Write the server's name after /mcp, for example /mcp greeter. Tab completes it.", { id: "mcp" })
+            return
+          }
+          const u = await giveServer(sessionId, arg)
+          if (!u.ok) {
+            toast(u.error ?? "The server could not be given to this session.", { id: "mcp" })
+            return
+          }
+          setText("")
+          toast(`This session can now use ${u.data!.name} (${u.data!.tools.length === 1 ? "1 tool" : `${u.data!.tools.length} tools`}).`, { id: "mcp" })
+          return
+        }
         case "/side": {
           // T-034: a side session beside this one, in Plan mode, for something that came up.
           if (!arg) {
