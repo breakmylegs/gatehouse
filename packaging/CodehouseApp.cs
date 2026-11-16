@@ -84,6 +84,9 @@ internal sealed class MainForm : Form
     // The quick prompt (W1-15): its window, made hidden once the interface has loaded, and its shortcut.
     private CoreWebView2Environment env;
     private QuickOverlay quick;
+    // O37: the wing at the top of the screen with what waits on you (Wing.cs).
+    private RequestWing wing;
+    private ToolStripMenuItem wingItem;
     /// <summary>Sessions in windows of their own (B16), by session id.</summary>
     private readonly System.Collections.Generic.Dictionary<string, PopoutWindow> popouts =
         new System.Collections.Generic.Dictionary<string, PopoutWindow>();
@@ -168,6 +171,9 @@ internal sealed class MainForm : Form
         menu.Items.Add("Open Codehouse", null, delegate { ShowWindow(); });
         quickItem = new ToolStripMenuItem("Quick prompt", null, delegate { OpenQuick(); });
         menu.Items.Add(quickItem);
+        wingItem = new ToolStripMenuItem("Show requests at the top of the screen", null, delegate { SetWingOn(!wingItem.Checked); });
+        wingItem.Checked = !File.Exists(WingOffMarker);
+        menu.Items.Add(wingItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Codehouse", null, delegate { Quit(); });
         tray.ContextMenuStrip = menu;
@@ -387,6 +393,7 @@ internal sealed class MainForm : Form
             else
             {
                 PrepareQuick();
+                PrepareWing();
                 SayIfRestarted();
             }
         };
@@ -575,6 +582,39 @@ internal sealed class MainForm : Form
         quitting = true;
         Hosting.StopChildren(relay, host);
         Application.Exit();
+    }
+
+    // ---- the wing at the top of the screen (O37, the Windows version of the Mac's beside the notch) ----
+
+    /// <summary>Its presence turns the wing off (the tray's switch), so the choice outlasts a restart and an update.</summary>
+    private string WingOffMarker { get { return Path.Combine(dataDir, "wing-off"); } }
+
+    private async void PrepareWing()
+    {
+        if (wing != null || env == null || url == null) return;
+        int hash = url.IndexOf('#');
+        string wingUrl = hash < 0 ? url + "?view=notch" : url.Substring(0, hash) + "?view=notch" + url.Substring(hash);
+        wing = new RequestWing(Guard, delegate(string id)
+        {
+            // A request to see in full: the main window, on Approvals, with it chosen.
+            ShowWindow();
+            try { web.CoreWebView2.PostWebMessageAsString("open-request:" + id); } catch (Exception) { }
+        });
+        wing.On = wingItem == null || wingItem.Checked;
+        try { await wing.Prepare(env, wingUrl); }
+        catch (Exception ex) { Remember("[wing] the requests wing could not load: " + ex.Message); }
+    }
+
+    private void SetWingOn(bool value)
+    {
+        if (wingItem != null) wingItem.Checked = value;
+        try
+        {
+            if (value) { if (File.Exists(WingOffMarker)) File.Delete(WingOffMarker); }
+            else File.WriteAllText(WingOffMarker, "off");
+        }
+        catch (Exception ex) { Remember("[wing] the choice could not be saved: " + ex.Message); }
+        if (wing != null) wing.On = value;
     }
 
     // ---- the quick prompt ----

@@ -260,6 +260,7 @@ execFileSync(
     pk("CodehouseApp.cs"),
     pk("Overlay.cs"),
     pk("Popout.cs"),
+    pk("Wing.cs"),
     pk("Hotkey.cs"),
     pk("NavGuard.cs"),
     pk("Capture.cs"),

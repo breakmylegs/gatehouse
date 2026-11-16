@@ -95,7 +95,7 @@ Shell commands are parsed properly (Bash with tree-sitter, PowerShell with its o
 
 - A request that needs you appears in its session, above the prompt box, with Allow once and Deny, and in the queue with the exact command or diff, the rule that held it, a risk score and why. Allow, deny, deny with a message, edit then allow (the edit is checked again), or remember the choice.
 - After a run of approvals faster than anyone could read them, the next high-risk one asks you to look again before it can be allowed.
-- Windows or macOS tells you when something is waiting, even with Codehouse closed to the tray.
+- Windows or macOS tells you when something is waiting, even with Codehouse closed to the tray, and a small wing at the top of the screen (beside the notch on a Mac) shows how many wait, with Deny and Allow once a click away.
 - **On your iPhone:** pair it once with a passkey. Requests reach it end to end encrypted through a Relay that runs inside Codehouse or on a server of yours, and your answer only counts after Codehouse has checked the passkey signature. The phone app also shows your sessions and their transcripts, and can send a prompt or interrupt one.
 - **Through ntfy or Slack:** a short, redacted summary with single-use Allow and Deny codes. Severe requests can never be allowed this way.
 - The **kill switch** denies everything and stops new sessions at once.
