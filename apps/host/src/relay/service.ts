@@ -451,8 +451,10 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
   async notify(
     kind: "stop" | "idle" | "notify" | "info",
     message: { title: string; body: string; project: string },
+    /** Mac fork (owner, 16 Nov): told even when the phone hears only of decisions (a finished build queue). */
+    o: { withDecisions?: boolean } = {},
   ): Promise<void> {
-    if (this.#d.notifyAllowed && !this.#d.notifyAllowed()) return // Mac fork: decisions only
+    if (!o.withDecisions && this.#d.notifyAllowed && !this.#d.notifyAllowed()) return // Mac fork: decisions only
     const phones = this.#d.store.phones()
     if (!this.#d.store.relay() || phones.length === 0) return
     const client = await this.#authed()

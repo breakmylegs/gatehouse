@@ -891,10 +891,11 @@ export function Settings() {
                   onChange={() => change({ phoneAlerts: "decisions" }, "Phone notifications")}
                 />
                 <span>
-                  Only decisions waiting for you
+                  Decisions waiting for you, and a finished queue
                   <span className="block text-xs text-mut">
-                    A permission, a plan or a question to answer, as ntfy does. Sessions finishing,
-                    notes from Claude, the digest and alerts stay on this computer.
+                    A permission, a plan or a question to answer, as ntfy does, and Claude saying it has
+                    finished its build queue. Sessions finishing, notes from Claude, the digest and alerts
+                    stay on this computer.
                   </span>
                 </span>
               </label>

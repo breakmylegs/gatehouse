@@ -1,8 +1,8 @@
 // What waits on you, beside the notch (owner, 14 Nov). A small panel on the screen you are using, with
 // apps/web/src/surfaces/NotchMac.tsx in it: at the notch's right when that screen has one, else under its menu bar in
 // the middle (16 Nov: on an external display it was out of sight, beside the laptop's notch). It follows the pointer
-// from screen to screen while it shows. It is beside the notch, not over it, so another app can keep the notch itself. It shows only while something
-// waits, never makes Codehouse the active app, and is not on the lock screen. Its Deny and Allow once are the
+// from screen to screen while it shows. It is beside the notch, not over it, so another app can keep the notch
+// itself. It shows only while something waits, never makes Codehouse the active app, and is not on the lock screen. Its Deny and Allow once are the
 // Approvals rows' own, decided as on the desktop; anything that needs reading opens the main window.
 import AppKit
 

@@ -1067,11 +1067,11 @@ export function createHost(opts: HostOptions = {}): Host {
         .catch(() => undefined)
     else if (type === "queue_empty") {
       void phone
-        .notify("notify", {
-          title: "Build queue empty",
-          body: "Claude has finished its queue.",
-          project,
-        })
+        .notify(
+          "notify",
+          { title: "Build queue empty", body: "Claude has finished its queue.", project },
+          { withDecisions: true }, // Mac fork (owner, 16 Nov): with decisions only, this still reaches the phone
+        )
         .catch(() => undefined)
       void ntfy.note("build queue empty", "Claude has finished its queue.", project)
       // D-002: when a session says it is done, its project's held-out checks run, if it has any; the counts only

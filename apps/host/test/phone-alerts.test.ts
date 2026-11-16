@@ -34,6 +34,12 @@ describe("what the phone is told", () => {
     expect(asked).toContain("phones")
   })
 
+  it("still tells it when Claude has finished its build queue (owner, 16 Nov)", async () => {
+    const { svc, asked } = service(() => false)
+    await svc.notify("notify", { title: "Build queue empty", body: "", project: "atlas" }, { withDecisions: true })
+    expect(asked).toContain("phones")
+  })
+
   it("is everything when the setting is absent, as before", async () => {
     const { svc, asked } = service()
     await svc.notify("info", { title: "Codehouse digest", body: "", project: "Codehouse" })
