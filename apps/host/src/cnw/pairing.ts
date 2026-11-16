@@ -35,7 +35,8 @@ export function certFingerprint(url: URL, connect: typeof tls.connect = tls.conn
     sock.once("secureConnect", () => {
       const raw = sock.getPeerCertificate(false)?.raw
       sock.end()
-      raw ? resolve(crypto.createHash("sha256").update(raw).digest("hex")) : reject(new Error("No certificate came back."))
+      if (raw) resolve(crypto.createHash("sha256").update(raw).digest("hex"))
+      else reject(new Error("No certificate came back."))
     })
     sock.once("timeout", () => (sock.destroy(), reject(new Error("Neighbourhood Watch did not answer."))))
     sock.once("error", (e) => reject(new Error(`Neighbourhood Watch could not be reached: ${e.message}`)))
