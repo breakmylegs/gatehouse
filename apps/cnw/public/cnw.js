@@ -46,6 +46,34 @@ function form(title, fields, submit, onSubmit, note) {
   return f
 }
 
+// Passkeys through the browser's own WebAuthn JSON support (Edge, Chrome, Safari 18 and later).
+const canPasskey = () => typeof PublicKeyCredential !== "undefined" && typeof PublicKeyCredential.parseRequestOptionsFromJSON === "function"
+
+async function passkeySignIn() {
+  const o = await call("POST", "/api/passkey/login/options")
+  if (!o.ok) return o.json.error ?? "Passkeys are not available."
+  try {
+    const cred = await navigator.credentials.get({ publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(o.json.options) })
+    const v = await call("POST", "/api/passkey/login/verify", { ticket: o.json.ticket, response: cred.toJSON() })
+    if (!v.ok) return v.json.error ?? "That did not work."
+    render()
+  } catch {
+    return "No passkey was used."
+  }
+}
+
+async function passkeyAdd(say) {
+  const o = await call("POST", "/api/passkey/register/options")
+  if (!o.ok) return void (say.textContent = o.json.error ?? "Not available.")
+  try {
+    const cred = await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(o.json.options) })
+    const v = await call("POST", "/api/passkey/register/verify", { ticket: o.json.ticket, response: cred.toJSON() })
+    say.textContent = v.ok ? "Passkey added. Next time, sign in with it." : v.json.error ?? "It was not added."
+  } catch {
+    say.textContent = "No passkey was made."
+  }
+}
+
 async function render() {
   const me = (await call("GET", "/api/me")).json
   main.replaceChildren()
@@ -73,7 +101,19 @@ async function render() {
         "The first account needs the code from `docker compose logs cnw`, so nobody who finds this page first can claim it.",
       ),
     )
-  if (me.access === "none")
+  if (me.access === "none") {
+    if (canPasskey()) {
+      const err = el("p", { class: "err", role: "alert" })
+      main.append(
+        el(
+          "section",
+          { class: "panel" },
+          el("h2", { text: "Sign in with a passkey" }),
+          el("button", { class: "btn primary", text: "Use a passkey", onclick: async () => (err.textContent = (await passkeySignIn()) ?? "") }),
+          err,
+        ),
+      )
+    }
     return main.append(
       form(
         "Sign in",
@@ -89,6 +129,7 @@ async function render() {
         },
       ),
     )
+  }
   await computers()
 }
 
@@ -151,7 +192,26 @@ async function computers() {
     }),
     msg,
   )
-  main.append(list, pairing, allow)
+  const upd = el("section", { class: "panel" }, el("h2", { text: "Updates" }))
+  const v = await call("GET", "/api/version")
+  const say = el("p", { class: "muted", "aria-live": "polite", text: `This is Neighbourhood Watch ${v.json.version ?? "?"}.` })
+  upd.append(
+    say,
+    el("button", {
+      class: "btn",
+      text: "Update to the latest signed release",
+      onclick: async () => {
+        say.textContent = "Updating: this can take a few minutes, and the page reloads when it is done."
+        const r = await call("POST", "/api/update")
+        say.textContent = r.ok ? r.json.message : r.json.error ?? "It did not update."
+        if (r.ok && /Updated/.test(r.json.message ?? "")) setTimeout(() => location.reload(), 20000)
+      },
+    }),
+  )
+  const keys = el("section", { class: "panel" }, el("h2", { text: "Passkeys" }))
+  const said = el("p", { class: "muted", "aria-live": "polite", text: "A passkey signs you in with your face, fingerprint or device PIN, and cannot be phished." })
+  keys.append(said, canPasskey() ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) }) : el("p", { class: "muted", text: "This browser cannot make passkeys." }))
+  main.append(list, pairing, allow, keys, upd)
 }
 
 signout.addEventListener("click", async () => {

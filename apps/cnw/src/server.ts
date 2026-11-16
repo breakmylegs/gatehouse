@@ -12,6 +12,7 @@ import { Hub } from "./hub.js"
 import { checkPublicKey, newCode, redeem, type Computer, type PendingCode } from "./pairing.js"
 import { hashPassword, verifyPassword } from "./passwords.js"
 import { JsonStore } from "./store.js"
+import { registerPasskeyRoutes } from "./passkeys.js"
 
 /**
  * The CNW server (O41). Behind caddy, which ends TLS and passes the client's address in a header only caddy can set
@@ -85,7 +86,7 @@ export async function createCnw(o: CnwOptions) {
   app.addHook("onRequest", async (req, reply) => {
     const o2 = req.headers.origin
     if (o2 && o2 !== origin && !req.url.startsWith("/agent")) return reply.code(403).send({ error: "Wrong origin." })
-    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup")) {
+    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login")) {
       if (!csrfOk(access(req), String(req.headers["x-csrf-token"] ?? ""))) return reply.code(403).send({ error: "Sign in again." })
     }
   })
@@ -139,6 +140,28 @@ export async function createCnw(o: CnwOptions) {
     return { ok: true, csrf: s.csrf }
   })
 
+  // Passkeys, beside the password.
+  registerPasskeyRoutes(app, {
+    rpId: new URL(o.publicUrl).hostname,
+    origin,
+    passkeysOf: (user) => users.read().users.find((u) => u.name === user)?.passkeys ?? [],
+    setPasskeys: (user, keys) =>
+      users.update((u) => ({ ...u, users: u.users.map((x) => (x.name === user ? { ...x, passkeys: keys } : x)) })),
+    ownerOf: (id) => users.read().users.find((u) => u.passkeys.some((k) => k.id === id))?.name,
+    signedIn: (req) => {
+      const a = access(req)
+      return a.kind === "user" ? a.user : undefined
+    },
+    startSession: (reply, user) => {
+      const s = sessions.start(user, true)
+      setCookie(reply, s.id, 7 * 24 * 3600)
+      return s.csrf
+    },
+    throttleKey: (req) => `passkey:${ipOf(req)}`,
+    throttle,
+    log,
+  })
+
   app.post("/api/logout", async (req, reply) => {
     sessions.end(cookieOf(req))
     setCookie(reply, "", 0)
@@ -172,6 +195,23 @@ export async function createCnw(o: CnwOptions) {
     hub.forget(id)
     log(`Computer removed: ${id}`)
     return { ok: true }
+  })
+
+  // Update: the updater service (the only part that reaches Docker) fetches the signed release and rebuilds CNW.
+  app.get("/api/version", async () => ({ version: process.env.CNW_VERSION ?? "0.0.0" }))
+  app.post("/api/update", async (req, reply) => {
+    const a = need(req, reply, "update")
+    if (!a) return
+    const updater = process.env.CNW_UPDATER
+    if (!updater) return reply.code(501).send({ error: "There is no updater in this setup." })
+    log(`Update asked for by ${a.kind === "user" ? a.user : "?"}`)
+    try {
+      const r = await fetch(new URL("/update", updater), { method: "POST" })
+      const text = await r.text()
+      return reply.code(r.ok ? 200 : 502).send({ message: text })
+    } catch (e) {
+      return reply.code(502).send({ error: `The updater could not be reached: ${(e as Error).message}` })
+    }
   })
 
   // A computer pairs with a code and its public key; no session needed, the code is the proof.
