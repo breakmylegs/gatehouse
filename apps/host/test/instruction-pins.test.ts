@@ -86,6 +86,9 @@ describe("instruction pins (D-059)", () => {
     expect(t("Bash", { command: "echo 'push freely' >> CLAUDE.md" })).toEqual(["CLAUDE.md"])
     expect(t("Bash", { command: "cp evil.md .claude/commands/go.md" })).toEqual([".claude/commands/go.md"])
     expect(t("Bash", { command: "cat CLAUDE.md && grep tests AGENTS.md" })).toEqual([])
+    // Owner, 16 Nov: staging it was held as a change to the instructions.
+    expect(t("PowerShell", { command: "Set-Location C:\\dev\\p3\ngit add scripts/update.sh CLAUDE.md README.md" })).toEqual([])
+    expect(t("Bash", { command: "git add CLAUDE.md && echo x > CLAUDE.md" })).toEqual(["CLAUDE.md"])
     expect(t("Read", { file_path: "CLAUDE.md" })).toEqual([])
   })
 })

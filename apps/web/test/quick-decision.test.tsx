@@ -7,9 +7,13 @@ import { QuickDecision } from "../src/components/QuickDecision"
 import { useStore } from "../src/store"
 
 const sent: unknown[] = []
+let reply: (cmd: Record<string, unknown>) => unknown = () => ({ ok: true })
 vi.mock("../src/store", async (orig) => {
   const actual = await orig<typeof import("../src/store")>()
-  return { ...actual, send: vi.fn(async (cmd: unknown) => (sent.push(cmd), { ok: true })) }
+  return {
+    ...actual,
+    send: vi.fn(async (cmd: Record<string, unknown>) => (sent.push(cmd), reply(cmd))),
+  }
 })
 
 const view = (risk: number): PendingView => ({
@@ -44,6 +48,7 @@ const view = (risk: number): PendingView => ({
 beforeEach(() => {
   useStore.setState({ conn: "open" })
   sent.length = 0
+  reply = () => ({ ok: true })
 })
 afterEach(cleanup)
 
@@ -63,6 +68,23 @@ describe("the request in the workspace", () => {
     expect(sent).toEqual([])
     fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
     await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "q1", opened: false, shownMs: expect.any(Number) }]))
+  })
+
+  it("after approvals too fast to read, waits two seconds and then sends the deliberate approval (owner, 16 Nov)", async () => {
+    // Before, it sent the same plain allow again, and the Host refused it however long you waited.
+    reply = (cmd) =>
+      cmd.type === "approve" && !cmd.deliberate
+        ? { ok: false, error: { code: "friction", message: "Look again" } }
+        : { ok: true }
+    render(<QuickDecision view={view(80)} variant="panel" />)
+    fireEvent.click(screen.getByRole("button", { name: /Allow once/ }))
+    const wait = await screen.findByRole("button", { name: /^Read it first/ })
+    expect(wait).toBeDisabled()
+    expect(screen.getByRole("alert").textContent).toMatch(/works again in two seconds/)
+    const yes = await screen.findByRole("button", { name: /^Yes, allow it/ }, { timeout: 4000 })
+    fireEvent.click(yes)
+    await waitFor(() => expect(sent.at(-1)).toMatchObject({ type: "approve", requestId: "q1", deliberate: true }))
+    expect(sent).toHaveLength(2)
   })
 })
 

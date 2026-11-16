@@ -1,7 +1,7 @@
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
-import { useRef, useState } from "react"
-import { decide } from "../lib/decide"
+import { useEffect, useRef, useState } from "react"
+import { decideFull } from "../lib/decide"
 import { GrantAll } from "./GrantAll"
 import { commandText, riskBand } from "../lib/format"
 import { useStore } from "../store"
@@ -9,6 +9,8 @@ import { RiskBadge } from "./RiskBadge"
 import { ShowHidden } from "./ShowHidden"
 
 const isShell = (tool: string) => tool === "Bash" || tool === "PowerShell"
+/** The Host's wait before a deliberate approval counts (server.ts, FRICTION_WAIT_MS), and a little more. */
+const FRICTION_MS = 2200
 
 /** What the request will do, in one or a few lines: the command for a shell, else the file or address. */
 function preview(view: PendingView): { text: string; more: boolean } {
@@ -51,18 +53,40 @@ export function QuickDecision({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const shownAt = useRef(Date.now())
+  // D-021: after approvals too fast to read, the Host asks for a deliberate one. Owner, 16 Nov: this card only showed
+  // the refusal and sent the same plain allow again, so it was refused however long you waited. Now Allow waits two
+  // seconds, then sends the deliberate approval the Host asked for, as the full card does.
+  const [friction, setFriction] = useState<"waiting" | "ready">()
+  useEffect(() => setFriction(undefined), [req.id])
+  useEffect(() => {
+    if (friction !== "waiting") return
+    const t = setTimeout(() => setFriction("ready"), FRICTION_MS)
+    return () => clearTimeout(t)
+  }, [friction])
 
   async function run(outcome: "allow" | "deny") {
+    if (outcome === "allow" && friction === "waiting") return
     setBusy(true)
     setError(undefined)
-    const failed = await decide(
+    const r = await decideFull(
       outcome === "allow"
         ? // D-021: approved from a row: the card was never opened.
-          { type: "approve", requestId: req.id, opened: false, shownMs: Date.now() - shownAt.current }
+          {
+            type: "approve",
+            requestId: req.id,
+            opened: false,
+            shownMs: Date.now() - shownAt.current,
+            ...(friction === "ready" ? { deliberate: true } : {}),
+          }
         : { type: "deny", requestId: req.id },
     )
     setBusy(false)
-    if (failed) setError(failed)
+    if (r.code === "friction") {
+      setFriction("waiting")
+      setError(
+        "You approved several requests faster than they could be read. Look at what this one does; Allow works again in two seconds.",
+      )
+    } else if (r.error) setError(r.error)
   }
 
   const off = busy || !connected
@@ -80,11 +104,11 @@ export function QuickDecision({
     <button
       type="button"
       className={clsx("btn", view.defaultToNo ? "btn-strong" : "btn-primary")}
-      disabled={off}
+      disabled={off || friction === "waiting"}
       onClick={() => void run("allow")}
       {...(variant === "panel" ? { "aria-keyshortcuts": "Control+Enter" } : {})}
     >
-      Allow once
+      {friction === "waiting" ? "Read it first" : friction === "ready" ? "Yes, allow it" : "Allow once"}
       {variant === "panel" ? <kbd>Ctrl Enter</kbd> : null}
     </button>
   )
