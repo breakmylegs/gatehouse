@@ -16,6 +16,7 @@ policy/rules.user.yaml
 policy/projects/
 apps/web/.impeccable/review/
 dist-release/
+dist-cnw/
 
 # Files you attach in a session in this folder (Codehouse keeps them here; never committed).
 .codehouse/
