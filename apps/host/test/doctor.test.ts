@@ -107,6 +107,14 @@ describe("the Doctor's checks", () => {
     expect(c["sign-in"]!.state).toBe("warn")
     expect(c.organisation).toBeUndefined()
   })
+
+  it("says how Neighbourhood Watch stands, without its address, and only when it can tell (O41)", () => {
+    expect(by(facts()).cnw).toBeUndefined()
+    expect(by(facts({ cnw: { paired: false, on: false, state: "off" } })).cnw).toMatchObject({ state: "ok", detail: /optional/ })
+    expect(by(facts({ cnw: { paired: true, on: true, state: "connected" } })).cnw).toMatchObject({ state: "ok" })
+    expect(by(facts({ cnw: { paired: true, on: true, state: "connecting" } })).cnw).toMatchObject({ state: "warn", fix: /reach/ })
+    expect(by(facts({ cnw: { paired: true, on: true, state: "refused" } })).cnw).toMatchObject({ state: "warn", fix: /pair again/ })
+  })
 })
 
 describe("the report to copy", () => {

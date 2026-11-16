@@ -38,6 +38,7 @@ beforeAll(async () => {
     pwsh: undefined,
     health: () => ({}) as never,
     expectedOrg: () => "ACN - Premium",
+    listHistory: async () => [],
     log: () => undefined,
   }
   server = new HostServer({ app, token: "t".repeat(40), port: 0 })

@@ -40,6 +40,30 @@ export interface DoctorFacts {
   localRuntime?: { ok: boolean; reason?: string }
   /** D-057: the vulnerability snapshot in the managed folder. */
   vulnSnapshot?: SnapshotState
+  /** O41: the connection to Codehouse Neighbourhood Watch. Never its address. */
+  cnw?: { paired: boolean; on: boolean; state: "off" | "connecting" | "connected" | "refused" }
+}
+
+/** O41: how the connection to Neighbourhood Watch stands. Optional, so off is ok. */
+export function cnwCheck(c: NonNullable<DoctorFacts["cnw"]>): DoctorCheck {
+  const label = "Neighbourhood Watch"
+  if (!c.paired || !c.on) return { id: "cnw", label, state: "ok", detail: c.paired ? "Paired, and switched off." : "Not set up. It is optional." }
+  if (c.state === "connected") return { id: "cnw", label, state: "ok", detail: "Connected: this computer's sessions show in Neighbourhood Watch." }
+  if (c.state === "refused")
+    return {
+      id: "cnw",
+      label,
+      state: "warn",
+      detail: "Neighbourhood Watch no longer knows this computer (it was removed there, or its certificate changed), so it stopped trying.",
+      fix: "Settings, Connectors, Neighbourhood Watch: pair again with a new code from Neighbourhood Watch.",
+    }
+  return {
+    id: "cnw",
+    label,
+    state: "warn",
+    detail: "Not connected yet. Codehouse keeps trying, and your sessions here work as usual.",
+    fix: "Check that the Neighbourhood Watch server is running and that this computer can reach its address.",
+  }
 }
 
 const GB = 1024 ** 3
@@ -221,6 +245,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
           }
         : { id: "phone", label: "Phone", state: "ok", detail: "Not set up. It is optional." },
   )
+  if (f.cnw) add(cnwCheck(f.cnw))
   for (const p of h.push ?? [])
     add({
       id: `push-${p.channel}`,
@@ -366,6 +391,8 @@ export function registerDoctorRoutes(
     env: NodeJS.ProcessEnv
     /** D-057: how the vulnerability snapshot stands. */
     vulnSnapshot?: () => SnapshotState
+    /** O41: how the connection to Neighbourhood Watch stands. */
+    cnwStatus?: () => NonNullable<DoctorFacts["cnw"]>
   },
 ): void {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -385,6 +412,7 @@ export function registerDoctorRoutes(
       health: ctx.health(),
       claude: claude.value,
       ...(ctx.vulnSnapshot ? { vulnSnapshot: ctx.vulnSnapshot() } : {}),
+      ...(ctx.cnwStatus ? { cnw: ctx.cnwStatus() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

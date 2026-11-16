@@ -869,7 +869,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerPromptRoutes(app, ctx)
   registerMarketplaceRoutes(app, ctx)
   registerEvalRoutes(app, ctx)
-  registerDoctorRoutes(app, ctx)
+  // O41: the Doctor's Neighbourhood Watch line, without its address.
+  const cnw = ctx.cnw
+  registerDoctorRoutes(app, {
+    ...ctx,
+    ...(cnw ? { cnwStatus: () => { const s = cnw.status(); return { paired: s.paired, on: s.on, state: s.state } } } : {}),
+  })
   registerWorktreeRoutes(app, ctx)
   if (ctx.board)
     registerBoardRoutes(app, { board: ctx.board.store, audit: ctx.audit, start: ctx.board.start })
