@@ -10,6 +10,8 @@ import { afterAll, describe, expect, it } from "vitest"
 import { bridgeFor, bridgeName } from "../src/mcp-builder/bridge.js"
 import { commandFor, McpRunner } from "../src/mcp-builder/runner.js"
 import { BuiltServers } from "../src/mcp-builder/store.js"
+import type { ToolCallResult } from "./fake-sdk.js"
+import { buildStack } from "./stack.js"
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-mcp-builder-"))
 const runners: McpRunner[] = []
@@ -91,6 +93,38 @@ server.connect(new StdioServerTransport())
     })
     expect(commandFor(s, "C:/f", undefined, "node")).toMatchObject({ command: "node", limited: false })
   }, 60_000)
+
+  it("gives a running session a server with /mcp, keeps the Companion, and sends its calls to a person", async () => {
+    const s = await buildStack({ hardTimeoutMs: 20_000, phoneExpiryMs: 10_000 })
+    try {
+      s.deps.builtBridge = (name) => ({ type: "sdk", name: `built-${name}`, instance: {} })
+      let call: ToolCallResult | undefined
+      let release: () => void = () => undefined
+      const gate = new Promise<void>((r) => (release = r))
+      s.sdk.turn = async (api) => {
+        await gate
+        const t = api.callTool("mcp__built-greeter__hello", { name: "Ana" })
+        await s.waitForPending()
+        // A server you built is not one the rules know, so its call waits for you like any such server's.
+        expect(s.broker.list()[0]?.request.toolName).toBe("mcp__built-greeter__hello")
+        s.broker.resolve(s.pendingId(), { kind: "decision", decision: "deny" }, "desktop")
+        call = await t
+      }
+      const session = await s.manager.start({ cwd: s.repo })
+      const done = new Promise<void>((res) => session.on("message", (m) => m.type === "result" && res()))
+      session.prompt("go")
+      await session.useBuilt("greeter")
+      const q = s.sdk.queries.at(-1) as unknown as { mcpSets: Record<string, unknown>[] }
+      expect(Object.keys(q.mcpSets.at(-1)!).sort()).toEqual(["built-greeter", "companion"])
+      expect(session.builtServers()).toEqual(["greeter"])
+      release()
+      await done
+      expect(call).toMatchObject({ executed: false })
+      await session.close()
+    } finally {
+      await s.stop()
+    }
+  }, 90_000)
 
   it("reads its list tolerantly, keeps what it does not know, and checks names and limits", async () => {
     const data = path.join(dir, "d4")

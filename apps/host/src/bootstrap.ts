@@ -50,6 +50,9 @@ import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
 import { chatFolderOf } from "./triage.js"
 import { CnwService } from "./cnw/service.js"
+import { bridgeFor } from "./mcp-builder/bridge.js"
+import { McpRunner } from "./mcp-builder/runner.js"
+import { BuiltServers } from "./mcp-builder/store.js"
 import { cleanUp } from "./worktree-cleanup.js"
 import { findClaudeBinary, SignInFlow } from "./signin.js"
 import { binaryRunner, Marketplace } from "./marketplace.js"
@@ -707,6 +710,11 @@ export function createHost(opts: HostOptions = {}): Host {
     log,
   })
   const heldOut = new HeldOutChecks({ dataDir: gatehouseDataDir(env), sealer: () => sealer() })
+  // O39: the MCP servers you build, each Node in its own folder inside its caps, reached by sessions only through an
+  // in-process bridge whose calls go through canUseTool like any server's.
+  const builtServers = new BuiltServers(gatehouseDataDir(env))
+  const mcpRunner = new McpRunner({ store: builtServers, limitsExe: () => limitsExe, env, log })
+  deps.builtBridge = (name) => bridgeFor(mcpRunner, name)
   // D-009: a claim's check runs as Codehouse's own action, for the session it was made in.
   deps.codehouseAction = (r) =>
     runCodehouseAction(r, {
@@ -1332,6 +1340,22 @@ export function createHost(opts: HostOptions = {}): Host {
       pwsh,
       // O41: Settings, Connectors, Neighbourhood Watch (GET /api/cnw, pairing, on and off).
       cnw,
+      // O39: the MCP page. The builder session works in the server's folder, with the other running servers given to it.
+      mcp: {
+        store: builtServers,
+        runner: mcpRunner,
+        audit,
+        startBuilder: async ({ folder, others }) => {
+          const s = await manager.start({ cwd: folder, mode: "default" })
+          for (const o of others) await s.useBuilt(o).catch((e: Error) => log(`mcp builder: ${o}: ${e.message}`))
+          return s.id
+        },
+        useInSession: async (id, name) => {
+          const s = manager.get(id)
+          if (!s) throw new Error("That session is not open.")
+          await s.useBuilt(name)
+        },
+      },
       audit,
       auditDir: dir,
       loadOptions,
@@ -1700,12 +1724,16 @@ export function createHost(opts: HostOptions = {}): Host {
               latencyMs: 0,
             }),
         }).then((n) => (n ? log(`brought back ${n} open session(s)`) : undefined))
+      // O39: the servers you built that start with Codehouse; one that fails says why in MCP, and the rest go on.
+      void mcpRunner.startAutostart().catch((e: Error) => log(`mcp builder: ${e.message}`))
     },
     async stop() {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
       cnw.stop()
+      // O39: the servers you built stop with Codehouse.
+      await mcpRunner.stopAll()
       for (const t of cleanupTimers) clearTimeout(t)
       routineTriggers?.stop()
       ntfy.stop()

@@ -67,6 +67,20 @@ server.connect(new StdioServerTransport()).catch((e) => {
 })
 `
 
+/** What a session building the server is told, as the folder's CLAUDE.md, which Claude Code reads by itself. */
+export const BUILDER_NOTES = `# The MCP server NAME
+
+This folder is an MCP server built in Codehouse. Codehouse runs it, and sessions use it by typing /mcp NAME.
+
+- Codehouse runs \`server.cjs\` with Node, over stdio. Keep it CommonJS (\`require\`).
+- \`@modelcontextprotocol/sdk\` and \`zod\` come with Codehouse; do not install them. Add other packages with npm in
+  this folder only if the server needs them.
+- stdout carries the MCP messages: write logs to stderr (\`console.error\`).
+- After a change, restart it in Codehouse, MCP, and try it from a session with /mcp NAME.
+- It runs with the processor and memory limits set in Codehouse, MCP, and never sees your Claude credentials.
+- Other servers that are running were given to this session, so you can call them while you build.
+`
+
 export class BuiltServers {
   readonly #file: string
   readonly #root: string
@@ -121,6 +135,8 @@ export class BuiltServers {
     fs.mkdirSync(dir, { recursive: true })
     const entry = path.join(dir, "server.cjs")
     if (!fs.existsSync(entry)) await writeFileAtomic(entry, STARTER.replace("NAME", name))
+    const notes = path.join(dir, "CLAUDE.md")
+    if (!fs.existsSync(notes)) await writeFileAtomic(notes, BUILDER_NOTES.replaceAll("NAME", name))
     await this.#write(name, () => ({ name, autostart: false, ...DEFAULT_LIMITS, entry: "server.cjs", createdAt: now.toISOString() }))
     return this.get(name)!
   }

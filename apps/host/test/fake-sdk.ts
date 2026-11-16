@@ -55,6 +55,8 @@ export interface FakeQueryHandle {
   closed: boolean
   interrupts: number
   modes: string[]
+  /** O39: each set of servers given with setMcpServers. */
+  mcpSets: Record<string, unknown>[]
   models: (string | undefined)[]
   flags: Record<string, unknown>[]
   prompts: string[]
@@ -110,6 +112,7 @@ export class FakeSdk {
       closed: false,
       interrupts: 0,
       modes: [],
+      mcpSets: [],
       models: [],
       flags: [],
       prompts: [],
@@ -355,6 +358,10 @@ export class FakeSdk {
       },
       async setPermissionMode(mode: string) {
         handle.modes.push(mode)
+      },
+      async setMcpServers(servers: Record<string, unknown>) {
+        handle.mcpSets.push(servers)
+        return { added: Object.keys(servers), removed: [], errors: {} }
       },
       async setModel(model?: string) {
         handle.models.push(model)

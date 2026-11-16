@@ -516,6 +516,8 @@ export interface SessionDeps {
     /** Ask about code: the code session this chat is about. */
     about?: SessionLink
   }) => Record<string, unknown>
+  /** O39: a fresh in-process bridge to a server you built, by its name. Absent where there are none (tests). */
+  builtBridge?: (name: string) => unknown
   /** Ask about code: how the linked session stands and the latest of what was said in it, redacted. */
   aboutSaid?: (about: SessionLink) => Promise<string>
   managedDetected: () => Promise<boolean | undefined>
@@ -867,6 +869,10 @@ export class Session extends EventEmitter<SessionEvents> {
     }
   }
   #q: Query | undefined
+  /** The Companion as this session was given it, so setMcpServers can give it again. */
+  #companionServers: Record<string, unknown> = {}
+  /** O39: the servers you built that this session uses, by their bridge name. */
+  readonly #built = new Map<string, unknown>()
   #state: SessionState = "starting"
   /** A chat's name until its title is kept: its first message. */
   #label: string | undefined
@@ -1338,13 +1344,17 @@ export class Session extends EventEmitter<SessionEvents> {
         SubagentStart: [{ hooks: [eventHook] }],
         SubagentStop: [{ hooks: [eventHook] }],
       },
-      mcpServers: d.companion({
-        sessionId: this.id,
-        cwd: this.cwd,
-        ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
-        ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
-        ...(this.#opts.kind === "chat" && this.#opts.about ? { about: this.#opts.about } : {}),
-      }) as Options["mcpServers"],
+      mcpServers: {
+        ...(this.#companionServers = d.companion({
+          sessionId: this.id,
+          cwd: this.cwd,
+          ...(this.#opts.kind === "chat" ? { kind: "chat" as const } : {}),
+          ...(this.#opts.chatProject ? { chatProject: this.#opts.chatProject } : {}),
+          ...(this.#opts.kind === "chat" && this.#opts.about ? { about: this.#opts.about } : {}),
+        }) as Record<string, unknown>),
+        // O39: built servers this session was given, again after a restart (each a fresh instance).
+        ...this.#builtNow(),
+      } as Options["mcpServers"],
       stderr: onStderr,
       // Inside a job object with the session's limits, when Codehouse can make one. Its stderr comes back to onStderr.
       ...(d.limiter
@@ -1977,6 +1987,38 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /** O21: the session's MCP servers as Claude Code reports them (used only for names, states and kinds). */
+  /** O39: a fresh bridge for each built server this session uses (an in-process instance connects once). */
+  #builtNow(): Record<string, unknown> {
+    const make = this.#deps.builtBridge
+    if (!make) return {}
+    return Object.fromEntries([...this.#built.keys()].map((n) => [n, make(n.replace(/^built-/, ""))]))
+  }
+
+  /** O39: the built servers this session uses, by the names you know them by. */
+  builtServers(): string[] {
+    return [...this.#built.keys()].map((n) => n.replace(/^built-/, ""))
+  }
+
+  /**
+   * O39: gives this session a server you built (/mcp <name>). The running session takes it at once (setMcpServers,
+   * with the Companion given again, since the call replaces every server the SDK added); a restart gives it again.
+   * Its calls go through canUseTool like any other server's.
+   */
+  async useBuilt(name: string): Promise<void> {
+    const make = this.#deps.builtBridge
+    if (!make) throw new Error("Servers you build are not available here.")
+    const key = `built-${name}`
+    this.#built.set(key, true)
+    const q = this.#q as unknown as { setMcpServers?: (s: Record<string, unknown>) => Promise<{ errors?: Record<string, string> }> } | undefined
+    if (!q?.setMcpServers) return
+    const r = await q.setMcpServers({ ...this.#companionServers, ...this.#builtNow() })
+    const err = r?.errors?.[key]
+    if (err) {
+      this.#built.delete(key)
+      throw new Error(`The session could not load ${name}: ${err}`)
+    }
+  }
+
   async mcpStatus(): Promise<unknown> {
     const q = this.#q as unknown as { mcpServerStatus?: () => Promise<unknown> } | undefined
     return q?.mcpServerStatus ? await q.mcpServerStatus() : []
