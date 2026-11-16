@@ -23,7 +23,10 @@ interface Pattern {
 
 const PATTERNS: Pattern[] = [
   { kind: "instruction", re: /\b(ignore|disregard|forget|override)\b[^.\n]{0,40}\b(all |the |any |your )?(previous|prior|above|earlier|system|original)\b[^.\n]{0,30}\b(instructions?|prompts?|rules?|directions?|guidelines?)\b/gi },
-  { kind: "instruction", re: /\b(you are now|from now on,? you|new instructions?:|system prompt:|developer mode|jailbreak)\b/gi },
+  // Owner, 16 Nov (O43): "Developer mode" and "you are now" are ordinary words in docs (Windows' Developer Mode setting,
+  // "you are now signed in"), so they count only when aimed at the agent.
+  { kind: "instruction", re: /\b(you are now ((a|an) )?(no longer|free|unrestricted|unfiltered|jailbroken|DAN|in \w+ mode)|from now on,? you|new instructions?:|system prompt:|jailbreak)\b/gi },
+  { kind: "instruction", re: /\b(you are (now )?(in|running in)|(act|respond|behave|answer|reply) (as|in|with)\b[^.\n]{0,30}?)\s*developer mode\b/gi },
   { kind: "instruction", re: /\b(do not|don't|never) (tell|inform|mention|show)( this to)? the user\b/gi },
   { kind: "instruction", re: /\b(assistant|ai agent|claude|language model|llm),? (must|should|please) (now )?(run|execute|send|upload|delete|push|curl|fetch)\b/gi },
   { kind: "instruction", re: /\b(before|after) (you )?(answer|respond|reply)(ing)?,? (run|execute|send|fetch|curl)\b/gi },
