@@ -59,6 +59,7 @@ vi.mock("../src/core", () => ({
   }),
   kill: vi.fn(async () => void state.kills++),
   enableNotifications: vi.fn(async () => undefined),
+  renewNotifications: vi.fn(async () => undefined),
   register: vi.fn(async () => ({
     pairingId: "p",
     fingerprint: "481516",
@@ -176,6 +177,13 @@ describe("getting started", () => {
     expect(screen.queryByText("atlas")).toBeNull()
     await userEvent.click(screen.getByRole("button", { name: "Unlock with Face ID" }))
     expect(await screen.findByText("atlas")).toBeInTheDocument()
+  })
+
+  it("sends its notification registration again on each unlock, so one iOS replaced still hears (16 Nov)", async () => {
+    const { renewNotifications } = await import("../src/core")
+    vi.mocked(renewNotifications).mockClear()
+    await unlocked()
+    await waitFor(() => expect(renewNotifications).toHaveBeenCalledWith(expect.objectContaining({ token: "t" })))
   })
 })
 
