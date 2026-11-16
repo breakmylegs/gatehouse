@@ -97,6 +97,18 @@ describe("the wing beside the notch", () => {
     expect(told.at(-1)).toBe("notch:hide")
   })
 
+  it("takes the shape of where the window puts it: against the notch, or a pill under another screen's menu bar", () => {
+    const low = view("r-low", "permission", 30, "atlas")
+    useStore.setState({ pending: { [low.request.id]: low } })
+    const { container } = render(<NotchMac />)
+    const box = () => container.querySelector(".notch")!
+    expect(box().hasAttribute("data-free")).toBe(false)
+    act(() => toPage("notch-place:free"))
+    expect(box().hasAttribute("data-free")).toBe(true)
+    act(() => toPage("notch-place:notch"))
+    expect(box().hasAttribute("data-free")).toBe(false)
+  })
+
   it("the main window opens a request it is told of, on Approvals", () => {
     const severe = view("r-severe", "permission", 95, "billing")
     useStore.setState({ pending: { [severe.request.id]: severe }, route: "workspace" })
