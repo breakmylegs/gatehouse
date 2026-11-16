@@ -1330,6 +1330,8 @@ export function createHost(opts: HostOptions = {}): Host {
       engine,
       store,
       pwsh,
+      // O41: Settings, Connectors, Neighbourhood Watch (GET /api/cnw, pairing, on and off).
+      cnw,
       audit,
       auditDir: dir,
       loadOptions,

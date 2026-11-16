@@ -2,6 +2,9 @@
 // recorded is refused. Its decisions are a person's (human-desktop), recorded on the desktop channel, which older
 // copies of Codehouse can read after an update is undone (no new audit channel).
 import { EventEmitter } from "node:events"
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { HostServer, type HostApp } from "../src/server.js"
 import type { ToolCallResult } from "./fake-sdk.js"
@@ -70,6 +73,15 @@ async function command(socket: FakeSocket, data: Record<string, unknown>): Promi
   }
   throw new Error("no reply")
 }
+
+describe("Settings can reach Neighbourhood Watch (O41)", () => {
+  it("is given the service in the admin routes, so GET /api/cnw and pairing exist", () => {
+    // 2.0.394 shipped without it: the service ran, but Settings could not pair, as no test builds the whole Host.
+    const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/bootstrap.ts"), "utf8")
+    const admin = src.slice(src.indexOf("    admin: {"))
+    expect(admin.slice(0, admin.indexOf("\n    },"))).toMatch(/^\s+cnw,$/m)
+  })
+})
 
 describe("commands from Neighbourhood Watch (O41)", () => {
   it("records who sent each command, and records its approval as a person's on the desktop channel", async () => {
