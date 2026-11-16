@@ -61,9 +61,14 @@ Docker, and only through a restricted socket proxy) to fetch that release, check
 signed commit, rebuild and restart CNW. Your data volume is kept. Anything unsigned, or a different commit, is refused
 and CNW stays as it was.
 
+To publish one (on the computer that holds the release key): raise `version` in `apps/cnw/package.json`, push to
+`main`, then run `npm run release:cnw` (`-- --dry` says what it would upload). It signs `cnw-update.json` for the pushed
+commit and uploads it with `cnw-update.sig` to the `cnw-latest` release, which is always a pre-release and never the
+latest release, because Codehouse's own update reads the latest one.
+
 ## Troubleshooting
 
-- **The computer shows "not connected".** In Codehouse, Settings, Neighbourhood Watch shows the state: Connecting
+- **The computer shows "not connected".** In Codehouse, the Doctor and Settings, Neighbourhood Watch show the state: Connecting
   (CNW is not reachable from that computer: check the name and that port 443 is open on the server), Refused (pair it
   again).
 - **Forgot the password.** Stop CNW, delete `users.json` in the `cnw-data` volume, start it again and use the new
