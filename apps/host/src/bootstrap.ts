@@ -881,6 +881,18 @@ export function createHost(opts: HostOptions = {}): Host {
       interrupt: async (id) => {
         await manager.get(id)?.interrupt()
       },
+      // E-095: every open session in the project, paused as a limit pauses it, with the reason phone, so nothing but you on
+      // the desktop starts it again. Sessions in other projects keep running.
+      pauseProject: async (project) => {
+        let n = 0
+        for (const s of manager.liveSessions()) {
+          const i = s.info()
+          if (i.project !== project || i.state === "ended" || i.evaluation) continue
+          await s.pause(0, undefined, "phone")
+          n++
+        }
+        return n
+      },
       // G32 (B35's safe variant): only a routine you allowed for the phone, started the way the routine starts.
       canStart: (id) => routines.list().some((r) => r.id === id && r.phone === true),
       start: async (id) => {

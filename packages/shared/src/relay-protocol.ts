@@ -124,7 +124,10 @@ export const SignedDecision = z.object({
   envelope: z.object({
     v: z.literal(1),
     /** G32 (owner 30 Oct): prompt and interrupt reach an open session; signed like a decision, never tied to one. */
-    type: z.enum(["decision", "answer", "kill", "prompt", "interrupt", "start", "heartbeat", "anchor"]),
+    // E-095: pause_project pauses every session in one project. A stopping power only: there is no envelope to resume.
+    type: z.enum(["decision", "answer", "kill", "prompt", "interrupt", "start", "heartbeat", "anchor", "pause_project"]),
+    /** E-095: the project pause_project names, by its name as the sessions list shows it. */
+    project: z.string().min(1).max(200).optional(),
     /** D-029b: the audit record an anchor names, and its hash. */
     anchor: z.object({ seq: z.number().int().min(1), hash: z.string().regex(/^[0-9a-f]{64}$/) }).optional(),
     requestId: z.string().optional(),

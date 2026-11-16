@@ -394,6 +394,22 @@ export async function sendToSession(
 }
 
 /**
+ * E-095: pauses every session in one project on the computer, signed with Face ID. A stopping power only: they start
+ * again from the computer, never from here.
+ */
+export async function pauseProject(session: Session, device: DeviceInfo, project: string): Promise<void> {
+  const envelope = newEnvelope({
+    type: "pause_project",
+    deviceId: device.phoneId,
+    now: Date.now(),
+    ttlMs: ttl.kill,
+    project,
+  })
+  const sealed = await signAndSeal(envelope, signWith(device), device.hostPublicKey, COMMAND_AAD)
+  await call("POST", "/api/phone/envelopes", { sealed }, session.token)
+}
+
+/**
  * G32 (B35's safe variant): starts one of the routines you allowed for the phone on the computer, by its id only,
  * signed with Face ID. The folder and the instructions stay on the computer.
  */

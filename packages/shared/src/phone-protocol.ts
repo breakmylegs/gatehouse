@@ -135,10 +135,13 @@ export function newEnvelope(o: {
   templateId?: string
   /** D-029b: the audit record an anchor names. */
   anchor?: { seq: number; hash: string }
+  /** E-095: the project a pause names. */
+  project?: string
 }): Envelope {
   return {
     v: 1,
     type: o.type,
+    ...(o.project !== undefined ? { project: o.project } : {}),
     ...(o.requestId !== undefined ? { requestId: o.requestId } : {}),
     ...(o.sessionId !== undefined ? { sessionId: o.sessionId } : {}),
     ...(o.templateId !== undefined ? { templateId: o.templateId } : {}),

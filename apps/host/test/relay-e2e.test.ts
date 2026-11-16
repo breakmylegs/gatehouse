@@ -198,7 +198,7 @@ async function onlyPending() {
 }
 const rejects = () => stack.records().filter((r) => r.event === "phone_decision_rejected")
 // G32: what the phone's signed messages and Interrupts reached.
-const sent: Array<{ id: string; text?: string; interrupt?: boolean; start?: boolean }> = []
+const sent: Array<{ id: string; text?: string; interrupt?: boolean; start?: boolean; pause?: boolean }> = []
 
 beforeAll(async () => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "gh-e2e-"))
@@ -233,6 +233,8 @@ beforeAll(async () => {
       interrupt: async (id) => void sent.push({ id, interrupt: true }),
       canStart: (id) => id === "allowed-routine",
       start: async (id) => void sent.push({ id, start: true }),
+      // E-095: the project a signed pause reached.
+      pauseProject: async (project) => (sent.push({ id: project, pause: true }), 2),
     },
   })
   phone = await FakePhone.create()
@@ -534,6 +536,37 @@ describe("a message and Interrupt from the phone (G32)", () => {
   })
 })
 
+describe("pausing a project from the phone (E-095)", () => {
+  const pause = (over: Partial<Parameters<typeof newEnvelope>[0]> = {}) =>
+    newEnvelope({ type: "pause_project", deviceId: phone.phoneId, now: Date.now(), ttlMs: 60_000, project: "billing", ...over })
+
+  it("pauses the project once signed, recorded first, even with the kill switch on", async () => {
+    sent.length = 0
+    await phone.post(undefined, pause(), COMMAND_AAD)
+    await until(() => sent.length === 1)
+    expect(sent[0]).toEqual({ id: "billing", pause: true })
+    const rec = stack.records().filter((r) => r.event === "project_paused_from_phone").at(-1)
+    expect(rec).toMatchObject({ channel: "phone", project: "billing", verdict: { decidedBy: "human-phone", ruleId: "phone-pause-project" } })
+    // A stopping power works when everything else from the phone is refused.
+    await stack.kill.engage("desktop", "test")
+    await phone.post(undefined, pause({ project: "docs" }), COMMAND_AAD)
+    await until(() => sent.length === 2)
+    await stack.kill.rearm("desktop")
+  })
+
+  it("refuses a pause that names a session too, and any envelope that tries to resume", async () => {
+    sent.length = 0
+    let before = rejects().length
+    await phone.post(undefined, pause({ sessionId: "open-1" }), COMMAND_AAD)
+    await until(() => rejects().length > before)
+    expect(rejects().at(-1)?.verdict.reason).toMatch(/names only the project/)
+    before = rejects().length
+    await phone.post(undefined, { ...pause(), type: "resume_project" as never }, COMMAND_AAD)
+    await until(() => rejects().length > before)
+    expect(rejects().at(-1)?.verdict.reason).toMatch(/expected shape/)
+    expect(sent).toEqual([])
+  })
+})
 describe("starting a routine from the phone (G32, B35's safe variant)", () => {
   const start = (templateId: string) =>
     newEnvelope({
@@ -738,3 +771,4 @@ describe("the Devices endpoints the desktop page uses", () => {
     await app.close()
   })
 })
+

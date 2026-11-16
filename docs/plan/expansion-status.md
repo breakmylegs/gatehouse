@@ -59,8 +59,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-051 | Merge conflict pre-check | E1 | todo | | |  |
 | E-052 | Structured task results | E1 | todo | | |  |
 | E-089 | Battery-aware scheduling | E1 | todo | | |  |
-| E-094 | Escalation ladder | E1 | todo | | |  |
-| E-095 | Phone pause per project | E1 | todo | | |  |
+| E-094 | Escalation ladder | E1 | done | feat/escalation-ladder | yes | broker, settings-ladder tests |
+| E-095 | Phone pause per project | E1 | done | feat/escalation-ladder | yes | relay-e2e, limit-pause tests; T130 |
 | E-001 | Visual regression baselines | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |
 | E-007 | Console and network error watcher | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |
 | E-006 | Responsive and theme matrix | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |

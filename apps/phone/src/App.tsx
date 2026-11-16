@@ -11,6 +11,7 @@ import {
   loadPending,
   loadSessions,
   register,
+  pauseProject,
   renewNotifications,
   sendToSession,
   signAnchor,
@@ -894,6 +895,12 @@ function SessionsScreen({
             "Sent. The session stops once your computer checks the signature.",
           )
         }
+        onPauseProject={() =>
+          void act(
+            () => pauseProject(session, device, chosen.project),
+            `Sent. Every session in ${chosen.project} pauses once your computer checks the signature. Start them again on the computer.`,
+          )
+        }
         onRequests={() => go(null)}
       />
     ) : (
@@ -1019,6 +1026,7 @@ function SessionView({
   old,
   onSend,
   onInterrupt,
+  onPauseProject,
   onRequests,
 }: {
   s: PhoneSession
@@ -1028,6 +1036,8 @@ function SessionView({
   old: React.ReactNode
   onSend: (text: string) => Promise<boolean>
   onInterrupt: () => void
+  /** E-095: pauses every session in this one's project. */
+  onPauseProject: () => void
   onRequests: () => void
 }) {
   const [message, setMessage] = useState("")
@@ -1100,6 +1110,10 @@ function SessionView({
               Interrupt…
             </button>
           ) : null}
+          {/* E-095: a stopping power; the sessions start again on the computer. */}
+          <button type="button" className="btn" disabled={busy} onClick={onPauseProject}>
+            Pause all in {s.project}…
+          </button>
         </div>
         {said ? (
           <p role="status" className="m-0 text-[15px]">

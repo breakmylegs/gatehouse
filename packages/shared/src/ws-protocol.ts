@@ -560,7 +560,7 @@ export const SessionInfo = z.object({
        * B20: why. Absent: the plan's 5-hour limit. "spend": today's spending reached the cap in Settings. D-018 "risk":
        * the session's risk budget is spent; it waits for you, and no limit starts it again by itself.
        */
-      reason: z.enum(["spend", "risk", "heartbeat"]).optional(),
+      reason: z.enum(["spend", "risk", "heartbeat", "phone"]).optional(),
     })
     .optional(),
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */

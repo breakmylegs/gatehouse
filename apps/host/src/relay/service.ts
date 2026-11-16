@@ -83,6 +83,8 @@ export interface PhoneServiceDeps {
     /** Whether a routine may be started from the phone, and starting it (resolves when its session has started). */
     canStart?: (templateId: string) => boolean
     start?: (templateId: string) => Promise<void>
+    /** E-095: pauses every open session in the project; resolves to how many were paused. */
+    pauseProject?: (project: string) => Promise<number>
   }
 }
 
@@ -592,6 +594,10 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
       await this.#start(a.templateId, phone.name, phone.id)
       return
     }
+    if (a.type === "pause_project") {
+      await this.#pauseProject(a.project, phone.name, phone.id)
+      return
+    }
     if (a.type === "anchor") {
       const r = signed.assertion as { response?: { authenticatorData?: string; clientDataJSON?: string; signature?: string } }
       const got = r.response
@@ -679,6 +685,35 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
         return await this.#reject((e as Error).message, { phoneId })
       }
     } else await s.interrupt(a.sessionId)
+  }
+
+  /**
+   * E-095: pauses every open session in one project, recorded first; the others keep running. A stopping power, so it
+   * works with the kill switch on too. Resuming is only on the desktop (Start now): no phone envelope can do it.
+   */
+  async #pauseProject(project: string, phoneName: string, phoneId: string): Promise<void> {
+    const s = this.#d.sessions
+    if (!s?.pauseProject) return await this.#reject("Projects cannot be paused from the phone here", { phoneId })
+    const recorded = await this.#d.audit.record({
+      session: "phone",
+      event: "project_paused_from_phone",
+      channel: "phone",
+      tool: "session",
+      project,
+      input: { phone: phoneId, project },
+      verdict: {
+        outcome: "allow",
+        ruleId: "phone-pause-project",
+        reason: `You paused every session in ${project} from ${phoneName}, signed with its passkey. Start them again on the computer.`,
+        risk: 0,
+        decidedBy: "human-phone",
+        policyHash: "n/a",
+      },
+      latencyMs: 0,
+    })
+    // A stopping power: it pauses even when the record could not be written, and says so, as refusing to stop is not safer.
+    if (!recorded) await this.#reject("The pause could not be recorded in the audit log; the sessions are paused all the same", { phoneId })
+    await s.pauseProject(project)
   }
 
   /**

@@ -277,6 +277,23 @@ describe("extra usage and the bypass (owner, 5 and 9 Nov)", () => {
     expect(a.calls).toEqual(["resume"])
   })
 
+  it("never starts a session again that you paused from the phone, bypass or reset (E-095)", async () => {
+    const a = target("a")
+    a.paused = { percent: 0, wasRunning: true, reason: "phone" }
+    a.bypass = { since: 1, maxUsd: 5, spentUsd: 0 }
+    const b = target("b")
+    b.paused = { percent: 0, wasRunning: true, reason: "phone" }
+    const pauser = new LimitPauser({
+      sessions: () => [a, b],
+      planUsage: async () => usage(10),
+      now: () => Date.parse("2026-11-09T12:00:00"),
+      log: () => undefined,
+    })
+    await pauser.check()
+    expect(a.calls).toEqual([])
+    expect(b.calls).toEqual([])
+  })
+
   it("counts extra usage spent today towards the cap, never the API price of work inside the plan (owner, 6 Nov)", async () => {
     const a = target("a")
     let used = 120

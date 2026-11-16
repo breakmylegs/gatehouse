@@ -42,6 +42,8 @@ export type PhoneAction =
   | { type: "heartbeat" }
   /** D-029b: an audit anchor, naming one record and its hash. */
   | { type: "anchor"; seq: number; hash: string }
+  /** E-095: pauses every session in one project. Resuming is a desktop action only. */
+  | { type: "pause_project"; project: string }
 
 export type Accepted = {
   ok: true
@@ -115,6 +117,13 @@ async function verify(i: VerifyInput): Promise<Accepted | Rejected> {
     if (life > MAX_KILL_LIFE_MS) return no("An anchor lives too long")
     if (!e.anchor) return no("The envelope names no record")
     action = { type: "anchor", seq: e.anchor.seq, hash: e.anchor.hash }
+  } else if (e.type === "pause_project") {
+    // E-095: signed like the kill switch, a fresh nonce and a short life; it names only the project.
+    if (e.requestId !== undefined || e.sessionId !== undefined || e.templateId !== undefined || e.text !== undefined)
+      return no("A project pause names only the project")
+    if (life > MAX_KILL_LIFE_MS) return no("A project pause lives too long")
+    if (!e.project) return no("The envelope names no project")
+    action = { type: "pause_project", project: e.project }
   } else if (e.type === "start") {
     // G32: like a message, signed over the whole envelope with a fresh nonce and a short life; it names only a routine.
     if (e.requestId !== undefined || e.sessionId !== undefined || e.text !== undefined)
