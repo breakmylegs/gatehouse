@@ -2,10 +2,12 @@
 // small panel next to the notch (packaging/mac/Notch.swift), so another app can keep the notch itself. It shows
 // nothing while nothing waits; with requests waiting, a black wing with how many and the highest risk; a click opens
 // the list, with the same Deny and Allow once as a row of Approvals (QuickDecision): a Severe request, a question or a
-// plan opens the main window instead. A request stays until it is decided, here, in the window or on the phone. Only
-// what a row shows is shown: the project, what it is and its risk, never the command.
+// plan opens the main window instead. The little fighter waits beside each one (owner, 16 Nov). A request stays until
+// it is decided, here, in the window or on the phone. Only what a row shows is shown: the project, what it is and its
+// risk, never the command.
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Fighter } from "../components/Fighter"
 import { QuickDecision } from "../components/QuickDecision"
 import { RiskBadge } from "../components/RiskBadge"
 import { riskBand } from "../lib/format"
@@ -71,6 +73,7 @@ export function NotchMac() {
         <ul className="notch-list" aria-label="Waiting on you">
           {pending.map((p) => (
             <li key={p.request.id} className="notch-item">
+              <Fighter mode="waiting" />
               <span className="grid min-w-0 gap-0.5">
                 <span className="truncate text-[12.5px] text-mut">{p.request.project}</span>
                 <span className="truncate text-[14px] font-semibold">{what(p)}</span>

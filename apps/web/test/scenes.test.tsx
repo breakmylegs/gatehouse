@@ -15,10 +15,12 @@ describe("the Codehouse look", () => {
 
   it("has every picture on disk, all from the Codehouse visual identity pack", () => {
     // Only the pack's files: its icons, spot pictures, wordmarks, start-up picture and the start screen the owner made
-    // with ChatGPT. No film still, and no background scenes.
+    // with ChatGPT, and the little fighter the owner supplied (16 Nov, original pixel art, no one's likeness). No film
+    // still, and no background scenes.
     expect(readdirSync(join(web, "public", "codehouse")).sort()).toEqual([
       "brand",
       "empty",
+      "fighter.png",
       "icons.svg",
       "splash.png",
       "start-screen.png",

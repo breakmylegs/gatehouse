@@ -1893,6 +1893,20 @@ main[data-rail="hidden"] {
   border-left-color: var(--c-acc);
   color: var(--c-tx);
 }
+/* The little fighter (components/Fighter.tsx): his own 48 pixels, kept sharp, turned to face what he stands beside. */
+.fighter {
+  display: inline-block;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  transform: scaleX(-1);
+}
+.activity .fighter {
+  align-self: center;
+  margin: -6px -4px -6px -8px;
+}
 .activity[data-stuck] .activity-dot {
   border-color: var(--c-sev);
   background: var(--c-sev);
