@@ -3,6 +3,7 @@ import crypto from "node:crypto"
 import fs from "node:fs"
 import http from "node:http"
 import path from "node:path"
+import { CNW_RELEASE_KEYS } from "./release-key.js"
 
 /**
  * The CNW updater (O41). It runs as its own service, the only one that can reach Docker (through a socket proxy), and
@@ -33,6 +34,19 @@ export function verifyManifest(json: string, sigB64: string, publicKeyPem: strin
     return { version: m.version, commit: m.commit, ...(typeof m.minFrom === "string" ? { minFrom: m.minFrom } : {}) }
   } catch {
     return undefined
+  }
+}
+
+/**
+ * The version the stack runs: the one in the checkout it was built from. Not CNW_VERSION, which compose.yml sets to
+ * "latest" when unset, and which no version is newer than, so Update never updated. 0.0.0 when it cannot be read.
+ */
+export function builtVersion(repoDir: string): string {
+  try {
+    const v = (JSON.parse(fs.readFileSync(path.join(repoDir, "apps", "cnw", "package.json"), "utf8")) as { version?: unknown }).version
+    return typeof v === "string" && /^\d+\.\d+\.\d+$/.test(v) ? v : "0.0.0"
+  } catch {
+    return "0.0.0"
   }
 }
 
@@ -77,7 +91,8 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
 
 // Run as a service: one request at a time, from the private network only.
 if (process.argv[1] && path.basename(process.argv[1]).startsWith("updater")) {
-  const keyPem = fs.readFileSync(process.env.CNW_UPDATE_KEY ?? "/app/docker/cnw/update-key.pem", "utf8")
+  // The release key is built in (release-key.ts); CNW_UPDATE_KEY may name a file with another, for a fork.
+  const keyPem = process.env.CNW_UPDATE_KEY ? fs.readFileSync(process.env.CNW_UPDATE_KEY, "utf8") : CNW_RELEASE_KEYS[0]!
   let busy = false
   http
     .createServer(async (req, res) => {
@@ -85,11 +100,12 @@ if (process.argv[1] && path.basename(process.argv[1]).startsWith("updater")) {
       if (busy) return res.writeHead(409).end("An update is already running.")
       busy = true
       try {
+        const repoDir = process.env.CNW_REPO_DIR ?? "/repo"
         const msg = await updateNow({
-          repoDir: process.env.CNW_REPO_DIR ?? "/repo",
+          repoDir,
           composeDir: process.env.CNW_COMPOSE_DIR ?? "/stack",
           keyPem,
-          current: process.env.CNW_VERSION ?? "0.0.0",
+          current: builtVersion(repoDir),
           log: (l) => process.stdout.write(`[updater] ${l}\n`),
         })
         res.writeHead(200).end(msg)

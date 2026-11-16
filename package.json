@@ -33,6 +33,7 @@
     "gate": "node scripts/gate.mjs",
     "install:local": "node scripts/install-local.mjs",
     "release": "tsx scripts/release.ts ship",
+    "release:cnw": "tsx scripts/release-cnw.ts",
     "release:version": "tsx scripts/release.ts version"
   },
   "devDependencies": {
