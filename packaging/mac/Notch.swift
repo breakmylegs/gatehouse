@@ -85,7 +85,11 @@ final class NotchWing: PageWindow {
     let frame: NSRect
     let byNotch: Bool
     if s.safeAreaInsets.top > 0, let right = s.auxiliaryTopRightArea {
-      frame = NSRect(x: right.minX, y: s.frame.maxY - size.height, width: size.width, height: size.height)
+      // Right of another notch app's shape, if one covers the notch's right side (NotchPlace.swift).
+      let x = NotchPlace.wingX(
+        notchRight: right.minX, screenTop: (NSScreen.screens.first?.frame.maxY ?? s.frame.maxY) - s.frame.maxY,
+        screenMinX: s.frame.minX, screenMaxX: s.frame.maxX, wingWidth: size.width, windows: Self.topWindows())
+      frame = NSRect(x: x, y: s.frame.maxY - size.height, width: size.width, height: size.height)
       byNotch = true
     } else {
       let area = s.visibleFrame
@@ -97,6 +101,19 @@ final class NotchWing: PageWindow {
       tell(byNotch ? "notch-place:notch" : "notch-place:free")
     }
     if window.frame != frame { window.setFrame(frame, display: true) }
+  }
+
+  /// Every window on screen, as CGWindowList sees it: where it is and its level, never what is in it.
+  private static func topWindows() -> [TopWindow] {
+    let me = ProcessInfo.processInfo.processIdentifier
+    let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    return (list ?? []).compactMap { w in
+      guard let b = w[kCGWindowBounds as String] as? [String: CGFloat], let x = b["X"], let y = b["Y"], let width = b["Width"]
+      else { return nil }
+      return TopWindow(
+        x: x, y: y, width: width, layer: w[kCGWindowLayer as String] as? Int ?? 0,
+        mine: (w[kCGWindowOwnerPID as String] as? pid_t) == me)
+    }
   }
 
   @objc private func screensChanged() {
