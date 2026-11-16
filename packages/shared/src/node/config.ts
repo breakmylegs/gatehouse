@@ -381,7 +381,8 @@ function build(loose: boolean) {
       .passthrough()
       .optional(),
     memoryGovernor: z
-      .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional() })
+      // `on` (16 Nov): the governor is off unless it is set.
+      .object({ percent: z.number().int().min(50).max(99), off: z.boolean().optional(), on: z.boolean().optional() })
       .passthrough()
       .optional(),
     planLimitPause: obj({

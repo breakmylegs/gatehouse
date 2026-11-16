@@ -1,4 +1,5 @@
-// C-004, the memory governor: above the commit charge in Settings (85% unless you choose), Codehouse starts no new
+// C-004, the memory governor, off unless switched on (owner, 16 Nov): once on, above the commit charge in Settings
+// (85% unless you choose), Codehouse starts no new
 // session, chat or page look, records each refusal before giving it, and offers idle sessions to suspend.
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import {
@@ -58,10 +59,14 @@ describe("the memory governor (C-004)", () => {
     await expect(governor(() => at(84)).g.admit("chat")).resolves.toBeUndefined()
     await expect(governor(() => at(99), null).g.admit("chat")).resolves.toBeUndefined()
     await expect(governor(() => undefined).g.admit("chat")).resolves.toBeUndefined()
-    expect([memoryPoint(undefined), memoryPoint({ percent: 70 }), memoryPoint({ percent: 30 })]).toEqual([
-      85, 70, 85,
+    // Owner, 16 Nov: off unless switched on, including settings saved before the switch existed.
+    expect([memoryPoint(undefined), memoryPoint({ percent: 70 }), memoryPoint({ percent: 90, off: true })]).toEqual([
+      undefined,
+      undefined,
+      undefined,
     ])
-    expect(memoryPoint({ percent: 90, off: true })).toBeUndefined()
+    expect([memoryPoint({ percent: 70, on: true }), memoryPoint({ percent: 30, on: true })]).toEqual([70, 85])
+    expect(memoryPoint({ percent: 90, on: true, off: true })).toBeUndefined()
   })
 
   it("still refuses when the refusal cannot be recorded", async () => {

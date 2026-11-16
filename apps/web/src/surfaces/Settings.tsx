@@ -60,7 +60,7 @@ interface Config {
   effortCap?: string
   maxSessions?: number
   spendCapUsd?: number
-  memoryGovernor?: { percent: number; off?: boolean }
+  memoryGovernor?: { percent: number; off?: boolean; on?: boolean }
   testIntegrity?: { strictAll?: boolean; strictProjects?: string[] }
   riskBudget?: { points: number; off?: boolean }
   allowedLicences?: string[]
@@ -208,7 +208,7 @@ function valuesOf(d: SettingsData): Values {
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     plResume: c.planLimitPause?.noAutoResume !== true,
-    memPoint: c.memoryGovernor?.off ? "off" : String(c.memoryGovernor?.percent ?? 85),
+    memPoint: c.memoryGovernor?.on === true && !c.memoryGovernor.off ? String(c.memoryGovernor.percent) : "off",
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -362,12 +362,13 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       strictAll: v.tiAll,
       strictProjects,
     }
-  if (v.memPoint === "85" && !d.saved.memoryGovernor) delete body.memoryGovernor
+  // Off unless switched on (owner, 16 Nov); off is saved as off: true too, so an older copy stays off.
+  if (v.memPoint === "off" && !d.saved.memoryGovernor) delete body.memoryGovernor
   else
     body.memoryGovernor = {
       ...(d.saved.memoryGovernor ?? {}),
       percent: v.memPoint === "off" ? (d.saved.memoryGovernor?.percent ?? 85) : Number(v.memPoint),
-      ...(v.memPoint === "off" ? { off: true } : { off: undefined }),
+      ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
   // A name the Host accepts, or none: half-typed or odd names are not saved.
   if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
@@ -447,7 +448,7 @@ export const DEFAULT_VALUES: Values = {
   ecTurns: "200",
   plPause: "95",
   plResume: true,
-  memPoint: "85",
+  memPoint: "off",
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -1413,16 +1414,16 @@ export function Settings() {
               <Field
                 // Mac fork: a Mac's reading is the share of memory in use (memory-governor-mac.ts).
                 label={onMac("Start nothing new when this computer's memory is committed past", "Start nothing new when the share of this Mac's memory in use is past")}
-                help={onMac("The commit charge is what Windows has promised to programs, against what memory and the page file can hold; past it programs fail. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on.", "macOS's own measure of memory pressure: the share of memory that is neither free nor quick to reclaim. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on.")}
+                help={onMac("Off unless you choose a point. The commit charge is what Windows has promised to programs, against what memory and the page file can hold; past it programs fail. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on.", "Off unless you choose a point. macOS's own measure of memory pressure: the share of memory that is neither free nor quick to reclaim. Above this point Codehouse starts no new session, chat or page look, says why, and offers to suspend sessions you are not using. Sessions already open carry on.")}
               >
                 <select
                   className="field"
                   value={v.memPoint}
                   onChange={(e) => change({ memPoint: e.target.value }, "Memory")}
                 >
-                  {withCurrent(["75", "80", "85", "90", "95", "off"], v.memPoint).map((n) => (
+                  {withCurrent(["off", "75", "80", "85", "90", "95"], v.memPoint).map((n) => (
                     <option key={n} value={n}>
-                      {n === "off" ? "Never: start whatever is asked" : `${n}%${n === "85" ? " (recommended)" : ""}`}
+                      {n === "off" ? "Never: start whatever is asked (the default)" : `${n}%`}
                     </option>
                   ))}
                 </select>

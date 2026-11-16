@@ -1,6 +1,6 @@
 /**
- * C-004, the memory governor (Frontier build, before Wave 1). Above a commit charge you set in Settings (85% unless
- * you choose), Codehouse starts nothing heavy of its own: no new session or chat, no page look. Each refusal is in the
+ * C-004, the memory governor (Frontier build, before Wave 1). Off unless you switch it on (owner, 16 Nov). Once on,
+ * above a commit charge you set in Settings (85% unless you choose), Codehouse starts nothing heavy of its own: no new session or chat, no page look. Each refusal is in the
  * audit log before it is given, with the reading, and the screen offers idle sessions to suspend.
  *
  * The commit charge is what Windows has promised to programs against what RAM and the page file can hold; past its
@@ -23,10 +23,14 @@ export const DEFAULT_MEMORY_PERCENT = 85
 /** How long one reading is used for. */
 const READING_MS = 5_000
 
-/** The point from Settings: off, a percentage from 50 to 99, or the default. */
-export function memoryPoint(s: { percent?: number; off?: boolean } | undefined): number | undefined {
-  if (s?.off) return undefined
-  return s && Number.isInteger(s.percent) && s.percent! >= 50 && s.percent! <= 99
+/**
+ * The point from Settings: a percentage from 50 to 99 (or the default) once you switch it on, otherwise off. Owner,
+ * 16 Nov: "I dont want the app preventing me from starting new sessions based on hardware resources by default", so
+ * it is off unless `on` is set; `off` is still honoured, and is written with it, so an older copy stays off too.
+ */
+export function memoryPoint(s: { percent?: number; off?: boolean; on?: boolean } | undefined): number | undefined {
+  if (s?.on !== true || s.off) return undefined
+  return Number.isInteger(s.percent) && s.percent! >= 50 && s.percent! <= 99
     ? s.percent
     : DEFAULT_MEMORY_PERCENT
 }
