@@ -152,7 +152,7 @@ export const GENERIC_PUSH = {
   stop: "Session finished",
   idle: "Session waiting",
   notify: "Message from a session",
-  info: "Gatehouse",
+  info: "Codehouse",
 } as const
 
 /** What the phone is shown, after decryption. The request id is the additional data of the seal. */

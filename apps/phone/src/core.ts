@@ -433,3 +433,13 @@ export async function enableNotifications(session: Session): Promise<void> {
   const sub = await subscribePush()
   await call("PUT", "/api/phone/push-subscription", { subscription: sub }, session.token)
 }
+
+/**
+ * Sends the phone's push registration again on each unlock, without asking (16 Nov). Turning notifications off and on
+ * in iOS Settings can leave the Relay pushing to an old registration, which Apple accepts and never shows.
+ */
+export async function renewNotifications(session: Session): Promise<void> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
+  if (Notification.permission !== "granted") return
+  await enableNotifications(session)
+}

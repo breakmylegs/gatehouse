@@ -11,6 +11,7 @@ import {
   loadPending,
   loadSessions,
   register,
+  renewNotifications,
   sendToSession,
   signAnchor,
   startTemplate,
@@ -115,6 +116,10 @@ export function App() {
       bc.close()
     }
   }, [session, refresh])
+
+  useEffect(() => {
+    if (session) void renewNotifications(session).catch(() => undefined)
+  }, [session])
 
   async function doUnlock() {
     if (!device) return
