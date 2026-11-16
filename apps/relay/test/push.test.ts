@@ -20,10 +20,15 @@ const { Store } = await import("../src/db.js")
 const { WebPushSender } = await import("../src/push.js")
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "gh-relay-push-"))
-const sender = new WebPushSender(new Store(dir), "https://relay.example.test")
+const store = new Store(dir)
+const sender = new WebPushSender(store, "https://relay.example.test")
 const SUB = JSON.stringify({ endpoint: "https://web.push.apple.com/x", keys: { p256dh: "a", auth: "b" } })
 beforeEach(() => (answer.next = undefined))
-afterAll(() => fs.rmSync(dir, { recursive: true, force: true }))
+// Closed first: Windows will not remove a folder while the database in it is open.
+afterAll(() => {
+  store.close()
+  fs.rmSync(dir, { recursive: true, force: true })
+})
 
 describe("a push to the phone", () => {
   it("says the push service's answer when it refuses, gone when the phone's subscription has ended", async () => {
