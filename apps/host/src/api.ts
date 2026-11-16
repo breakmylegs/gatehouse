@@ -1832,6 +1832,8 @@ const LIVE_SETTINGS = [
   "phoneAlerts", // Mac fork: relay/service.ts reads it at each notification
   "recapByClaude",
   "extremeRiskLimit",
+  // E-094: read by the broker for each request.
+  "escalationLadder",
   "forges",
   "worktreeCleanup",
   "titleByClaude",

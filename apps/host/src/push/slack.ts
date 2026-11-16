@@ -146,7 +146,7 @@ export class SlackChannel {
     this.#hasTokens = secrets !== undefined
     if (!s?.enabled || !secrets) return
     this.#running = true
-    this.#d.broker.on("created", this.#onCreated)
+    this.#d.broker.on("push_due", this.#onCreated)
     this.#d.broker.on("resolved", this.#onResolved)
     void this.#connect(1000)
     this.#d.onChange?.()
@@ -154,7 +154,7 @@ export class SlackChannel {
 
   stop(): void {
     this.#running = false
-    this.#d.broker.off("created", this.#onCreated)
+    this.#d.broker.off("push_due", this.#onCreated)
     this.#d.broker.off("resolved", this.#onResolved)
     this.#socket?.close()
     this.#socket = undefined

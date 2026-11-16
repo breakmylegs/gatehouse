@@ -553,3 +553,46 @@ describe("events and defaults", () => {
     expect(events).toEqual(["created:true", "resolved:deny"])
   })
 })
+
+describe("the escalation ladder (E-094)", () => {
+  it("tells the phone and the push channels only after their wait, and changes no deadline", async () => {
+    const { broker, phone } = make({ ladder: () => ({ phoneMs: 2 * 60_000, pushMs: 5 * 60_000 }) })
+    const pushed: string[] = []
+    broker.on("push_due", (v) => pushed.push(v.request.id))
+    const p = broker.request(spec())
+    const id = firstId(broker)
+    const deadline = broker.list()[0]!.hardDeadline
+    expect(phone.delivered).toHaveLength(0)
+    expect(pushed).toEqual([])
+    vi.advanceTimersByTime(2 * 60_000)
+    await Promise.resolve()
+    expect(phone.delivered.map((r) => r.id)).toEqual([id])
+    expect(pushed).toEqual([])
+    vi.advanceTimersByTime(3 * 60_000)
+    expect(pushed).toEqual([id])
+    expect(broker.list()[0]!.hardDeadline).toBe(deadline)
+    broker.resolve(id, { kind: "decision", decision: "deny" }, "desktop")
+    expect((await p).outcome).toBe("deny")
+  })
+
+  it("tells nobody else of a request answered at the computer before the wait is over", async () => {
+    const { broker, phone } = make({ ladder: () => ({ phoneMs: 60_000, pushMs: 60_000 }) })
+    const pushed: string[] = []
+    broker.on("push_due", (v) => pushed.push(v.request.id))
+    const p = broker.request(spec())
+    broker.resolve(firstId(broker), { kind: "decision", decision: "allow" }, "desktop")
+    expect((await p).outcome).toBe("allow")
+    vi.advanceTimersByTime(5 * 60_000)
+    expect(phone.delivered).toHaveLength(0)
+    expect(pushed).toEqual([])
+  })
+
+  it("tells every channel at once without a ladder, as before", () => {
+    const { broker, phone } = make()
+    const pushed: string[] = []
+    broker.on("push_due", (v) => pushed.push(v.request.id))
+    void broker.request(spec())
+    expect(phone.delivered).toHaveLength(1)
+    expect(pushed).toEqual([firstId(broker)])
+  })
+})

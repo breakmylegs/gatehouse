@@ -87,6 +87,14 @@ function build(loose: boolean) {
       phone: z.boolean().optional(),
     }).optional(),
     /**
+     * E-094, the escalation ladder: minutes the phone and the push channels (ntfy, Slack) wait before they are told of
+     * a request, 0 to 60. Absent: every channel at once. The desktop is always told at once, and deadlines are unchanged.
+     */
+    escalationLadder: obj({
+      phoneAfterMinutes: z.number().int().min(0).max(60).optional(),
+      pushAfterMinutes: z.number().int().min(0).max(60).optional(),
+    }).optional(),
+    /**
      * What every session is told at its start, in your own words (owner, 31 Oct). Up to 8000 characters. Absent: nothing.
      * Read by older versions too, which keep it without using it.
      */

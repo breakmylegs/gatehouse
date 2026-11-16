@@ -253,7 +253,7 @@ export class NtfyChannel {
     const s = this.#d.settings()
     if (!s?.enabled) return
     this.#running = true
-    this.#d.broker.on("created", this.#onCreated)
+    this.#d.broker.on("push_due", this.#onCreated)
     this.#d.broker.on("resolved", this.#onResolved)
     void this.#listen(++this.#generation)
     this.#d.onChange?.()
@@ -263,7 +263,7 @@ export class NtfyChannel {
     this.#running = false
     // The loop listening now is over: one started later must not be mistaken for it (a save stops and starts at once).
     this.#generation++
-    this.#d.broker.off("created", this.#onCreated)
+    this.#d.broker.off("push_due", this.#onCreated)
     this.#d.broker.off("resolved", this.#onResolved)
     this.#abort?.abort()
     this.#abort = undefined

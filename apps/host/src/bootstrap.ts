@@ -233,6 +233,14 @@ export function createHost(opts: HostOptions = {}): Host {
     phoneExpiryMs: config.phoneExpiryMs,
     hardTimeoutMs: config.hardTimeoutMs,
     quietHours: () => config.quietHours ?? store.current?.rules.quietHours,
+    // E-094: off unless set in Settings, Phone and notifications.
+    ladder: () =>
+      config.escalationLadder
+        ? {
+            phoneMs: (config.escalationLadder.phoneAfterMinutes ?? 0) * 60_000,
+            pushMs: (config.escalationLadder.pushAfterMinutes ?? 0) * 60_000,
+          }
+        : undefined,
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
   // 15 seconds, or 35 while the policy has the judge on (its own limit is 25). Still bounded, still fail-closed.

@@ -52,6 +52,8 @@ interface Config {
   projectsFolder?: string
   digestTime?: string | null
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
+  /** E-094: minutes the phone and the push channels wait before they are told; absent, all at once. */
+  escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number }
   phoneExpiryMs: number
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
@@ -133,6 +135,9 @@ interface Values {
   plResume: boolean
   /** C-004: a percentage, or "off". */
   memPoint: string
+  /** E-094: minutes before the phone, and before ntfy and Slack, are told; "0" for at once. */
+  ladPhone: string
+  ladPush: string
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
   /** D-018: points of the risk budget, or "" for none. */
@@ -187,7 +192,8 @@ interface Values {
   appLink: boolean
 }
 
-function valuesOf(d: SettingsData): Values {
+/** Exported for tests. */
+export function valuesOf(d: SettingsData): Values {
   const c = { ...d.running, ...d.saved } as Config
   const q = d.saved.quietHours ?? d.quietHoursInPolicy
   return {
@@ -210,6 +216,8 @@ function valuesOf(d: SettingsData): Values {
     plPause: c.planLimitPause?.off ? "off" : String(c.planLimitPause?.percent ?? 95),
     plResume: c.planLimitPause?.noAutoResume !== true,
     memPoint: c.memoryGovernor?.on === true && !c.memoryGovernor.off ? String(c.memoryGovernor.percent) : "off",
+    ladPhone: String(c.escalationLadder?.phoneAfterMinutes ?? 0),
+    ladPush: String(c.escalationLadder?.pushAfterMinutes ?? 0),
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -250,7 +258,8 @@ function valuesOf(d: SettingsData): Values {
 }
 
 /** The settings file as the Host wants it, keeping anything this page does not show. */
-function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
+/** Exported for tests. */
+export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   const body: Record<string, unknown> = {
     ...d.saved,
     redactTerms: lines(v.terms),
@@ -371,6 +380,14 @@ function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       percent: v.memPoint === "off" ? (d.saved.memoryGovernor?.percent ?? 85) : Number(v.memPoint),
       ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
+  // E-094: saved only when a channel waits; all at once is no setting at all.
+  if (v.ladPhone === "0" && v.ladPush === "0") delete body.escalationLadder
+  else
+    body.escalationLadder = {
+      ...(d.saved.escalationLadder ?? {}),
+      phoneAfterMinutes: Number(v.ladPhone),
+      pushAfterMinutes: Number(v.ladPush),
+    }
   // A name the Host accepts, or none: half-typed or odd names are not saved.
   if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
   else delete body.outputStyle
@@ -450,6 +467,8 @@ export const DEFAULT_VALUES: Values = {
   plPause: "95",
   plResume: true,
   memPoint: "off",
+  ladPhone: "0",
+  ladPush: "0",
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -733,6 +752,7 @@ export function Settings() {
   const extremeChanged = differs(v, ["ecTurns", "ecUsd", "exLimit"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
+  const ladChanged = differs(v, ["ladPhone", "ladPush"])
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
   const licChanged = differs(v, ["licences"])
@@ -1470,6 +1490,34 @@ export function Settings() {
                   ring under each prompt box, shows where you are.
                 </p>
               ) : null}
+            </Group>
+
+            <Group section="phone" title="Who is told, and when" gap="gap-2" changed={ladChanged}>
+              <p className="m-0 text-sm text-mut">
+                The desktop is told of a request at once. The phone and the push channels can wait a few minutes first,
+                so you are not reached on them for something you answer at the computer. Their deadlines do not change,
+                and an answer from any of them counts at any time.
+              </p>
+              {(
+                [
+                  ["ladPhone", "Tell the phone after"],
+                  ["ladPush", "Tell ntfy and Slack after"],
+                ] as const
+              ).map(([key, label]) => (
+                <Field key={key} label={label}>
+                  <select
+                    className="field w-48"
+                    value={v[key]}
+                    onChange={(e) => change({ [key]: e.target.value } as Partial<typeof v>, "Who is told, and when")}
+                  >
+                    {withCurrent(["0", "1", "2", "5", "10", "15", "30"], v[key]).map((n) => (
+                      <option key={n} value={n}>
+                        {n === "0" ? "At once (the default)" : n === "1" ? "1 minute" : `${n} minutes`}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              ))}
             </Group>
 
             <Group section="phone" title="Daily digest" gap="gap-2" changed={digestChanged}>

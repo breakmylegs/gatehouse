@@ -97,6 +97,12 @@ export interface BrokerOptions {
   phoneExpiryMs: number
   hardTimeoutMs: number
   quietHours?: () => QuietHours | undefined
+  /**
+   * E-094, the escalation ladder: how long the phone and the push channels (ntfy, Slack) wait before they are told of a
+   * request. Off unless set: then every channel is told at once. It only delays telling; the request's deadlines are
+   * unchanged, and an answer from any channel still counts at any time.
+   */
+  ladder?: () => { phoneMs?: number; pushMs?: number } | undefined
   phone?: PhoneChannel
   /** Makes the redacted copy of the input that the phone and the audit see (invariant 12). */
   redact: <T>(value: T) => T
@@ -107,6 +113,8 @@ export interface BrokerEvents {
   created: [PendingView]
   resolved: [{ id: string; sessionId: string; request: EscalationRequest; resolution: Resolution }]
   phone: [{ id: string; status: PendingView["phone"] }]
+  /** E-094: the push channels may tell you of it now (at once, or after the ladder's wait). */
+  push_due: [PendingView]
 }
 
 interface Entry {
@@ -230,7 +238,18 @@ export class Broker extends EventEmitter<BrokerEvents> {
       entry.timers.push(setTimeout(() => this.#phoneExpired(request.id), this.#opts.phoneExpiryMs))
 
       this.emit("created", view)
-      this.#deliverToPhone(request.id)
+      // E-094: the phone and the push channels at once, or each after its wait on the ladder.
+      const ladder = this.#opts.ladder?.()
+      const after = (ms: number | undefined, f: () => void) => {
+        if (!ms || ms <= 0) return f()
+        const t = setTimeout(f, ms)
+        t.unref?.()
+        entry.timers.push(t)
+      }
+      after(ladder?.phoneMs, () => this.#deliverToPhone(request.id))
+      after(ladder?.pushMs, () => {
+        if (this.#pending.has(request.id)) this.emit("push_due", view)
+      })
     })
   }
 
