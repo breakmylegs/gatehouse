@@ -6,7 +6,6 @@ import type { SessionMeta } from "../lib/sessionMeta"
 import { dropStashed, stashed, stashLabel, takeStashed, type StashedDraft } from "../lib/stash"
 import { Icon } from "./Icon"
 import { mentionOf } from "../lib/linkSessions"
-import { sessionCode } from "../lib/codes"
 import { useStore } from "../store"
 
 type Panel = "none" | "prompts" | "stash" | "commands" | "connectors" | "plugins" | "sessions"
@@ -288,7 +287,7 @@ function SessionsPanel({ self, onPick }: { self: string; onPick: (s: { id: strin
   return (
     <>
       {others.map((s) => (
-        <MenuItem key={s.id} label={s.title ?? s.project} hint={sessionCode(s)} onClick={() => onPick(s)} />
+        <MenuItem key={s.id} label={s.title ?? s.project} hint={s.title ? s.project : undefined} onClick={() => onPick(s)} />
       ))}
     </>
   )

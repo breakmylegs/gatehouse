@@ -54,6 +54,7 @@ import { carryOnFrom } from "../lib/redo"
 import { HeldList } from "../components/HeldList"
 import { linkSessions } from "../lib/linkSessions"
 import { prLinks } from "../lib/prLinks"
+import { PrLinksMenu } from "../components/PrLinksMenu"
 import { cloneRequest, PUBLISH_REQUEST } from "../lib/repoRequests"
 import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
@@ -535,12 +536,13 @@ function SessionPane({
     ...list
       .filter((s) => s.id !== session.id)
       .map((s) => ({
-        label: `Show ${sessionCode(s)} ${s.project} here`,
+        // O38: named by its title or project, without its code.
+        label: `Show ${s.title ?? s.project} here`,
         onSelect: () => onChangeSession(s.id),
       })),
     ...(panes.length < 3 && index === panes.length - 1
       ? others.map((s) => ({
-          label: `Open ${sessionCode(s)} ${s.project} beside`,
+          label: `Open ${s.title ?? s.project} beside`,
           onSelect: () => openBeside(s.id),
         }))
       : []),
@@ -739,16 +741,8 @@ function SessionPane({
           ) : (
             <span className="mono truncate text-xs text-mut">{session.cwd}</span>
           )}
-          {/* T-078: the pull requests this session opened, from its own gh pr create. */}
-          {prs.length ? (
-            <span role="group" aria-label="Pull requests this session opened" className="flex flex-wrap gap-1.5 text-xs">
-              {prs.map((p) => (
-                <a key={p.url} href={p.url} target="_blank" rel="noreferrer" className="font-semibold" title={p.url}>
-                  {p.repo.split("/")[1]} #{p.number}
-                </a>
-              ))}
-            </span>
-          ) : null}
+          {/* T-078: the pull requests this session opened, as one small button (owner, 16 Nov). */}
+          <PrLinksMenu prs={prs} />
         </span>
         {/* A chat has no project, so none of the project panels; it has what it made to show you. */}
         {chat ? (
