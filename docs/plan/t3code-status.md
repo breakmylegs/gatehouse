@@ -76,7 +76,7 @@ Slices, in order:
 | T-063 | A thread details card with chosen rows: context window with the autocompact mark, usage limits, local servers with Stop, side chats. | Partly | todo | | |
 | T-064 | Permission modes per thread: Supervised, Auto-accept edits, Auto. | Have | built (Codehouse had it) | | |
 | T-065 | Full access: commands and edits with no approval. | Conflicts | listed for decision | | |
-| T-066 | A default mode for new threads, overridable per project. | Partly | todo | | |
+| T-066 | A default mode for new threads, overridable per project. | Partly | built | feat/model-choices | by T-017: a new session takes your last mode, or the folder's own; never an Extreme approval mode |
 | T-067 | Managed policy: cap the broadest mode, lock settings with a "Managed by" label, allow-list providers, limit clients, turn off remote access and webhooks, update from a mirror; refuse to start on a policy it cannot enforce; `policy check` and `policy show`. | Partly | todo | | |
 | T-068 | Subagents' approval requests shown in the parent with the subagent's name; a typed reply declines with feedback. | Have | built (Codehouse had it) | | |
 | T-069 | Remembered approvals ("Allow all edits this session"). | Have | built (Codehouse had it) | | |
@@ -115,7 +115,7 @@ Slices, in order:
 | T-087 | Prompt links that open a draft (prompt, repository, model, PR), stripping invisible characters. | Build (safe variant), S | todo | | |
 | T-104 | Light, dark and system appearance; a theme picker. | Have | built (Codehouse had it) | | |
 | T-105 | Custom themes, VS Code theme import, custom CSS, server-published themes, and an agent that restyles the app. | Conflicts | listed for decision | | |
-| T-106 | Panel animation duration, 0 ms by default. | Build, S | todo | | |
+| T-106 | Panel animation duration, 0 ms by default. | Build, S | built | | the side panels open at once, with no animation (checked 17 Nov), so no setting is needed |
 | T-071 | Customisable shortcuts (a settings file with conditions and precedence, new defaults added later). | Build, M | todo | | |
 | T-107 | Keyboard pickers for model, effort, mode, workspace and branch; effort up and down; mod+1 to 9 for the first threads. | Partly | todo | | |
 | T-108 | F6 to move between areas; arrow keys, F2 rename and Shift+F10 in the thread list. | Partly | built in part | slice/t4 | F6 and Shift+F6; the list keys not yet |
