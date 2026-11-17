@@ -1850,6 +1850,8 @@ const LIVE_SETTINGS = [
   "timelineSummaries",
   // T-020: read when a session starts.
   "promptSuggestions",
+  // T-024: read at each hourly look.
+  "settleAfterDays",
   "forges",
   "worktreeCleanup",
   "titleByClaude",

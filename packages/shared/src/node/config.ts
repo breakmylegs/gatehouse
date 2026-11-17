@@ -98,6 +98,8 @@ function build(loose: boolean) {
       .array(z.object({ id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:\-[\]/]{0,99}$/), label: z.string().min(1).max(40) }).passthrough())
       .max(20)
       .optional(),
+    /** T-024: days after which a finished, unpinned session is archived by itself; 0 for never. Absent: 3. */
+    settleAfterDays: z.number().int().min(0).max(365).optional(),
     /** T-020: a suggested next prompt after each turn, filled in with Tab. On unless false. */
     promptSuggestions: z.boolean().optional(),
     /** O42: Claude sums up each session every ten minutes for its timeline. On unless false. */

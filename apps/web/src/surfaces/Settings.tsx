@@ -61,6 +61,8 @@ interface Config {
   promptSuggestions?: boolean
   /** T-016: models of your own, with their names. */
   customModels?: Array<{ id: string; label: string }>
+  /** T-024: days before a finished session settles; 0 for never. */
+  settleAfterDays?: number
   phoneExpiryMs: number
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
@@ -151,6 +153,8 @@ interface Values {
   psOn: boolean
   /** T-016: your own models, "id = Display name" one to a line. */
   cmText: string
+  /** T-024: days as typed, "0" for never. */
+  settleDays: string
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
   /** D-018: points of the risk budget, or "" for none. */
@@ -234,6 +238,7 @@ export function valuesOf(d: SettingsData): Values {
     tlOn: c.timelineSummaries !== false,
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
+    settleDays: String(c.settleAfterDays ?? 3),
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -397,6 +402,9 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
   // O42: on unless turned off, so only off is saved.
+  // T-024: three days is no setting at all.
+  if (v.settleDays === "3") delete body.settleAfterDays
+  else body.settleAfterDays = Number(v.settleDays)
   // T-016: saved only when every line is a model; otherwise what was saved stays.
   {
     const cm = parseModels(v.cmText)
@@ -501,6 +509,7 @@ export const DEFAULT_VALUES: Values = {
   tlOn: true,
   psOn: true,
   cmText: "",
+  settleDays: "3",
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -790,6 +799,7 @@ export function Settings() {
   const tlChanged = differs(v, ["tlOn"])
   const psChanged = differs(v, ["psOn"])
   const cmChanged = differs(v, ["cmText"])
+  const settleChanged = differs(v, ["settleDays"])
   const cmErrors = parseModels(v.cmText).errors
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
@@ -1466,6 +1476,21 @@ export function Settings() {
                   value={v.evDays}
                   onChange={(e) => change({ evDays: e.target.value.replace(/[^0-9]/g, "") }, "Evidence")}
                 />
+              </Field>
+            </Group>
+
+            <Group section="sessions" title="Settle finished sessions" gap="gap-2" changed={settleChanged}>
+              <Field
+                label="Archive a finished session by itself after"
+                help="A session that has ended and not been touched for this long leaves the sidebar, as Archive does. Earlier sessions on Sessions still has it (Show archived). A pinned session never settles."
+              >
+                <select className="field w-48" value={v.settleDays} onChange={(e) => change({ settleDays: e.target.value }, "Settle finished sessions")}>
+                  {withCurrent(["0", "1", "3", "7", "30"], v.settleDays).map((n) => (
+                    <option key={n} value={n}>
+                      {n === "0" ? "Never" : n === "1" ? "1 day" : `${n} days${n === "3" ? " (the default)" : ""}`}
+                    </option>
+                  ))}
+                </select>
               </Field>
             </Group>
 

@@ -35,7 +35,7 @@ Slices, in order:
 | T-021 | Image generation (Codex). | Conflicts | listed for decision | | |
 | T-022 | Threads outlive the agent process; stop and resume. | Have | built (Codehouse had it) | | |
 | T-023 | Pin threads and drag to reorder or between sections. | Partly | todo | | |
-| T-024 | Settle finished threads, automatically after inactivity or a merged PR, Never per thread. | Partly | todo | | |
+| T-024 | Settle finished threads, automatically after inactivity or a merged PR, Never per thread. | Build, S | built in part | feat/settle | archived after 3 days ended and untouched (Settings, 0 for never); pinning keeps one; after a merged PR not yet |
 | T-025 | Snooze a thread until a time or until limits reset; it wakes early for an approval, a question or a failure. | Build, S | built | | snooze in the sidebar, wakes at once if it needs you (status corrected 17 Nov) |
 | T-026 | Undo for sidebar actions (a five-second notice, mod+Z). | Build, S | todo | | |
 | T-027 | A folded Working section for busy threads. | Partly | todo | | |

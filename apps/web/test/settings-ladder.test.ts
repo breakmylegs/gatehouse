@@ -44,3 +44,13 @@ describe("the timeline's summaries (O42)", () => {
     expect(valuesOf(data({ timelineSummaries: false })).tlOn).toBe(false)
   })
 })
+
+describe("settling finished sessions (T-024)", () => {
+  it("is three days unless you choose, and only another choice is saved", () => {
+    const d = data()
+    expect(valuesOf(d).settleDays).toBe("3")
+    expect(bodyOf(d, valuesOf(d))).not.toHaveProperty("settleAfterDays")
+    expect(bodyOf(d, { ...valuesOf(d), settleDays: "0" }).settleAfterDays).toBe(0)
+    expect(valuesOf(data({ settleAfterDays: 7 })).settleDays).toBe("7")
+  })
+})

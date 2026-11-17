@@ -49,6 +49,7 @@ import { createRecapWriter } from "./recap-writer.js"
 import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
 import { SessionTimeline } from "./session-timeline.js"
+import { SessionSettler } from "./session-settle.js"
 import { createTimelineWriter } from "./timeline-writer.js"
 import { chatFolderOf } from "./triage.js"
 import { CnwService } from "./cnw/service.js"
@@ -823,6 +824,16 @@ export function createHost(opts: HostOptions = {}): Host {
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     audit,
     policyHash: () => store.current?.hash ?? "",
+    log,
+  })
+  // T-024: finished sessions settle out of the sidebar after a while (archived, as Archive does); a pinned one never.
+  const settler = new SessionSettler({
+    list: () => manager.list(),
+    archive: async (s) => {
+      await history.setMeta(s.sdkSessionId!, { archived: true }, s.cwd, log)
+      manager.announce(s.sdkSessionId!)
+    },
+    days: () => config.settleAfterDays,
     log,
   })
   manager.on("prompted", ({ sessionId, text }) => timeline.note(sessionId, { who: "you", text }))
@@ -1793,6 +1804,7 @@ export function createHost(opts: HostOptions = {}): Host {
       void mcpRunner.startAutostart().catch((e: Error) => log(`mcp builder: ${e.message}`))
       // O42: the ten-minute summaries for each session's timeline.
       timeline.start()
+      settler.start()
     },
     async stop() {
       // First, so the sessions closed below come back next time.
@@ -1800,6 +1812,7 @@ export function createHost(opts: HostOptions = {}): Host {
       limitPauser.stop()
       cnw.stop()
       timeline.stop()
+      settler.stop()
       // O39: the servers you built stop with Codehouse.
       await mcpRunner.stopAll()
       for (const t of cleanupTimers) clearTimeout(t)
