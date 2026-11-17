@@ -1,6 +1,7 @@
 import crypto from "node:crypto"
 import https from "node:https"
 import net from "node:net"
+import os from "node:os"
 import tls from "node:tls"
 import { newComputerKey } from "./connector.js"
 
@@ -54,8 +55,13 @@ export function certFingerprint(url: URL, connect: typeof tls.connect = tls.conn
   })
 }
 
-/** POSTs JSON over a connection that accepts only the pinned certificate. */
-function pinnedPost(url: URL, body: unknown, certSha256: string): Promise<{ status: number; json: Record<string, unknown> }> {
+const sha256 = (raw: Buffer | undefined) => (raw ? crypto.createHash("sha256").update(raw).digest("hex") : "")
+
+/**
+ * POSTs JSON over a connection that accepts only the pinned certificate. The pin is checked as soon as TLS is up,
+ * before the body (the pairing code and the public key) is written; a different certificate gets nothing.
+ */
+export function pinnedPost(url: URL, body: unknown, certSha256: string): Promise<{ status: number; json: Record<string, unknown> }> {
   const data = JSON.stringify(body)
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -66,11 +72,11 @@ function pinnedPost(url: URL, body: unknown, certSha256: string): Promise<{ stat
         rejectUnauthorized: false,
         timeout: 20_000,
         checkServerIdentity: () => undefined,
+        // A fresh connection, so its handshake is seen here.
+        agent: false,
       },
       (res) => {
-        const sock = res.socket as tls.TLSSocket
-        const raw = sock.getPeerCertificate?.(false)?.raw
-        if (!raw || crypto.createHash("sha256").update(raw).digest("hex") !== certSha256) {
+        if (sha256((res.socket as tls.TLSSocket).getPeerCertificate?.(false)?.raw) !== certSha256) {
           res.destroy()
           return reject(new Error("The certificate changed during pairing."))
         }
@@ -87,7 +93,13 @@ function pinnedPost(url: URL, body: unknown, certSha256: string): Promise<{ stat
     )
     req.on("timeout", () => req.destroy(new Error("Neighbourhood Watch did not answer.")))
     req.on("error", reject)
-    req.end(data)
+    req.once("socket", (socket) => {
+      const sock = socket as tls.TLSSocket
+      sock.once("secureConnect", () => {
+        if (sha256(sock.getPeerCertificate?.(false)?.raw) === certSha256) return void req.end(data)
+        req.destroy(new Error("The certificate changed during pairing, so nothing was sent."))
+      })
+    })
   })
 }
 
@@ -104,7 +116,9 @@ export async function pair(
   const url = checkUrl(rawUrl)
   const certSha256 = await (d.fingerprint ?? certFingerprint)(url)
   const key = newComputerKey()
-  const r = await (d.post ?? pinnedPost)(new URL("/agent/pair", url), { code: code.trim(), publicKey: key.publicKey, label: label.slice(0, 60) }, certSha256)
+  // With no label given, CNW lists the computer by its own name rather than as "A computer".
+  const name = (label.trim() || os.hostname()).slice(0, 60)
+  const r = await (d.post ?? pinnedPost)(new URL("/agent/pair", url), { code: code.trim(), publicKey: key.publicKey, label: name }, certSha256)
   if (r.status !== 200 || typeof r.json.computer !== "string")
     throw new Error(typeof r.json.error === "string" ? r.json.error : "Neighbourhood Watch did not accept the code.")
   await d.seal(key.privateKey)

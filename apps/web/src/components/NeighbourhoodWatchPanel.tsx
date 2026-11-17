@@ -7,7 +7,15 @@ interface Status {
   on: boolean
   url?: string
   state: "off" | "connecting" | "connected" | "refused"
+  /** Why it was refused (absent from an older Host). */
+  refusal?: "removed" | "certificate"
 }
+
+/** What the panel says about the connection: a changed certificate is told apart from a computer CNW removed. */
+export const stateText = (s: Pick<Status, "state" | "refusal">): string =>
+  s.state === "refused" && s.refusal === "certificate"
+    ? "Refused: Neighbourhood Watch's certificate changed since you paired, so nothing was sent. Unpair and pair again."
+    : STATE[s.state]
 
 const STATE: Record<Status["state"], string> = {
   off: "Off",
@@ -71,7 +79,7 @@ export function NeighbourhoodWatchPanel() {
   return (
     <div className="grid gap-2">
       <p className="m-0">
-        Paired with <span className="mono">{s.url}</span>: <strong>{STATE[s.state]}</strong>
+        Paired with <span className="mono">{s.url}</span>: <strong>{stateText(s)}</strong>
       </p>
       <label className="flex items-center gap-2">
         <input

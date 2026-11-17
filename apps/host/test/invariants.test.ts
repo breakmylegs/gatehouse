@@ -774,6 +774,8 @@ describe("session lifecycle", () => {
     })
     session.on("state", (i) => states.push(`${i.state}:${i.pendingApprovals}`))
     await s.waitForPending()
+    // The broker holds the request a moment before the session says it is waiting; on a busy machine, wait for that.
+    for (let i = 0; i < 100 && session.info().state !== "waiting"; i++) await new Promise((r) => setTimeout(r, 20))
     expect(session.info()).toMatchObject({ state: "waiting", pendingApprovals: 1 })
     s.broker.resolve(s.pendingId(), { kind: "decision", decision: "deny" }, "desktop")
     await done

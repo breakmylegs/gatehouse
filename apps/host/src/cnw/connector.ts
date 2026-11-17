@@ -58,6 +58,11 @@ export class CnwConnector extends EventEmitter {
   #timer: NodeJS.Timeout | undefined
   #ping: NodeJS.Timeout | undefined
   status: "off" | "connecting" | "connected" | "refused" = "off"
+  /** Why it was refused: CNW does not know this computer (removed), or its certificate changed. */
+  refusal: "removed" | "certificate" | undefined
+  /** Whether CNW's certificate has been checked against the pin on this connection (or there is no pin). */
+  #pinned = false
+  #pinFailed = false
 
   constructor(o: ConnectorOptions) {
     super()
@@ -66,6 +71,8 @@ export class CnwConnector extends EventEmitter {
 
   start(): void {
     this.#stopped = false
+    this.#pinFailed = false
+    this.refusal = undefined
     this.#connect()
   }
 
@@ -89,22 +96,25 @@ export class CnwConnector extends EventEmitter {
     this.#set("connecting")
     const url = new URL("/agent", this.#o.url)
     url.protocol = url.protocol === "http:" ? "ws:" : "wss:"
-    // ws hands these options to tls.connect, whose checkServerIdentity returns an Error or undefined; ws's own type
-    // describes another (servername, CertMeta) => boolean form, hence the cast.
-    const opts = {
-      handshakeTimeout: 15_000,
-      maxPayload: 4 * 1024 * 1024,
-      ...(this.#o.certSha256
-        ? {
-            checkServerIdentity: (_host: string, cert: { raw?: Buffer }) =>
-              cert.raw && crypto.createHash("sha256").update(cert.raw).digest("hex") === this.#o.certSha256
-                ? undefined
-                : new Error("Neighbourhood Watch's certificate is not the one it had when you paired."),
-          }
-        : {}),
-    } as unknown as WebSocket.ClientOptions
+    // With a pin, the certificate is not checked against any authority (caddy's own, for an IP address or a home
+    // name, is in none), so Node would not call checkServerIdentity either: the pin is checked by hand on "upgrade",
+    // before "open", and the connection ends there if it differs. Nothing is sent before then (#raw waits for it).
+    const pin = this.#o.certSha256
+    const opts: WebSocket.ClientOptions = { handshakeTimeout: 15_000, maxPayload: 4 * 1024 * 1024, ...(pin ? { rejectUnauthorized: false } : {}) }
     const ws = (this.#o.createSocket ?? ((u, o) => new WebSocket(u, o)))(url.toString(), opts)
     this.#ws = ws
+    this.#pinned = !pin
+    if (pin)
+      ws.on("upgrade", (res: { socket: { getPeerCertificate?: (detailed: boolean) => { raw?: Buffer } } }) => {
+        const raw = res.socket.getPeerCertificate?.(false)?.raw
+        if (raw && crypto.createHash("sha256").update(raw).digest("hex") === pin) {
+          this.#pinned = true
+          return
+        }
+        this.#pinFailed = true
+        this.#o.log("neighbourhood watch: its certificate is not the one it had when you paired, so nothing was sent; pair it again")
+        ws.terminate()
+      })
     ws.on("message", (raw: Buffer) => this.#message(raw.toString("utf8")))
     ws.on("close", (code: number) => this.#closed(code))
     ws.on("error", (e: Error) => this.#o.log(`neighbourhood watch: ${e.message}`))
@@ -160,7 +170,8 @@ export class CnwConnector extends EventEmitter {
   }
 
   #raw(msg: unknown): void {
-    if (this.#ws?.readyState === WebSocket.OPEN) this.#ws.send(JSON.stringify(msg))
+    // Never to a server whose certificate has not been checked against the pin.
+    if (this.#pinned && this.#ws?.readyState === WebSocket.OPEN) this.#ws.send(JSON.stringify(msg))
   }
 
   #closed(code: number): void {
@@ -168,8 +179,15 @@ export class CnwConnector extends EventEmitter {
     for (const t of this.#tabs.values()) t.close()
     this.#tabs.clear()
     if (this.#stopped) return
+    if (this.#pinFailed) {
+      // A changed certificate is not retried: it stays refused, saying why, until the computer is paired again.
+      this.refusal = "certificate"
+      this.#set("refused")
+      return
+    }
     if (code === 4401 || code === 4403) {
       this.#o.log(`neighbourhood watch refused this computer (${code}); pair it again`)
+      this.refusal = "removed"
       this.#set("refused")
       return
     }
