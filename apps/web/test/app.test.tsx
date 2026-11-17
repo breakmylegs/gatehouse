@@ -35,11 +35,11 @@ describe("App shell", () => {
     expect(screen.getByRole("heading", { name: /All clear/ })).toBeInTheDocument()
   })
 
-  it("renders Home, the start screen, without looping", async () => {
+  it("renders Home, the start picture, without looping", async () => {
     useStore.setState({ route: "home" })
     useStore.getState().handleEvent({ type: "hello", sessions: [], pending: [], health, usage: {} })
     render(<App />)
-    expect(await screen.findByRole("button", { name: "Projects" })).toBeInTheDocument()
+    expect(await screen.findByRole("img", { name: /roadhouse/i })).toBeInTheDocument()
   })
 })
 

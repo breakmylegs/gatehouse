@@ -234,9 +234,21 @@ const KEPT_ROUTES: Route[] = [
 /** Sessions side by side at most (owner, 1 Nov: "Up to 4 shown at once"); four sit two by two. */
 export const MAX_PANES = 4
 
+/**
+ * In Neighbourhood Watch the page shows a computer that is set up already: its setup is that computer's, so the page
+ * goes straight to its main screen.
+ */
+const REMOTE = import.meta.env.VITE_CODEHOUSE_REMOTE === "cnw"
+
+/**
+ * Where the window opens: the main screen (owner, 17 Nov: "It should just load into the main screen"), or the page
+ * you were on. The start picture is never a stop on the way; an older version's saved "home" opens the main screen.
+ */
+export const MAIN_ROUTE: Route = "workspace"
+
 function readView(): { route: Route; panes: string[]; selectedSession?: string; focus: number } {
   try {
-    if (localStorage.getItem("gatehouse.setup") === "done") {
+    if (REMOTE || localStorage.getItem("gatehouse.setup") === "done") {
       const v = JSON.parse(localStorage.getItem(VIEW) ?? "null") as Record<string, unknown> | null
       if (v && typeof v === "object") {
         const panes = Array.isArray(v.panes)
@@ -251,7 +263,7 @@ function readView(): { route: Route; panes: string[]; selectedSession?: string; 
             ? v.focus
             : 0
         return {
-          route: KEPT_ROUTES.includes(v.route as Route) ? (v.route as Route) : "home",
+          route: KEPT_ROUTES.includes(v.route as Route) && v.route !== "home" ? (v.route as Route) : MAIN_ROUTE,
           panes,
           focus,
           ...(typeof v.selectedSession === "string" ? { selectedSession: v.selectedSession } : {}),
@@ -261,7 +273,7 @@ function readView(): { route: Route; panes: string[]; selectedSession?: string; 
   } catch {
     // a value from another version, or none
   }
-  return { route: "home", panes: [], focus: 0 }
+  return { route: MAIN_ROUTE, panes: [], focus: 0 }
 }
 const startView = readView()
 /** The page the window opened on (Home when there is none of yours): the first-run checks take over from it, as they did from Approvals. */
@@ -364,7 +376,7 @@ export const useStore = create<State>((set, get) => ({
   helpOpen: false,
   setHelpOpen: (helpOpen) => set({ helpOpen }),
   markSeen: (id) => set((s) => (s.seen[id] ? s : { seen: { ...s.seen, [id]: true } })),
-  setupDone: localStorage.getItem("gatehouse.setup") === "done",
+  setupDone: REMOTE || localStorage.getItem("gatehouse.setup") === "done",
 
   setRoute: (route) => set({ route }),
   // T-002: the start-session form, with the folder filled in; nothing starts until you say what to do.

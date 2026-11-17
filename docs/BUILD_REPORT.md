@@ -1470,4 +1470,10 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - **What resolves under /app/ (checked on a real CNW build):** scripts, preloads and the stylesheet are named `/app/assets/...`; lazy chunks are imported relative to the script; the pictures, icon sprite and favicons were already relative (`./codehouse/...`); the socket (`/ws/<computer>`) and the sign-in page (`/`) are CNW's own root paths.
   - **The start-up picture is safe:** if the page's script or stylesheet fails to load (or nothing has started after 20 s), it goes and says Codehouse could not start, instead of hiding the failure.
   - **Tests:** cnw-base (web: the base for each build; the fallback), server (CNW: /app/ and every file it names, 200; root /assets 404).
+- **No stop at the start picture (owner, 17 Nov: "The start screen never had buttons. It shouldnt need buttons now. It should just load into the main screen on the computer it is connected to").**
+  - The window opens on the main screen, the workspace (`MAIN_ROUTE` in `apps/web/src/store.ts`), or the page you were on. An older version's saved Home opens the main screen too.
+  - Home is the picture alone, reached from the command deck: the invisible buttons laid over the drawn ones are gone.
+  - In Neighbourhood Watch the page counts setup as done (setup belongs to the computer itself) and opens on that computer's main screen.
+  - While looking at this, the invisible buttons were found to be aligned and clickable in a headless browser, so they were removed rather than mended.
+  - Tests: home (no buttons; where the window opens, desktop and CNW), restore, app.
 - **Lifecycle invariant test made patient:** it read the session's state the moment the broker held the request, before the session said it was waiting. Under load that failed a release. It now waits for the state. Only the test changed.

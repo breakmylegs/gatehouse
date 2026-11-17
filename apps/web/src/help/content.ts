@@ -567,7 +567,7 @@ Use the sign-in buttons to sign in through Anthropic's own page in your browser.
   home: {
     id: "home",
     title: "Home",
-    body: `Home is the Codehouse start screen. Choose Chat to talk with Claude, Code to work in a folder with a coding session, or Projects to keep instructions and files for a set of chats. Codehouse opens on it when it has no page of yours to go back to. Open it again by selecting the Codehouse name at the top left, or search for Home with Ctrl+K.`,
+    body: `Home is the Codehouse start picture. Codehouse opens on its main screen, or on the page you were on, and never stops at the picture; in Neighbourhood Watch, it opens on the computer's main screen. See the picture again by selecting the Codehouse name at the top left, or search for Home with Ctrl+K. Chat, Code and Projects are in the sidebar.`,
   },
 }
 

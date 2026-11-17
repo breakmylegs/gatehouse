@@ -2448,29 +2448,6 @@ li[data-resuming] {
   height: 100%;
   border-radius: 10px;
 }
-.home-spot {
-  position: absolute;
-  top: 72.3%;
-  width: 13.9%;
-  height: 8.9%;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  cursor: pointer;
-  transition: box-shadow 0.15s;
-}
-.home-spot:hover {
-  box-shadow: 0 0 22px 4px rgb(79 240 224 / 0.45);
-}
-.home-spot:focus-visible {
-  outline: 3px solid #4ff0e0;
-  outline-offset: 3px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .home-spot {
-    transition: none;
-  }
-}
 
 @media (forced-colors: active) {
   :root,
