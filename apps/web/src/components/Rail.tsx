@@ -30,6 +30,7 @@ import {
   archiveEnded,
   archiveSession,
   copyConversation,
+  copySessionId,
   setSessionMeta,
   titleOf,
 } from "../lib/sessionActions"
@@ -524,6 +525,10 @@ export function Rail({ onHide }: { onHide: () => void }) {
                               label: "Copy conversation",
                               onSelect: () => void copyConversation(s),
                             },
+                            // T-031: the id Claude Code knows the session by (claude --resume <id>), once it has one.
+                            ...(s.sdkSessionId
+                              ? [{ label: "Copy session id", onSelect: () => void copySessionId(s.sdkSessionId!) }]
+                              : []),
                             {
                               label: "Export...",
                               onSelect: () =>

@@ -102,6 +102,12 @@ export async function copyConversation(s: SessionInfo): Promise<void> {
   else toast.error("The conversation could not be copied.", { id: "session" })
 }
 
+/** T-031: the id Claude Code knows a session by, for claude --resume or a note. */
+export async function copySessionId(sdkSessionId: string): Promise<void> {
+  if (await copyText(sdkSessionId)) toast(`Copied the session id ${sdkSessionId}.`, { id: "session" })
+  else toast.error("The session id could not be copied.", { id: "session" })
+}
+
 /** The last code block in what Claude said, newest first: the code inside the last fenced block. */
 export function lastCodeBlock(texts: string[]): string | undefined {
   for (let i = texts.length - 1; i >= 0; i--) {
