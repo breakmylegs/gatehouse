@@ -6,7 +6,27 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { RELEASE_KEYS } from "../../host/src/update/manifest.js"
 import { CNW_RELEASE_KEYS } from "../src/release-key.js"
-import { builtVersion, newer, verifyManifest } from "../src/updater.js"
+import { builtVersion, newer, updaterServer, verifyManifest } from "../src/updater.js"
+
+describe("the updater's service", () => {
+  it("answers GET /health with 200 without updating, runs POST /update, and refuses anything else", async () => {
+    let updates = 0
+    const server = updaterServer(async () => (updates++, "Already up to date (1.0.0)."))
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
+    const at = `http://127.0.0.1:${(server.address() as { port: number }).port}`
+    try {
+      const health = await fetch(`${at}/health`)
+      expect([health.status, await health.text()]).toEqual([200, "ok"])
+      expect(updates).toBe(0)
+      expect((await fetch(`${at}/update`, { method: "POST" })).status).toBe(200)
+      expect(updates).toBe(1)
+      expect((await fetch(`${at}/update`)).status).toBe(404)
+      expect((await fetch(`${at}/health`, { method: "POST" })).status).toBe(404)
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
+  })
+})
 
 describe("the CNW updater", () => {
   it("accepts only a signed manifest with a full commit and a version", () => {

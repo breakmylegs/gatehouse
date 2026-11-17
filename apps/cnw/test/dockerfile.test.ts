@@ -46,6 +46,12 @@ describe("the CNW stack (compose)", () => {
     expect(u.environment?.HOME).toBe("/tmp")
   })
 
+  it("checks the updater's health on its own port, not cnw's image health check on 8080", () => {
+    const test = (compose.services.updater as { healthcheck?: { test?: string[] } }).healthcheck?.test ?? []
+    expect(test.join(" ")).toContain("http://127.0.0.1:8090/health")
+    expect(test.join(" ")).not.toContain("8080")
+  })
+
   it("has no fixed Caddyfile to edit: caddy's configuration is written from .env", () => {
     expect(fs.existsSync(path.join(root, "docker/cnw/Caddyfile"))).toBe(false)
     expect(JSON.stringify(compose.services.caddy)).toContain("/caddy-config/Caddyfile")

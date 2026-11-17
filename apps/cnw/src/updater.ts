@@ -93,31 +93,39 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
   return `Updated to ${m.version}.`
 }
 
+/**
+ * The updater's HTTP service: POST /update runs one update at a time; GET /health answers 200 for the container's
+ * health check, touching neither Docker nor the clone. Anything else is 404.
+ */
+export function updaterServer(update: () => Promise<string>): http.Server {
+  let busy = false
+  return http.createServer(async (req, res) => {
+    if (req.method === "GET" && req.url === "/health") return res.writeHead(200, { "content-type": "text/plain" }).end("ok")
+    if (req.method !== "POST" || req.url !== "/update") return res.writeHead(404).end()
+    if (busy) return res.writeHead(409).end("An update is already running.")
+    busy = true
+    try {
+      res.writeHead(200).end(await update())
+    } catch (e) {
+      res.writeHead(500).end((e as Error).message)
+    } finally {
+      busy = false
+    }
+  })
+}
+
 // Run as a service: one request at a time, from the private network only.
 if (process.argv[1] && path.basename(process.argv[1]).startsWith("updater")) {
   // The release key is built in (release-key.ts); CNW_UPDATE_KEY may name a file with another, for a fork.
   const keyPem = process.env.CNW_UPDATE_KEY ? fs.readFileSync(process.env.CNW_UPDATE_KEY, "utf8") : CNW_RELEASE_KEYS[0]!
-  let busy = false
-  http
-    .createServer(async (req, res) => {
-      if (req.method !== "POST" || req.url !== "/update") return res.writeHead(404).end()
-      if (busy) return res.writeHead(409).end("An update is already running.")
-      busy = true
-      try {
-        const repoDir = process.env.CNW_REPO_DIR ?? "/repo"
-        const msg = await updateNow({
-          repoDir,
-          composeDir: process.env.CNW_COMPOSE_DIR ?? "/stack",
-          keyPem,
-          current: builtVersion(repoDir),
-          log: (l) => process.stdout.write(`[updater] ${l}\n`),
-        })
-        res.writeHead(200).end(msg)
-      } catch (e) {
-        res.writeHead(500).end((e as Error).message)
-      } finally {
-        busy = false
-      }
-    })
-    .listen(8090, "0.0.0.0")
+  const repoDir = process.env.CNW_REPO_DIR ?? "/repo"
+  updaterServer(() =>
+    updateNow({
+      repoDir,
+      composeDir: process.env.CNW_COMPOSE_DIR ?? "/stack",
+      keyPem,
+      current: builtVersion(repoDir),
+      log: (l) => process.stdout.write(`[updater] ${l}\n`),
+    }),
+  ).listen(8090, "0.0.0.0")
 }
