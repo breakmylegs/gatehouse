@@ -158,6 +158,8 @@ export interface State {
   setupDone: boolean
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
+  /** T-020: each session's suggested next prompt, until it works again. */
+  suggestions: Record<string, string>
   /** T-002: a folder you opened from a terminal, for the start-session form to take (and clear). */
   startFolder?: string
   openFolder: (path: string | undefined) => void
@@ -318,6 +320,7 @@ export const useStore = create<State>((set, get) => ({
   pending: {},
   resolved: {},
   transcripts: {},
+  suggestions: {},
   activity: {},
   pulse: {},
   load: {},
@@ -513,8 +516,23 @@ export const useStore = create<State>((set, get) => ({
           else delete pulse[e.sessionId]
           return { pulse }
         })
+        // T-020: a suggested next prompt, kept for the prompt box (Tab fills it in; it is never sent by itself). Gone once
+        // the session works again.
+        const kind = (e.message as { type?: unknown } | null)?.type
+        if (kind === "prompt_suggestion") {
+          const text = (e.message as { suggestion?: unknown }).suggestion
+          if (typeof text === "string" && text.trim())
+            set((s) => ({ suggestions: { ...s.suggestions, [e.sessionId]: text.trim().slice(0, 2000) } }))
+          return
+        }
+        if ((kind === "assistant" || kind === "user") && get().suggestions[e.sessionId])
+          set((s) => {
+            const suggestions = { ...s.suggestions }
+            delete suggestions[e.sessionId]
+            return { suggestions }
+          })
         // A partial message changes nothing in the transcript itself.
-        if ((e.message as { type?: unknown } | null)?.type === "stream_event") return
+        if (kind === "stream_event") return
         const done = e.message as {
           type?: unknown
           is_error?: unknown

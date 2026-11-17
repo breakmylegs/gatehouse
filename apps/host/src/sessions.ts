@@ -1326,6 +1326,9 @@ export class Session extends EventEmitter<SessionEvents> {
               : {}),
           }),
       includePartialMessages: true,
+      // T-020: a suggested next prompt after each turn (the SDK's prompt_suggestion, from the turn's own cache). It only
+      // fills the prompt box when you press Tab; nothing is ever sent by it. Off in Settings, Sessions.
+      ...(d.config().promptSuggestions !== false ? { promptSuggestions: true } : {}),
       // Its account's own Claude Code folder, and never a credential (invariant 6).
       // Mac fork: without Codehouse.app's own settings (env-mac.ts), and with the folder's direnv .envrc (direnv-mac.ts).
       env: await withDirenvMac(

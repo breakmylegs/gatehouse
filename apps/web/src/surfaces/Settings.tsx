@@ -56,6 +56,8 @@ interface Config {
   escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number }
   /** O42: false turns off the ten-minute summaries. */
   timelineSummaries?: boolean
+  /** T-020: false turns off the suggested next prompt. */
+  promptSuggestions?: boolean
   phoneExpiryMs: number
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
@@ -142,6 +144,8 @@ interface Values {
   ladPush: string
   /** O42: the ten-minute summaries for each session's timeline. */
   tlOn: boolean
+  /** T-020: a suggested next prompt after each turn. */
+  psOn: boolean
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
   /** D-018: points of the risk budget, or "" for none. */
@@ -223,6 +227,7 @@ export function valuesOf(d: SettingsData): Values {
     ladPhone: String(c.escalationLadder?.phoneAfterMinutes ?? 0),
     ladPush: String(c.escalationLadder?.pushAfterMinutes ?? 0),
     tlOn: c.timelineSummaries !== false,
+    psOn: c.promptSuggestions !== false,
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -386,6 +391,8 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
   // O42: on unless turned off, so only off is saved.
+  if (v.psOn) delete body.promptSuggestions
+  else body.promptSuggestions = false
   if (v.tlOn) delete body.timelineSummaries
   else body.timelineSummaries = false
   // E-094: saved only when a channel waits; all at once is no setting at all.
@@ -478,6 +485,7 @@ export const DEFAULT_VALUES: Values = {
   ladPhone: "0",
   ladPush: "0",
   tlOn: true,
+  psOn: true,
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -763,6 +771,7 @@ export function Settings() {
   const memChanged = differs(v, ["memPoint"])
   const ladChanged = differs(v, ["ladPhone", "ladPush"])
   const tlChanged = differs(v, ["tlOn"])
+  const psChanged = differs(v, ["psOn"])
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
   const licChanged = differs(v, ["licences"])
@@ -1439,6 +1448,14 @@ export function Settings() {
                   onChange={(e) => change({ evDays: e.target.value.replace(/[^0-9]/g, "") }, "Evidence")}
                 />
               </Field>
+            </Group>
+
+            <Group section="sessions" title="Suggested next prompt" gap="gap-2" changed={psChanged}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.psOn} onChange={(e) => change({ psOn: e.target.checked }, "Suggested next prompt")} />
+                After each turn, suggest what to ask next in the empty prompt box (Tab fills it in; nothing is sent by itself)
+              </label>
+              <p className="m-0 text-sm text-mut">Claude Code makes it from the turn it has just done, so it costs almost nothing. It applies to sessions you start from now.</p>
             </Group>
 
             <Group section="sessions" title="Timeline" gap="gap-2" changed={tlChanged}>

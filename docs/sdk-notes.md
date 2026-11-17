@@ -296,3 +296,7 @@ Checked in the pinned SDK's `sdk.d.ts` (PostToolUseHookSpecificOutput, PostToolU
 - `updatedToolOutput` (PostToolUse): "Replaces the tool output before it is sent to the model", for every tool; `updatedMCPToolOutput` is the older MCP-only form. Used by D-061 to hand Claude a result with what looked like prompt injection taken out. Section 10's condition (replace only where the SDK supports it for that tool) is met for every tool by these types.
 
 Neither decides anything (no permissionDecision), so invariant 2 is unchanged. Checked against the types and the test SDK, not yet against a live session.
+
+## Prompt suggestions (T-020, 17 Nov)
+
+- `Options.promptSuggestions: true` (sdk.d.ts) makes Claude Code send a `prompt_suggestion` message (`SDKPromptSuggestionMessage`: `suggestion`, `uuid`, `session_id`) after each turn's `result`, at most one a turn, from the turn's own prompt cache. It is suppressed on the first turn, after API errors, in Plan mode, near the plan limit and by `CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION=false`. The session's pump reads the stream past `result` already, so it reaches the window as any message does. Codehouse only shows it in the empty prompt box, where Tab fills it in; it is never sent by itself. Off in Settings, Sessions (`promptSuggestions: false`).

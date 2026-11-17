@@ -1848,6 +1848,8 @@ const LIVE_SETTINGS = [
   "escalationLadder",
   // O42: read at each ten-minute look.
   "timelineSummaries",
+  // T-020: read when a session starts.
+  "promptSuggestions",
   "forges",
   "worktreeCleanup",
   "titleByClaude",

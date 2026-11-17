@@ -16,7 +16,7 @@ Slices, in order:
 | T-002 | Open a project in the running app from a terminal (`t3 app <folder>`). | Build, S | built | feat/open-folder | `Codehouse.exe <folder>` opens the start-session form on it, in the running copy too; nothing starts until you say what to build |
 | T-003 | Background service at sign-in, restarted if it exits. | Have | built (Codehouse had it) | | |
 | T-004 | Welcome page that finds installed agents and imports recent projects and conversations from Claude Code's history. | Partly | todo | | |
-| T-005 | Drop a folder on the sidebar to open it as a project. | Build, S | todo | | |
+| T-005 | Drop a folder on the sidebar to open it as a project. | Build, S | waiting | | a page is not given a dropped folder's path; needs the window to take the drop (WebView2 postMessageWithAdditionalObjects), not checked on this runtime yet |
 | T-006 | Threads without a project, in dated scratch folders, and Turn into project. | Partly | built in part | slice/t4 | scratch sessions in dated folders; Turn into project not yet |
 | T-007 | Desktop as a remote only, with no local server. | Conflicts | listed for decision | | |
 | T-008 | Run agents and projects inside a WSL distro. | Build, L | todo | | |
@@ -31,7 +31,7 @@ Slices, in order:
 | T-017 | Remembered model and options for new threads, and a project default model. | Partly | todo | | |
 | T-018 | Text generation: thread titles, commit messages, PR titles and descriptions, branch names, with optional API-key text generators. | Build (safe variant), S | partly built | slice/T2-titles | titles built (no tools, on the session account check, recorded); commit messages, PR texts and branch names follow in slice T3 (T-074, T-086) |
 | T-019 | Regenerate title, and title instructions. | Build, S | built | slice/T2-titles | Name it again, and How you like titles in Settings |
-| T-020 | Suggested next prompt after a turn (Tab to fill, never sent). | Build, S | todo | | |
+| T-020 | Suggested next prompt after a turn (Tab to fill, never sent). | Build, S | built | feat/open-folder | the SDK's prompt_suggestion in the empty prompt box; Tab fills it in; off in Settings |
 | T-021 | Image generation (Codex). | Conflicts | listed for decision | | |
 | T-022 | Threads outlive the agent process; stop and resume. | Have | built (Codehouse had it) | | |
 | T-023 | Pin threads and drag to reorder or between sections. | Partly | todo | | |

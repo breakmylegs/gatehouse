@@ -2189,6 +2189,8 @@ function Composer({
     area.current?.focus()
   }
 
+  // T-020: the session's suggested next prompt, shown in the empty box; Tab fills it in.
+  const suggestion = useStore((s) => s.suggestions[sessionId])
   const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
   // O39: /mcp and the start of a name lists the servers you built that are running, so Tab completes the name.
   const typingMcp = /^\/mcp(?: \S*)?$/i.test(text)
@@ -2629,7 +2631,11 @@ function Composer({
           disabled={disabled}
           title="Enter sends, Shift+Enter adds a line, / for commands, @ for files"
           placeholder={
-            disabled ? "This session has ended" : "Write a prompt, / for commands, @ for files"
+            disabled
+              ? "This session has ended"
+              : suggestion
+                ? `${suggestion}   (Tab to use it)`
+                : "Write a prompt, / for commands, @ for files"
           }
           value={text}
           onChange={(e) => {
@@ -2639,6 +2645,12 @@ function Composer({
             setMention(mentionAt(e.target.value, e.target.selectionStart ?? e.target.value.length))
           }}
           onKeyDown={(e) => {
+            // T-020: Tab in an empty box fills in the suggested next prompt; you still send it yourself.
+            if (e.key === "Tab" && !e.shiftKey && !text && suggestion && matches.length === 0 && !(mention && found.length > 0)) {
+              e.preventDefault()
+              setText(suggestion)
+              return
+            }
             if (mention && found.length > 0) {
               if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                 e.preventDefault()
