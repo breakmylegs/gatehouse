@@ -246,7 +246,8 @@ async function snapshotTree(
   const env = { GIT_INDEX_FILE: indexFile }
   try {
     if (base) await git(top, ["read-tree", base], env)
-    const pathspecs = (excludeGlobs ?? []).map((g) => `:(exclude,glob,icase)${g}`)
+    // A glob from a root (//wsl$/..., C:/...) names nothing in a repository, and git refuses it as outside one.
+    const pathspecs = (excludeGlobs ?? []).filter((g) => !/^(?:\/|[A-Za-z]:)/.test(g)).map((g) => `:(exclude,glob,icase)${g}`)
     await git(top, ["add", "-A", "--", ".", ...pathspecs], env)
     return await git(top, ["write-tree"], env)
   } finally {

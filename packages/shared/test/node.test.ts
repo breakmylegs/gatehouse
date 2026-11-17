@@ -181,7 +181,7 @@ describe("createCheckpoint", () => {
     expect(git(dir, "rev-parse", cp.ref)).toBe(cp.commit)
   })
 
-  it("never captures files matching the exclude globs", async () => {
+  it("never captures files matching the exclude globs, and is not stopped by a glob from a root", async () => {
     const dir = repo()
     fs.writeFileSync(path.join(dir, ".env"), "SECRET=1\n")
     fs.mkdirSync(path.join(dir, "sub"))
@@ -191,7 +191,8 @@ describe("createCheckpoint", () => {
       cwd: dir,
       sessionId: "s",
       label: "x",
-      excludeGlobs: ["**/.env", "**/*.pem"],
+      // The floor's secrets rule names WSL homes (E-028); git refuses such a path as outside the repository.
+      excludeGlobs: ["**/.env", "**/*.pem", "//wsl$/**/.kube/**", "C:/Windows/**"],
     })
     const files = git(dir, "ls-tree", "-r", "--name-only", cp.commit).split("\n")
     expect(files).toContain("ok.txt")
