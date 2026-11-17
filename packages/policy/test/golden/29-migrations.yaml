@@ -1,0 +1,28 @@
+# E-011: an edit to a database migration that destroys or locks out data waits for you (destructive-migration).
+# Destructive (15).
+- { t: Write, in: { file_path: "${WS}/migrations/001.sql", content: "DROP TABLE orders;\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/002.sql", content: "ALTER TABLE users DROP COLUMN email;\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/003.sql", content: "TRUNCATE audit;\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/004.sql", content: "DELETE FROM sessions;\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/005.sql", content: "ALTER TABLE users ADD COLUMN tier text NOT NULL;\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/006.sql", content: "ALTER TABLE users ALTER COLUMN name TYPE varchar(20);\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/007.sql", content: "ALTER TABLE users RENAME COLUMN name TO full_name;\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/prisma/migrations/20261117_x/migration.sql", content: "-- AlterTable\nALTER TABLE \"User\" DROP COLUMN \"bio\";\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/src/main/resources/db/V4__narrow.sql", content: "ALTER TABLE accounts MODIFY COLUMN code char(2);\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/Migrations/20261117_Drop.cs", content: "migrationBuilder.DropTable(name: \"Orders\");\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/Migrations/20261117_Tier.cs", content: "migrationBuilder.AddColumn<int>(name: \"Tier\", table: \"Users\", nullable: false);\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/alembic/versions/ab12_drop.py", content: "def upgrade():\n    op.drop_column('users', 'email')\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/migrations/20261117_rename.js", content: "exports.up = (knex) => knex.schema.renameTable('users', 'people')\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/db/changelog.xml", content: "<databaseChangeLog><changeSet id=\"9\"><dropTable tableName=\"orders\"/></changeSet></databaseChangeLog>\n" }, o: escalate, r: destructive-migration }
+- { t: Write, in: { file_path: "${WS}/db/changelog-2.yaml", content: "databaseChangeLog:\n  - changeSet:\n      changes:\n        - addNotNullConstraint:\n            tableName: users\n            columnName: tier\n" }, o: escalate, r: destructive-migration }
+# Safe (10): not held by this rule (no-rule is the fixture's own answer for a write it has no rule for).
+- { t: Write, in: { file_path: "${WS}/migrations/101.sql", content: "CREATE TABLE tiers (id int NOT NULL);\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/102.sql", content: "DELETE FROM sessions WHERE expires < now();\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/103.sql", content: "ALTER TABLE users ADD COLUMN tier text NOT NULL DEFAULT 'free';\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/104.sql", content: "ALTER TABLE users ALTER COLUMN id TYPE bigint;\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/105.sql", content: "ALTER TABLE users RENAME TO people;\nCREATE VIEW users AS SELECT * FROM people;\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/106.sql", content: "ALTER TABLE users ALTER COLUMN tier DROP NOT NULL;\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/107.sql", content: "CREATE INDEX users_email ON users (email);\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/migrations/108.sql", content: "-- DROP TABLE orders;\nALTER TABLE orders ADD COLUMN note text;\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/prisma/migrations/20261118_y/migration.sql", content: "CREATE TABLE \"Tag\" (\"id\" SERIAL NOT NULL);\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/scripts/cleanup.sql", content: "DROP TABLE scratch;\n" }, o: escalate, r: no-rule }

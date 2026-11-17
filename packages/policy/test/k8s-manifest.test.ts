@@ -40,6 +40,7 @@ describe("Kubernetes manifests (E-023)", () => {
     const file = path.join(dir, "edited.yaml")
     fs.writeFileSync(file, DEPLOY)
     expect(k8sFindings("Edit", { file_path: file, old_string: "    spec:\n      containers:", new_string: "    spec:\n      hostNetwork: true\n      containers:" }, file)).toMatchObject({ ruleId: K8S_RULE })
+    expect(k8sFindings("MultiEdit", { file_path: file, edits: [{ old_string: "      containers:", new_string: "      hostPID: true\n      containers:" }] }, file)).toMatchObject({ ruleId: K8S_RULE })
   })
 
   it("does not find again what the file had, holds nothing for a latest tag alone, and leaves other YAML be", () => {

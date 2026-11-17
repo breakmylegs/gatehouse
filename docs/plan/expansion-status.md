@@ -46,7 +46,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-096 | Safe mode | E1 | todo | | |  |
 | E-097 | Crash bundle | E1 | todo | | |  |
 | E-099 | Health score | E1 | todo | | |  |
-| E-011 | Destructive migration guard | E1 | todo | | |  |
+| E-011 | Destructive migration guard | E1 | done | feat/guards-2 | yes | destructive-migration at 85; golden 29 (15 + 10); statement reader, no parser dependency |
 | E-016 | Remote database connection guard | E1 | done | feat/guards | yes | remote-database; golden 24 |
 | E-017 | Bulk data export guard | E1 | done | feat/guards | yes | bulk-export; golden 26 |
 | E-021 | Production context guard for cloud CLIs | E1 | done | feat/guards | yes | production-context; golden 25 |
