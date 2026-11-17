@@ -56,7 +56,7 @@ Slices, in order:
 | T-042 | Edit from here, with Revert files too (worktree only, refused when another session shares the folder). | Partly | built | slice/T2-edit-revert | worktree only, refused when another open session shares the folder, recorded first |
 | T-043 | Prompt stash (save a draft with its attachments and bring it back). | Build, S | built | slice/T1-composer | |
 | T-044 | Commands with `/`, skills with `$`, Restart agent session after a skills change. | Have | built (Codehouse had it) | | |
-| T-045 | `/compact`, idle compaction before the prompt cache expires with a Compact or Keep choice, and an auto-compact threshold. | Partly | todo | | |
+| T-045 | `/compact`, idle compaction before the prompt cache expires with a Compact or Keep choice, and more. | Partly | built in part | feat/palette-search | /compact and Compact were there; an idle session (50 min) worth compacting is offered Compact or Keep beside the context meter |
 | T-046 | `/clear`: a fresh agent session in the same thread, marked in the transcript. | Build, S | built | slice/T1-sidebar | |
 | T-047 | `/goal`, working until a stated goal is met. | Have | built (Codehouse had it) | | |
 | T-048 | Context chips inline in the text: a terminal excerpt, a review comment, a diff note, a file. | Partly | todo | | |

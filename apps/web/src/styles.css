@@ -2951,3 +2951,14 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   border-radius: 50%;
   background: var(--c-acc);
 }
+
+/* T-045: the offer to compact an idle session, beside the context meter. */
+.ctx-offer {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  font-size: 12.5px;
+  color: var(--c-mut);
+}

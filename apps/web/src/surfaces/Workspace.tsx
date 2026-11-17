@@ -1436,6 +1436,16 @@ const tokens = (n: number) => (n < 1000 ? `${n}` : `${Math.round(n / 1000)}k`)
 /** From this full, compacting is worth it; from the second, it is pressing. Claude Code compacts by itself near the limit. */
 export const COMPACT_WORTH = 60
 export const COMPACT_SOON = 80
+/** T-045: how long a session sits idle before Codehouse offers to compact it, ahead of its prompt cache running out. */
+export const IDLE_OFFER_MS = 50 * 60_000
+
+/**
+ * T-045: offer to compact an idle session before its prompt cache runs out, when compacting is worth it, so the next
+ * prompt reads a summary rather than the whole conversation again. Not while it compacts, and not once you chose Keep.
+ */
+export function shouldOfferCompact(o: { idleMs: number; pct: number | undefined; kept: boolean; pending: boolean }): boolean {
+  return !o.kept && !o.pending && o.pct !== undefined && o.pct >= COMPACT_WORTH && o.idleMs >= IDLE_OFFER_MS
+}
 
 /**
  * How full the conversation is: what Claude holds in mind for this session, as a share of what it can. Always shown;
@@ -1489,6 +1499,27 @@ function ContextMeter({
     .sort((a, b) => b.tokens - a.tokens)
     .slice(0, 6)
   const worth = pct !== undefined && pct >= COMPACT_WORTH
+  // T-045: since when it has been idle, looked at each minute; Keep holds until the next turn.
+  const idleSince = useRef<number | undefined>(undefined)
+  const [kept, setKept] = useState(false)
+  const [, setMinute] = useState(0)
+  useEffect(() => {
+    if (state === "idle") idleSince.current ??= Date.now()
+    else {
+      idleSince.current = undefined
+      setKept(false)
+    }
+  }, [state])
+  useEffect(() => {
+    const t = setInterval(() => setMinute((n) => n + 1), 60_000)
+    return () => clearInterval(t)
+  }, [])
+  const offer = shouldOfferCompact({
+    idleMs: idleSince.current === undefined ? 0 : Date.now() - idleSince.current,
+    pct,
+    kept,
+    pending,
+  })
   const advice =
     pct === undefined
       ? "Codehouse reads this after each turn."
@@ -1537,6 +1568,17 @@ function ContextMeter({
         </span>
         {worth ? <span className="ctx-advice">Compact</span> : null}
       </button>
+      {offer ? (
+        <span role="status" className="ctx-offer">
+          Idle for a while: compact now, so the next prompt reads a summary instead of all of it again?
+          <button type="button" className="btn !min-h-6 !px-2 !text-[12.5px]" onClick={compact}>
+            Compact
+          </button>
+          <button type="button" className="btn !min-h-6 !px-2 !text-[12.5px]" onClick={() => setKept(true)}>
+            Keep
+          </button>
+        </span>
+      ) : null}
       {open ? (
         <div role="group" aria-label="What fills the context" className="ctx-panel panel">
           {u ? (
