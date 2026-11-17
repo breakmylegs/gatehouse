@@ -28,7 +28,7 @@ Slices, in order:
 | T-014 | Provider version warnings, Update now, readiness timeouts. | Have | built (Codehouse had it) | | |
 | T-015 | Change model mid-thread, and switch provider with a budgeted context handoff. | Partly | todo | | |
 | T-016 | Custom models and display names for models. | Partly | todo | | |
-| T-017 | Remembered model and options for new threads, and a project default model. | Partly | todo | | |
+| T-017 | Remembered model and options for new threads, and a project default model. | Build, S | built | feat/model-choices | last choices, and a folder's own; never an Extreme approval mode |
 | T-018 | Text generation: thread titles, commit messages, PR titles and descriptions, branch names, with optional API-key text generators. | Build (safe variant), S | partly built | slice/T2-titles | titles built (no tools, on the session account check, recorded); commit messages, PR texts and branch names follow in slice T3 (T-074, T-086) |
 | T-019 | Regenerate title, and title instructions. | Build, S | built | slice/T2-titles | Name it again, and How you like titles in Settings |
 | T-020 | Suggested next prompt after a turn (Tab to fill, never sent). | Build, S | built | feat/open-folder | the SDK's prompt_suggestion in the empty prompt box; Tab fills it in; off in Settings |

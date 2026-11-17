@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { cleanName, projectName } from "@gatehouse/shared/project-name"
 import { scratchName } from "../lib/scratch"
+import { choicesFor, hasFolderChoices, rememberChoices } from "../lib/newSessionChoices"
 import { money } from "../lib/format"
 import { systemName } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
@@ -138,9 +139,17 @@ export function Sessions() {
     setCwd(startFolder)
     openFolder(undefined)
   }, [startFolder, openFolder])
-  const [model, setModel] = useState("")
-  const [mode, setMode] = useState<UiMode>("default")
-  const [effort, setEffort] = useState<EffortId | "">("")
+  // T-017: what you chose last time, or what you last chose for this folder.
+  const [model, setModel] = useState(() => choicesFor().model ?? "")
+  const [mode, setMode] = useState<UiMode>(() => choicesFor().mode ?? "default")
+  const [effort, setEffort] = useState<EffortId | "">(() => (choicesFor().effort ?? "") as EffortId | "")
+  useEffect(() => {
+    if (!hasFolderChoices(cwd)) return
+    const c = choicesFor(cwd)
+    if (c.model !== undefined) setModel(c.model)
+    if (c.effort !== undefined) setEffort(c.effort as EffortId | "")
+    if (c.mode !== undefined) setMode(c.mode)
+  }, [cwd])
   const [busy, setBusy] = useState(false)
   const [startedAt, setStartedAt] = useState(0)
   // A new project: what you want to build names its folder, in the projects folder from Settings.
@@ -263,6 +272,8 @@ export function Sessions() {
       sessionId: string
       info: { cwd: string; worktree?: { branch: string } }
     }
+    // T-017: kept for next time, and for this folder (never an Extreme approval mode).
+    rememberChoices(fresh ? freshPath : cwd.trim(), { model, effort, mode })
     if (fresh) {
       // The first prompt goes straight to the new session, as if you had typed it there.
       useStore.getState().addUserText(id, idea.trim())
