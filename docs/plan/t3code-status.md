@@ -127,7 +127,7 @@ Slices, in order:
 | T-079 | Agent-driven browser tabs in a headless Chrome, take and release control, screenshots of rendered pages. | Conflicts | listed for decision | | |
 | T-114 | Import cookies from another browser into the app's browser. | Conflicts | listed for decision | | |
 | T-115 | The app as the default web browser (macOS). | Conflicts | listed for decision | | |
-| T-116 | Open in an external editor (VS Code, JetBrains) at a file and line. | Build, S | todo | | |
+| T-116 | Open in an external editor (VS Code, JetBrains) at a file and line. | Build, S | built in part | feat/send-key | Open in VS Code in the file viewer, through vscode:// (Cursor's link too); never a blocked file; JetBrains not yet |
 | T-117 | Edit files in the window; search and replace across files; read files outside the workspace read-only. | Have | built (Codehouse had it) | | |
 | T-118 | A device panel: live iOS Simulator or Android Emulator next to the thread, device tools for agents, SSH device hosts. | Build, L | todo | | |
 | T-119 | Scheduled tasks: recurring or once, run now, pause; runs go to a new thread each time, one continuing thread, or one thread with a fresh session each run. | Partly | todo | | |

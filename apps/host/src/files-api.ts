@@ -59,6 +59,25 @@ export interface FilesDeps {
   sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** Opens Explorer with the file selected. Injected so tests never open a window. */
   reveal?: (absPath: string) => void
+  /** T-116: opens an editor's own link. Injected so tests never open one. */
+  openLink?: (link: string) => void
+}
+
+/** T-116: an editor's link to a file at a line: vscode://file/C:/dev/x.ts:12 (Cursor's is cursor://). */
+export function editorLink(editor: "vscode" | "cursor", abs: string, line?: number): string {
+  const p = abs.replace(/\\/g, "/").split("/").map(encodeURIComponent).join("/").replace(/^([A-Za-z])%3A/, "$1:")
+  return `${editor}://file/${p.replace(/^\/+/, "")}${line ? `:${line}` : ""}`
+}
+
+/** Opens a link with what Windows (or macOS) has for it, without a shell: the link is one argument. */
+export const openLink = (link: string): void => {
+  if (!/^(vscode|cursor):\/\/file\//.test(link)) return
+  if (process.platform === "darwin") {
+    spawn("/usr/bin/open", [link], { detached: true, stdio: "ignore" }).unref()
+    return
+  }
+  if (process.platform !== "win32") return
+  spawn("explorer.exe", [link], { detached: true, stdio: "ignore", windowsHide: false }).unref()
 }
 
 export const revealInExplorer = (abs: string): void => {
@@ -511,6 +530,21 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const where = locate(b, root)
     if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
     ;(ctx.reveal ?? revealInExplorer)(where.abs)
+    return { ok: true }
+  })
+
+  // T-116: a file in your own editor, at a line. Only a file of the session's (as reveal allows), never one the floor
+  // blocks (a secret would open in plain view), through the editor's own link so no shell is ever run.
+  app.post("/api/files/open-editor", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const where = locate(b, root)
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    if (await blocked(where.abs, root)) return bad(reply, 403, "That file is blocked by the policy, so it is not opened.")
+    const editor = b.editor === "cursor" ? "cursor" : "vscode"
+    const line = typeof b.line === "number" && Number.isInteger(b.line) && b.line > 0 && b.line < 10_000_000 ? b.line : undefined
+    ;(ctx.openLink ?? openLink)(editorLink(editor, where.abs, line))
     return { ok: true }
   })
 

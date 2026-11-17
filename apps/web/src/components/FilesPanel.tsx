@@ -290,6 +290,12 @@ export function Viewer({
     if (!r.ok) toast.error(r.error ?? "Explorer could not open")
   }
 
+  /** T-116: the file in VS Code (it asks Windows to open VS Code's own link; nothing happens if it is not installed). */
+  async function openInEditor() {
+    const r = await api("POST", "/api/files/open-editor", { session: sessionId, path: rel, editor: "vscode" })
+    if (!r.ok) toast.error(r.error ?? "VS Code could not open")
+  }
+
   const previewUrl = base ? `${base}${rel.split("/").map(encodeURIComponent).join("/")}` : undefined
 
   return (
@@ -358,6 +364,10 @@ export function Viewer({
               onClick={() => void reveal()}
             >
               Show in Explorer
+            </button>
+            {/* T-116: in your own editor; refused for a file the policy blocks. */}
+            <button type="button" className="btn !min-h-7 !px-2 text-[13px]" onClick={() => void openInEditor()}>
+              Open in VS Code
             </button>
           </>
         ) : (

@@ -4,7 +4,7 @@ import path from "node:path"
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { PolicyEngine, PolicyStore } from "@gatehouse/policy"
-import { registerFilesRoutes } from "../src/files-api.js"
+import { editorLink, registerFilesRoutes } from "../src/files-api.js"
 import type { AdminContext } from "../src/api.js"
 
 const REPO = path.resolve(import.meta.dirname, "../../..")
@@ -13,6 +13,7 @@ let ws: string
 let outside: string
 let app: FastifyInstance
 const revealed: string[] = []
+const links: string[] = []
 // Save a copy: where the save window answers, what was recorded, and whether recording works.
 let saveTo: string | undefined
 const copied: Array<{ event: string; input: Record<string, unknown> }> = []
@@ -53,6 +54,7 @@ beforeAll(async () => {
     sessionCwd: (id: string) => (id === "s1" && s1Open ? ws : undefined),
     sessionWrote: (id: string, abs: string) => id === "s1" && written.has(abs.toLowerCase()),
     reveal: (abs: string) => void revealed.push(abs),
+    openLink: (l: string) => void links.push(l),
     saveAs: async () => saveTo,
     audit: { record: async (e: never) => (copied.push(e), audited) },
     store,
@@ -200,6 +202,19 @@ describe("the files panel", () => {
     expect(revealed).toHaveLength(1)
   })
 
+  it("opens a file of the session's in VS Code at a line, never a secret or a file outside (T-116)", async () => {
+    const open = (p: string, extra: Record<string, unknown> = {}) =>
+      app.inject({ method: "POST", url: "/api/files/open-editor", payload: { session: "s1", path: p, ...extra } })
+    expect((await open("src/a.ts", { line: 12 })).statusCode).toBe(200)
+    expect(links.at(-1)).toMatch(/^vscode:\/\/file\/.+\/src\/a\.ts:12$/)
+    expect((await open("src/a.ts", { editor: "cursor", line: -3 })).statusCode).toBe(200)
+    expect(links.at(-1)).toMatch(/^cursor:\/\/file\/.+\/src\/a\.ts$/)
+    const before = links.length
+    expect((await open(".env")).statusCode).toBe(403)
+    expect((await open("../outside/private.txt")).statusCode).toBe(403)
+    expect(links).toHaveLength(before)
+    expect(editorLink("vscode", "C:\\dev\\my app\\x.ts", 3)).toBe("vscode://file/C:/dev/my%20app/x.ts:3")
+  })
   it("saves a copy where you choose, only after it is recorded, never a secrets file, and nothing when you cancel", async () => {
     const save = (p: string) =>
       app.inject({
