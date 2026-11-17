@@ -76,10 +76,11 @@ const FOLDED_KEY = "gatehouse.rail.folded"
 function readFolded(): Record<string, boolean> {
   try {
     const v = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "{}") as Record<string, unknown>
+    // Folded folders, and (T-027) Working when you opened it, which is folded unless saved as open.
     return Object.fromEntries(
       Object.entries(v)
-        .filter(([, on]) => on === true)
-        .map(([k]) => [k, true as boolean]),
+        .filter(([, on]) => typeof on === "boolean")
+        .map(([k, on]) => [k, on as boolean]),
     )
   } catch {
     return {}
@@ -124,6 +125,9 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [pinned, setPinned] = useState<Route[]>(readRailPages)
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
+  // T-027: Working gathers busy sessions; fold it to keep them out of the way, kept like any folder's fold. It starts
+  // open, so a session that is working is never out of sight until you choose.
+  const isFolded = (key: string) => folded[key] === true
   const [renaming, setRenaming] = useState<SessionInfo>()
   const [moving, setMoving] = useState<SessionInfo>()
   const [handingOff, setHandingOff] = useState<SessionInfo>()
@@ -171,7 +175,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const groups =
     mode === "chat"
       ? groupChats(listed, { ended: hideEnded, keep: shown })
-      : groupByFolder(listed, { ended: hideEnded, keep: shown })
+      : groupByFolder(listed, { ended: hideEnded, keep: shown, working: true })
   const hiddenEnded = hideEnded ? listed.filter((s) => isHiddenEnded(s, shown)).length : 0
   const endedAll = listed.filter((s) => isHiddenEnded(s)).length
   const chooseHide = (on: boolean) => {
@@ -406,10 +410,10 @@ export function Rail({ onHide }: { onHide: () => void }) {
               <button
                 type="button"
                 className="sign cursor-pointer border-0 bg-transparent p-0 text-[13px] font-semibold text-shell-mut"
-                aria-expanded={!folded[g.folder]}
+                aria-expanded={!isFolded(g.folder)}
                 onClick={() =>
                   setFolded((f) => {
-                    const next = { ...f, [g.folder]: !f[g.folder] }
+                    const next = { ...f, [g.folder]: !isFolded(g.folder) }
                     try {
                       localStorage.setItem(FOLDED_KEY, JSON.stringify(next))
                     } catch {
@@ -423,11 +427,11 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 {g.folder.startsWith("project:") ? (
                   <Icon name="projects" size={13} className="mr-1 inline align-[-2px]" />
                 ) : null}
-                {g.label} <Disclosure open={!folded[g.folder]} />
+                {g.label} <Disclosure open={!isFolded(g.folder)} />
               </button>
               <span className="text-[12px] text-shell-mut">{g.sessions.length}</span>
             </div>
-            {folded[g.folder] ? null : (
+            {isFolded(g.folder) ? null : (
               <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-0.5 p-0">
                 {g.sessions.map((s) => {
                   // Subagents or commands still working after the turn ended count as working.

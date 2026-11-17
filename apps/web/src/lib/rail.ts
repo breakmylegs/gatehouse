@@ -75,6 +75,8 @@ export function saveHideEnded(on: boolean): void {
 const CHATS = "chats:"
 const PINNED = "pinned:"
 const PROJECT = "project:"
+/** T-027: busy sessions together, folded unless you open it. */
+export const WORKING = "working:"
 
 /**
  * Chats for the Chat side of the sidebar: pinned first, then one group for each project that has chats (by name), then
@@ -150,7 +152,7 @@ function byRecency(sorted: SessionInfo[], now: Date): FolderGroup[] {
 export function groupByFolder(
   list: SessionInfo[],
   /** Ended sessions leave the list, except ones you have open (owner, 31 Oct). */
-  hide?: { ended: boolean; keep?: ReadonlySet<string | undefined> },
+  hide?: { ended: boolean; keep?: ReadonlySet<string | undefined>; working?: boolean },
 ): FolderGroup[] {
   const groups = new Map<string, FolderGroup>()
   for (const s of list) {
@@ -161,6 +163,13 @@ export function groupByFolder(
       const g = groups.get(PINNED) ?? { folder: PINNED, label: "Pinned", sessions: [] }
       g.sessions.push(s)
       groups.set(PINNED, g)
+      continue
+    }
+    // T-027: a session working on its own (not waiting on you, not pinned) is listed under Working, after Pinned.
+    if (hide?.working && s.state === "running" && s.kind !== "chat") {
+      const g = groups.get(WORKING) ?? { folder: WORKING, label: "Working", sessions: [] }
+      g.sessions.push(s)
+      groups.set(WORKING, g)
       continue
     }
     // A session you moved to a project is listed under the project, before the folders (owner, 2 Nov).
@@ -191,6 +200,7 @@ export function groupByFolder(
   return [...groups.values()].sort(
     (a, b) =>
       Number(b.folder === PINNED) - Number(a.folder === PINNED) ||
+      Number(b.folder === WORKING) - Number(a.folder === WORKING) ||
       Number(b.folder.startsWith(PROJECT)) - Number(a.folder.startsWith(PROJECT)) ||
       Number(a.folder === CHATS) - Number(b.folder === CHATS) ||
       a.label.localeCompare(b.label),
@@ -206,7 +216,7 @@ export function railOrder(
   hideEnded: boolean,
   keep?: ReadonlySet<string | undefined>,
 ): SessionInfo[] {
-  return groupByFolder(list, { ended: hideEnded, ...(keep ? { keep } : {}) }).flatMap(
+  return groupByFolder(list, { ended: hideEnded, working: true, ...(keep ? { keep } : {}) }).flatMap(
     (g) => g.sessions,
   )
 }
