@@ -41,7 +41,7 @@ Slices, in order:
 | T-027 | A folded Working section for busy threads. | Partly | built | feat/working | Working in the sidebar, after Pinned, for sessions working on their own; open until you fold it |
 | T-028 | Group threads by project. | Have | built (Codehouse had it) | | |
 | T-029 | Send the same prompt to several models, each in its own worktree; start in the background and open a fresh draft. | Partly | todo | | |
-| T-030 | Search every thread by title, branch, PR and project, and inside messages, from the palette. | Partly | todo | | |
+| T-030 | Search every thread by title, branch, PR and project, and inside messages, from the palette. | Partly | built | feat/palette-search | the palette knows sessions by title, project, folder, branch and PRs, and finds what was said in the open sessions; Earlier sessions still searches older ones |
 | T-031 | Copy a link or id for a thread. | Build, S | built | feat/send-key | Copy session id in a session's menu (Claude Code's id); no link, as Codehouse registers no address scheme |
 | T-032 | Subagent threads, an Agents view, and Stop that stops subagents too. | Have | built (Codehouse had it) | | |
 | T-033 | Limited state with Resume, Resume at reset and Snooze until reset. | Have | built (Codehouse had it) | | |

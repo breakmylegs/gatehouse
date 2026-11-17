@@ -5,6 +5,7 @@ import { type AppCommand, buildCommands, rankCommands } from "../lib/commands"
 import { openConversation } from "../lib/redo"
 import { keyLabel } from "../lib/platform-mac" // Mac fork
 import { readHideEnded } from "../lib/rail"
+import { searchSaid, sessionKeywords } from "../lib/sessionSearch"
 import { usePending, useSessionList, useStore } from "../store"
 import { EmptyState } from "./EmptyState"
 
@@ -33,6 +34,8 @@ export function CommandPalette() {
   const pending = usePending()
   const [query, setQuery] = useState("")
   const hits = useChatSearch(open ? query : "")
+  // T-030: what was said in the sessions open here, and each session's title, branch and pull requests.
+  const transcripts = useStore((s) => s.transcripts)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -83,6 +86,11 @@ export function CommandPalette() {
     }),
     route,
   )
+  const said = searchSaid(transcripts, query)
+  const titleOfId = (id: string) => {
+    const s = sessions.find((x) => x.id === id)
+    return s ? (s.title ?? s.project) : "A session"
+  }
   const here = all.filter((c) => c.page === route)
   const rest = all.filter((c) => c.page !== route)
   const commandItems = (list: AppCommand[]) =>
@@ -153,13 +161,35 @@ export function CommandPalette() {
               {sessions.slice(0, 50).map((s) => (
                 <Item
                   key={s.id}
-                  value={`session ${s.project} ${s.cwd}`}
+                  value={sessionKeywords(s, transcripts[s.id]?.items)}
                   onSelect={run(() => {
                     selectSession(s.id)
                     setRoute("workspace")
                   })}
                 >
-                  {s.project} ({s.state})
+                  {s.title ?? s.project} ({s.state}){s.worktree ? ` on ${s.worktree.branch}` : ""}
+                </Item>
+              ))}
+            </Command.Group>
+          ) : null}
+          {said.length > 0 ? (
+            // T-030: the words you typed are in each value, so the list's own filter keeps them.
+            <Command.Group heading="Said in sessions" className="text-[13px] text-mut">
+              {said.map((h) => (
+                <Item
+                  key={`${h.sessionId}:${h.itemId}`}
+                  value={`said ${h.sessionId} ${h.itemId} ${query}`}
+                  onSelect={run(() => {
+                    selectSession(h.sessionId)
+                    setRoute("workspace")
+                  })}
+                >
+                  <span className="grid">
+                    <span>
+                      {titleOfId(h.sessionId)}: {h.who === "you" ? "you" : "Claude"}
+                    </span>
+                    <span className="text-[12px] font-normal text-mut">{h.snippet}</span>
+                  </span>
                 </Item>
               ))}
             </Command.Group>
