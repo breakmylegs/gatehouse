@@ -1,0 +1,15 @@
+# E-028: WSL and bash.exe run a command inside Linux; the inner command is decided as it would be on its own.
+- { t: Bash, cmd: "wsl -e bash -c \"cat ~/.ssh/id_rsa\"", o: deny, r: secrets-files }
+- { t: Bash, cmd: "wsl -- ls", o: escalate, r: no-rule }
+# wsl itself matches no allow, so a command inside Linux never runs unasked, even one that would on Windows.
+- { t: Bash, cmd: "wsl -- git status", o: escalate, r: no-rule }
+- { t: Bash, cmd: "wsl -d Ubuntu -u root -- rm -rf /", o: deny, r: destructive-shell }
+- { t: Bash, cmd: "wsl cat .env", o: deny, r: secrets-files }
+- { t: Bash, cmd: "wsl.exe --exec git push", o: escalate, r: git-remote }
+- { t: PowerShell, cmd: "wsl -e bash -c 'cat ~/.aws/credentials'", o: deny, r: secrets-files }
+- { t: PowerShell, cmd: "bash.exe -c 'cat .env'", o: deny, r: secrets-files }
+- { t: Bash, cmd: "wsl -e $CMD", o: deny, r: obfuscated-shell }
+- { t: Read, p: "//wsl$/Ubuntu/home/me/.ssh/id_ed25519", o: deny, r: secrets-files }
+- { t: Read, p: "//wsl.localhost/Ubuntu/home/me/.kube/config", o: deny, r: secrets-files }
+- { t: Read, p: "//wsl.localhost/Ubuntu/home/me/.config/gcloud/credentials.db", o: deny, r: secrets-files }
+- { t: Bash, cmd: "wsl --list --verbose", o: escalate, r: no-rule }

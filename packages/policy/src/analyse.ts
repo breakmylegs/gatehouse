@@ -14,6 +14,7 @@ import {
   type Token,
 } from "./segments.js"
 import type { EvalContext, ToolCall } from "./types.js"
+import { shellCommand, wslCommand } from "./wsl.js"
 
 export const FILE_TOOLS = new Set(["Read", "Edit", "Write", "MultiEdit", "NotebookEdit", "Grep", "Glob"])
 export const SHELL_TOOLS = new Set(["Bash", "PowerShell"])
@@ -96,9 +97,21 @@ function strField(input: Record<string, unknown>, key: string): string | undefin
 const ENCODED = "-encodedcommand"
 const COMMAND = "-command"
 
-/** Inspects a segment that starts another shell: encoded commands and nested -Command payloads. */
-function inspectNativeShell(seg: Segment, out: ShellAnalysis): void {
+const LINUX_SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "ash"])
+
+/**
+ * Inspects a segment that starts another shell: encoded commands and nested -Command payloads, and (E-028) the Linux
+ * command a wsl call runs, or a bash -c from PowerShell (the Bash parser unwraps its own bash -c).
+ */
+function inspectNativeShell(seg: Segment, out: ShellAnalysis, linux: string[]): void {
   const base = baseCommandName(seg.name)
+  const inner = base === "wsl" ? wslCommand(seg.args) : seg.kind === "pwsh" && LINUX_SHELLS.has(base) ? shellCommand(seg.args) : undefined
+  if (inner !== undefined) {
+    if (seg.dynamic) {
+      if (seg.kind === "pwsh") out.flags.dynamicInvocation = true
+      else out.flags.evalDynamic = true
+    } else linux.push(inner)
+  }
   if (base === "reg" && /^(add|delete|import|copy|restore|load|unload)$/i.test(seg.args[0] ?? "")) {
     out.flags.registryWrite = true
   }
@@ -148,10 +161,21 @@ async function resolveNested(
   depth: number,
   state: { unavailable: boolean },
 ): Promise<void> {
-  for (const seg of analysis.segments.slice()) inspectNativeShell(seg, analysis)
+  const linux: string[] = []
+  for (const seg of analysis.segments.slice()) inspectNativeShell(seg, analysis, linux)
   const payloads = analysis.pwshPayloads.splice(0)
   for (const p of payloads) {
     const inner = await runPwsh(p.text, deps, depth + 1, state)
+    await resolveNested(inner, deps, depth + 1, state)
+    mergeAnalysis(analysis, inner)
+  }
+  for (const text of linux) {
+    if (depth >= MAX_NESTING) {
+      analysis.flags.evalDynamic = true
+      continue
+    }
+    // A Linux command that cannot be parsed sets parseError, which escalates.
+    const inner = await analyseBash(text)
     await resolveNested(inner, deps, depth + 1, state)
     mergeAnalysis(analysis, inner)
   }

@@ -247,6 +247,7 @@ const MIN_PER_CATEGORY: Record<string, number> = {
   "27-toolchain": 5,
   "28-k8s-manifests": 4,
   "29-migrations": 25,
+  "30-wsl": 13,
 }
 
 for (const { category, cases } of corpus) {

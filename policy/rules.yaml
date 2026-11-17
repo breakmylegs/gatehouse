@@ -11,7 +11,10 @@ floor:
     tools: [Read, Edit, Write, MultiEdit, NotebookEdit, Bash, PowerShell, Grep, Glob]
     pathGlobs: ["**/.env", "**/.env.*", "**/*.pem", "**/*.pfx", "**/*.key", "**/id_rsa*", "**/id_ed25519*",
                 "**/.aws/**", "**/.azure/**", "**/.ssh/**", "**/.claude/.credentials.json",
-                "**/.credentials.json", "**/Gatehouse/accounts/**"]
+                "**/.credentials.json", "**/Gatehouse/accounts/**",
+                # E-028: a Linux home under WSL keeps its cloud and cluster logins here too.
+                "//wsl$/**/.kube/**", "//wsl.localhost/**/.kube/**", "//wsl$/**/.config/gcloud/**",
+                "//wsl.localhost/**/.config/gcloud/**"]
     message: "Secrets files are blocked by policy. Ask the user to provide the values instead."
   # F2 (backlog): a rule that stops a call says what to do instead, so Claude can take the safer way by itself.
   - id: obfuscated-shell
