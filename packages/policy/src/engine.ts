@@ -10,6 +10,7 @@ import { installerCall } from "./installers.js"
 import { remoteDatabase } from "./database.js"
 import { productionContext } from "./cloud-context.js"
 import { bulkExport } from "./data-export.js"
+import { toolchainChange } from "./toolchain.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
 import { INSTALL_SCRIPTS_RULE, installScriptsFinding, withoutScripts } from "./install-scripts.js"
 import { hiddenCharacters } from "./hidden.js"
@@ -397,6 +398,9 @@ export class PolicyEngine {
     // E-017: a bulk export of data goes to a person, with what it takes and where; outside the project is higher.
     const exported = f.isShell ? bulkExport(f.segments, ctx.cwd, typeof input.command === "string" ? input.command : "") : undefined
     if (exported) escalations.push(exported)
+    // E-030: a change to the tools every project here uses goes to a person; Set-ExecutionPolicy is Severe.
+    const toolchain = f.isShell ? toolchainChange(f.segments, ctx.cwd) : undefined
+    if (toolchain) escalations.push(toolchain)
     // D-064: an install that would run install scripts goes to a person, with each script's text.
     const scripts = f.isShell && typeof input.command === "string" ? installScriptsFinding(input.command, ctx.cwd) : undefined
     if (scripts) escalations.push(scripts)

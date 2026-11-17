@@ -1,0 +1,6 @@
+# E-030: a change to the tools every project on this computer uses waits for you (toolchain-change).
+- { t: Bash, cmd: "nvm install 22", o: escalate, r: toolchain-change }
+- { t: Bash, cmd: "rustup default nightly", o: escalate, r: toolchain-change }
+- { t: Bash, cmd: "npm install -g typescript", o: escalate, r: toolchain-change }
+- { t: Bash, cmd: "dotnet tool install --global dotnet-ef", o: escalate, r: toolchain-change }
+- { t: Bash, cmd: "pnpm add --global turbo", o: escalate, r: toolchain-change }
