@@ -50,6 +50,8 @@ import { send, useStore } from "../store"
 
 interface Config {
   redactTerms: string[]
+  /** E-086 (absent: UK spelling and no dashes). */
+  writingRules?: { ukSpelling?: boolean; noDashes?: boolean; terms?: Array<{ use: string; not: string[] }>; banned?: string[] }
   expectedOrg?: string
   workspaceRoots?: string[]
   projectsFolder?: string
@@ -125,6 +127,15 @@ const lines = (t: string) =>
     .map((l) => l.trim())
     .filter(Boolean)
 
+/** E-086: "Codehouse = CodeHouse, Code house" lines, each the way to write a term and the ways not to. */
+const termLines = (t: string) =>
+  lines(t)
+    .map((l) => {
+      const [use = "", not = ""] = l.split("=")
+      return { use: use.trim(), not: not.split(",").map((n) => n.trim()).filter(Boolean) }
+    })
+    .filter((x) => x.use && x.not.length)
+
 /** What the form shows, as typed. Saved as a whole: the Host checks every field each time. */
 interface Values {
   org: string
@@ -140,6 +151,10 @@ interface Values {
   digestOn: boolean
   digestAt: string
   terms: string
+  writeUk: boolean
+  writeDashes: boolean
+  writeTerms: string
+  writeBanned: string
   cpEsc: boolean
   cpBurst: boolean
   /** A number, or "none" for no limit. */
@@ -233,6 +248,10 @@ export function valuesOf(d: SettingsData): Values {
     digestOn: c.digestTime !== null,
     digestAt: c.digestTime ?? "08:00",
     terms: c.redactTerms.join("\n"),
+    writeUk: c.writingRules?.ukSpelling ?? true,
+    writeDashes: c.writingRules?.noDashes ?? true,
+    writeTerms: (c.writingRules?.terms ?? []).map((t) => `${t.use} = ${t.not.join(", ")}`).join("\n"),
+    writeBanned: (c.writingRules?.banned ?? []).join("\n"),
     cpEsc: c.checkpoints.beforeEscalation,
     cpBurst: c.checkpoints.editBursts,
     ecTurns: c.extremeCarryOn?.noTurnLimit ? "none" : String(c.extremeCarryOn?.turns ?? 200),
@@ -320,6 +339,21 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.keepAwake = false
   if (v.recap) delete body.recapByClaude
   else body.recapByClaude = false
+  // E-086: the house style (UK spelling, no dashes, no lists) is saved as no setting; a newer version's fields stay.
+  {
+    const { ukSpelling: _u, noDashes: _n, terms: _t, banned: _b, ...keep } = (d.saved.writingRules as Record<string, unknown> | undefined) ?? {}
+    const terms = termLines(v.writeTerms)
+    const banned = lines(v.writeBanned)
+    const rules = {
+      ...keep,
+      ...(v.writeUk ? {} : { ukSpelling: false }),
+      ...(v.writeDashes ? {} : { noDashes: false }),
+      ...(terms.length ? { terms } : {}),
+      ...(banned.length ? { banned } : {}),
+    }
+    if (Object.keys(rules).length) body.writingRules = rules
+    else delete body.writingRules
+  }
   // T-061: anything else kept in forges by a newer version stays.
   {
     const { github: _g, ...rest } = (d.saved.forges as Record<string, unknown> | undefined) ?? {}
@@ -513,6 +547,10 @@ export const DEFAULT_VALUES: Values = {
   digestOn: true,
   digestAt: "08:00",
   terms: "",
+  writeUk: true,
+  writeDashes: true,
+  writeTerms: "",
+  writeBanned: "",
   cpEsc: true,
   cpBurst: true,
   ecTurns: "200",
@@ -834,6 +872,7 @@ export function Settings() {
   const instrChanged = differs(v, ["instr"])
   const profileChanged = differs(v, ["callMe", "work"])
   const privacyChanged = differs(v, ["terms"])
+  const writingChanged = differs(v, ["writeUk", "writeDashes", "writeTerms", "writeBanned"])
   const checkpointsChanged = differs(v, ["cpEsc", "cpBurst"])
   const sectionChanged: Partial<Record<SectionId, boolean>> = {
     account: orgChanged || profileChanged,
@@ -1675,6 +1714,43 @@ export function Settings() {
                   value={v.terms}
                   onChange={(e) => edit({ terms: e.target.value })}
                   onBlur={() => commit("Redaction list")}
+                  spellCheck={false}
+                />
+              </Field>
+            </Group>
+
+            <Group section="privacy" title="Writing rules" gap="gap-3" changed={writingChanged}>
+              <p className="m-0 text-[13px] text-mut">
+                What Codehouse writes, such as an export, is corrected, and the preview lists each change. What Claude
+                writes, such as a commit message, is only checked: the session says what breaks a rule, and the text is
+                never changed. Code and web addresses are left alone. A project can add its own in
+                .codehouse/writing-rules.json.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.writeUk} onChange={(e) => change({ writeUk: e.target.checked }, "Writing rules")} />
+                UK spelling (colour, organise)
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.writeDashes} onChange={(e) => change({ writeDashes: e.target.checked }, "Writing rules")} />
+                No em or en dashes (a comma, or a hyphen in a range of numbers)
+              </label>
+              <Field label="Terms written one way" help="One per line: the right way, an equals sign, then the wrong ways with commas. For example: Codehouse = CodeHouse, Code house. Saves when you leave the box.">
+                <textarea
+                  className="field"
+                  rows={3}
+                  value={v.writeTerms}
+                  onChange={(e) => edit({ writeTerms: e.target.value })}
+                  onBlur={() => commit("Writing rules")}
+                  spellCheck={false}
+                />
+              </Field>
+              <Field label="Banned terms" help="One per line. Flagged wherever they appear, never replaced. Saves when you leave the box.">
+                <textarea
+                  className="field"
+                  rows={3}
+                  value={v.writeBanned}
+                  onChange={(e) => edit({ writeBanned: e.target.value })}
+                  onBlur={() => commit("Writing rules")}
                   spellCheck={false}
                 />
               </Field>

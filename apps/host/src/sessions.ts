@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import { checkLastCommit, readRules } from "./writing-rules.js"
 import type { IntentCheck } from "./intent-drift.js"
 import { adrContext, readAdrs } from "./adr.js"
 import { fitnessCheck, fitnessWords, hasFitness } from "./fitness.js"
@@ -404,6 +405,7 @@ export interface SessionEvents {
         | "instructions_changed"
         | "heartbeat_missed"
         | "merge_conflict_ahead"
+        | "writing_flagged"
         | "commit_noted"
         | "mutant_task_started"
         | "intent_drift"
@@ -1193,7 +1195,11 @@ export class Session extends EventEmitter<SessionEvents> {
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
       ...(d.evidence ? { onCommandEnded: (id: string, error: string | undefined) => (error === undefined ? d.evidence!.results.succeeded(id) : d.evidence!.results.failed(id, error)) } : {}),
-      onCommitted: (cwd) =>
+      onCommitted: (cwd) => {
+        // E-086: the agent's commit message, checked against the writing rules and never rewritten.
+        void checkLastCommit(cwd, readRules(d.config().writingRules)).then(
+          (problems) => problems.length > 0 && this.emit("event", { type: "writing_flagged", data: { where: "commit message", problems } }),
+        )
         void noteCommit({
           sessionId: this.id,
           cwd,
@@ -1205,7 +1211,8 @@ export class Session extends EventEmitter<SessionEvents> {
             : {}),
         }).then(
           (n) => n && this.emit("event", { type: "commit_noted", data: { auditSeq: n.auditSeq } }),
-        ),
+        )
+      },
       // D-061: a result that looked like prompt injection: recorded (what kind, never the result) and shown.
       onInjection: (tool, findings, toolUseId) => {
         this.#flagged = [...this.#flagged, { tool, at: new Date().toISOString(), findings }].slice(-20)

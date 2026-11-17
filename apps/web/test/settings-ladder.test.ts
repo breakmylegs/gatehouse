@@ -45,6 +45,19 @@ describe("the timeline's summaries (O42)", () => {
   })
 })
 
+describe("writing rules (E-086)", () => {
+  it("are the house style unless changed, saving only what differs and keeping what a newer copy wrote", () => {
+    const d = data()
+    expect([valuesOf(d).writeUk, valuesOf(d).writeDashes]).toEqual([true, true])
+    expect(bodyOf(d, valuesOf(d))).not.toHaveProperty("writingRules")
+    const kept = data({ writingRules: { later: 1 } })
+    const body = bodyOf(kept, { ...valuesOf(kept), writeDashes: false, writeTerms: "Codehouse = CodeHouse, Code house\nnot a term", writeBanned: "synergy\n" })
+    expect(body.writingRules).toEqual({ later: 1, noDashes: false, terms: [{ use: "Codehouse", not: ["CodeHouse", "Code house"] }], banned: ["synergy"] })
+    const back = valuesOf(data({ writingRules: body.writingRules }))
+    expect([back.writeDashes, back.writeTerms, back.writeBanned]).toEqual([false, "Codehouse = CodeHouse, Code house", "synergy"])
+  })
+})
+
 describe("settling finished sessions (T-024)", () => {
   it("is three days unless you choose, and only another choice is saved", () => {
     const d = data()

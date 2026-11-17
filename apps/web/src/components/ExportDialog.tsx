@@ -58,6 +58,43 @@ function printPage(html: string): void {
   document.body.appendChild(frame)
 }
 
+interface Preview {
+  text: string
+  masked: number
+  /** E-086: writing-rule corrections made to the prose (an older Host sends none). */
+  changes?: Array<{ from: string; to: string; count: number }>
+  banned?: string[]
+}
+
+const shown = (s: string) => (s === "—" ? "an em dash" : s === "–" ? "an en dash" : `"${s}"`)
+
+/** E-086: what the writing rules corrected, and banned terms left for you to change. */
+export function WritingChanges({ changes, banned }: { changes: NonNullable<Preview["changes"]>; banned: string[] }) {
+  if (!changes.length && !banned.length) return null
+  return (
+    <div className="grid gap-1 text-[13px]">
+      {changes.length ? (
+        <>
+          <span>Corrected by your writing rules:</span>
+          <ul className="m-0 pl-5">
+            {changes.slice(0, 20).map((c) => (
+              <li key={`${c.from}>${c.to}`}>
+                {shown(c.from)} to "{c.to}"{c.count > 1 ? `, ${c.count} times` : ""}
+              </li>
+            ))}
+            {changes.length > 20 ? <li className="text-mut">and {changes.length - 20} more</li> : null}
+          </ul>
+        </>
+      ) : null}
+      {banned.length ? (
+        <span className="font-semibold text-warn">
+          Banned by your writing rules, and left for you to change: {banned.map((b) => `"${b}"`).join(", ")}.
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
 /**
  * Export with a preview (W1-13): the whole conversation is read from the Host from its start, your redaction list
  * and secret patterns are masked by the Host, and what you see is exactly what is saved. Each save is in the audit
@@ -65,7 +102,7 @@ function printPage(html: string): void {
  */
 export function ExportDialog() {
   const [what, setWhat] = useState<ExportWhat>()
-  const [preview, setPreview] = useState<{ text: string; masked: number }>()
+  const [preview, setPreview] = useState<Preview>()
   const [error, setError] = useState<string>()
   const [format, setFormat] = useState<Format>("md")
   const [busy, setBusy] = useState(false)
@@ -114,11 +151,12 @@ export function ExportDialog() {
         at: Date.now(),
         ...(model ? { model: modelLabel(model, model) } : {}),
       })
-      const p = await api<{ text: string; masked: number }>("POST", "/api/export/redact", {
+      const p = await api<Preview>("POST", "/api/export/redact", {
         text: markdown.current,
         format: "md",
         title: what.title,
         preview: true,
+        ...(what.sessionId ? { session: what.sessionId } : {}),
       })
       if (gone) return
       if (p.ok && p.data) setPreview(p.data)
@@ -136,7 +174,7 @@ export function ExportDialog() {
   async function save() {
     if (!what) return
     setBusy(true)
-    const r = await api<{ text: string; masked: number }>("POST", "/api/export/redact", {
+    const r = await api<Preview>("POST", "/api/export/redact", {
       text: markdown.current,
       format,
       title: what.title,
@@ -160,7 +198,7 @@ export function ExportDialog() {
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-h`}
-        className="panel grid max-h-[90vh] w-[min(820px,94vw)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-3 p-4"
+        className="panel grid max-h-[90vh] w-[min(820px,94vw)] grid-rows-[auto_auto_auto_minmax(0,1fr)_auto] gap-3 p-4"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -181,6 +219,7 @@ export function ExportDialog() {
                 ? `${preview.masked} ${preview.masked === 1 ? "thing was" : "things were"} masked: words on your redaction list and anything that looks like a secret. This is exactly what will be saved.`
                 : "Nothing needed masking. This is exactly what will be saved."}
         </p>
+        <WritingChanges changes={preview?.changes ?? []} banned={preview?.banned ?? []} />
         <pre
           className="cmd min-h-0 overflow-auto text-[12.5px]"
           aria-label="What will be saved"

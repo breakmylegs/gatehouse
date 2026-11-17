@@ -47,6 +47,19 @@ function build(loose: boolean) {
   return obj({
     /** Client names, internal host names and the like, redacted everywhere (invariant 12). */
     redactTerms: z.array(z.string()).default([]),
+    /**
+     * E-086: writing rules for what Codehouse writes (corrected, listed in the preview) and what agents write (checked,
+     * never rewritten). Absent: UK spelling and no dashes, the house style. Read tolerantly by the Host.
+     */
+    writingRules: z
+      .object({
+        ukSpelling: z.boolean().optional(),
+        noDashes: z.boolean().optional(),
+        terms: z.array(z.object({ use: z.string(), not: z.array(z.string()) }).passthrough()).optional(),
+        banned: z.array(z.string()).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** The organisation the signed-in account must belong to (invariant 14). */
     expectedOrg: z.string().optional(),
     /**

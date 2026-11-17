@@ -83,6 +83,34 @@ describe("exporting a conversation", () => {
     await app.close()
   })
 
+  it("corrects the prose by the writing rules in the preview, listing each change, and never touches code (E-086)", async () => {
+    const project = fs.mkdtempSync(path.join(dir, "proj-"))
+    fs.mkdirSync(path.join(project, ".codehouse"))
+    fs.writeFileSync(path.join(project, ".codehouse", "writing-rules.json"), JSON.stringify({ terms: [{ use: "Codehouse", not: ["CodeHouse"] }], banned: ["synergy"] }))
+    const app = Fastify()
+    registerExportRoutes(app, {
+      audit: { record: async () => true } as never,
+      config: () => ({ redactTerms: [] }) as never,
+      sessionCwd: (id) => (id === "s1" ? project : undefined),
+    })
+    const r = await app.inject({
+      method: "POST",
+      url: "/api/export/redact",
+      payload: { session: "s1", format: "md", preview: true, text: "The color changed — CodeHouse said synergy.\n```\nconst color = 1 — 2\n```" },
+    })
+    const body = r.json() as { text: string; changes: Array<{ from: string; to: string; count: number }>; banned: string[] }
+    expect(body.text).toBe("The colour changed, Codehouse said synergy.\n```\nconst color = 1 — 2\n```")
+    expect(body.changes).toEqual(
+      expect.arrayContaining([
+        { from: "—", to: ",", count: 1 },
+        { from: "CodeHouse", to: "Codehouse", count: 1 },
+        { from: "color", to: "colour", count: 1 },
+      ]),
+    )
+    expect(body.banned).toEqual(["synergy"])
+    await app.close()
+  })
+
   it("makes no export it could not record", async () => {
     const app = Fastify()
     registerExportRoutes(app, {

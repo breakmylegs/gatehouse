@@ -1824,6 +1824,8 @@ const DAY = 86_400_000
 const LIVE_SETTINGS = [
   "expectedOrg",
   "redactTerms",
+  // E-086: read each time an export is made or a commit checked.
+  "writingRules",
   "digestTime",
   "extremeCarryOn",
   "planLimitPause",

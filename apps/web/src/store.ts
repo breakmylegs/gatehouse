@@ -840,6 +840,11 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
     case "heartbeat_missed":
       return `Paused: nothing was heard from you for ${String(data.minutes)} minutes, the dead-man timer. Start it again when you are back.`
+    case "writing_flagged": {
+      // E-086: what an agent wrote breaks the writing rules; flagged, never rewritten.
+      const problems = Array.isArray(data.problems) ? data.problems.filter((p): p is string => typeof p === "string") : []
+      return `Writing rules: the ${str(data.where) ?? "text"} ${problems.slice(0, 5).join("; ")}.`
+    }
     case "merge_conflict_ahead":
       // E-051: found by trying the merge in git's object store; nothing was merged.
       return `Merge conflict ahead: ${str(data.line) ?? ""} Nothing has been merged; sort it out before merging back.`
