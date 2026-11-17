@@ -158,6 +158,9 @@ export interface State {
   setupDone: boolean
   handleEvent: (e: ServerEvent) => void
   setRoute: (r: Route) => void
+  /** T-002: a folder you opened from a terminal, for the start-session form to take (and clear). */
+  startFolder?: string
+  openFolder: (path: string | undefined) => void
   selectSession: (id: string | undefined) => void
   /** Sessions shown side by side in the workspace, left to right. At most MAX_PANES. */
   panes: string[]
@@ -361,6 +364,8 @@ export const useStore = create<State>((set, get) => ({
   setupDone: localStorage.getItem("gatehouse.setup") === "done",
 
   setRoute: (route) => set({ route }),
+  // T-002: the start-session form, with the folder filled in; nothing starts until you say what to do.
+  openFolder: (startFolder) => (startFolder ? set({ startFolder, route: "sessions" }) : set({ startFolder: undefined })),
   openImported: (importedChat) => set({ importedChat, route: "imported" }),
   selectSession: (selectedSession) =>
     set((s) => {

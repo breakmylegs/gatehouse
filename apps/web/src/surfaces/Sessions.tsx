@@ -130,6 +130,14 @@ export function Sessions() {
   const selectSession = useStore((s) => s.selectSession)
   const openBeside = useStore((s) => s.openBeside)
   const [cwd, setCwd] = useState("")
+  // T-002: a folder opened from a terminal (Codehouse.exe <folder>) fills the form; you still say what to build.
+  const startFolder = useStore((s) => s.startFolder)
+  const openFolder = useStore((s) => s.openFolder)
+  useEffect(() => {
+    if (!startFolder) return
+    setCwd(startFolder)
+    openFolder(undefined)
+  }, [startFolder, openFolder])
   const [model, setModel] = useState("")
   const [mode, setMode] = useState<UiMode>("default")
   const [effort, setEffort] = useState<EffortId | "">("")

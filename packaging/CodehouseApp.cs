@@ -394,6 +394,7 @@ internal sealed class MainForm : Form
             {
                 PrepareQuick();
                 PrepareWing();
+                OpenPendingFolder();
                 SayIfRestarted();
             }
         };
@@ -582,6 +583,28 @@ internal sealed class MainForm : Form
         quitting = true;
         Hosting.StopChildren(relay, host);
         Application.Exit();
+    }
+
+    // ---- a folder opened from a terminal (T-002) ----
+
+    /// <summary>Where Codehouse.exe &lt;folder&gt; leaves the folder for the window: read once, then removed.</summary>
+    internal static string OpenFolderFile { get { return Path.Combine(Hosting.DataDir(), "open-folder.txt"); } }
+
+    /// <summary>The start-session form with that folder filled in, once the page is up. Nothing starts until you say what to do.</summary>
+    internal void OpenPendingFolder()
+    {
+        if (env == null || url == null) return; // the page is not up yet; it looks again when it is
+        string folder = null;
+        try
+        {
+            if (!File.Exists(OpenFolderFile)) return;
+            folder = File.ReadAllText(OpenFolderFile).Trim();
+            File.Delete(OpenFolderFile);
+        }
+        catch (Exception ex) { Remember("[open] the folder could not be read: " + ex.Message); return; }
+        if (folder.Length == 0 || folder.Length > 1000 || folder.IndexOfAny(new[] { '\r', '\n' }) >= 0 || !Directory.Exists(folder)) return;
+        ShowWindow();
+        Tell("open-folder:" + folder);
     }
 
     // ---- the wing at the top of the screen (O37, the Windows version of the Mac's beside the notch) ----
@@ -893,6 +916,7 @@ internal static class Program
         bool check = false, browser = false, relay = false, help = false, inTray = false;
         int afterPid = 0;
         string relayArgs = "";
+        string openFolder = null;
         for (int i = 0; i < args.Length; i++)
         {
             string a = args[i];
@@ -904,6 +928,9 @@ internal static class Program
             else if (a == "--no-browser") { }
             else if (a == "--after" && i + 1 < args.Length) int.TryParse(args[++i], out afterPid);
             else if (a == "--public-url" && i + 1 < args.Length) relayArgs = "--public-url \"" + args[++i] + "\"";
+            // T-002: a folder to open in Codehouse, from a terminal: --open <folder>, or the folder on its own.
+            else if (a == "--open" && i + 1 < args.Length) openFolder = args[++i];
+            else if (!a.StartsWith("-") && openFolder == null && Directory.Exists(a)) openFolder = a;
             else
             {
                 Console.WriteLine("[gatehouse] Unknown option " + a + ". Try --help.");
@@ -916,6 +943,7 @@ internal static class Program
             Console.WriteLine("  Codehouse.exe                 open the Codehouse window");
             Console.WriteLine("  --check                       start, check the window and Host, stop (exit code 0 or 1)");
             Console.WriteLine("  --relay [--public-url URL]    also start the phone Relay (docs\\relay-local.md)");
+            Console.WriteLine("  Codehouse.exe <folder>        open Codehouse on a new session in that folder (--open <folder> too)");
             Console.WriteLine("  --tray                        start hidden in the tray (what start at sign-in uses)");
             Console.WriteLine("  --browser                     use the default browser instead of this window");
             Console.WriteLine("Use Codehouse-Console.exe for a console window with the Host's messages.");
@@ -937,6 +965,15 @@ internal static class Program
             try { Process.GetProcessById(afterPid).WaitForExit(30000); }
             catch (Exception) { }
         }
+        if (openFolder != null)
+        {
+            // A folder that is there, as a full path, left for the window (this one or the one already running) to open.
+            string full;
+            try { full = Path.GetFullPath(openFolder); } catch (Exception) { full = null; }
+            if (full == null || !Directory.Exists(full)) { Console.WriteLine("[gatehouse] There is no folder " + openFolder + "."); return 2; }
+            try { Directory.CreateDirectory(Hosting.DataDir()); File.WriteAllText(MainForm.OpenFolderFile, full); }
+            catch (Exception ex) { Console.WriteLine("[gatehouse] The folder could not be passed on: " + ex.Message); return 1; }
+        }
         bool created;
         string lockName = SingleInstanceName();
         Mutex single = new Mutex(true, "Local\\Gatehouse.App" + lockName, out created);
@@ -955,7 +992,7 @@ internal static class Program
         {
             while (show.WaitOne())
             {
-                try { form.BeginInvoke((Action)delegate { form.ShowWindow(); }); } catch (Exception) { }
+                try { form.BeginInvoke((Action)delegate { form.ShowWindow(); form.OpenPendingFolder(); }); } catch (Exception) { }
             }
         });
         watcher.IsBackground = true;

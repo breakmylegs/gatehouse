@@ -13,11 +13,11 @@ Slices, in order:
 | Id | Feature | Verdict | Status | Branch | Note |
 |---|---|---|---|---|---|
 | T-001 | Desktop app for Windows, macOS and Linux, and package-manager installs. | Have | built (Codehouse had it) | | |
-| T-002 | Open a project in the running app from a terminal (`t3 app <folder>`). | Build, S | todo | | |
+| T-002 | Open a project in the running app from a terminal (`t3 app <folder>`). | Build, S | built | feat/open-folder | `Codehouse.exe <folder>` opens the start-session form on it, in the running copy too; nothing starts until you say what to build |
 | T-003 | Background service at sign-in, restarted if it exits. | Have | built (Codehouse had it) | | |
 | T-004 | Welcome page that finds installed agents and imports recent projects and conversations from Claude Code's history. | Partly | todo | | |
 | T-005 | Drop a folder on the sidebar to open it as a project. | Build, S | todo | | |
-| T-006 | Threads without a project, in dated scratch folders, and Turn into project. | Partly | todo | | |
+| T-006 | Threads without a project, in dated scratch folders, and Turn into project. | Partly | built in part | slice/t4 | scratch sessions in dated folders; Turn into project not yet |
 | T-007 | Desktop as a remote only, with no local server. | Conflicts | listed for decision | | |
 | T-008 | Run agents and projects inside a WSL distro. | Build, L | todo | | |
 | T-009 | Other coding agents (Codex, Cursor, Grok, OpenCode, Antigravity, Kiro, Pi, Muse Code, fx) on their own sign-ins. | Conflicts | listed for decision | | |
@@ -36,7 +36,7 @@ Slices, in order:
 | T-022 | Threads outlive the agent process; stop and resume. | Have | built (Codehouse had it) | | |
 | T-023 | Pin threads and drag to reorder or between sections. | Partly | todo | | |
 | T-024 | Settle finished threads, automatically after inactivity or a merged PR, Never per thread. | Partly | todo | | |
-| T-025 | Snooze a thread until a time or until limits reset; it wakes early for an approval, a question or a failure. | Build, S | todo | | |
+| T-025 | Snooze a thread until a time or until limits reset; it wakes early for an approval, a question or a failure. | Build, S | built | | snooze in the sidebar, wakes at once if it needs you (status corrected 17 Nov) |
 | T-026 | Undo for sidebar actions (a five-second notice, mod+Z). | Build, S | todo | | |
 | T-027 | A folded Working section for busy threads. | Partly | todo | | |
 | T-028 | Group threads by project. | Have | built (Codehouse had it) | | |
@@ -118,8 +118,8 @@ Slices, in order:
 | T-106 | Panel animation duration, 0 ms by default. | Build, S | todo | | |
 | T-071 | Customisable shortcuts (a settings file with conditions and precedence, new defaults added later). | Build, M | todo | | |
 | T-107 | Keyboard pickers for model, effort, mode, workspace and branch; effort up and down; mod+1 to 9 for the first threads. | Partly | todo | | |
-| T-108 | F6 to move between areas; arrow keys, F2 rename and Shift+F10 in the thread list. | Partly | todo | | |
-| T-109 | Back and forward through pages; reopen the last closed tab. | Build, S | todo | | |
+| T-108 | F6 to move between areas; arrow keys, F2 rename and Shift+F10 in the thread list. | Partly | built in part | slice/t4 | F6 and Shift+F6; the list keys not yet |
+| T-109 | Back and forward through pages; reopen the last closed tab. | Build, S | built in part | slice/t4 | back and forward (Alt+Left, Alt+Right, mouse buttons); reopen a closed pane not yet |
 | T-110 | Localisation and right-to-left text. | Build, L | todo | | |
 | T-111 | Trackpad swipe for back and forward. | Build, S | todo | | |
 | T-112 | A terminal per thread with server-kept scrollback (5,000 lines), restored after a reconnect, Select all, Jump to latest. | Partly | todo | | |

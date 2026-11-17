@@ -75,6 +75,12 @@ export function startShell(): () => void {
       if (!st.panes.includes(id)) st.openBeside(id)
       return
     }
+    // T-002: a folder opened from a terminal (Codehouse.exe <folder>): the start-session form, with it filled in.
+    if (m.startsWith("open-folder:")) {
+      const folder = m.slice(12).trim()
+      if (folder && folder.length <= 1000 && !/[\r\n]/.test(folder)) useStore.getState().openFolder(folder)
+      return
+    }
     // Mac fork: a request opened from the wing beside the notch (NotchMac.tsx), on Approvals.
     if (m.startsWith("open-request:")) {
       const st = useStore.getState()
