@@ -1,0 +1,10 @@
+# E-016: a database client pointed at another computer waits for you (remote-database), one that looks like production
+# is Severe; one on this computer, or with no host named, is decided by the rules as before.
+- { t: Bash, cmd: "psql -h db.example.com -U app -d shop", o: escalate, r: remote-database }
+- { t: Bash, cmd: "psql postgres://app@db.example.com:5432/shop -c 'select 1'", o: escalate, r: remote-database }
+- { t: Bash, cmd: "PGHOST=10.1.2.3 psql -d shop", o: escalate, r: remote-database }
+- { t: Bash, cmd: "mysql -hdb-staging.internal -u app shop", o: escalate, r: remote-database }
+- { t: Bash, cmd: "sqlcmd -S tcp:prod-sql.example.com,1433 -Q 'select 1'", o: escalate, r: remote-database }
+- { t: Bash, cmd: "mongosh 'mongodb+srv://cluster0.example.net/app'", o: escalate, r: remote-database }
+- { t: Bash, cmd: "redis-cli -h cache.example.com GET x", o: escalate, r: remote-database }
+- { t: PowerShell, cmd: "sqlcmd -S db.example.com -Q 'select 1'", o: escalate, r: remote-database }

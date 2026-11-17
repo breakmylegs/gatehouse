@@ -7,6 +7,8 @@ import { DEFAULT_LICENCES, licenceFindings } from "./licences.js"
 import { admit, dependencyKey, fromCommand, fromManifestEdit, knownDependencies, type AddedDependency, type DependencyFinding } from "./dependencies.js"
 import { expandEffects } from "./expand.js"
 import { installerCall } from "./installers.js"
+import { remoteDatabase } from "./database.js"
+import { productionContext } from "./cloud-context.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
 import { INSTALL_SCRIPTS_RULE, installScriptsFinding, withoutScripts } from "./install-scripts.js"
 import { hiddenCharacters } from "./hidden.js"
@@ -385,6 +387,12 @@ export class PolicyEngine {
     // D-096: installing software on Windows is High, and never approved by Extreme approval.
     const installer = f.isShell ? installerCall(f.segments) : undefined
     if (installer) escalations.push(installer)
+    // E-016: a database client pointed at another computer goes to a person; one that looks like production is Severe.
+    const remoteDb = f.isShell ? remoteDatabase(f.segments) : undefined
+    if (remoteDb) escalations.push(remoteDb)
+    // E-021: a change with kubectl, helm, az, aws or gcloud aimed at what looks like production is Severe.
+    const prodContext = f.isShell ? productionContext(f.segments) : undefined
+    if (prodContext) escalations.push(prodContext)
     // D-064: an install that would run install scripts goes to a person, with each script's text.
     const scripts = f.isShell && typeof input.command === "string" ? installScriptsFinding(input.command, ctx.cwd) : undefined
     if (scripts) escalations.push(scripts)

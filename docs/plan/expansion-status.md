@@ -47,9 +47,9 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-097 | Crash bundle | E1 | todo | | |  |
 | E-099 | Health score | E1 | todo | | |  |
 | E-011 | Destructive migration guard | E1 | todo | | |  |
-| E-016 | Remote database connection guard | E1 | todo | | |  |
+| E-016 | Remote database connection guard | E1 | done | feat/guards | yes | remote-database; golden 24 |
 | E-017 | Bulk data export guard | E1 | todo | | |  |
-| E-021 | Production context guard for cloud CLIs | E1 | todo | | |  |
+| E-021 | Production context guard for cloud CLIs | E1 | done | feat/guards | yes | production-context; golden 25 |
 | E-023 | Kubernetes manifest guard | E1 | todo | | |  |
 | E-028 | WSL command coverage | E1 | todo | | |  |
 | E-030 | Toolchain manager guard | E1 | todo | | |  |
