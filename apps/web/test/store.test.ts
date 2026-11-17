@@ -163,6 +163,10 @@ describe("store events", () => {
     expect(describeEvent("notification", { message: "Needs input" })).toBe("Needs input")
     expect(describeEvent("stop", {})).toBeUndefined()
     expect(describeEvent("subagent_stop", {})).toBe("Subagent finished")
+    // E-051: a conflict found before merging says so, and that nothing was merged.
+    expect(describeEvent("merge_conflict_ahead", { line: "a and b would conflict in app.ts." })).toBe(
+      "Merge conflict ahead: a and b would conflict in app.ts. Nothing has been merged; sort it out before merging back.",
+    )
   })
 
   it("says when Extreme approval carries on by itself, and why it stopped", () => {
