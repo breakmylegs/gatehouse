@@ -75,7 +75,11 @@ services:
     pull_policy: never
     restart: unless-stopped
     command: ["npx", "tsx", "apps/cnw/src/updater.ts"]
+    # As the owner of the clone (the machine's first user on Debian and Ubuntu), so it can check out a release in it.
+    # CNW_UID and CNW_GID in .env if yours differ (id -u, id -g).
+    user: "${CNW_UID:-1000}:${CNW_GID:-1000}"
     environment:
+      HOME: /tmp
       DOCKER_HOST: tcp://docker-proxy:2375
       CNW_COMPOSE_DIR: /stack
       CNW_REPO_DIR: /repo

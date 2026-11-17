@@ -79,10 +79,12 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
   const m = verifyManifest(json, sig, o.keyPem)
   if (!m) throw new Error("The update is not signed with the release key, so it was not used.")
   if (!newer(m.version, o.current)) return `Already up to date (${o.current}).`
-  await run("git", ["fetch", "--depth", "1", "origin", m.commit], o.repoDir)
-  const head = (await run("git", ["rev-parse", "FETCH_HEAD"], o.repoDir)).trim()
+  // The clone belongs to the machine's user, not this container's: git is told it is safe to use, this once.
+  const git = (...args: string[]) => run("git", ["-c", `safe.directory=${o.repoDir}`, ...args], o.repoDir)
+  await git("fetch", "--depth", "1", "origin", m.commit)
+  const head = (await git("rev-parse", "FETCH_HEAD")).trim()
   if (head !== m.commit) throw new Error("The fetched commit is not the one signed, so it was not used.")
-  await run("git", ["checkout", "--detach", m.commit], o.repoDir)
+  await git("checkout", "--detach", m.commit)
   o.log(`building CNW ${m.version}`)
   // No -f: compose reads compose.yml and .env from the stack's folder, so a COMPOSE_FILE set there (your own proxy) is
   // kept. CNW_REPO_DIR (set for this service) is the build context, the clone just checked out.

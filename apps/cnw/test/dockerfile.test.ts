@@ -40,6 +40,12 @@ describe("the CNW stack (compose)", () => {
     expect(compose.services.updater?.pull_policy).toBe("never")
   })
 
+  it("runs the updater as the clone's owner, with a home git can use, so it can check out a release", () => {
+    const u = compose.services.updater as { user?: string; environment?: Record<string, string> }
+    expect(u.user).toBe("${CNW_UID:-1000}:${CNW_GID:-1000}")
+    expect(u.environment?.HOME).toBe("/tmp")
+  })
+
   it("has no fixed Caddyfile to edit: caddy's configuration is written from .env", () => {
     expect(fs.existsSync(path.join(root, "docker/cnw/Caddyfile"))).toBe(false)
     expect(JSON.stringify(compose.services.caddy)).toContain("/caddy-config/Caddyfile")

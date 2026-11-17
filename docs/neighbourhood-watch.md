@@ -80,7 +80,9 @@ something other than `https://CNW_HOST`.
 **Options for every case.** `CNW_TLS=internal` or `CNW_TLS=public` overrides the certificate choice. `CNW_PORT=8443`
 (and `CNW_HTTP_PORT=8080`) publish caddy on other ports when 443 (or 80) is taken; the address then includes the port,
 `https://192.168.1.225:8443`, in the browser and in Codehouse. A setting that cannot be used stops the start with a
-plain reason in `docker compose logs cnw-config`.
+plain reason in `docker compose logs cnw-config`. The updater works in the clone as its owner, user 1000 by default
+(the first user on Debian and Ubuntu); if `id -u` and `id -g` say otherwise for the user who cloned it, set `CNW_UID`
+and `CNW_GID`.
 
 ## Certificates
 
