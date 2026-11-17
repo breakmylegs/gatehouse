@@ -11,6 +11,7 @@ import { remoteDatabase } from "./database.js"
 import { productionContext } from "./cloud-context.js"
 import { bulkExport } from "./data-export.js"
 import { toolchainChange } from "./toolchain.js"
+import { k8sFindings } from "./k8s-manifest.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
 import { INSTALL_SCRIPTS_RULE, installScriptsFinding, withoutScripts } from "./install-scripts.js"
 import { hiddenCharacters } from "./hidden.js"
@@ -401,6 +402,9 @@ export class PolicyEngine {
     // E-030: a change to the tools every project here uses goes to a person; Set-ExecutionPolicy is Severe.
     const toolchain = f.isShell ? toolchainChange(f.segments, ctx.cwd) : undefined
     if (toolchain) escalations.push(toolchain)
+    // E-023: an edit to a Kubernetes manifest that adds a dangerous setting is Severe.
+    const k8s = f.isShell ? undefined : k8sFindings(call.toolName, input, f.targets[0]?.abs)
+    if (k8s) escalations.push(k8s)
     // D-064: an install that would run install scripts goes to a person, with each script's text.
     const scripts = f.isShell && typeof input.command === "string" ? installScriptsFinding(input.command, ctx.cwd) : undefined
     if (scripts) escalations.push(scripts)

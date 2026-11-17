@@ -50,7 +50,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-016 | Remote database connection guard | E1 | done | feat/guards | yes | remote-database; golden 24 |
 | E-017 | Bulk data export guard | E1 | done | feat/guards | yes | bulk-export; golden 26 |
 | E-021 | Production context guard for cloud CLIs | E1 | done | feat/guards | yes | production-context; golden 25 |
-| E-023 | Kubernetes manifest guard | E1 | todo | | |  |
+| E-023 | Kubernetes manifest guard | E1 | done | feat/guards-2 | yes | kubernetes-manifest at 85; golden 28; latest tags and limits noted only |
 | E-028 | WSL command coverage | E1 | todo | | |  |
 | E-030 | Toolchain manager guard | E1 | done | feat/guards | yes | toolchain-change; golden 27; pip and Set-ExecutionPolicy left to their own rules |
 | E-093 | Card data guard | E1 | todo | | |  |

@@ -1,0 +1,5 @@
+# E-023: an edit to a Kubernetes manifest that adds a dangerous setting is Severe and waits for you (kubernetes-manifest).
+- { t: Write, in: { file_path: "${WS}/k8s/deploy.yaml", content: "apiVersion: apps/v1\nkind: Deployment\nspec:\n  template:\n    spec:\n      containers:\n        - name: web\n          securityContext:\n            privileged: true\n" }, o: escalate, r: kubernetes-manifest }
+- { t: Write, in: { file_path: "${WS}/k8s/pod.yaml", content: "apiVersion: v1\nkind: Pod\nspec:\n  hostNetwork: true\n" }, o: escalate, r: kubernetes-manifest }
+- { t: Write, in: { file_path: "${WS}/charts/web/values.yaml", content: "securityContext:\n  runAsUser: 0\n" }, o: escalate, r: kubernetes-manifest }
+- { t: Write, in: { file_path: "${WS}/k8s/secret.yaml", content: "apiVersion: v1\nkind: Secret\nstringData:\n  token: x\n" }, o: escalate, r: kubernetes-manifest }
