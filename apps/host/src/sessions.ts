@@ -2590,6 +2590,12 @@ export interface ManagerEvents {
 /** A chat's name from what was said first: one line, at most 80 characters. */
 export const chatTitle = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 80)
 
+/** An Ask about code chat's name: the code session's name, then the question (once, however often it is given). */
+export const aboutTitle = (session: string, title: string): string => {
+  const name = session.replace(/\s+/g, " ").trim()
+  return !name || title.startsWith(`${name}: `) ? title : `${name}: ${title}`
+}
+
 /**
  * The warm chat (owner, 1 Nov): a plain chat started while New chat or the quick prompt is open, so the first message
  * does not wait for Claude Code to start. It is a whole chat, made exactly as one started then would be (its own
@@ -2849,6 +2855,8 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         throw new SessionFolderError("Choose a code session that is open to ask about.")
       opts = {
         ...opts,
+        // Owner, 17 Nov: a question is named first by the code session it asks about.
+        ...(opts.title ? { title: aboutTitle(target.title ?? target.project, opts.title) } : {}),
         about: {
           id: target.id,
           title: target.title ?? target.project,

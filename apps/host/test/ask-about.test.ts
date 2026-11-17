@@ -1,7 +1,7 @@
 // Ask about code (owner, 6 Nov): a chat about a code session, to ask about it and its code from outside it.
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { latestSaid, readAbout } from "../src/about-session.js"
-import { SessionFolderError } from "../src/sessions.js"
+import { aboutTitle, SessionFolderError } from "../src/sessions.js"
 import { buildStack, type Stack } from "./stack.js"
 import path from "node:path"
 
@@ -76,6 +76,10 @@ describe("a chat about a code session", () => {
     expect(given.at(-1)).toMatchObject({ kind: "chat", about: { id: code.id, cwd: s.dir } })
     expect(chat.info()).toMatchObject({ kind: "chat", mode: "plan", about: { id: code.id, cwd: s.dir } })
     expect(chat.restartOptions().about?.id).toBe(code.id)
+    // Owner, 17 Nov: the question is named first by the code session it asks about, once.
+    expect(chat.info().title).toBe(`${code.info().project}: q`)
+    expect(aboutTitle("Build", "Build: q")).toBe("Build: q")
+    expect(aboutTitle(" ", "q")).toBe("q")
   })
 
   it("is refused for a session that is not open, for another chat, and for a coding session", async () => {
