@@ -98,6 +98,25 @@ function build(loose: boolean) {
       .array(z.object({ id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:\-[\]/]{0,99}$/), label: z.string().min(1).max(40) }).passthrough())
       .max(20)
       .optional(),
+    /**
+     * T-128: prices of your own (dollars per million tokens) and one model counted as another, in the Usage report only.
+     * At most 50.
+     */
+    modelPricing: z
+      .array(
+        z
+          .object({
+            model: z.string().min(1).max(100),
+            inputPerM: z.number().min(0).max(10_000).optional(),
+            outputPerM: z.number().min(0).max(10_000).optional(),
+            cacheReadPerM: z.number().min(0).max(10_000).optional(),
+            cacheWritePerM: z.number().min(0).max(10_000).optional(),
+            countAs: z.string().min(1).max(100).optional(),
+          })
+          .passthrough(),
+      )
+      .max(50)
+      .optional(),
     /** T-024: days after which a finished, unpinned session is archived by itself; 0 for never. Absent: 3. */
     settleAfterDays: z.number().int().min(0).max(365).optional(),
     /** T-020: a suggested next prompt after each turn, filled in with Tab. On unless false. */

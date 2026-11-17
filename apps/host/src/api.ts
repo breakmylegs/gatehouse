@@ -19,6 +19,7 @@ import { registerTitleRoutes, type TitleDeps } from "./title-api.js"
 import { registerTriageRoutes } from "./triage.js"
 import { registerCnwRoutes, type CnwService } from "./cnw/service.js"
 import { registerTimelineRoutes } from "./session-timeline.js"
+import { applyPricing } from "./model-pricing.js"
 import { registerMcpBuilderRoutes, type McpRouteDeps } from "./mcp-builder/routes.js"
 import { registerForgeRoutes } from "./forge/routes.js"
 import type { PrWatcher } from "./forge/watch.js"
@@ -494,7 +495,8 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (!ctx.usage) return bad(reply, 501, "Usage is not available here.")
     if (!day.test(q.from ?? "") || !day.test(q.to ?? "") || (q.from as string) > (q.to as string))
       return bad(reply, 400, "Give from and to as YYYY-MM-DD, from first.")
-    return ctx.usage.report(q.from as string, q.to as string)
+    // T-128: your own prices and counted-as, applied to what is shown, never to what was recorded.
+    return applyPricing(ctx.usage.report(q.from as string, q.to as string), ctx.config().modelPricing)
   })
 
   // What drove the usage (B15): tool calls, subagents and skills, counted from the audit log.
@@ -1852,6 +1854,8 @@ const LIVE_SETTINGS = [
   "promptSuggestions",
   // T-024: read at each hourly look.
   "settleAfterDays",
+  // T-128: read for each usage report.
+  "modelPricing",
   "forges",
   "worktreeCleanup",
   "titleByClaude",

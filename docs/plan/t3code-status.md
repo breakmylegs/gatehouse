@@ -139,7 +139,7 @@ Slices, in order:
 | T-125 | Triage an issue: an agent reads the app's logs and its source for that version and drafts an issue, asking before any fix. | Build (safe variant), S | built | slice/T2-triage | a Plan-mode chat given the redacted log and Doctor report; drafts an issue |
 | T-126 | Threads carry on after an update, crash or restart, at most three automatic resumes in a row. | Have | built (Codehouse had it) | | |
 | T-127 | Usage: tokens, cache savings, model breakdown, estimated cost, periods with shortcuts. | Have | built (Codehouse had it) | | |
-| T-128 | Custom model prices and counting one model as another. | Build, S | todo | | |
+| T-128 | Custom model prices and counting one model as another. | Build, S | built | feat/pricing | Settings, Usage, Prices of your own; the Usage report only |
 | T-129 | Limits pooled across accounts, one bar segment per account, the next reset and what it returns. | Partly | todo | | |
 | T-130 | Limits from the composer (`/usage-limits`) and in thread details. | Have | built (Codehouse had it) | | |
 | T-131 | OpenTelemetry export to your own receiver, with a Test button. | Have | built (Codehouse had it) | | |

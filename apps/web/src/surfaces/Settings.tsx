@@ -43,6 +43,7 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { modelsText, parseModels, setCustomModels } from "../lib/models"
 import { setSendKey, useSendKey, type SendKey } from "../lib/sendKey"
+import { parsePricing, pricingText, type ModelPrice } from "../lib/pricing"
 import { EFFORTS } from "../lib/modes"
 import { onMac } from "../lib/platform-mac" // Mac fork
 import { send, useStore } from "../store"
@@ -64,6 +65,8 @@ interface Config {
   customModels?: Array<{ id: string; label: string }>
   /** T-024: days before a finished session settles; 0 for never. */
   settleAfterDays?: number
+  /** T-128: your own prices and counted-as, for the Usage report. */
+  modelPricing?: ModelPrice[]
   phoneExpiryMs: number
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
@@ -156,6 +159,8 @@ interface Values {
   cmText: string
   /** T-024: days as typed, "0" for never. */
   settleDays: string
+  /** T-128: one to a line. */
+  priceText: string
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
   /** D-018: points of the risk budget, or "" for none. */
@@ -240,6 +245,7 @@ export function valuesOf(d: SettingsData): Values {
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
     settleDays: String(c.settleAfterDays ?? 3),
+    priceText: pricingText(c.modelPricing ?? []),
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -403,6 +409,14 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
   // O42: on unless turned off, so only off is saved.
+  // T-128: saved only when every line is right; otherwise what was saved stays.
+  {
+    const pr = parsePricing(v.priceText)
+    if (!pr.errors.length) {
+      if (pr.prices.length) body.modelPricing = pr.prices
+      else delete body.modelPricing
+    }
+  }
   // T-024: three days is no setting at all.
   if (v.settleDays === "3") delete body.settleAfterDays
   else body.settleAfterDays = Number(v.settleDays)
@@ -511,6 +525,7 @@ export const DEFAULT_VALUES: Values = {
   psOn: true,
   cmText: "",
   settleDays: "3",
+  priceText: "",
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -801,6 +816,8 @@ export function Settings() {
   const psChanged = differs(v, ["psOn"])
   const cmChanged = differs(v, ["cmText"])
   const settleChanged = differs(v, ["settleDays"])
+  const priceChanged = differs(v, ["priceText"])
+  const priceErrors = parsePricing(v.priceText).errors
   const cmErrors = parseModels(v.cmText).errors
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
@@ -1734,6 +1751,18 @@ export function Settings() {
 
             <Group section="general" title="Sending a prompt" gap="gap-2">
               <SendKeyChoice />
+            </Group>
+
+            <Group section="usage" title="Prices of your own" gap="gap-2" changed={priceChanged}>
+              <Field
+                label="One to a line: model = input, output (dollars a million tokens), or model as other-model"
+                help="A price works out that model's cost in Usage from its tokens, for a model through a gateway that reports none or the wrong one; cache read and cache write may follow. as counts one model as another. Only the Usage report changes; what was recorded stays."
+              >
+                <textarea className="field mono" rows={3} value={v.priceText} onChange={(e) => change({ priceText: e.target.value }, "Prices of your own")} />
+              </Field>
+              {priceErrors.length ? (
+                <p role="alert" className="m-0 text-sm text-sev">{priceErrors.join(" ")} Nothing is saved until every line is right.</p>
+              ) : null}
             </Group>
 
             <Group section="usage" title="Your usage limits" gap="gap-2">

@@ -43,3 +43,20 @@ describe("your own models (T-016)", () => {
     expect(GatehouseConfig.safeParse({ customModels: [{ id: "bad id; rm -rf", label: "X" }] }).success).toBe(false)
   })
 })
+
+describe("prices of your own in Settings (T-128)", () => {
+  it("reads prices and counted-as lines, says which are wrong, and keeps the saved list until every line is right", async () => {
+    const { parsePricing, pricingText } = await import("../src/lib/pricing")
+    expect(parsePricing("gateway/llama = 0.5, 2\nold-name as claude-opus-5-5\nbad = x\n = 3")).toEqual({
+      prices: [
+        { model: "gateway/llama", inputPerM: 0.5, outputPerM: 2 },
+        { model: "old-name", countAs: "claude-opus-5-5" },
+      ],
+      errors: ["Line 3: up to four prices, each 0 to 10000 dollars a million tokens.", 'Line 4: write "model = input, output" or "model as other-model".'],
+    })
+    expect(pricingText([{ model: "m", inputPerM: 1, outputPerM: 4 }, { model: "a", countAs: "b" }])).toBe("m = 1, 4\na as b")
+    const d = data({ modelPricing: [{ model: "m", inputPerM: 1 }] })
+    expect(bodyOf(d, { ...valuesOf(d), priceText: "m = 2, 8" }).modelPricing).toEqual([{ model: "m", inputPerM: 2, outputPerM: 8 }])
+    expect(bodyOf(d, { ...valuesOf(d), priceText: "m = lots" }).modelPricing).toEqual([{ model: "m", inputPerM: 1 }])
+  })
+})
