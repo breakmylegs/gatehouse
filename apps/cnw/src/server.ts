@@ -12,7 +12,7 @@ import { Hub } from "./hub.js"
 import { checkPublicKey, newCode, redeem, type Computer, type PendingCode } from "./pairing.js"
 import { hashPassword, verifyPassword } from "./passwords.js"
 import { JsonStore } from "./store.js"
-import { registerPasskeyRoutes } from "./passkeys.js"
+import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passkeys.js"
 
 /**
  * The CNW server (O41). Behind caddy, which ends TLS and passes the client's address in a header only caddy can set
@@ -44,6 +44,9 @@ interface Paired {
   pending: PendingCode[]
 }
 
+/** An address as compared: no IPv4-mapped prefix, no brackets, lower case. */
+const bare = (a: string) => a.trim().replace(/^\[|\]$/g, "").replace(/^::ffff:/i, "").toLowerCase()
+
 const Login = z.object({ name: z.string().min(1).max(60), password: z.string().min(1).max(500) })
 const Setup = z.object({ code: z.string().min(1).max(100), name: z.string().min(1).max(60), password: z.string().min(12).max(500) })
 
@@ -56,6 +59,7 @@ export async function createCnw(o: CnwOptions) {
   const throttle = new Throttle(o.now)
   const hub = new Hub(() => paired.read().computers, o.now)
   const origin = new URL(o.publicUrl).origin
+  const rpId = new URL(o.publicUrl).hostname
 
   // First start: a one-time setup code, printed to the log only, kept as a hash.
   if (!users.read().users.length && !users.read().setupHash) {
@@ -65,10 +69,13 @@ export async function createCnw(o: CnwOptions) {
   }
 
   const ranges = (): Range[] => settings.read().allowlist.map(parseRange).filter((r): r is Range => typeof r !== "string")
+  // X-Forwarded-For is believed only from the trusted proxy (the bundled caddy, or your own); from anyone else, or
+  // with no trusted proxy set, it is ignored and the connection's own address counts.
+  const trusted = new Set((o.trustedProxy ?? "").split(",").map((a) => bare(a)).filter(Boolean))
   const ipOf = (req: FastifyRequest) => {
     const direct = req.socket.remoteAddress ?? ""
     const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim()
-    return o.trustedProxy && direct.replace(/^::ffff:/, "") === o.trustedProxy && fwd ? fwd : direct
+    return trusted.has(bare(direct)) && fwd ? fwd : direct
   }
   const cookieOf = (req: FastifyRequest) =>
     String(req.headers.cookie ?? "")
@@ -104,7 +111,14 @@ export async function createCnw(o: CnwOptions) {
 
   app.get("/api/me", async (req) => {
     const a = access(req)
-    return { access: a.kind, ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey } : {}), setup: !users.read().users.length }
+    return {
+      access: a.kind,
+      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey } : {}),
+      setup: !users.read().users.length,
+      // Passkeys cannot work at an IP address; the page says so and offers the password only.
+      passkeys: passkeysPossible(rpId),
+      ...(passkeysPossible(rpId) ? {} : { passkeyNote: PASSKEY_ON_IP }),
+    }
   })
 
   app.post("/api/setup", async (req, reply) => {
@@ -144,7 +158,7 @@ export async function createCnw(o: CnwOptions) {
 
   // Passkeys, beside the password.
   registerPasskeyRoutes(app, {
-    rpId: new URL(o.publicUrl).hostname,
+    rpId,
     origin,
     passkeysOf: (user) => users.read().users.find((u) => u.name === user)?.passkeys ?? [],
     setPasskeys: (user, keys) =>

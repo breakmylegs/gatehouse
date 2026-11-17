@@ -1,5 +1,6 @@
 import crypto from "node:crypto"
 import https from "node:https"
+import net from "node:net"
 import tls from "node:tls"
 import { newComputerKey } from "./connector.js"
 
@@ -28,10 +29,20 @@ export function checkUrl(raw: string): URL {
   return new URL(u.origin)
 }
 
+/**
+ * Where to connect for a CNW address: the host without IPv6 brackets, the port (443 unless given), and the server
+ * name only for a name. An IP address is never sent as the server name: TLS does not allow it, and Node warns
+ * (DEP0123). CNW at an address answers with its default_sni certificate instead.
+ */
+export function tlsTarget(url: URL): { host: string; port: number; servername?: string } {
+  const host = url.hostname.replace(/^\[|\]$/g, "")
+  return { host, port: Number(url.port || 443), ...(net.isIP(host) ? {} : { servername: host }) }
+}
+
 /** SHA-256 of the certificate the server presents, read without trusting it. */
 export function certFingerprint(url: URL, connect: typeof tls.connect = tls.connect): Promise<string> {
   return new Promise((resolve, reject) => {
-    const sock = connect({ host: url.hostname, port: Number(url.port || 443), servername: url.hostname, rejectUnauthorized: false, timeout: 15_000 })
+    const sock = connect({ ...tlsTarget(url), rejectUnauthorized: false, timeout: 15_000 })
     sock.once("secureConnect", () => {
       const raw = sock.getPeerCertificate(false)?.raw
       sock.end()

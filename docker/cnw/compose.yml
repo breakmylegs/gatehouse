@@ -1,33 +1,62 @@
-# Codehouse Neighbourhood Watch (O41): docker compose up -d, from this folder.
-# Only caddy publishes a port. cnw listens on the private network; the updater alone talks to Docker, and only
-# through a socket proxy that allows what an update needs.
+# Codehouse Neighbourhood Watch (O41): docker compose up -d --build, from this folder, after setting CNW_HOST in .env.
+# Only caddy publishes ports. cnw listens on the private network; the updater alone talks to Docker, and only
+# through a socket proxy that allows what an update needs. Nothing tracked here is edited during setup: everything a
+# computer needs differently is in .env (docs/neighbourhood-watch.md).
+#   CNW_HOST   a name or address: an IP or a home-network name gets caddy's own certificate, a public name Let's Encrypt
+#   CNW_TLS    internal or public, to override that choice (optional)
+#   CNW_PORT   the port people browse to, when 443 is taken (optional); CNW_HTTP_PORT likewise for 80
+#   COMPOSE_FILE=compose.yml:compose.own-proxy.yml   your own reverse proxy instead of caddy (see that file)
 name: codehouse-cnw
 
 services:
+  # Writes caddy's configuration from .env, then stops; caddy starts only once it has.
+  cnw-config:
+    image: codehouse-cnw:${CNW_VERSION:-latest}
+    pull_policy: never
+    command: ["npx", "tsx", "apps/cnw/src/caddy-config.ts"]
+    environment:
+      CNW_HOST: ${CNW_HOST:?Set CNW_HOST in .env, such as cnw.home.arpa or 192.168.1.225}
+      CNW_TLS: ${CNW_TLS:-}
+      CNW_PORT: ${CNW_PORT:-}
+      CNW_CADDY_OUT: /caddy-config/Caddyfile
+    volumes:
+      - caddy-config:/caddy-config
+    network_mode: none
+    restart: "no"
+    depends_on: [cnw]
+
   caddy:
     image: caddy:2.10-alpine
     restart: unless-stopped
+    command: ["caddy", "run", "--config", "/caddy-config/Caddyfile", "--adapter", "caddyfile"]
     ports:
-      - "443:443"
-      - "80:80"
-    environment:
-      CNW_HOST: ${CNW_HOST:?Set CNW_HOST in .env, such as cnw.home.arpa}
+      - "${CNW_PORT:-443}:443"
+      - "${CNW_HTTP_PORT:-80}:80"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-config:/caddy-config:ro
+      # caddy's certificates and its own certificate authority: kept, so the certificate Codehouse pinned at pairing
+      # stays the same across restarts and updates. Never remove this volume (docker compose down -v would).
       - caddy-data:/data
     networks:
       front:
         ipv4_address: 172.30.0.10
-    depends_on: [cnw]
+    depends_on:
+      cnw:
+        condition: service_started
+      cnw-config:
+        condition: service_completed_successfully
 
   cnw:
     image: codehouse-cnw:${CNW_VERSION:-latest}
+    pull_policy: never
     build:
-      context: ../..
+      # The updater sets CNW_REPO_DIR to its clone; from this folder the repository is two folders up.
+      context: ${CNW_REPO_DIR:-../..}
       dockerfile: docker/cnw/Dockerfile
     restart: unless-stopped
     environment:
-      CNW_PUBLIC_URL: https://${CNW_HOST}
+      CNW_HOST: ${CNW_HOST:?Set CNW_HOST in .env, such as cnw.home.arpa or 192.168.1.225}
+      CNW_PORT: ${CNW_PORT:-}
       CNW_TRUSTED_PROXY: 172.30.0.10
       CNW_UPDATER: http://updater:8090
     volumes:
@@ -42,6 +71,8 @@ services:
   # image, recreates cnw and keeps the previous image to go back to.
   updater:
     image: codehouse-cnw:${CNW_VERSION:-latest}
+    # Built with cnw above, never pulled: there is no codehouse-cnw image on Docker Hub.
+    pull_policy: never
     restart: unless-stopped
     command: ["npx", "tsx", "apps/cnw/src/updater.ts"]
     environment:
@@ -53,6 +84,7 @@ services:
       # The clone of the repository the stack is built from; the updater checks out the signed commit in it.
       - ../..:/repo
     networks: [back, docker]
+    depends_on: [cnw]
 
   docker-proxy:
     image: tecnativa/docker-socket-proxy:0.3
@@ -83,3 +115,4 @@ networks:
 volumes:
   cnw-data:
   caddy-data:
+  caddy-config:

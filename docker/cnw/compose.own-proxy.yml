@@ -1,0 +1,20 @@
+# Your own reverse proxy instead of the bundled caddy. Chosen in .env, never by editing a tracked file:
+#   COMPOSE_FILE=compose.yml:compose.own-proxy.yml
+#   CNW_HOST=cnw.example.org          the name your proxy serves (https)
+#   CNW_PORT=8080                     where CNW listens in plain HTTP, for your proxy (default 8080)
+#   CNW_TRUSTED_PROXY=192.168.1.10    your proxy's address, as CNW sees it; only its X-Forwarded-For is believed.
+#                                     Left out, X-Forwarded-For is ignored and every request counts as from the proxy.
+#   CNW_PUBLIC_URL=https://...        only if people browse to something other than https://CNW_HOST
+# Your proxy ends TLS, and must pass the Host and Origin through unchanged and set X-Forwarded-For.
+services:
+  cnw-config:
+    profiles: ["bundled-caddy"]
+  caddy:
+    profiles: ["bundled-caddy"]
+  cnw:
+    ports:
+      - "${CNW_PORT:-8080}:8080"
+    environment:
+      CNW_MODE: own-proxy
+      CNW_TRUSTED_PROXY: ${CNW_TRUSTED_PROXY:-}
+      CNW_PUBLIC_URL: ${CNW_PUBLIC_URL:-}

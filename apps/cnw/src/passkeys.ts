@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import net from "node:net"
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -41,7 +42,21 @@ export interface PasskeyDeps {
 
 const CHALLENGE_MS = 5 * 60_000
 
+/**
+ * WebAuthn needs a name as its relying party: browsers refuse a passkey for an IP address. CNW at an address keeps
+ * password sign-in and says why passkeys are not offered.
+ */
+export const PASSKEY_ON_IP =
+  "Passkeys need Neighbourhood Watch at a name, such as cnw.home.arpa: browsers refuse them at an IP address. Sign in with your password, or give it a name (see Start it in the guide)."
+
+export const passkeysPossible = (rpId: string): boolean => net.isIP(rpId.replace(/^\[|\]$/g, "")) === 0
+
 export function registerPasskeyRoutes(app: FastifyInstance, d: PasskeyDeps): void {
+  if (!passkeysPossible(d.rpId)) {
+    for (const route of ["/api/passkey/register/options", "/api/passkey/register/verify", "/api/passkey/login/options", "/api/passkey/login/verify"])
+      app.post(route, async (_req, reply) => reply.code(409).send({ error: PASSKEY_ON_IP }))
+    return
+  }
   const now = d.now ?? Date.now
   const challenges = new Map<string, { challenge: string; user?: string; expires: number }>()
   const keep = (challenge: string, user?: string) => {

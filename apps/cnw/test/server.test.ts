@@ -24,6 +24,58 @@ async function start() {
 
 const cookieOf = (r: { headers: Record<string, unknown> }) => String(r.headers["set-cookie"] ?? "").split(";")[0]!
 
+describe("CNW at an address, and behind a proxy", () => {
+  it("refuses passkeys at an IP address, saying why, and keeps password sign-in", async () => {
+    const lines: string[] = []
+    const { app } = await createCnw({ dataDir: dir, publicUrl: "https://192.168.1.225:8443", log: (l) => void lines.push(l), webDir: path.join(dir, "none") })
+    const me = (await app.inject({ method: "GET", url: "/api/me" })).json() as { passkeys: boolean; passkeyNote: string }
+    expect(me.passkeys).toBe(false)
+    expect(me.passkeyNote).toMatch(/browsers refuse them at an IP address/)
+    expect((await app.inject({ method: "POST", url: "/api/passkey/login/options", headers: { origin: "https://192.168.1.225:8443" } })).statusCode).toBe(409)
+    const code = /shown once\): (\S+)/.exec(lines.join("\n"))?.[1]
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    expect(setup.statusCode).toBe(200)
+    const login = await app.inject({ method: "POST", url: "/api/login", payload: { name: "ana", password: "a long password here" } })
+    expect(login.statusCode).toBe(200)
+    // Signed in, adding a passkey is refused the same way.
+    const add = await app.inject({
+      method: "POST",
+      url: "/api/passkey/register/options",
+      headers: { origin: "https://192.168.1.225:8443", cookie: cookieOf(login), "x-csrf-token": (login.json() as { csrf: string }).csrf },
+    })
+    expect(add.statusCode).toBe(409)
+    await app.close()
+  })
+
+  it("offers passkeys at a name", async () => {
+    const { app } = await start()
+    expect(((await app.inject({ method: "GET", url: "/api/me" })).json() as { passkeys: boolean }).passkeys).toBe(true)
+    await app.close()
+  })
+
+  it("ignores X-Forwarded-For with no trusted proxy, and believes it only from the trusted one", async () => {
+    // Five wrong passwords from one connection, each under another name and claiming another address.
+    const tries = async (app: Awaited<ReturnType<typeof createCnw>>["app"]) => {
+      for (let i = 0; i < 5; i++)
+        await app.inject({ method: "POST", url: "/api/login", remoteAddress: "10.0.0.5", headers: { "x-forwarded-for": `203.0.113.${i}` }, payload: { name: `n${i}`, password: "wrong" } })
+      return (await app.inject({ method: "POST", url: "/api/login", remoteAddress: "10.0.0.5", headers: { "x-forwarded-for": "203.0.113.99" }, payload: { name: "n9", password: "wrong" } })).statusCode
+    }
+    const plain = await createCnw({ dataDir: dir, publicUrl: ORIGIN, log: () => undefined, webDir: path.join(dir, "none") })
+    // The claimed addresses count for nothing: the one connection is throttled.
+    expect(await tries(plain.app)).toBe(429)
+    await plain.app.close()
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "cnw-proxy-"))
+    try {
+      const proxied = await createCnw({ dataDir: other, publicUrl: ORIGIN, trustedProxy: "192.168.1.10, 10.0.0.5", log: () => undefined, webDir: path.join(other, "none") })
+      // From the trusted proxy, each claimed address is its own.
+      expect(await tries(proxied.app)).toBe(401)
+      await proxied.app.close()
+    } finally {
+      fs.rmSync(other, { recursive: true, force: true })
+    }
+  })
+})
+
 describe("the CNW server (O41)", () => {
   it("makes the first account only with the setup code, then signs in with a strict cookie", async () => {
     const { app, code } = await start()

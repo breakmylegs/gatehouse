@@ -74,8 +74,12 @@ async function passkeyAdd(say) {
   }
 }
 
+// Why passkeys are not offered here (CNW at an IP address), or "" when they are.
+let passkeysOff = ""
+
 async function render() {
   const me = (await call("GET", "/api/me")).json
+  passkeysOff = me.passkeys === false ? (me.passkeyNote ?? "Passkeys are not available here.") : ""
   main.replaceChildren()
   main.className = ""
   signout.hidden = me.access !== "user"
@@ -102,7 +106,7 @@ async function render() {
       ),
     )
   if (me.access === "none") {
-    if (canPasskey()) {
+    if (canPasskey() && !passkeysOff) {
       const err = el("p", { class: "err", role: "alert" })
       main.append(
         el(
@@ -210,7 +214,7 @@ async function computers() {
   )
   const keys = el("section", { class: "panel" }, el("h2", { text: "Passkeys" }))
   const said = el("p", { class: "muted", "aria-live": "polite", text: "A passkey signs you in with your face, fingerprint or device PIN, and cannot be phished." })
-  keys.append(said, canPasskey() ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) }) : el("p", { class: "muted", text: "This browser cannot make passkeys." }))
+  keys.append(said, passkeysOff ? el("p", { class: "muted", text: passkeysOff }) : canPasskey() ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) }) : el("p", { class: "muted", text: "This browser cannot make passkeys." }))
   main.append(list, pairing, allow, keys, upd)
 }
 

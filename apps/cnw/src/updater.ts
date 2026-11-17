@@ -84,8 +84,10 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
   if (head !== m.commit) throw new Error("The fetched commit is not the one signed, so it was not used.")
   await run("git", ["checkout", "--detach", m.commit], o.repoDir)
   o.log(`building CNW ${m.version}`)
-  await run("docker", ["compose", "-f", path.join(o.composeDir, "compose.yml"), "build", "cnw"], o.composeDir)
-  await run("docker", ["compose", "-f", path.join(o.composeDir, "compose.yml"), "up", "-d", "cnw"], o.composeDir, 5 * 60_000)
+  // No -f: compose reads compose.yml and .env from the stack's folder, so a COMPOSE_FILE set there (your own proxy) is
+  // kept. CNW_REPO_DIR (set for this service) is the build context, the clone just checked out.
+  await run("docker", ["compose", "build", "cnw"], o.composeDir)
+  await run("docker", ["compose", "up", "-d", "cnw"], o.composeDir, 5 * 60_000)
   return `Updated to ${m.version}.`
 }
 

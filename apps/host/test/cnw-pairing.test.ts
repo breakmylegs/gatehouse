@@ -1,7 +1,9 @@
 // O41: pairing Codehouse with Neighbourhood Watch: https only, no credentials in the address, the certificate pinned
 // first, the private key sealed only once CNW accepted the code, and CNW's refusal said plainly.
+import crypto from "node:crypto"
+import { EventEmitter } from "node:events"
 import { describe, expect, it } from "vitest"
-import { checkUrl, pair } from "../src/cnw/pairing.js"
+import { certFingerprint, checkUrl, pair, tlsTarget } from "../src/cnw/pairing.js"
 
 describe("pairing with Neighbourhood Watch (O41)", () => {
   it("takes only an https address without a name or password in it", () => {
@@ -9,6 +11,31 @@ describe("pairing with Neighbourhood Watch (O41)", () => {
     expect(() => checkUrl("http://cnw.home.arpa")).toThrow(/https/)
     expect(() => checkUrl("https://me:pw@cnw.home.arpa")).toThrow(/name and password/)
     expect(() => checkUrl("not a url")).toThrow(/not an address/)
+    // CNW at an address, on another port: kept as given.
+    expect(checkUrl("https://192.168.1.225:8443/").origin).toBe("https://192.168.1.225:8443")
+  })
+
+  it("connects to an IP address with its port and no server name, and to a name with it", () => {
+    expect(tlsTarget(new URL("https://192.168.1.225:8443"))).toEqual({ host: "192.168.1.225", port: 8443 })
+    expect(tlsTarget(new URL("https://[2001:db8::25]"))).toEqual({ host: "2001:db8::25", port: 443 })
+    expect(tlsTarget(new URL("https://cnw.home.arpa"))).toEqual({ host: "cnw.home.arpa", port: 443, servername: "cnw.home.arpa" })
+  })
+
+  it("reads the certificate of CNW at an IP address and port, sending no server name", async () => {
+    const seen: Array<Record<string, unknown>> = []
+    const fake = ((o: Record<string, unknown>) => {
+      seen.push(o)
+      const sock = new EventEmitter() as EventEmitter & { getPeerCertificate: () => { raw: Buffer }; end: () => void; destroy: () => void }
+      sock.getPeerCertificate = () => ({ raw: Buffer.from("cert") })
+      sock.end = () => undefined
+      sock.destroy = () => undefined
+      setImmediate(() => sock.emit("secureConnect"))
+      return sock
+    }) as never
+    const fp = await certFingerprint(checkUrl("https://192.168.1.225:8443"), fake)
+    expect(fp).toBe(crypto.createHash("sha256").update("cert").digest("hex"))
+    expect(seen[0]).toMatchObject({ host: "192.168.1.225", port: 8443 })
+    expect(seen[0]).not.toHaveProperty("servername")
   })
 
   it("pins the certificate, sends the code and public key over it, and seals the key only when accepted", async () => {
