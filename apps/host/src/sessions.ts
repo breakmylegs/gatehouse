@@ -403,6 +403,7 @@ export interface SessionEvents {
         | "thrash_paused"
         | "instructions_changed"
         | "heartbeat_missed"
+        | "merge_conflict_ahead"
         | "commit_noted"
         | "mutant_task_started"
         | "intent_drift"
@@ -776,6 +777,11 @@ export class Session extends EventEmitter<SessionEvents> {
     )
     this.emit("event", { type: "heartbeat_missed", data: { minutes: d.minutes } })
     await this.pause(0, undefined, "heartbeat")
+  }
+
+  /** E-051: this session's branch would conflict with another's, or with its base, in these files. */
+  conflictAhead(line: string, files: string[]): void {
+    this.emit("event", { type: "merge_conflict_ahead", data: { line, files } })
   }
 
   /**

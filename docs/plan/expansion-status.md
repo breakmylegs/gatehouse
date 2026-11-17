@@ -56,7 +56,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-093 | Card data guard | E1 | done | feat/guards-2 | yes | commit scan refuses a staged card number; card-data on edits at 80; redaction masks card numbers |
 | E-086 | Writing rules enforcement | E1 | todo | | |  |
 | E-080 | Shared signed redaction lists | E1 | todo | | |  |
-| E-051 | Merge conflict pre-check | E1 | todo | | |  |
+| E-051 | Merge conflict pre-check | E1 | done | feat/about-title | yes | git merge-tree every 5 min while worktree sessions run; told in each session once; shown on Worktrees; committed work only |
 | E-052 | Structured task results | E1 | todo | | |  |
 | E-089 | Battery-aware scheduling | E1 | todo | | |  |
 | E-094 | Escalation ladder | E1 | done | feat/escalation-ladder | yes | broker, settings-ladder tests |

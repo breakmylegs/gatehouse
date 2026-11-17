@@ -65,6 +65,7 @@ import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
 import { readItModels } from "./providers/it-models.js"
 import { claudeVersion } from "./doctor.js"
 import { Worktrees } from "./worktrees.js"
+import { ConflictWatch, conflictLine } from "./conflict-check.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
 import { createRequire } from "node:module"
@@ -1256,6 +1257,23 @@ export function createHost(opts: HostOptions = {}): Host {
     minGapMs: 3_000,
   })
   manager.on("session", () => phoneSessions.poke())
+  // E-051: worktree branches that would conflict, tried every five minutes while sessions work in worktrees. Each
+  // session working there is told once, when a conflict first appears.
+  const sameFolder = (a: string, b: string) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+  const liveIn = (folder: string) => manager.list().filter((i) => i.state !== "ended" && sameFolder(i.cwd, folder))
+  const toldConflicts = new Set<string>()
+  const conflictWatch = new ConflictWatch({
+    working: () => worktrees.records().filter((w) => liveIn(w.path).length > 0),
+    onChange: (found) => {
+      for (const c of found) {
+        const key = JSON.stringify([c.repo, c.branch, c.with, c.files])
+        if (toldConflicts.has(key)) continue
+        toldConflicts.add(key)
+        for (const p of c.paths) for (const i of liveIn(p)) manager.get(i.id)?.conflictAhead(conflictLine(c), c.files)
+      }
+    },
+  })
+  conflictWatch.start()
   manager.on("message", ({ sessionId, message }) => {
     if (phoneLive.message(sessionId, message)) phoneSessions.poke()
   })
@@ -1592,6 +1610,8 @@ export function createHost(opts: HostOptions = {}): Host {
       health,
       claude: () => claudeVersion(findClaudeBinary),
       worktrees,
+      // E-051: what the last check found, for the Worktrees page.
+      conflicts: () => conflictWatch.conflicts,
       // A worktree in use by a running session is not removed from under it.
       openIn: (folder) =>
         manager

@@ -840,6 +840,9 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       return `Paused: the plan's 5-hour limit reached ${Math.round(Number(data.percent ?? 0))}%. It starts again by itself when the limit resets.`
     case "heartbeat_missed":
       return `Paused: nothing was heard from you for ${String(data.minutes)} minutes, the dead-man timer. Start it again when you are back.`
+    case "merge_conflict_ahead":
+      // E-051: found by trying the merge in git's object store; nothing was merged.
+      return `Merge conflict ahead: ${str(data.line) ?? ""} Nothing has been merged; sort it out before merging back.`
     case "remember_refused":
       // D-015: allowed this once, but not remembered, and why.
       return `Not remembered: ${str(data.why) ?? ""}`

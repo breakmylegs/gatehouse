@@ -126,6 +126,8 @@ describe("removing a worktree", () => {
         record: async (r: { event: string }) => (recorded.push(r.event), canRecord),
       } as never,
       openIn: () => open,
+      // E-051: the last check's conflicts are shown on the worktree they concern, naming the other side.
+      conflicts: () => [{ repo: w.repo, branch: "other", with: w.branch, files: ["app.ts"], paths: [path.join(dir, "elsewhere"), w.path] }],
     })
     // Not recorded, not removed.
     open = false
@@ -141,7 +143,7 @@ describe("removing a worktree", () => {
     canRecord = true
     open = true
     const list = await app.inject({ method: "GET", url: "/api/worktrees" })
-    expect(list.json().worktrees[0]).toMatchObject({ path: w.path, open: true })
+    expect(list.json().worktrees[0]).toMatchObject({ path: w.path, open: true, conflicts: [{ with: "other", files: ["app.ts"] }] })
     let r = await app.inject({
       method: "POST",
       url: "/api/worktrees/remove",

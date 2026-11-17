@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
 import { registerFilesRoutes } from "./files-api.js"
 import type { SlackSecrets, SlackStatus } from "./push/slack.js"
+import type { Conflict } from "./conflict-check.js"
 import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
@@ -228,6 +229,8 @@ export interface AdminContext {
   worktrees?: Worktrees
   /** Whether a running session works in a folder. */
   openIn?: (folder: string) => boolean
+  /** E-051: worktree branches the last check found would conflict. */
+  conflicts?: () => Conflict[]
   /** Whether Claude Code is here, and its version, for the Doctor. */
   claude?: () => Promise<{ found: boolean; version?: string }>
 }

@@ -15,6 +15,8 @@ export interface WorktreeRow {
   changed: number
   commits: number
   open: boolean
+  /** E-051: branches this one would conflict with, and where (absent from an older Host). */
+  conflicts?: Array<{ with: string; files: string[] }>
 }
 
 /** What merging a worktree back would bring (apps/host/src/worktree-merge.ts). */
@@ -133,6 +135,12 @@ export function WorktreesPanel() {
                   }.`
                 : "The folder has gone."}
             </span>
+            {(w.conflicts ?? []).map((c) => (
+              <span key={c.with} role="status" className="text-[13px] font-semibold text-warn">
+                Would conflict with {c.with} in {c.files.slice(0, 5).join(", ")}
+                {c.files.length > 5 ? ` and ${c.files.length - 5} more` : ""}.
+              </span>
+            ))}
             {merging?.path === w.path ? (
               <MergeLook
                 preview={merging.preview}

@@ -14,6 +14,7 @@ import { writeFileAtomic } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 import { MergeError, mergeBack, previewMerge } from "./worktree-merge.js"
 import { cleanUp } from "./worktree-cleanup.js"
+import type { Conflict } from "./conflict-check.js"
 
 export class WorktreeError extends Error {}
 
@@ -325,7 +326,7 @@ function folderBytes(dir: string): number {
  */
 export function registerWorktreeRoutes(
   app: FastifyInstance,
-  ctx: { worktrees?: Worktrees; audit: HostAudit; openIn?: (folder: string) => boolean },
+  ctx: { worktrees?: Worktrees; audit: HostAudit; openIn?: (folder: string) => boolean; conflicts?: () => Conflict[] },
 ): void {
   // T-089: Clean up now, with the rules you chose on the page; it says what went and what stayed, and why.
   app.post("/api/worktrees/cleanup", async (req, reply) => {
@@ -339,7 +340,17 @@ export function registerWorktreeRoutes(
   app.get("/api/worktrees", async (_req, reply) => {
     if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
     const list = await ctx.worktrees.list()
-    return { worktrees: list.map((w) => ({ ...w, open: ctx.openIn?.(w.path) ?? false })) }
+    // E-051: each worktree's branch that would conflict, with what and in which files (from the last check).
+    const conflicts = ctx.conflicts?.() ?? []
+    return {
+      worktrees: list.map((w) => ({
+        ...w,
+        open: ctx.openIn?.(w.path) ?? false,
+        conflicts: conflicts
+          .filter((c) => c.paths.some((p) => samePath(p, w.path)))
+          .map((c) => ({ with: c.branch === w.branch ? c.with : c.branch, files: c.files })),
+      })),
+    }
   })
   app.post("/api/worktrees/remove", async (req, reply) => {
     if (!ctx.worktrees) return reply.code(404).send({ error: "Worktrees are not available here." })
