@@ -42,6 +42,7 @@ import { RoutinesPanel } from "../components/RoutinesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { modelsText, parseModels, setCustomModels } from "../lib/models"
+import { setSendKey, useSendKey, type SendKey } from "../lib/sendKey"
 import { EFFORTS } from "../lib/modes"
 import { onMac } from "../lib/platform-mac" // Mac fork
 import { send, useStore } from "../store"
@@ -1731,6 +1732,10 @@ export function Settings() {
               <AppearancePanel />
             </Group>
 
+            <Group section="general" title="Sending a prompt" gap="gap-2">
+              <SendKeyChoice />
+            </Group>
+
             <Group section="usage" title="Your usage limits" gap="gap-2">
               <UsageLimitsPanel />
             </Group>
@@ -2157,5 +2162,18 @@ function Field({
       {children}
       {help ? <span className="text-xs text-mut">{help}</span> : null}
     </label>
+  )
+}
+
+/** T-053: which key sends a prompt; kept in this window, like the appearance. */
+function SendKeyChoice() {
+  const k = useSendKey()
+  return (
+    <Field label="Send a prompt with" help="Shift+Enter adds a line when Enter sends. With Ctrl+Enter, Enter adds a line, for long prompts.">
+      <select className="field w-72" value={k} onChange={(e) => setSendKey(e.target.value as SendKey)}>
+        <option value="enter">Enter (the default)</option>
+        <option value="mod-enter">Ctrl+Enter, and Enter adds a line</option>
+      </select>
+    </Field>
   )
 }

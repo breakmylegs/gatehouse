@@ -56,6 +56,7 @@ import { linkSessions } from "../lib/linkSessions"
 import { prLinks } from "../lib/prLinks"
 import { PrLinksMenu } from "../components/PrLinksMenu"
 import { listServers, mcpMatches, giveServer, type BuiltServerView } from "../lib/mcpServers"
+import { sends, useSendKey } from "../lib/sendKey"
 import { cloneRequest, PUBLISH_REQUEST } from "../lib/repoRequests"
 import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
@@ -2194,6 +2195,8 @@ function Composer({
 
   // T-020: the session's suggested next prompt, shown in the empty box; Tab fills it in.
   const suggestion = useStore((s) => s.suggestions[sessionId])
+  // T-053: which key sends.
+  const sendKey = useSendKey()
   const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
   // O39: /mcp and the start of a name lists the servers you built that are running, so Tab completes the name.
   const typingMcp = /^\/mcp(?: \S*)?$/i.test(text)
@@ -2632,7 +2635,7 @@ function Composer({
           rows={1}
           maxLength={100_000}
           disabled={disabled}
-          title="Enter sends, Shift+Enter adds a line, / for commands, @ for files"
+          title={`${sendKey === "enter" ? "Enter sends, Shift+Enter adds a line" : "Ctrl+Enter sends, Enter adds a line"}, / for commands, @ for files`}
           placeholder={
             disabled
               ? "This session has ended"
@@ -2695,7 +2698,8 @@ function Composer({
                 setText(step.text)
                 setRecall(step.recall)
               }
-            } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            } else if (sends({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, isComposing: e.nativeEvent.isComposing }, sendKey)) {
+              // T-053: Enter, or Ctrl+Enter when that is the choice (then Enter makes a new line).
               e.preventDefault()
               void submit(e.altKey)
             }
