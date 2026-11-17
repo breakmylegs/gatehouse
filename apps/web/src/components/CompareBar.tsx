@@ -3,13 +3,13 @@ import { toast } from "sonner"
 import { api } from "../lib/api"
 import { money } from "../lib/format"
 import { send, useStore } from "../store"
-import { MODELS } from "../surfaces/Sessions"
+import { modelLabel } from "../lib/models"
 
 /** A model's name as the pickers show it. */
 const modelName = (id: string | undefined, local?: boolean) =>
   local
     ? (id ?? "A model on this computer")
-    : (MODELS.find((m) => m.id === (id ?? ""))?.label ?? id ?? "Default model")
+    : modelLabel(id)
 
 /** G25: what a run changed so far, from its Changes. */
 interface Size {

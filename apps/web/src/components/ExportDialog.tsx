@@ -7,7 +7,7 @@ import { api } from "../lib/api"
 import { download, exportName, toMarkdown } from "../lib/exportMarkdown"
 import { emptyTranscript, reduceHistory, type Item } from "../lib/transcript"
 import { send, useStore } from "../store"
-import { MODELS } from "../surfaces/Sessions"
+import { modelLabel } from "../lib/models"
 
 /** What to export: a conversation by its Claude Code id, or an open session not yet saved by Claude Code. */
 export interface ExportWhat {
@@ -112,7 +112,7 @@ export function ExportDialog() {
         title: what.title,
         ...(what.cwd ? { cwd: what.cwd } : {}),
         at: Date.now(),
-        ...(model ? { model: MODELS.find((m) => m.id === model)?.label ?? model } : {}),
+        ...(model ? { model: modelLabel(model, model) } : {}),
       })
       const p = await api<{ text: string; masked: number }>("POST", "/api/export/redact", {
         text: markdown.current,

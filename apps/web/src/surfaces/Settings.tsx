@@ -41,6 +41,7 @@ import { ProvidersPanel } from "../components/ProvidersPanel"
 import { RoutinesPanel } from "../components/RoutinesPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { modelsText, parseModels, setCustomModels } from "../lib/models"
 import { EFFORTS } from "../lib/modes"
 import { onMac } from "../lib/platform-mac" // Mac fork
 import { send, useStore } from "../store"
@@ -58,6 +59,8 @@ interface Config {
   timelineSummaries?: boolean
   /** T-020: false turns off the suggested next prompt. */
   promptSuggestions?: boolean
+  /** T-016: models of your own, with their names. */
+  customModels?: Array<{ id: string; label: string }>
   phoneExpiryMs: number
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
@@ -146,6 +149,8 @@ interface Values {
   tlOn: boolean
   /** T-020: a suggested next prompt after each turn. */
   psOn: boolean
+  /** T-016: your own models, "id = Display name" one to a line. */
+  cmText: string
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
   /** D-018: points of the risk budget, or "" for none. */
@@ -228,6 +233,7 @@ export function valuesOf(d: SettingsData): Values {
     ladPush: String(c.escalationLadder?.pushAfterMinutes ?? 0),
     tlOn: c.timelineSummaries !== false,
     psOn: c.promptSuggestions !== false,
+    cmText: modelsText(c.customModels ?? []),
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -391,6 +397,14 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
   // O42: on unless turned off, so only off is saved.
+  // T-016: saved only when every line is a model; otherwise what was saved stays.
+  {
+    const cm = parseModels(v.cmText)
+    if (!cm.errors.length) {
+      if (cm.models.length) body.customModels = cm.models
+      else delete body.customModels
+    }
+  }
   if (v.psOn) delete body.promptSuggestions
   else body.promptSuggestions = false
   if (v.tlOn) delete body.timelineSummaries
@@ -486,6 +500,7 @@ export const DEFAULT_VALUES: Values = {
   ladPush: "0",
   tlOn: true,
   psOn: true,
+  cmText: "",
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -713,6 +728,8 @@ export function Settings() {
         toast.error(`${what} not saved: ${why[0]}`, { id: "settings" })
         return
       }
+      // T-016: the pickers offer your own models at once.
+      setCustomModels(body.customModels)
       saved.current = now
       dataRef.current = { ...d, saved: body as Partial<Config> }
       setErrors(undefined)
@@ -772,6 +789,8 @@ export function Settings() {
   const ladChanged = differs(v, ["ladPhone", "ladPush"])
   const tlChanged = differs(v, ["tlOn"])
   const psChanged = differs(v, ["psOn"])
+  const cmChanged = differs(v, ["cmText"])
+  const cmErrors = parseModels(v.cmText).errors
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
   const licChanged = differs(v, ["licences"])
@@ -1448,6 +1467,23 @@ export function Settings() {
                   onChange={(e) => change({ evDays: e.target.value.replace(/[^0-9]/g, "") }, "Evidence")}
                 />
               </Field>
+            </Group>
+
+            <Group section="sessions" title="Your own models" gap="gap-2" changed={cmChanged}>
+              <Field
+                label="Models to offer beside Claude's, one to a line: id = Display name"
+                help="For a newer model before Codehouse lists it, or one your gateway serves, for example claude-opus-5-5[1m] = Opus 5.5 (long). The id is given to Claude Code as you write it. A line with a built-in id renames it. At most 20."
+              >
+                <textarea
+                  className="field mono"
+                  rows={3}
+                  value={v.cmText}
+                  onChange={(e) => change({ cmText: e.target.value }, "Your own models")}
+                />
+              </Field>
+              {cmErrors.length ? (
+                <p role="alert" className="m-0 text-sm text-sev">{cmErrors.join(" ")} Nothing is saved until every line is right.</p>
+              ) : null}
             </Group>
 
             <Group section="sessions" title="Suggested next prompt" gap="gap-2" changed={psChanged}>

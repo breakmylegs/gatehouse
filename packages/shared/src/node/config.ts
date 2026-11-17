@@ -90,6 +90,14 @@ function build(loose: boolean) {
      * E-094, the escalation ladder: minutes the phone and the push channels (ntfy, Slack) wait before they are told of
      * a request, 0 to 60. Absent: every channel at once. The desktop is always told at once, and deadlines are unchanged.
      */
+    /**
+     * T-016: models of your own in the model pickers, with the names you give them (a newer model before Codehouse
+     * lists it, or one your gateway serves). At most 20. The id is passed to Claude Code as it is written.
+     */
+    customModels: z
+      .array(z.object({ id: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:\-[\]/]{0,99}$/), label: z.string().min(1).max(40) }).passthrough())
+      .max(20)
+      .optional(),
     /** T-020: a suggested next prompt after each turn, filled in with Tab. On unless false. */
     promptSuggestions: z.boolean().optional(),
     /** O42: Claude sums up each session every ten minutes for its timeline. On unless false. */

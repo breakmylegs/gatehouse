@@ -4,7 +4,8 @@ import { chatName } from "../lib/chatName"
 import { api } from "../lib/api"
 import { keepChatWarm } from "../lib/warmChat"
 import { accountForNew, send, useSessionList, useStore } from "../store"
-import { MODELS, START_WAIT_MS, StartProgress } from "./Sessions"
+import { START_WAIT_MS, StartProgress } from "./Sessions"
+import { useModels } from "../lib/models"
 import { acceptLicence, licenceAccepted, useLicence } from "../lib/licence"
 
 /**
@@ -92,10 +93,12 @@ export function NewChat() {
   const licence = useLicence(localModel && !accepted ? localModel : undefined)
   const licenceReady = !localModel || accepted
   // B22: the same first message to two to four models, side by side, to keep the best answer.
+  // T-016: the models to offer, yours from Settings included.
+  const models = useModels()
   const [comparing, setComparing] = useState(false)
   const [compareWith, setCompareWith] = useState<string[]>([])
   const compareChoices = [
-    ...(offerClaude ? MODELS.filter((m) => m.id).map((m) => ({ id: m.id, label: m.label })) : []),
+    ...(offerClaude ? models.filter((m) => m.id).map((m) => ({ id: m.id, label: m.label })) : []),
     ...shownLocal.map((m) => ({ id: `local:${m}`, label: `${m} (${localLabel})` })),
   ]
   const compareReady = !comparing || (compareWith.length >= 2 && compareWith.length <= 4)
@@ -284,7 +287,7 @@ export function NewChat() {
             <span>Model</span>
             <select className="field" value={model} onChange={(e) => setModel(e.target.value)}>
               {offerClaude
-                ? MODELS.map((m) => (
+                ? models.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label}
                     </option>

@@ -80,7 +80,8 @@ import { QuickDecision } from "../components/QuickDecision"
 import { clock, longStamp, money, stamp } from "../lib/format"
 import { MAIN_ACCOUNT, send, usePending, useSessionList, useStore } from "../store"
 import { PlanMeter } from "../components/PlanMeter"
-import { MODELS, StartProgress } from "./Sessions"
+import { StartProgress } from "./Sessions"
+import { modelLabel, useModels } from "../lib/models"
 import { SessionCode } from "../components/SessionCode"
 import { Menu, type MenuItem } from "../components/Menu"
 import { MoreLines, shownLines } from "../components/MoreLines"
@@ -381,6 +382,8 @@ function SessionPane({
   const [timeline, setTimeline] = useState(false)
   // O42: the ten-minute summaries, opened from the Timeline button on the bar.
   const [summaries, setSummaries] = useState(false)
+  // T-016: the models to offer, yours from Settings included.
+  const models = useModels()
   // D-003: the change's evidence pack.
   const [evidence, setEvidence] = useState(false)
   // D-033: the project's requirements and their trace matrix.
@@ -1200,7 +1203,7 @@ function SessionPane({
               <select
                 className="composer-select"
                 value={
-                  MODELS.some((m) => m.id === (session.model ?? "")) ? (session.model ?? "") : ""
+                  models.some((m) => m.id === (session.model ?? "")) ? (session.model ?? "") : ""
                 }
                 disabled={ended}
                 onChange={(e) =>
@@ -1211,7 +1214,7 @@ function SessionPane({
                   })
                 }
               >
-                {MODELS.map((m) => (
+                {models.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.label}
                   </option>
@@ -1395,7 +1398,7 @@ export const LEVEL_NOTES: Record<Level, string> = {
 
 /** What a session is set to, in a few words, for the folded line: "Opus 5.5, High effort, Auto, Medium". */
 export function settingsSummary(s: SessionInfo, chat: boolean): string {
-  const model = MODELS.find((m) => m.id === (s.model ?? ""))?.label ?? s.model ?? "Default model"
+  const model = modelLabel(s.model)
   const effort = EFFORTS.find((e) => e.id === s.effort)?.label
   const mode = chat ? "Plan mode" : MODE_OPTIONS.find((m) => m.id === uiModeOf(s))?.label
   const level = s.resources

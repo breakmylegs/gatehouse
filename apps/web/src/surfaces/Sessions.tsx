@@ -7,6 +7,7 @@ import { toast } from "sonner"
 import { cleanName, projectName } from "@gatehouse/shared/project-name"
 import { scratchName } from "../lib/scratch"
 import { choicesFor, hasFolderChoices, rememberChoices } from "../lib/newSessionChoices"
+import { BUILT_IN_MODELS, modelLabel, useModels } from "../lib/models"
 import { money } from "../lib/format"
 import { systemName } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
@@ -28,16 +29,8 @@ import clsx from "clsx"
 import { EmptyState } from "../components/EmptyState"
 import { WorktreesPanel } from "../components/WorktreesPanel"
 
-export const MODELS: Array<{ id: string; label: string }> = [
-  { id: "", label: "Default model" },
-  { id: "claude-opus-5-5", label: "Opus 5.5" },
-  { id: "claude-opus-5", label: "Opus 5" },
-  { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
-  { id: "claude-sonnet-5", label: "Sonnet 5" },
-  { id: "claude-haiku-5-5", label: "Haiku 5.5" },
-  { id: "claude-haiku-4-5", label: "Haiku 4.5" },
-  { id: "claude-fable-5-1", label: "Fable 5.1" },
-]
+/** The built-in models (T-016: pickers use useModels(), which adds your own from Settings). */
+export const MODELS = BUILT_IN_MODELS
 
 const STATE: Record<SessionInfo["state"], { label: string; shape: string; rank: number }> = {
   waiting: { label: "Waiting on you", shape: "M5 1 9 9H1z", rank: 0 },
@@ -139,6 +132,8 @@ export function Sessions() {
     setCwd(startFolder)
     openFolder(undefined)
   }, [startFolder, openFolder])
+  // T-016: the models to offer, yours from Settings included.
+  const models = useModels()
   // T-017: what you chose last time, or what you last chose for this folder.
   const [model, setModel] = useState(() => choicesFor().model ?? "")
   const [mode, setMode] = useState<UiMode>(() => choicesFor().mode ?? "default")
@@ -329,7 +324,7 @@ export function Sessions() {
           <label className="grid w-[170px] grid-cols-[minmax(0,1fr)] gap-1">
             <span>Model</span>
             <select className="field" value={model} onChange={(e) => setModel(e.target.value)}>
-              {MODELS.map((m) => (
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
                 </option>
@@ -573,7 +568,7 @@ export function Sessions() {
                   {s.error ? <span className="block text-xs text-sev">{s.error}</span> : null}
                 </td>
                 <td className="sign py-2.5 pr-3 align-top">
-                  {MODELS.find((m) => m.id === s.model)?.label ?? s.model ?? "Default"}
+                  {modelLabel(s.model, "Default")}
                   {s.effort ? (
                     <span className="block text-[12.5px] text-mut">
                       {EFFORTS.find((x) => x.id === s.effort)?.label ?? s.effort} effort
