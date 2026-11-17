@@ -1,3 +1,5 @@
+import { CARD_CANDIDATE, looksLikeCard } from "./card-data.js"
+
 const BUILT_IN: { kind: string; re: RegExp }[] = [
   {
     kind: "private-key",
@@ -43,6 +45,8 @@ export function redactString(text: string, opts: RedactOptions = {}): string {
       out = out.replace(re, (_m, key: string, sep: string) => `${key}${sep}[REDACTED:${kind}]`)
     } else out = out.replace(re, `[REDACTED:${kind}]`)
   }
+  // E-093: a number that could be a card (test cards too) is taken out; other long numbers are left.
+  out = out.replace(CARD_CANDIDATE, (m) => (looksLikeCard(m) ? "[REDACTED:card-number]" : m))
   for (const term of opts.terms ?? []) {
     const t = term.trim()
     if (t === "") continue

@@ -53,7 +53,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-023 | Kubernetes manifest guard | E1 | done | feat/guards-2 | yes | kubernetes-manifest at 85; golden 28; latest tags and limits noted only |
 | E-028 | WSL command coverage | E1 | done | feat/guards-2 | yes | wsl and bash.exe -c unwrapped for both shells; floor adds .kube and .config/gcloud under \\wsl$; golden 30 |
 | E-030 | Toolchain manager guard | E1 | done | feat/guards | yes | toolchain-change; golden 27; pip and Set-ExecutionPolicy left to their own rules |
-| E-093 | Card data guard | E1 | todo | | |  |
+| E-093 | Card data guard | E1 | done | feat/guards-2 | yes | commit scan refuses a staged card number; card-data on edits at 80; redaction masks card numbers |
 | E-086 | Writing rules enforcement | E1 | todo | | |  |
 | E-080 | Shared signed redaction lists | E1 | todo | | |  |
 | E-051 | Merge conflict pre-check | E1 | todo | | |  |

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
+import { hasRealCard } from "@gatehouse/policy"
 
 /**
  * Secrets in a commit (backlog G22; "a plain in-repo scanner, never gitleaks", the owner's rule). Before a session's
@@ -15,7 +16,9 @@ import path from "node:path"
  */
 export const SECRET_IN_COMMIT_RULE = "secret-in-commit"
 
-const KINDS: Array<{ kind: string; re: RegExp }> = [
+// E-093: a number that could be a real payment card is refused too (only the file and line are named).
+const KINDS: Array<{ kind: string; re: RegExp; test?: (line: string) => boolean }> = [
+  { kind: "a card number", re: /\d{4}/, test: hasRealCard },
   { kind: "a private key", re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
   { kind: "an Anthropic API key", re: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
   // Not an Anthropic key, which the line above names.
@@ -26,6 +29,8 @@ const KINDS: Array<{ kind: string; re: RegExp }> = [
   { kind: "a Google API key", re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { kind: "a password in a web address", re: /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@'"]+:[^\s/@'"]{6,}@/i },
 ]
+
+const matches = (k: (typeof KINDS)[number], line: string) => (k.test ? k.test(line) : k.re.test(line))
 
 export interface Found {
   file: string
@@ -67,7 +72,7 @@ export function secretsInDiff(diff: string): Found[] {
     if (at !== undefined) at++
     if (!line.startsWith("+")) continue
     for (const k of KINDS)
-      if (k.re.test(line) && !out.some((f) => f.file === file && f.kind === k.kind))
+      if (matches(k, line) && !out.some((f) => f.file === file && f.kind === k.kind))
         out.push({ file, kind: k.kind, ...(n !== undefined ? { line: n } : {}) })
   }
   return out
@@ -77,9 +82,9 @@ export function secretsInDiff(diff: string): Found[] {
 export function secretsInFile(file: string, text: string): Found[] {
   const lines = text.split(/\r?\n/)
   return KINDS.flatMap((k) => {
-    const i = lines.findIndex((l) => k.re.test(l))
+    const i = lines.findIndex((l) => matches(k, l))
     // A pattern across lines (none today) is still found, without a line.
-    return i >= 0 ? [{ file, kind: k.kind, line: i + 1 }] : k.re.test(text) ? [{ file, kind: k.kind }] : []
+    return i >= 0 ? [{ file, kind: k.kind, line: i + 1 }] : !k.test && k.re.test(text) ? [{ file, kind: k.kind }] : []
   })
 }
 

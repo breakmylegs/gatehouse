@@ -63,6 +63,15 @@ describe("secrets in a commit", () => {
     expect(reason).not.toContain(AWS)
   })
 
+  it("refuses a staged number that could be a real card, naming file and line only, and passes a test card (E-093)", () => {
+    // A Luhn-valid Visa-shaped number, made here so this file holds none.
+    const body = ["4532", "0151", "1283", "036"].join("")
+    const card = [...Array(10).keys()].map((c) => `${body}${c}`).find((d) => [...d].reverse().reduce((s, ch, i) => s + (i % 2 ? (Number(ch) * 2 > 9 ? Number(ch) * 2 - 9 : Number(ch) * 2) : Number(ch)), 0) % 10 === 0) ?? ""
+    const diff = ["+++ b/test/fixtures/order.json", "@@ -0,0 +1,2 @@", "+{", `+  "pan": "${card}"`, "+++ b/test/pay.test.ts", "@@ -0,0 +1 @@", '+charge("4242424242424242")'].join("\n")
+    expect(secretsInDiff(diff)).toEqual([{ file: "test/fixtures/order.json", kind: "a card number", line: 2 }])
+    expect(secretReason(secretsInDiff(diff))).not.toContain(card)
+  })
+
   it("reads what is staged, what -a would take, and new files a chained git add would take", async () => {
     fs.writeFileSync(path.join(dir, "staged.ts"), `const k = "${AWS}"\n`)
     git("add", "staged.ts")
