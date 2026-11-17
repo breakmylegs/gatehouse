@@ -5,6 +5,9 @@ import { workspaceAliases } from "../../scripts/workspace-aliases.mjs"
 
 // The Host serves apps/web/dist. In development the dev server proxies the socket to a running Host.
 export default defineConfig({
+  // Neighbourhood Watch serves the interface under /app/, so its build loads its scripts and styles from there. The
+  // desktop's build keeps "/": the Host serves it at the root, and nothing about it changes (BUILD_REPORT, 17 Nov).
+  base: process.env.VITE_CODEHOUSE_REMOTE === "cnw" ? "/app/" : "/",
   plugins: [react(), tailwindcss()],
   // The workspace packages from their folders, not through the node_modules links (scripts/workspace-aliases.mjs).
   resolve: { alias: workspaceAliases() },

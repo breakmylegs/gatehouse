@@ -24,6 +24,28 @@ async function start() {
 
 const cookieOf = (r: { headers: Record<string, unknown> }) => String(r.headers["set-cookie"] ?? "").split(";")[0]!
 
+describe("the Codehouse interface at /app/", () => {
+  it("serves the page and every script and stylesheet it names, as the CNW build names them", async () => {
+    // Shaped as `VITE_CODEHOUSE_REMOTE=cnw vite build` writes it: base /app/.
+    const web = path.join(dir, "web")
+    fs.mkdirSync(path.join(web, "assets"), { recursive: true })
+    fs.writeFileSync(
+      path.join(web, "index.html"),
+      '<!doctype html><link rel="stylesheet" crossorigin href="/app/assets/index-a1.css"><script type="module" crossorigin src="/app/assets/index-b2.js"></script><link rel="modulepreload" href="/app/assets/chunk-c3.js">',
+    )
+    for (const f of ["index-a1.css", "index-b2.js", "chunk-c3.js"]) fs.writeFileSync(path.join(web, "assets", f), "x")
+    const { app } = await createCnw({ dataDir: dir, publicUrl: ORIGIN, log: () => undefined, webDir: web })
+    const page = await app.inject({ method: "GET", url: "/app/" })
+    expect(page.statusCode).toBe(200)
+    const refs = [...page.body.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]!)
+    expect(refs).toHaveLength(3)
+    for (const ref of refs) expect((await app.inject({ method: "GET", url: ref })).statusCode, ref).toBe(200)
+    // Built for the root, as before the fix, the same files are not found: the page would stay on its start-up picture.
+    expect((await app.inject({ method: "GET", url: "/assets/index-b2.js" })).statusCode).toBe(404)
+    await app.close()
+  })
+})
+
 describe("CNW at an address, and behind a proxy", () => {
   it("refuses passkeys at an IP address, saying why, and keeps password sign-in", async () => {
     const lines: string[] = []

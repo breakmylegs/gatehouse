@@ -43,6 +43,29 @@
   <body>
     <div id="boot" role="status"><span>Codehouse</span></div>
     <div id="root"></div>
+    <script>
+      // If Codehouse's own script or styles cannot load, the start-up picture must not hide that for ever: it goes,
+      // and says so. main.tsx sets window.__codehouseStarted as soon as it runs.
+      ;(function () {
+        function fail() {
+          if (window.__codehouseStarted) return
+          var boot = document.getElementById("boot")
+          if (!boot) return
+          boot.style.backgroundImage = "none"
+          boot.innerHTML = '<p style="max-width:32em;padding:0 24px;text-align:center;font-weight:500">Codehouse could not start: its files did not load. Reload the page; if this stays, update Codehouse or Neighbourhood Watch.</p>'
+          boot.setAttribute("role", "alert")
+        }
+        window.addEventListener(
+          "error",
+          function (e) {
+            var t = e.target
+            if (t && (t.tagName === "SCRIPT" || (t.tagName === "LINK" && t.rel === "stylesheet"))) fail()
+          },
+          true,
+        )
+        setTimeout(fail, 20000)
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -14,6 +14,9 @@ import { NotchMac } from "./surfaces/NotchMac" // Mac fork
 
 markPlatform() // Mac fork
 
+// The page's script has run: index.html's fallback for files that did not load stands down.
+;(window as unknown as { __codehouseStarted?: boolean }).__codehouseStarted = true
+
 // The quick prompt's small window (W1-15) loads the same page with ?view=quick: only that page, no start-up picture.
 const params = new URLSearchParams(location.search)
 const quick = params.get("view") === "quick"
