@@ -57,6 +57,7 @@ import { prLinks } from "../lib/prLinks"
 import { PrLinksMenu } from "../components/PrLinksMenu"
 import { listServers, mcpMatches, giveServer, type BuiltServerView } from "../lib/mcpServers"
 import { sends, useSendKey } from "../lib/sendKey"
+import { isCommand } from "../lib/isCommand"
 import { cloneRequest, PUBLISH_REQUEST } from "../lib/repoRequests"
 import { bringBack, sideOf, startSide } from "../lib/side"
 import { useHeld } from "../lib/held"
@@ -2239,7 +2240,7 @@ function Composer({
   const suggestion = useStore((s) => s.suggestions[sessionId])
   // T-053: which key sends.
   const sendKey = useSendKey()
-  const showMenu = text.startsWith("/") && !text.includes(" ") && !text.includes("\n")
+  const showMenu = (text === "/" || isCommand(text)) && !text.includes(" ") && !text.includes("\n")
   // O39: /mcp and the start of a name lists the servers you built that are running, so Tab completes the name.
   const typingMcp = /^\/mcp(?: \S*)?$/i.test(text)
   const [built, setBuilt] = useState<BuiltServerView[]>([])
@@ -2270,7 +2271,7 @@ function Composer({
       )
       return
     }
-    if (t.startsWith("/")) {
+    if (isCommand(t)) {
       const [cmd, ...rest] = t.split(/\s+/)
       const arg = rest.join(" ")
       let r
