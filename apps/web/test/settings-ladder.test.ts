@@ -34,3 +34,13 @@ describe("who is told, and when (E-094)", () => {
     expect(bodyOf(d, { ...valuesOf(d), ladPhone: "0", ladPush: "0" })).not.toHaveProperty("escalationLadder")
   })
 })
+
+describe("the timeline's summaries (O42)", () => {
+  it("are on unless turned off, and only off is saved", () => {
+    const d = data()
+    expect(valuesOf(d).tlOn).toBe(true)
+    expect(bodyOf(d, valuesOf(d))).not.toHaveProperty("timelineSummaries")
+    expect(bodyOf(d, { ...valuesOf(d), tlOn: false }).timelineSummaries).toBe(false)
+    expect(valuesOf(data({ timelineSummaries: false })).tlOn).toBe(false)
+  })
+})

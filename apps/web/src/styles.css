@@ -2917,3 +2917,37 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   padding: 10px 14px;
   box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
 }
+
+/* O42: a session's timeline of ten-minute summaries, scrolled left and right. */
+.summary-timeline {
+  scroll-snap-type: x proximity;
+  border-top: 2px solid var(--c-line);
+  padding-top: 6px;
+}
+.summary-node {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 76px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  scroll-snap-align: end;
+  cursor: pointer;
+}
+.summary-node:hover {
+  background: var(--c-s2);
+}
+.summary-node[aria-pressed="true"] {
+  border-color: var(--c-acc);
+  background: var(--c-s2);
+}
+.summary-dot {
+  width: 10px;
+  height: 10px;
+  margin-top: -12px;
+  border-radius: 50%;
+  background: var(--c-acc);
+}

@@ -48,6 +48,8 @@ import { createSummariser } from "./chat/summarise.js"
 import { createRecapWriter } from "./recap-writer.js"
 import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
+import { SessionTimeline } from "./session-timeline.js"
+import { createTimelineWriter } from "./timeline-writer.js"
 import { chatFolderOf } from "./triage.js"
 import { CnwService } from "./cnw/service.js"
 import { bridgeFor } from "./mcp-builder/bridge.js"
@@ -808,6 +810,23 @@ export function createHost(opts: HostOptions = {}): Host {
   manager.on("session", (info) => {
     if (info.state === "ended") chatRecorder.closed(info.id)
   })
+  // O42: what each session did, summed up by Claude every ten minutes for its timeline (on unless turned off).
+  const timeline = new SessionTimeline({
+    dir: path.join(gatehouseDataDir(env), "timelines"),
+    writer: createTimelineWriter(),
+    enabled: () => config.timelineSummaries !== false,
+    session: (id) => {
+      const i = manager.get(id)?.info()
+      return i ? { project: i.project, ...(i.local ? { local: true } : {}), ...(i.evaluation ? { evaluation: true } : {}) } : undefined
+    },
+    orgOk: () => account.last()?.org.ok === true,
+    redact: (t) => redactString(t, { terms: config.redactTerms }),
+    audit,
+    policyHash: () => store.current?.hash ?? "",
+    log,
+  })
+  manager.on("prompted", ({ sessionId, text }) => timeline.note(sessionId, { who: "you", text }))
+  manager.on("message", ({ sessionId, message }) => timeline.message(sessionId, message as unknown as Record<string, unknown>))
   const extraSpend = new ExtraSpendToday({
     file: path.join(gatehouseDataDir(env), "extra-spend-today.json"),
     today: () => localDay(new Date()),
@@ -1379,6 +1398,12 @@ export function createHost(opts: HostOptions = {}): Host {
       pwsh,
       // O41: Settings, Connectors, Neighbourhood Watch (GET /api/cnw, pairing, on and off).
       cnw,
+      // O42: a session's timeline of ten-minute summaries.
+      timeline: {
+        timeline,
+        enabled: () => config.timelineSummaries !== false,
+        exists: (id) => manager.get(id) !== undefined,
+      },
       // O39: the MCP page. The builder session works in the server's folder, with the other running servers given to it.
       mcp: {
         store: builtServers,
@@ -1766,12 +1791,15 @@ export function createHost(opts: HostOptions = {}): Host {
         }).then((n) => (n ? log(`brought back ${n} open session(s)`) : undefined))
       // O39: the servers you built that start with Codehouse; one that fails says why in MCP, and the rest go on.
       void mcpRunner.startAutostart().catch((e: Error) => log(`mcp builder: ${e.message}`))
+      // O42: the ten-minute summaries for each session's timeline.
+      timeline.start()
     },
     async stop() {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
       cnw.stop()
+      timeline.stop()
       // O39: the servers you built stop with Codehouse.
       await mcpRunner.stopAll()
       for (const t of cleanupTimers) clearTimeout(t)

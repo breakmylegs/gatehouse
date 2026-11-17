@@ -18,6 +18,7 @@ import { registerRecapRoutes, type RecapDeps } from "./recap-api.js"
 import { registerTitleRoutes, type TitleDeps } from "./title-api.js"
 import { registerTriageRoutes } from "./triage.js"
 import { registerCnwRoutes, type CnwService } from "./cnw/service.js"
+import { registerTimelineRoutes } from "./session-timeline.js"
 import { registerMcpBuilderRoutes, type McpRouteDeps } from "./mcp-builder/routes.js"
 import { registerForgeRoutes } from "./forge/routes.js"
 import type { PrWatcher } from "./forge/watch.js"
@@ -143,6 +144,8 @@ export interface AdminContext {
   titles?: TitleDeps
   /** O41: Neighbourhood Watch, paired and run from Settings. */
   cnw?: CnwService
+  /** O42: each session's ten-minute summaries. */
+  timeline?: Parameters<typeof registerTimelineRoutes>[1]
   /** O39: the MCP servers you build. */
   mcp?: McpRouteDeps
   /** T-125: the folder of a chat Codehouse made, for triage files. */
@@ -900,6 +903,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     })
   }
   if (ctx.cnw) registerCnwRoutes(app, ctx.cnw)
+  if (ctx.timeline) registerTimelineRoutes(app, ctx.timeline)
   if (ctx.mcp) registerMcpBuilderRoutes(app, ctx.mcp)
   if (ctx.triageFolder)
     registerTriageRoutes(app, {
@@ -1842,6 +1846,8 @@ const LIVE_SETTINGS = [
   "extremeRiskLimit",
   // E-094: read by the broker for each request.
   "escalationLadder",
+  // O42: read at each ten-minute look.
+  "timelineSummaries",
   "forges",
   "worktreeCleanup",
   "titleByClaude",

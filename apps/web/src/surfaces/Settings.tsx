@@ -54,6 +54,8 @@ interface Config {
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   /** E-094: minutes the phone and the push channels wait before they are told; absent, all at once. */
   escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number }
+  /** O42: false turns off the ten-minute summaries. */
+  timelineSummaries?: boolean
   phoneExpiryMs: number
   hardTimeoutMs: number
   checkpoints: { beforeEscalation: boolean; editBursts: boolean; burstWindowMs: number }
@@ -138,6 +140,8 @@ interface Values {
   /** E-094: minutes before the phone, and before ntfy and Slack, are told; "0" for at once. */
   ladPhone: string
   ladPush: string
+  /** O42: the ten-minute summaries for each session's timeline. */
+  tlOn: boolean
   /** D-001: every project strict about its tests, or these, one to a line. */
   tiAll: boolean
   /** D-018: points of the risk budget, or "" for none. */
@@ -218,6 +222,7 @@ export function valuesOf(d: SettingsData): Values {
     memPoint: c.memoryGovernor?.on === true && !c.memoryGovernor.off ? String(c.memoryGovernor.percent) : "off",
     ladPhone: String(c.escalationLadder?.phoneAfterMinutes ?? 0),
     ladPush: String(c.escalationLadder?.pushAfterMinutes ?? 0),
+    tlOn: c.timelineSummaries !== false,
     tiAll: c.testIntegrity?.strictAll === true,
     rbPoints: c.riskBudget && !c.riskBudget.off ? String(c.riskBudget.points) : "",
     tiProjects: (c.testIntegrity?.strictProjects ?? []).join("\n"),
@@ -380,6 +385,9 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       percent: v.memPoint === "off" ? (d.saved.memoryGovernor?.percent ?? 85) : Number(v.memPoint),
       ...(v.memPoint === "off" ? { off: true, on: undefined } : { on: true, off: undefined }),
     }
+  // O42: on unless turned off, so only off is saved.
+  if (v.tlOn) delete body.timelineSummaries
+  else body.timelineSummaries = false
   // E-094: saved only when a channel waits; all at once is no setting at all.
   if (v.ladPhone === "0" && v.ladPush === "0") delete body.escalationLadder
   else
@@ -469,6 +477,7 @@ export const DEFAULT_VALUES: Values = {
   memPoint: "off",
   ladPhone: "0",
   ladPush: "0",
+  tlOn: true,
   tiAll: false,
   rbPoints: "",
   tiProjects: "",
@@ -753,6 +762,7 @@ export function Settings() {
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
   const ladChanged = differs(v, ["ladPhone", "ladPush"])
+  const tlChanged = differs(v, ["tlOn"])
   const tiChanged = differs(v, ["tiAll", "tiProjects"])
   const rbChanged = differs(v, ["rbPoints"])
   const licChanged = differs(v, ["licences"])
@@ -1429,6 +1439,17 @@ export function Settings() {
                   onChange={(e) => change({ evDays: e.target.value.replace(/[^0-9]/g, "") }, "Evidence")}
                 />
               </Field>
+            </Group>
+
+            <Group section="sessions" title="Timeline" gap="gap-2" changed={tlChanged}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.tlOn} onChange={(e) => change({ tlOn: e.target.checked }, "Timeline")} />
+                Sum up what each session did every ten minutes, for its Timeline
+              </label>
+              <p className="m-0 text-sm text-mut">
+                Claude writes a few sentences from the session's messages and tool calls, with your redaction list applied
+                first. It uses a little of your plan each time, and never runs for a model on this computer.
+              </p>
             </Group>
 
             <Group section="sessions" title="Memory" gap="gap-2" changed={memChanged}>

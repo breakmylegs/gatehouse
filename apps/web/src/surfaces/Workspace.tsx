@@ -88,6 +88,7 @@ import { parseFindings, REVIEW_FENCE, ReviewCard, ReviewSession } from "../compo
 import { GUIDE_FENCE, GuideCard, parseGuide } from "../components/ReviewGuide"
 import { Walkthrough } from "../components/Walkthrough"
 import { Timeline } from "../components/Timeline"
+import { SummaryTimeline } from "../components/SummaryTimeline"
 import { SearchPane } from "../components/SearchPane"
 import { GitPane } from "../components/GitPane"
 import { PictureViewer } from "../components/PictureViewer"
@@ -378,6 +379,8 @@ function SessionPane({
   const [walkthrough, setWalkthrough] = useState(false)
   // C-010: every call of the session from the audit log, in order.
   const [timeline, setTimeline] = useState(false)
+  // O42: the ten-minute summaries, opened from the Timeline button on the bar.
+  const [summaries, setSummaries] = useState(false)
   // D-003: the change's evidence pack.
   const [evidence, setEvidence] = useState(false)
   // D-033: the project's requirements and their trace matrix.
@@ -640,7 +643,7 @@ function SessionPane({
         }),
     },
     ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
-    ...(chat ? [] : [{ label: "Timeline...", onSelect: () => setTimeline(true) }]),
+    ...(chat ? [] : [{ label: "Audit trail...", onSelect: () => setTimeline(true) }]),
     ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
@@ -822,6 +825,11 @@ function SessionPane({
                 {SIDE_LABEL[t]}
               </button>
             ))}
+            {/* O42: what happened, summed up every ten minutes; hidden until you open it. */}
+            <button type="button" className="pane-tool" aria-pressed={summaries} onClick={() => setSummaries((o) => !o)}>
+              <Icon name="plan" size={14} />
+              Timeline
+            </button>
             <button
               type="button"
               className="pane-tool"
@@ -858,6 +866,11 @@ function SessionPane({
       {timeline ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Timeline sessionId={session.id} onClose={() => setTimeline(false)} />
+        </div>
+      ) : null}
+      {summaries ? (
+        <div className="px-3 pt-2">
+          <SummaryTimeline sessionId={session.id} onClose={() => setSummaries(false)} />
         </div>
       ) : null}
       {testsFirst ? (

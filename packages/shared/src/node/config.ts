@@ -90,6 +90,8 @@ function build(loose: boolean) {
      * E-094, the escalation ladder: minutes the phone and the push channels (ntfy, Slack) wait before they are told of
      * a request, 0 to 60. Absent: every channel at once. The desktop is always told at once, and deadlines are unchanged.
      */
+    /** O42: Claude sums up each session every ten minutes for its timeline. On unless false. */
+    timelineSummaries: z.boolean().optional(),
     escalationLadder: obj({
       phoneAfterMinutes: z.number().int().min(0).max(60).optional(),
       pushAfterMinutes: z.number().int().min(0).max(60).optional(),
