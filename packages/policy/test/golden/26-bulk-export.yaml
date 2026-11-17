@@ -1,0 +1,6 @@
+# E-017: a bulk export of data waits for you (bulk-export), with what it takes and where it goes.
+- { t: Bash, cmd: "pg_dump -d shop -f C:/Users/me/Downloads/shop.sql", o: escalate, r: bulk-export }
+- { t: Bash, cmd: "mysqldump shop > /tmp/shop.sql", o: escalate, r: bulk-export }
+- { t: Bash, cmd: "mongoexport --db shop --collection orders --out D:/exports/orders.json", o: escalate, r: bulk-export }
+- { t: Bash, cmd: "bcp dbo.orders out C:/temp/orders.dat -S db -T", o: escalate, r: bulk-export }
+- { t: PowerShell, cmd: "Invoke-Sqlcmd -Query 'select * from orders' | Export-Csv C:\\temp\\orders.csv", o: escalate, r: bulk-export }
