@@ -139,6 +139,8 @@ function build(loose: boolean) {
     escalationLadder: obj({
       phoneAfterMinutes: z.number().int().min(0).max(60).optional(),
       pushAfterMinutes: z.number().int().min(0).max(60).optional(),
+      /** Mac fork (owner, 18 Nov): the waits only while someone is using the Mac; away, every channel is told at once. */
+      onlyWhenHere: z.boolean().optional(),
     }).optional(),
     /**
      * What every session is told at its start, in your own words (owner, 31 Oct). Up to 8000 characters. Absent: nothing.

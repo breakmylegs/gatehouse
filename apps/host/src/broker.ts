@@ -102,7 +102,9 @@ export interface BrokerOptions {
    * request. Off unless set: then every channel is told at once. It only delays telling; the request's deadlines are
    * unchanged, and an answer from any channel still counts at any time.
    */
-  ladder?: () => { phoneMs?: number; pushMs?: number } | undefined
+  ladder?: () => { phoneMs?: number; pushMs?: number; onlyWhenHere?: boolean } | undefined
+  /** Mac fork (owner, 18 Nov): nobody is using the computer. With the ladder's onlyWhenHere, away tells every channel at once. */
+  away?: () => Promise<boolean>
   phone?: PhoneChannel
   /** Makes the redacted copy of the input that the phone and the audit see (invariant 12). */
   redact: <T>(value: T) => T
@@ -246,10 +248,16 @@ export class Broker extends EventEmitter<BrokerEvents> {
         t.unref?.()
         entry.timers.push(t)
       }
-      after(ladder?.phoneMs, () => this.#deliverToPhone(request.id))
-      after(ladder?.pushMs, () => {
-        if (this.#pending.has(request.id)) this.emit("push_due", view)
-      })
+      const tell = (l: typeof ladder) => {
+        after(l?.phoneMs, () => this.#deliverToPhone(request.id))
+        after(l?.pushMs, () => {
+          if (this.#pending.has(request.id)) this.emit("push_due", view)
+        })
+      }
+      const away = this.#opts.away
+      if (ladder?.onlyWhenHere && away && (ladder.phoneMs || ladder.pushMs))
+        void away().then((a) => tell(a ? undefined : ladder), () => tell(ladder))
+      else tell(ladder)
     })
   }
 

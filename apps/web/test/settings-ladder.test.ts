@@ -33,6 +33,16 @@ describe("who is told, and when (E-094)", () => {
     // Back to at once: the setting goes.
     expect(bodyOf(d, { ...valuesOf(d), ladPhone: "0", ladPush: "0" })).not.toHaveProperty("escalationLadder")
   })
+
+  it("saves waiting only while you use the Mac when chosen, and reads it back (Mac fork, 18 Nov)", () => {
+    const d = data()
+    expect(valuesOf(d).ladHere).toBe(false)
+    const body = bodyOf(d, { ...valuesOf(d), ladPhone: "2", ladHere: true })
+    expect(GatehouseConfig.parse({ escalationLadder: body.escalationLadder }).escalationLadder?.onlyWhenHere).toBe(true)
+    expect(valuesOf(data({ escalationLadder: body.escalationLadder })).ladHere).toBe(true)
+    const off = bodyOf(d, { ...valuesOf(d), ladPhone: "2", ladHere: false })
+    expect(JSON.parse(JSON.stringify(off.escalationLadder))).not.toHaveProperty("onlyWhenHere")
+  })
 })
 
 describe("the timeline's summaries (O42)", () => {
