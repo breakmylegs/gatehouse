@@ -40,13 +40,16 @@ if (!v) throw new Error("The built app has no Mac version.")
 const m = /^(.*\+mac\.)(\d+)(\.dev)?$/.exec(v)!
 const next = `${m[1]}${Number(m[2]) + 1}`
 
+/** Stops the test copy and its Host, asking first and then forcing what is left. */
 function stopCopies(): void {
-  const ps = spawnSync("/bin/ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout
-  for (const line of ps.split("\n"))
-    if (line.includes(`${app}/Contents/`)) {
+  for (const signal of ["-TERM", "-KILL"]) {
+    const ps = spawnSync("/bin/ps", ["-axo", "pid=,command="], { encoding: "utf8" }).stdout
+    for (const line of ps.split("\n")) {
       const pid = Number(line.trim().split(/\s+/)[0])
-      if (pid) spawnSync("/bin/kill", [String(pid)])
+      if (pid && pid !== process.pid && line.includes(`${app}/Contents/`)) spawnSync("/bin/kill", [signal, String(pid)])
     }
+    spawnSync("/bin/sleep", ["3"])
+  }
 }
 
 async function main(): Promise<void> {
