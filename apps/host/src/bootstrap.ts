@@ -129,7 +129,9 @@ import { TerminalManager } from "./terminal.js"
 import { SessionHistory, type SessionSdk } from "./history.js"
 import { SessionMetaStore } from "./session-meta.js"
 import { localDay, UsageStore } from "./usage.js"
-import { UpdateService } from "./update/service.js"
+import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
+import { MacUpdateService } from "./update/service-mac.js" // Mac fork
+import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
 import { GitHubSource } from "./update/source.js"
 import { ChangelogStore } from "./update/changelog.js"
 import { UpdateTokenStore } from "./update/token.js"
@@ -161,7 +163,7 @@ export interface HostOptions {
 
 export interface Host {
   app: HostApp
-  updates: UpdateService
+  updates: Updates
   config: GatehouseConfig
   approverProcess: ApproverProcess | undefined
   store: PolicyStore
@@ -1079,7 +1081,7 @@ export function createHost(opts: HostOptions = {}): Host {
     file: path.join(gatehouseDataDir(env), "updates", "changelog.json"),
     fetch: () => updateSource.changelog(),
   })
-  const updates = new UpdateService({
+  const updateOptions: UpdateServiceOptions = {
     installDir,
     // Mac fork: Codehouse.app says its own version (packaging/mac/Host.swift).
     sourceVersion: installDir ? "0.0.0-source" : (env.GATEHOUSE_MAC_APP_VERSION ?? sourceVersion()),
@@ -1125,7 +1127,40 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     log,
     tokenSet: () => updateToken.get() !== undefined,
-  })
+  }
+  // Mac fork (owner, 18 Nov): Codehouse.app updates itself from the Mac's own releases (service-mac.ts).
+  const macApp = env.GATEHOUSE_MAC_APP_PATH && env.GATEHOUSE_MAC_APP_VERSION ? env.GATEHOUSE_MAC_APP_PATH : undefined
+  const updates: Updates = macApp
+    ? new MacUpdateService({
+        dir: updateOptions.dir,
+        ...(updateOptions.keys ? { keys: updateOptions.keys } : {}),
+        settings: updateOptions.settings,
+        saveSettings: updateOptions.saveSettings,
+        audit: updateOptions.audit,
+        log,
+        tokenSet: () => updateToken.get() !== undefined,
+        app: macApp,
+        version: env.GATEHOUSE_MAC_APP_VERSION as string,
+        source: new GitHubSource({
+          token: () => updateToken.get(),
+          ...(testBase ? { base: testBase } : {}),
+          channel: { tag: MAC_CHANNEL_TAG, manifest: MAC_UPDATE_FILE, signature: MAC_UPDATE_SIGNATURE, tagOf: macTag },
+        }),
+      })
+    : new UpdateService(updateOptions)
+  // Test hook only (scripts/update-e2e-mac.ts): with the local stand-in and its key set, look at once and install what
+  // is found, as the Update button would. Never from GitHub: without GATEHOUSE_UPDATE_BASE and its key it does nothing.
+  if (testBase && testKey && env.GATEHOUSE_UPDATE_TEST_INSTALL === "1") {
+    let asked = false
+    updates.on("status", (s) => {
+      const v = s.latest?.version
+      if (asked || !v || !s.available || !s.canInstall || s.applyWhenReady) return
+      if (s.phase !== "idle" && !(s.phase === "ready" && s.ready === v)) return
+      asked = true
+      void updates.install(v).catch(() => undefined)
+    })
+    setTimeout(() => void updates.check(), 3_000).unref()
+  }
   const localRelay = new LocalRelay({
     command: process.execPath,
     args: childArgs("relay"),

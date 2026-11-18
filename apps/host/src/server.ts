@@ -120,7 +120,7 @@ export interface HostApp {
   /** Policy, audit and settings endpoints for the desktop UI. Absent in tests that do not need them. */
   admin?: AdminContext
   /** Updates to Codehouse itself. Absent in tests that do not need them. */
-  updates?: import("./update/service.js").UpdateService
+  updates?: import("./update/service.js").Updates
   /** The phone channel. Absent in tests that do not need it. */
   phone?: PhoneService
   /** Restarts Codehouse through the window app. Absent where nothing can restart it (the console launcher, tests). */

@@ -46,7 +46,7 @@ import { makeAuditBundle } from "./audit-bundle.js"
 import { sessionRecords, sessionTimeline } from "./timeline.js"
 import { makeTimelineExport, type TimelineSigner } from "./timeline-export.js"
 import { gatehouseDataDir, listCheckpoints } from "@gatehouse/shared/node"
-import type { UpdateService } from "./update/service.js"
+import type { Updates } from "./update/service.js"
 import type { UpdateTokenStore } from "./update/token.js"
 import type { FolderPicker, SaveAsPicker } from "./folder-picker.js"
 import fs from "node:fs"
@@ -206,7 +206,7 @@ export interface AdminContext {
     stop: () => Promise<void>
   }
   /** Updates to Codehouse itself. Absent in tests that do not need it. */
-  updates?: UpdateService
+  updates?: Updates
   /** The changelog in Settings (owner, 4 Nov): every release's notes, read from the releases and kept for offline. */
   changelog?: ChangelogStore
   /** G30: the PowerShell verifier, put in each audit bundle. */
