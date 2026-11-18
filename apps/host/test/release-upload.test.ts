@@ -61,6 +61,22 @@ describe("publishing a release (O28)", () => {
     expect(g.calls[1]).toBe("release create")
   })
 
+  it("makes a Windows release Latest, and a Mac one never (Mac fork, 18 Nov)", () => {
+    const editOf = (latest?: boolean) => {
+      const g = github()
+      let edit: string[] = []
+      const run = (cmd: string, args: string[]) => {
+        if (args[1] === "edit") edit = args
+        return g.run(cmd, args)
+      }
+      publishRelease({ ...base, run, ...(latest === undefined ? {} : { latest }) })
+      return edit
+    }
+    expect(editOf()).toContain("--latest")
+    expect(editOf(false)).toContain("--latest=false")
+    expect(editOf(false)).not.toContain("--latest")
+  })
+
   it("never publishes with a file missing or not matching, and carries the draft on next time", () => {
     const g = github({ failUploads: { "update.sig": 9 } })
     expect(() => publishRelease({ ...base, run: g.run })).toThrow(/update\.sig could not be uploaded after 4 tries\. The release is still a draft/)

@@ -26,6 +26,11 @@ export interface PublishOptions {
   waitMs?: number
   log?: (line: string) => void
   sleep?: (ms: number) => void
+  /**
+   * Mac fork (18 Nov): false publishes it without making it GitHub's Latest, for a Mac release (Windows copies read
+   * releases/latest). Unset, it becomes Latest, as every Windows release does.
+   */
+  latest?: boolean
 }
 
 interface Asset {
@@ -90,6 +95,6 @@ export function publishRelease(o: PublishOptions): void {
   const after = view(o)
   const bad = after ? mismatched(o.files, after.assets) : o.files.map((f) => path.basename(f))
   if (bad.length) throw new Error(`These files on GitHub do not match the ones here: ${bad.join(", ")}. The release is still a draft.`)
-  const r = o.run("gh", ["release", "edit", o.tag, "--repo", o.repo, "--draft=false", "--latest"])
+  const r = o.run("gh", ["release", "edit", o.tag, "--repo", o.repo, "--draft=false", o.latest === false ? "--latest=false" : "--latest"])
   if (r.status !== 0) throw new Error(`Every file is up and checked, but the release could not be published: ${r.stderr.trim()}`)
 }

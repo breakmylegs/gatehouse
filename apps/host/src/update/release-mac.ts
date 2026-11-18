@@ -26,9 +26,11 @@ export const macTag = (version: string): string => `mac-v${version.replace("+", 
 /**
  * Public keys whose signature on a Mac release is trusted, for Mac updates only. The private key is made on the Mac
  * that publishes (npm run release:mac -- --new-key) and stays there. To change keys, ship a release signed with the old
- * key that lists both, then drop the old one. None yet: until there is one, every Mac release is refused.
+ * key that lists both, then drop the old one. Made 18 Nov on David's Mac.
  */
-export const MAC_RELEASE_KEYS: readonly string[] = []
+export const MAC_RELEASE_KEYS: readonly string[] = [
+  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAa01rtXtqoaoX3SAqbBzlmQb/ZSF+TIVYvgm8t4RfzDQ=\n-----END PUBLIC KEY-----\n",
+]
 
 /** Codehouse.app in four parts. Paths are inside the bundle, from Contents/. */
 export const MAC_PART_NAMES = ["program", "app", "modules", "runtime"] as const
