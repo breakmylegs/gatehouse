@@ -33,6 +33,7 @@ colors:
   ok-green-dark: "oklch(76% 0.12 152)"
   caution: "oklch(46% 0.11 70)"
   caution-dark: "oklch(80% 0.12 75)"
+  scrim: "oklch(0% 0 0 / 0.4)"
 typography:
   display:
     fontFamily: "Segoe UI Variable Display, -apple-system, BlinkMacSystemFont, system-ui, sans-serif"

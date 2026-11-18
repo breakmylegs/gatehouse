@@ -59,6 +59,18 @@ function form(title, fields, submit, onSubmit, note) {
 
 const canNotify = () => typeof Notification !== "undefined"
 
+/** Dates as people here write them: 18 Nov 2026, 20:38. */
+const when = (iso) => new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" })
+const day = (iso) => new Date(iso).toLocaleDateString("en-GB", { dateStyle: "medium" })
+
+/** A browser's own long name, as a person would say it: "Edge on Windows", "Safari on iPhone". */
+function deviceName(ua) {
+  if (!ua) return "A browser"
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X|Macintosh/.test(ua) ? "a Mac" : /Linux/.test(ua) ? "Linux" : ""
+  const app = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : ""
+  return app && os ? `${app} on ${os}` : app || os || "A browser"
+}
+
 /**
  * The danger notice (apps/cnw/DESIGN.md): what a change breaks, before it breaks it. A modal dialog, Cancel the default
  * and first, Escape cancels, the confirm in a risk outline. Resolves to true only when confirmed. With fields, it
@@ -495,7 +507,7 @@ async function healthPanel() {
         {},
         el("strong", { text: `${c.label}: ` }),
         el("span", { text: c.online ? "connected" : "not connected" }),
-        el("span", { class: "muted", text: last.length ? `. Last: ${last.map((e) => `${e.event} ${new Date(e.at).toLocaleString()}`).join("; ")}` : "" }),
+        el("span", { class: "muted", text: last.length ? `. Last: ${last.map((e) => `${e.event} ${when(e.at)}`).join("; ")}` : "" }),
       ),
     )
   }
@@ -614,7 +626,7 @@ async function auditPanel() {
         el(
           "div",
           { class: "item", role: "listitem", style: "grid-template-columns:auto 1fr" },
-          el("span", { class: "meta", text: new Date(e.at).toLocaleString() }),
+          el("span", { class: "meta", text: when(e.at) }),
           el("span", {}, el("strong", { text: `${e.user}: ` }), el("span", { text: `${e.action.replace(/-/g, " ")}, ${e.detail}` })),
         ),
       )
@@ -861,7 +873,7 @@ async function devicesPanel() {
       el(
         "div",
         { class: "row-actions", style: "align-items:center" },
-        el("span", { style: "flex:1", text: `${d.ua || "A browser"}${d.ip ? ` from ${d.ip}` : ""}, since ${new Date(d.created).toLocaleString()}${d.current ? " (this one)" : ""}` }),
+        el("span", { style: "flex:1", text: `${deviceName(d.ua)}${d.ip ? ` from ${d.ip}` : ""}, since ${when(d.created)}${d.current ? " (this one)" : ""}` }),
         d.current
           ? null
           : el("button", {
@@ -939,7 +951,7 @@ async function peoplePanel() {
         const c = await call("POST", "/api/people/invite", { email: email.value, role: role.value })
         if (!c.ok) return void (say.textContent = c.json.error ?? "No invite was made.")
         link.textContent = c.json.link
-        say.textContent = "Send them this link. It works once, until " + new Date(c.json.expires).toLocaleDateString() + "."
+        say.textContent = "Send them this link. It works once, until " + day(c.json.expires) + "."
       },
     }),
     link,

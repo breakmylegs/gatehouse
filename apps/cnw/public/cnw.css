@@ -22,6 +22,8 @@
   --sev: oklch(46% 0.18 27);
   --ok: oklch(42% 0.11 152);
   --warn: oklch(46% 0.11 70);
+  /* Behind the danger notice (DESIGN.md: scrim). */
+  --scrim: oklch(0% 0 0 / 0.4);
   --sans: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --display: "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
@@ -57,6 +59,10 @@ body {
 }
 a {
   color: var(--acc);
+}
+/* No word left alone on a last line, where the browser can help. */
+p {
+  text-wrap: pretty;
 }
 :focus-visible {
   outline: 2px solid var(--acc);
@@ -333,7 +339,7 @@ select:hover {
 }
 .item .meta {
   color: var(--mut);
-  font-size: 14px;
+  font-size: 13px;
 }
 .time {
   display: inline-grid;
@@ -368,7 +374,7 @@ select:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: 13px;
 }
 .state::before {
   content: "";
@@ -495,7 +501,7 @@ dialog.sheet:not([open]) {
   display: none;
 }
 dialog.sheet::backdrop {
-  background: oklch(0% 0 0 / 0.4);
+  background: var(--scrim);
 }
 @media (max-width: 759px) {
   dialog.sheet {
@@ -518,4 +524,11 @@ body.out::before {
   body.out::before {
     opacity: 0.11;
   }
+}
+
+/* A status or error line with nothing to say takes no room, so no panel ends in a gap. */
+.panel > p:empty,
+.pass > p:empty,
+form > p:empty {
+  display: none;
 }
