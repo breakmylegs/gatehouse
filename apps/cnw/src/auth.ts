@@ -19,6 +19,9 @@ interface Session {
   passkey: boolean
   /** When the person last proved it is them (signing in, or signing in again): a Severe allow wants it recent. */
   confirmed: number
+  /** For the list of signed-in devices: the browser and the address it signed in from. */
+  ua?: string
+  ip?: string
 }
 
 const hash = (s: string) => crypto.createHash("sha256").update(s).digest("hex")
@@ -31,12 +34,30 @@ export class Sessions {
     this.#now = now
   }
 
-  start(user: string, passkey: boolean): { id: string; csrf: string } {
+  start(user: string, passkey: boolean, from: { ua?: string; ip?: string } = {}): { id: string; csrf: string } {
     const id = crypto.randomBytes(32).toString("base64url")
     const csrf = crypto.randomBytes(24).toString("base64url")
     const t = this.#now()
-    this.#byHash.set(hash(id), { user, csrf, created: t, seen: t, passkey, confirmed: t })
+    this.#byHash.set(hash(id), { user, csrf, created: t, seen: t, passkey, confirmed: t, ...(from.ua ? { ua: from.ua.slice(0, 200) } : {}), ...(from.ip ? { ip: from.ip.slice(0, 60) } : {}) })
     return { id, csrf }
+  }
+
+  /** A user's signed-in devices, by a short id that is not the session's own (its hash, cut). */
+  list(user: string, current: string | undefined): Array<{ id: string; created: string; seen: string; ua?: string; ip?: string; current: boolean }> {
+    const mine = current ? hash(current) : ""
+    return [...this.#byHash.entries()]
+      .filter(([, s]) => s.user === user)
+      .map(([k, s]) => ({ id: k.slice(0, 16), created: new Date(s.created).toISOString(), seen: new Date(s.seen).toISOString(), ...(s.ua ? { ua: s.ua } : {}), ...(s.ip ? { ip: s.ip } : {}), current: k === mine }))
+  }
+
+  /** Signs one of a user's devices out; false when it is not theirs or not there. */
+  revoke(user: string, id: string): boolean {
+    for (const [k, s] of this.#byHash)
+      if (s.user === user && id.length === 16 && k.startsWith(id)) {
+        this.#byHash.delete(k)
+        return true
+      }
+    return false
   }
 
   get(id: string | undefined): Session | undefined {

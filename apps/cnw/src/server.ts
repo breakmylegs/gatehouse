@@ -17,6 +17,7 @@ import { JsonStore } from "./store.js"
 import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passkeys.js"
 import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
 import { bareHost } from "./tls.js"
+import { base32, hashRecovery, newSecret, otpauthUri, recoveryCodes, Sealer, verifyCode } from "./totp.js"
 import { commandAllowed, httpAllowed, roleMay, roleOf, ROLES, seesComputer, type Role } from "./roles.js"
 
 /**
@@ -58,7 +59,7 @@ interface Users {
     /** The computers this person sees; absent for every one. */
     computers?: string[]
     /** A second factor (TOTP), its secret sealed. */
-    totp?: { sealed: string; recovery: string[] }
+    totp?: { sealed: string; recovery: string[]; lastStep?: number }
   }>
   setupHash?: string
 }
@@ -98,6 +99,8 @@ export async function createCnw(o: CnwOptions) {
   const audit = new JsonStore<Audit>(o.dataDir, "audit", () => ({ entries: [] }))
   const invites = new JsonStore<Invites>(o.dataDir, "invites", () => ({ invites: [] }))
   const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex")
+  const sealer = new Sealer(o.dataDir)
+  const loginTickets = new Map<string, { user: string; until: number }>()
   const env = o.env ?? process.env
   const ownProxy = env.CNW_MODE === "own-proxy"
   const record = (user: string, action: string, detail: string) =>
@@ -153,6 +156,29 @@ export async function createCnw(o: CnwOptions) {
   })
 
   const userOf = (name: string) => users.read().users.find((u) => u.name === name)
+  const startFor = (req: FastifyRequest, user: string, passkey: boolean) => sessions.start(user, passkey, { ua: String(req.headers["user-agent"] ?? ""), ip: ipOf(req) })
+  /** A code from the person's app, or one of their recovery codes (used up); the step used is kept, so no code is used twice. */
+  const secondFactor = (u: Users["users"][number], code: string): boolean => {
+    if (!u.totp) return true
+    let secret: Buffer
+    try {
+      secret = sealer.open(u.totp.sealed)
+    } catch {
+      return false
+    }
+    const step = verifyCode(secret, code, (o.now ?? Date.now)(), u.totp.lastStep ?? -1)
+    if (step !== undefined) {
+      users.update((v) => ({ ...v, users: v.users.map((x) => (x.name === u.name && x.totp ? { ...x, totp: { ...x.totp, lastStep: step } } : x)) }))
+      return true
+    }
+    const h = hashRecovery(code)
+    if (code.trim() && u.totp.recovery.includes(h)) {
+      users.update((v) => ({ ...v, users: v.users.map((x) => (x.name === u.name && x.totp ? { ...x, totp: { ...x.totp, recovery: x.totp.recovery.filter((r) => r !== h) } } : x)) }))
+      record(u.name, "recovery-code-used", `${u.totp.recovery.length - 1} left`)
+      return true
+    }
+    return false
+  }
   // Uplift phase 2: an account from before email sign-in adds its email first; until then it can do nothing else.
   const needsEmail = (a: Access) => a.kind === "user" && !userOf(a.user)?.email
   const need = (req: FastifyRequest, reply: FastifyReply, action: string): Access | undefined => {
@@ -181,7 +207,7 @@ export async function createCnw(o: CnwOptions) {
     const a = access(req)
     return {
       access: a.kind,
-      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey, role: roleFor(a), ...(userOf(a.user)?.email ? { email: userOf(a.user)!.email } : { needsEmail: true }) } : {}),
+      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey, role: roleFor(a), totp: Boolean(userOf(a.user)?.totp), ...(userOf(a.user)?.email ? { email: userOf(a.user)!.email } : { needsEmail: true }) } : {}),
       setup: !users.read().users.length,
       // Passkeys cannot work at an IP address; the page says so and offers the password only.
       passkeys: passkeysPossible(rpId),
@@ -198,7 +224,7 @@ export async function createCnw(o: CnwOptions) {
     const password = await hashPassword(b.data.password)
     const name = b.data.name ?? b.data.email!
     users.write({ users: [{ name, ...(b.data.email ? { email: b.data.email } : {}), password, passkeys: [] }] })
-    const s = sessions.start(name, false)
+    const s = startFor(req, name, false)
     setCookie(reply, s.id, 7 * 24 * 3600)
     log(`First account made: ${name}`)
     return { ok: true, csrf: s.csrf }
@@ -221,7 +247,13 @@ export async function createCnw(o: CnwOptions) {
       return reply.code(401).send({ error: "That email and password do not match." })
     }
     for (const k of keys) throttle.succeeded(k)
-    const s = sessions.start(user.name, false)
+    // Uplift phase 4: with a second factor, the password alone signs nothing in; a code follows, within five minutes.
+    if (user.totp) {
+      const ticket = crypto.randomBytes(24).toString("base64url")
+      loginTickets.set(ticket, { user: user.name, until: (o.now ?? Date.now)() + 5 * 60_000 })
+      return { totp: true, ticket }
+    }
+    const s = startFor(req, user.name, false)
     setCookie(reply, s.id, 7 * 24 * 3600)
     log(`Signed in: ${user.name} from ${ipOf(req)}`)
     return { ok: true, csrf: s.csrf, ...(user.email ? {} : { needsEmail: true }) }
@@ -413,7 +445,8 @@ export async function createCnw(o: CnwOptions) {
     const wait = throttle.wait(key)
     if (wait) return reply.code(429).send({ error: `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` })
     const password = String((req.body as { password?: unknown })?.password ?? "").slice(0, 500)
-    if (!me || !(await verifyPassword(password, me.password))) {
+    // With a second factor, signing in again for a Severe allow wants a code from the app too.
+    if (!me || !(await verifyPassword(password, me.password)) || !secondFactor(me, String((req.body as { code?: unknown })?.code ?? ""))) {
       throttle.failed(key)
       return reply.code(403).send({ error: "That is not your password." })
     }
@@ -458,6 +491,77 @@ export async function createCnw(o: CnwOptions) {
     return { ok: true, sent: `Sent to ${c.label}. Its own rules decide; the inbox shows what it did.` }
   })
 
+  // Uplift phase 4: a second factor (TOTP), set up from You. Set-up shows the key and an otpauth link for the
+  // authenticator app; it is on once a code from the app is confirmed, and ten recovery codes are shown once.
+  const pendingTotp = new Map<string, { secret: Buffer; until: number }>()
+  app.post("/api/totp/start", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const me = userOf(a.user)!
+    if (me.totp) return reply.code(409).send({ error: "A second factor is on already. Turn it off first to set up another." })
+    const secret = newSecret()
+    pendingTotp.set(a.user, { secret, until: (o.now ?? Date.now)() + 10 * 60_000 })
+    return { key: (base32(secret).match(/.{1,4}/g) ?? []).join(" "), uri: otpauthUri(me.email ?? me.name, secret) }
+  })
+  app.post("/api/totp/confirm", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const p = pendingTotp.get(a.user)
+    if (!p || p.until < (o.now ?? Date.now)()) return reply.code(409).send({ error: "Start again: the key was not confirmed within ten minutes." })
+    const step = verifyCode(p.secret, String((req.body as { code?: unknown })?.code ?? ""), (o.now ?? Date.now)())
+    if (step === undefined) return reply.code(403).send({ error: "That code does not match. Check the time on your phone, and type the newest code." })
+    const rec = recoveryCodes()
+    users.update((u) => ({ ...u, users: u.users.map((x) => (x.name === a.user ? { ...x, totp: { sealed: sealer.seal(p.secret), recovery: rec.hashes, lastStep: step } } : x)) }))
+    pendingTotp.delete(a.user)
+    record(a.user, "totp-on", "a second factor was turned on")
+    return { ok: true, recovery: rec.codes }
+  })
+  app.delete("/api/totp", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const me = userOf(a.user)!
+    const b = (req.body ?? {}) as { password?: unknown; code?: unknown }
+    if (!me.totp) return { ok: true }
+    if (!(await verifyPassword(String(b.password ?? "").slice(0, 500), me.password)) || !secondFactor(me, String(b.code ?? "")))
+      return reply.code(403).send({ error: "Your password and a code from your app are needed to turn it off." })
+    users.update((u) => ({ ...u, users: u.users.map((x) => { if (x.name !== a.user) return x; const next = { ...x }; delete next.totp; return next }) }))
+    record(a.user, "totp-off", "the second factor was turned off")
+    return { ok: true }
+  })
+  app.post("/api/login/totp", async (req, reply) => {
+    const b = (req.body ?? {}) as { ticket?: unknown; code?: unknown }
+    const t = loginTickets.get(String(b.ticket ?? ""))
+    if (!t || t.until < (o.now ?? Date.now)()) return reply.code(403).send({ error: "Sign in again: that took more than five minutes." })
+    const me = userOf(t.user)
+    const key = `totp:${t.user}`
+    const wait = throttle.wait(key)
+    if (wait) return reply.code(429).send({ error: `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` })
+    if (!me || !secondFactor(me, String(b.code ?? ""))) {
+      throttle.failed(key)
+      return reply.code(401).send({ error: "That code does not match." })
+    }
+    throttle.succeeded(key)
+    loginTickets.delete(String(b.ticket))
+    const s = startFor(req, me.name, false)
+    setCookie(reply, s.id, 7 * 24 * 3600)
+    log(`Signed in: ${me.name} from ${ipOf(req)}, with a second factor`)
+    return { ok: true, csrf: s.csrf }
+  })
+
+  // Signed-in devices, each with Sign out; your own only.
+  app.get("/api/devices", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    return { devices: sessions.list(a.user, cookieOf(req)) }
+  })
+  app.delete("/api/devices/:id", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const ok = sessions.revoke(a.user, (req.params as { id: string }).id)
+    if (ok) record(a.user, "device-signed-out", (req.params as { id: string }).id)
+    return reply.code(ok ? 200 : 404).send(ok ? { ok: true } : { error: "There is no such device." })
+  })
+
   // Uplift phase 4: people. An owner or an admin invites by email with a role and, if chosen, only some computers; the
   // invite is a link to copy (email follows once SMTP is set on the Server page), used once, for seven days. Only an
   // owner adds, changes or removes an owner, and there is always one left.
@@ -497,7 +601,7 @@ export async function createCnw(o: CnwOptions) {
     users.update((u) => ({ ...u, users: [...u.users, { name: inv.email, email: inv.email, password, passkeys: [], role: inv.role, ...(inv.computers ? { computers: inv.computers } : {}) }] }))
     invites.update((v) => ({ invites: v.invites.filter((i) => i.hash !== inv.hash) }))
     record(inv.email, "joined", `invited by ${inv.by} as ${inv.role}`)
-    const s = sessions.start(inv.email, false)
+    const s = startFor(req, inv.email, false)
     setCookie(reply, s.id, 7 * 24 * 3600)
     return { ok: true, csrf: s.csrf }
   })
