@@ -46,6 +46,12 @@ export interface AnalyseDeps {
 }
 
 const GLOB_CHARS = /[*?[]/
+/**
+ * 18 Nov: picomatch 4.0.7, the newest, takes exponential time on repeated extglobs (GHSA-fc5q-39xc-vjpf): 12 `+(a)`
+ * against a 36 letter name took 4 s, 16 against 40 letters over three minutes, and the floor runs in the Host. A word
+ * with more than this many is taken to match every file in its folder, which is quick and never less strict.
+ */
+const MAX_EXTGLOBS = 3
 
 function looksLikePath(value: string): boolean {
   return (
@@ -79,7 +85,10 @@ function expandGlobToken(value: string, cwd: string, dotMatch: boolean): Resolve
   const filePart = slash >= 0 ? norm.slice(slash + 1) : norm
   if (GLOB_CHARS.test(dirPart) || filePart === "") return []
   const dir = resolvePath(dirPart === "" ? "/" : dirPart, cwd)
-  const matcher = picomatch(filePart, { dot: dotMatch, nocase: true })
+  const matcher =
+    (filePart.match(/[@!?+*]\(/g)?.length ?? 0) > MAX_EXTGLOBS
+      ? () => true
+      : picomatch(filePart, { dot: dotMatch, nocase: true })
   let names: string[]
   try {
     names = fs.readdirSync(dir.abs)
