@@ -5,6 +5,7 @@ import { api } from "../lib/api"
 import { download } from "../lib/exportMarkdown"
 import { offlineExport } from "../lib/artifactExport"
 import Markdown from "react-markdown"
+import { LINK_PARTS } from "../lib/links"
 import remarkGfm from "remark-gfm"
 import { CodeView } from "./CodeViews"
 
@@ -216,7 +217,7 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
                 className="help-body max-h-[60vh] overflow-auto rounded-md border border-line px-4 py-3"
                 aria-label={`Artifact: ${artifact.title}, version ${chosen.version}`}
               >
-                <Markdown remarkPlugins={[remarkGfm]}>{body}</Markdown>
+                <Markdown remarkPlugins={[remarkGfm]} components={LINK_PARTS}>{body}</Markdown>
               </div>
             ) : (
               <CodeView text={body} label={`${artifact.title}, version ${chosen.version}`} />

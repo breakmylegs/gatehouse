@@ -9,6 +9,10 @@ using System.Text;
 
 internal enum NavAction { Allow, External, Refuse }
 
+/// <summary>What a finished navigation means for the window: its page loaded, it could not load (the error page), or
+/// nothing at all.</summary>
+internal enum LoadOutcome { Loaded, Fatal, Ignore }
+
 internal static class NavGuard
 {
     /// <summary>The same scheme, host and port, with no user name in the address. A prefix test let
@@ -60,6 +64,19 @@ internal static class NavGuard
         return Web(uri) ? NavAction.External : NavAction.Refuse;
     }
 
+    /// <summary>A navigation that finished. <paramref name="own"/>: one to Codehouse's own page that started in the
+    /// window itself (its first load or a reload); a link the guard cancelled is never own. <paramref name="loaded"/>:
+    /// the page has loaded before. Only a failure of the window's own load is fatal, so a link opened in your browser
+    /// never replaces the interface with the error page (owner, 18 Nov).</summary>
+    internal static LoadOutcome Completed(bool success, string status, bool own, bool loaded)
+    {
+        if (!own) return LoadOutcome.Ignore;
+        if (success) return LoadOutcome.Loaded;
+        // A reload stopped part way once the page is up (another one replaced it) leaves the page as it was.
+        if (loaded && status == "OperationCanceled") return LoadOutcome.Ignore;
+        return LoadOutcome.Fatal;
+    }
+
     /// <summary>What the audit records: the scheme and host only, never the path or query, which can carry names
     /// and tokens. Only plain address characters survive, so the result is safe inside JSON.</summary>
     internal static string Describe(string uri)
@@ -96,7 +113,13 @@ internal static class NavGuard
             if (a != NavAction.Allow) Console.WriteLine(Report(args[3], args[1], a));
             return 0;
         }
-        Console.Error.WriteLine("usage: --decide <uri> <origin> <window|frame|new-window>");
+        // --completed <true|false> <status> <own true|false> <loaded true|false>: prints loaded, fatal or ignore.
+        if (args.Length == 5 && args[0] == "--completed")
+        {
+            Console.WriteLine(Completed(args[1] == "true", args[2], args[3] == "true", args[4] == "true").ToString().ToLowerInvariant());
+            return 0;
+        }
+        Console.Error.WriteLine("usage: --decide <uri> <origin> <window|frame|new-window> | --completed <ok> <status> <own> <loaded>");
         return 2;
     }
 #endif

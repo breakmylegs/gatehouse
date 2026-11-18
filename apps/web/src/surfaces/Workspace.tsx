@@ -36,6 +36,7 @@ import {
   type ComponentProps,
 } from "react"
 import Markdown from "react-markdown"
+import { outward } from "../lib/links"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
@@ -3124,7 +3125,7 @@ function CodeBlock({ children, ...rest }: ComponentProps<"pre">) {
 }
 /**
  * A link in Claude's words. One to a page on this computer opens in the pane's viewer when Settings, Viewer says so;
- * every other link goes where it always went (the window sends it to your browser).
+ * every other link opens in a new window (your browser), never in Codehouse's own page (owner, 18 Nov).
  */
 function TranscriptLink({ href, children, ...rest }: ComponentProps<"a">) {
   const openHere = useContext(OpenLocalPage)
@@ -3133,6 +3134,7 @@ function TranscriptLink({ href, children, ...rest }: ComponentProps<"a">) {
     <a
       {...rest}
       href={href}
+      {...outward(href)}
       onClick={(e) => {
         if (!local || !openHere || !readViewerPrefs().localLinks) return
         e.preventDefault()
@@ -3144,7 +3146,8 @@ function TranscriptLink({ href, children, ...rest }: ComponentProps<"a">) {
   )
 }
 
-const MARKDOWN_PARTS = { pre: CodeBlock, a: TranscriptLink }
+/** Exported for apps/web/test/links.test.tsx. */
+export const MARKDOWN_PARTS = { pre: CodeBlock, a: TranscriptLink }
 
 /**
  * What Claude said. Copy gives the Markdown to a plain editor and the formatted text to Word or Outlook, as the

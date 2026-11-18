@@ -1515,6 +1515,10 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - whether the audit chain verifies.
 
   The overall state is the worst factor's, never a weighted score. A factor with nothing to go on (no test runs on an ordinary computer) shows "No data" and does not count. Tests: health-score (host and web), safe-mode.
+- **Link clicks no longer break the window (owner, 18 Nov):** a plain link in a chat opened in the browser, but the guard's cancelled navigation then finished as OperationCanceled and the window showed "could not load the Codehouse interface".
+  - **The window:** `packaging/CodehouseApp.cs` notes the ids of its own navigations to Codehouse's page as they start (`OwnLoads`), and each finished navigation goes through `NavGuard.Completed` (`packaging/NavGuard.cs`). Only the window's own load (its first or a reload) failing is fatal; a link the guard cancelled is ignored, as is a reload of the page that is up stopped part way. The quick prompt (`Overlay.cs`) uses the same rule, so a cancelled link no longer marks it not ready. Pop-outs and the wing had no such handler; the Mac already ignored a cancelled navigation (`packaging/mac/Page.swift`).
+  - **The page:** links that leave Codehouse (web pages and email addresses), in a chat, an artifact, a file shown as Markdown, the Guide and Help, open with `target="_blank"` and `rel="noopener noreferrer"` (`apps/web/src/lib/links.tsx`). They go through the window's NewWindowRequested, which opens your browser and keeps the audit, and in CNW's /app they open a new tab without leaving the session. A link inside the interface is left as it is. NavGuard stays the safety net.
+  - **Tests:** `apps/host/test/navguard-exe.test.ts` (the compiled decision and the handlers' wiring) and `apps/web/test/links.test.tsx`; both fail with the fix taken out.
 - **E-097, crash bundle:** Doctor's "Make a crash bundle" shows every file first, then "Save to Downloads" writes exactly the previewed files as a zip. The preview is kept under an id for ten minutes and used once, so the two cannot differ. It holds:
   - the last 2 MB of host.log, redacted;
   - version.json;

@@ -71,6 +71,25 @@ describe.skipIf(!csc)("the window's navigation guard", () => {
     expect(decide("http://127.0.0.1:47123@claude.ai/", "frame").action).toBe("refuse")
   })
 
+  // Owner, 18 Nov: a link opened in your browser left the window on "could not load the Codehouse interface
+  // (OperationCanceled)". Only a failure of the window's own load of its page is fatal.
+  it("leaves the window as it is when the guard cancelled a link, and fails only its own load", () => {
+    const completed = (ok: boolean, status: string, own: boolean, loaded: boolean) =>
+      execFileSync(exe, ["--completed", String(ok), status, String(own), String(loaded)], { windowsHide: true })
+        .toString()
+        .trim()
+    // A link the guard cancelled and opened in the browser: not our own navigation.
+    expect(completed(false, "OperationCanceled", false, true)).toBe("ignore")
+    expect(completed(false, "OperationCanceled", false, false)).toBe("ignore")
+    // Our own reload stopped part way once the page is up.
+    expect(completed(false, "OperationCanceled", true, true)).toBe("ignore")
+    // The first load of the interface failing is still the error page.
+    expect(completed(false, "ConnectionAborted", true, false)).toBe("fatal")
+    expect(completed(false, "OperationCanceled", true, false)).toBe("fatal")
+    expect(completed(false, "CannotConnect", true, true)).toBe("fatal")
+    expect(completed(true, "Unknown", true, false)).toBe("loaded")
+  })
+
   it("refuses addresses that are not web pages without opening them", () => {
     expect(decide("file:///C:/Users/someone/secret.txt")).toEqual({
       action: "refuse",
@@ -78,6 +97,19 @@ describe.skipIf(!csc)("the window's navigation guard", () => {
     })
     expect(decide("ms-settings:privacy").action).toBe("refuse")
     expect(decide("javascript:alert(1)", "new-window").action).toBe("refuse")
+  })
+})
+
+describe("the windows' handling of a finished navigation", () => {
+  // Every NavigationCompleted in the Windows windows decides through NavGuard.Completed, with the ids of its own loads,
+  // so a cancelled link can never fail a window or the quick prompt again.
+  it("goes through NavGuard.Completed, never failing on IsSuccess alone", () => {
+    for (const f of ["CodehouseApp.cs", "Overlay.cs"]) {
+      const src = fs.readFileSync(path.join(REPO, "packaging", f), "utf8")
+      expect(src, f).toMatch(/NavGuard\.Completed\(e\.IsSuccess, e\.WebErrorStatus\.ToString\(\), own\.Remove\(e\.NavigationId\)/)
+      expect(src, f).not.toMatch(/if \(!e\.IsSuccess\)/)
+      expect(src, f).not.toMatch(/ready = e\.IsSuccess/)
+    }
   })
 })
 

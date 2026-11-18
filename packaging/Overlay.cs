@@ -5,6 +5,7 @@
 // Written in C# 5 so the compiler that ships with Windows can build it.
 
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
@@ -22,14 +23,16 @@ internal sealed class QuickOverlay : Form
 
     private readonly WebView2 web = new WebView2();
     private readonly Action<CoreWebView2> guard;
+    private readonly Func<CoreWebView2, HashSet<ulong>> ownLoads;
     private readonly Action<string> onOpen;
     private IntPtr before;
     private bool ready;
 
     /// <param name="onOpen">Told what was sent (a little JSON: the session and your words) so the main window shows it.</param>
-    internal QuickOverlay(Action<CoreWebView2> guard, Action<string> onOpen)
+    internal QuickOverlay(Action<CoreWebView2> guard, Func<CoreWebView2, HashSet<ulong>> ownLoads, Action<string> onOpen)
     {
         this.guard = guard;
+        this.ownLoads = ownLoads;
         this.onOpen = onOpen;
         Text = "Codehouse quick prompt";
         FormBorderStyle = FormBorderStyle.None;
@@ -89,7 +92,13 @@ internal sealed class QuickOverlay : Form
                 onOpen(m.Substring("quick-open:".Length));
             }
         };
-        core.NavigationCompleted += delegate(object s, CoreWebView2NavigationCompletedEventArgs e) { ready = e.IsSuccess; };
+        // Its own page only: a link opened in your browser finishes as cancelled and leaves it ready (owner, 18 Nov).
+        HashSet<ulong> own = ownLoads(core);
+        core.NavigationCompleted += delegate(object s, CoreWebView2NavigationCompletedEventArgs e)
+        {
+            LoadOutcome o = NavGuard.Completed(e.IsSuccess, e.WebErrorStatus.ToString(), own.Remove(e.NavigationId), ready);
+            if (o != LoadOutcome.Ignore) ready = o == LoadOutcome.Loaded;
+        };
         core.Navigate(quickUrl);
     }
 

@@ -12,6 +12,7 @@
 // Written in C# 5 so the compiler that ships with Windows can build it (no SDK needed).
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -384,9 +385,16 @@ internal sealed class MainForm : Form
             else if (m != null && m.StartsWith("hotkey:")) SetHotkey(m.Substring("hotkey:".Length));
             else if (m != null && m.StartsWith("popout:")) PopOut(m.Substring("popout:".Length));
         };
+        // Only the window's own loads of its page count: a link the guard cancelled, and opened in your browser, also
+        // finishes as a failure (OperationCanceled) and must leave the interface as it is (owner, 18 Nov).
+        HashSet<ulong> own = OwnLoads(core);
+        bool loaded = false;
         core.NavigationCompleted += delegate(object s, CoreWebView2NavigationCompletedEventArgs e)
         {
-            if (!e.IsSuccess) { Fail("The window could not load the Codehouse interface (" + e.WebErrorStatus + ")."); return; }
+            LoadOutcome o = NavGuard.Completed(e.IsSuccess, e.WebErrorStatus.ToString(), own.Remove(e.NavigationId), loaded);
+            if (o == LoadOutcome.Ignore) return;
+            if (o == LoadOutcome.Fatal) { Fail("The window could not load the Codehouse interface (" + e.WebErrorStatus + ")."); return; }
+            loaded = true;
             splash.Visible = false;
             splashClock.Stop();
             if (check) CheckPage();
@@ -418,6 +426,18 @@ internal sealed class MainForm : Form
             e.Handled = true;
             Refused(e.Uri, "new-window");
         };
+    }
+
+    /// <summary>A window's navigations to Codehouse's own page, by id, noted as they start (after the guard, which
+    /// never cancels our own page). Each is taken off when it finishes.</summary>
+    internal HashSet<ulong> OwnLoads(CoreWebView2 core)
+    {
+        HashSet<ulong> ids = new HashSet<ulong>();
+        core.NavigationStarting += delegate(object s, CoreWebView2NavigationStartingEventArgs e)
+        {
+            if (!e.Cancel && NavGuard.SameOrigin(e.Uri, hostOrigin)) ids.Add(e.NavigationId);
+        };
+        return ids;
     }
 
     private bool Refused(string uri, string where)
@@ -647,7 +667,7 @@ internal sealed class MainForm : Form
         if (quick != null || env == null || url == null) return;
         int hash = url.IndexOf('#');
         string quickUrl = hash < 0 ? url + "?view=quick" : url.Substring(0, hash) + "?view=quick" + url.Substring(hash);
-        quick = new QuickOverlay(Guard, delegate(string sent)
+        quick = new QuickOverlay(Guard, OwnLoads, delegate(string sent)
         {
             // What the quick prompt sent: show the main window on that session, with your words in it.
             ShowWindow();

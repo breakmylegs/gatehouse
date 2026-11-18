@@ -1,5 +1,6 @@
 import { useState } from "react"
 import Markdown from "react-markdown"
+import { LINK_PARTS } from "../lib/links"
 import { GUIDE } from "../help/content"
 
 /** The user guide: every help article in one place, with its own contents list. */
@@ -27,7 +28,7 @@ export function Guide() {
       {article ? (
         <article className="panel help-body px-7 py-6">
           <h2 className="m-0 mb-3 text-[24px]">{article.title}</h2>
-          <Markdown>{article.body}</Markdown>
+          <Markdown components={LINK_PARTS}>{article.body}</Markdown>
         </article>
       ) : null}
     </div>

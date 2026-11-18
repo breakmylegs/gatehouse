@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import Markdown from "react-markdown"
+import { LINK_PARTS } from "../lib/links"
 import { PAGE_HELP } from "../help/content"
 import { useStore } from "../store"
 
@@ -34,7 +35,7 @@ export function HelpPane() {
         </button>
       </div>
       <div className="help-body min-h-0 overflow-auto px-4 py-3">
-        <Markdown>{article.body}</Markdown>
+        <Markdown components={LINK_PARTS}>{article.body}</Markdown>
       </div>
       <div className="border-t border-line px-4 py-3">
         <button

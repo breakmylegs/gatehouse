@@ -3,6 +3,7 @@ import { CodeEditor, CodeView } from "./CodeViews"
 import { Outline } from "./Outline"
 import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
+import { LINK_PARTS } from "../lib/links"
 import remarkGfm from "remark-gfm"
 import { toast } from "sonner"
 import { api } from "../lib/api"
@@ -456,7 +457,7 @@ export function Viewer({
           <Table text={read.text} sep={separatorOf(rel)} label={rel} />
         ) : MARKDOWN.test(rel) && !source ? (
           <div className="help-body px-5 py-4">
-            <Markdown remarkPlugins={[remarkGfm]}>{read.text}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} components={LINK_PARTS}>{read.text}</Markdown>
           </div>
         ) : (
           // C-031: the file's outline beside it, and go to symbol.
