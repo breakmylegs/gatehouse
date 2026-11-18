@@ -406,7 +406,7 @@ async function serverView() {
   main.append(el("h1", { text: "Server" }))
   if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "Sign in to see and change the server's settings, even on an allowed network." }))
   if (me.role !== "owner" && me.role !== "admin") return main.append(el("p", { class: "panel muted", text: "Your role looks and answers; an owner or an admin runs the server." }))
-  main.append(await serverPanel(), await peoplePanel(), await allowPanel(), await updatesPanel())
+  main.append(await healthPanel(), await serverPanel(), await peoplePanel(), await allowPanel(), await updatesPanel(), backupPanel(), await auditPanel())
 }
 
 async function allowPanel() {
@@ -434,24 +434,158 @@ async function allowPanel() {
   return allow
 }
 
+/** Server: Health. Free space, memory, how long CNW has run, the updater and caddy, and each computer's connections. */
+async function healthPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Health" }))
+  const r = await call("GET", "/api/health")
+  if (!r.ok) return panel.append(el("p", { class: "muted", text: r.json.error ?? "Not available." })), panel
+  const h = r.json
+  const gb = (n) => `${(n / 1024 ** 3).toFixed(1)} GB`
+  const up = (s) => (s < 3600 ? `${Math.round(s / 60)} minutes` : s < 86400 ? `${Math.round(s / 3600)} hours` : `${Math.round(s / 86400)} days`)
+  const line = (label, value, bad) => el("p", {}, el("span", { class: "muted", text: `${label}: ` }), el("span", { class: bad ? "err" : "", text: value }))
+  if (h.disk) panel.append(line("Free space for CNW's data", `${gb(h.disk.free)} of ${gb(h.disk.total)}`, h.disk.free < 1024 ** 3))
+  panel.append(line("Memory free", `${gb(h.memory.free)} of ${gb(h.memory.total)}`), line("Running for", up(h.uptimeSeconds)))
+  if (h.updater !== undefined) panel.append(line("Updater", h.updater ? "answering" : "not answering", !h.updater))
+  if (h.caddy !== undefined) panel.append(line("caddy (the certificate)", h.caddy ? "answering" : "not answering", !h.caddy))
+  for (const c of h.computers) {
+    const last = c.history.slice(-5).reverse()
+    panel.append(
+      el(
+        "p",
+        {},
+        el("strong", { text: `${c.label}: ` }),
+        el("span", { text: c.online ? "connected" : "not connected" }),
+        el("span", { class: "muted", text: last.length ? `. Last: ${last.map((e) => `${e.event} ${new Date(e.at).toLocaleString()}`).join("; ")}` : "" }),
+      ),
+    )
+  }
+  return panel
+}
+
+/** Server: Updates. This version, the newest signed one and what it changes, going back, and updating by itself. */
 async function updatesPanel() {
-  const upd = el("section", { class: "panel" }, el("h2", { text: "Updates" }))
-  const v = await call("GET", "/api/version")
-  const say = el("p", { class: "muted", "aria-live": "polite", text: `This is Neighbourhood Watch ${v.json.version ?? "?"}.` })
-  upd.append(
-    say,
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Updates" }))
+  const r = await call("GET", "/api/updates")
+  const u = r.json
+  const say = el("p", { class: "muted", role: "status" })
+  panel.append(el("p", { text: `This is Neighbourhood Watch ${u.current ?? "?"}.${u.latest ? (u.newer ? ` ${u.latest} is out.` : " It is the newest.") : ""}` }))
+  if (u.notes) panel.append(el("p", { class: "muted", text: u.notes }))
+  if (u.note) panel.append(el("p", { class: "warn", text: u.note }))
+  panel.append(
     el("button", {
-      class: "btn",
+      class: "btn primary",
       text: "Update to the latest signed release",
       onclick: async () => {
         say.textContent = "Updating: this can take a few minutes, and the page reloads when it is done."
-        const r = await call("POST", "/api/update")
-        say.textContent = r.ok ? r.json.message : (r.json.error ?? "It did not update.")
-        if (r.ok && /Updated/.test(r.json.message ?? "")) setTimeout(() => location.reload(), 20000)
+        const x = await call("POST", "/api/update")
+        say.textContent = x.ok ? x.json.message : (x.json.error ?? "It did not update.")
+        if (x.ok && /Updated/.test(x.json.message ?? "")) setTimeout(() => location.reload(), 20000)
       },
     }),
   )
-  return upd
+  if (u.previous)
+    panel.append(
+      el("p", { class: "muted", text: `Version ${u.previous.version}, from before the last update, is kept to go back to.` }),
+      el("button", {
+        class: "btn",
+        text: `Go back to ${u.previous.version}`,
+        onclick: async () => {
+          if (!confirm(`Go back to ${u.previous.version}? CNW starts again with it.`)) return
+          const x = await call("POST", "/api/update/rollback")
+          if (x.status === 428) return void (say.textContent = "Sign in again first (sign out and in), then go back.")
+          say.textContent = x.ok ? x.json.message : (x.json.error ?? "It did not go back.")
+        },
+      }),
+    )
+  const auto = el("input", { type: "checkbox" })
+  auto.checked = Boolean(u.auto?.auto)
+  const hour = el("input", { type: "number", min: "0", max: "23", value: String(u.auto?.hour ?? 3), style: "width:6em" })
+  panel.append(
+    el("label", { style: "display:flex;gap:8px;align-items:center" }, auto, el("span", { text: "Update by itself when a signed release is out, at this hour:" }), hour),
+    el("button", {
+      class: "btn",
+      text: "Save",
+      onclick: async () => {
+        const x = await call("PUT", "/api/updates", { auto: auto.checked, hour: Number(hour.value) })
+        say.textContent = x.ok ? "Saved." : (x.json.error ?? "Not saved.")
+      },
+    }),
+    say,
+  )
+  return panel
+}
+
+/** Server: Backup and restore, for an owner. The passphrase is the only way to open the file: keep it. */
+function backupPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Backup and restore" }))
+  if (me.role !== "owner") return panel.append(el("p", { class: "muted", text: "An owner makes and restores backups." })), panel
+  const say = el("p", { class: "muted", role: "status" })
+  const pass = el("input", { type: "password", autocomplete: "new-password", minlength: "12", "aria-label": "A passphrase for the backup" })
+  const file = el("input", { type: "file", accept: ".cnwbackup", "aria-label": "A backup file" })
+  const pass2 = el("input", { type: "password", autocomplete: "off", "aria-label": "Its passphrase" })
+  const fresh = (x) => (x.status === 428 ? "Sign in again first (sign out and in): a backup holds everything." : (x.json.error ?? "That did not work."))
+  panel.append(
+    el("p", { class: "muted", text: "A backup holds the people, settings, paired computers and the audit, encrypted with a passphrase you choose. Without the passphrase nobody can open it, you included. caddy's certificate is not in it: restored onto a new server, each computer pairs again." }),
+    el("label", {}, el("span", { text: "A passphrase of 12 characters or more" }), pass),
+    el("button", {
+      class: "btn",
+      text: "Make a backup",
+      onclick: async () => {
+        const r = await fetch("/api/backup", { method: "POST", headers: { "content-type": "application/json", "x-csrf-token": csrf }, body: JSON.stringify({ passphrase: pass.value }) })
+        if (!r.ok) return void (say.textContent = fresh({ status: r.status, json: await r.json().catch(() => ({})) }))
+        const blob = await r.blob()
+        const a = el("a", { href: URL.createObjectURL(blob), download: `neighbourhood-watch-${new Date().toISOString().slice(0, 10)}.cnwbackup` })
+        document.body.append(a)
+        a.click()
+        a.remove()
+        say.textContent = "The backup is in your downloads. Keep the passphrase with it, apart from it."
+      },
+    }),
+    el("h2", { text: "Restore" }),
+    el("label", {}, el("span", { text: "A backup file" }), file),
+    el("label", {}, el("span", { text: "Its passphrase" }), pass2),
+    el("button", {
+      class: "btn danger",
+      text: "Restore it",
+      onclick: async () => {
+        const f = file.files?.[0]
+        if (!f) return void (say.textContent = "Choose a backup file first.")
+        if (!confirm("Restore this backup? Everything here now is replaced by it, and CNW starts again.")) return
+        const x = await call("POST", "/api/restore", { backup: await f.text(), passphrase: pass2.value })
+        say.textContent = x.ok ? x.json.message : fresh(x)
+        if (x.ok) setTimeout(() => location.reload(), 8000)
+      },
+    }),
+    say,
+  )
+  return panel
+}
+
+/** Server: the audit log of what was changed and answered in CNW, newest first. */
+async function auditPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Audit log" }))
+  const list = el("div", { class: "list", role: "list" })
+  let before
+  const more = el("button", { class: "btn", text: "Older" })
+  const load = async () => {
+    const r = await call("GET", `/api/audit?limit=30${before ? `&before=${encodeURIComponent(before)}` : ""}`)
+    for (const e of r.json.entries ?? [])
+      list.append(
+        el(
+          "div",
+          { class: "item", role: "listitem", style: "grid-template-columns:auto 1fr" },
+          el("span", { class: "meta", text: new Date(e.at).toLocaleString() }),
+          el("span", {}, el("strong", { text: `${e.user}: ` }), el("span", { text: `${e.action.replace(/-/g, " ")}, ${e.detail}` })),
+        ),
+      )
+    before = r.json.more
+    more.hidden = !before
+  }
+  more.addEventListener("click", load)
+  await load()
+  if (!list.children.length) list.append(el("p", { class: "item muted", text: "Nothing yet." }))
+  panel.append(list, more)
+  return panel
 }
 
 // Uplift phase 2: the Server panel. CNW's address, its kind of certificate and its port, set here instead of .env; the
@@ -564,7 +698,23 @@ function computersPanel() {
       el(
         "div",
         { class: "row-actions", style: "align-items:center" },
-        el("span", { style: "flex:1", text: c.label }),
+        el("span", { style: "flex:1", text: `${c.label}${c.tags?.length ? ` (${c.tags.join(", ")})` : ""}` }),
+        me.role === "owner" || me.role === "admin"
+          ? el("button", {
+              class: "btn",
+              text: "Rename",
+              "aria-label": `Rename ${c.label}`,
+              onclick: async () => {
+                const label = prompt(`A new name for ${c.label}`, c.label)
+                if (label === null) return
+                const tags = prompt("Tags to group it by, separated by commas (or none)", (c.tags ?? []).join(", "))
+                const r = await call("PATCH", `/api/computers/${encodeURIComponent(c.id)}`, { label, ...(tags !== null ? { tags: tags.split(",").map((t) => t.trim()).filter(Boolean) } : {}) })
+                if (!r.ok) return toast(r.json.error ?? "Not renamed.")
+                await refresh(false)
+                show()
+              },
+            })
+          : null,
         el("button", {
           class: "btn danger",
           text: "Remove",
