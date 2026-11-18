@@ -1,93 +1,279 @@
-/* Codehouse Neighbourhood Watch's own pages: sign-in, computers, pairing and the allow list. One column on a phone,
-   two on a tablet or desktop. Its own look; no Anthropic logos. */
+/* Codehouse Neighbourhood Watch's own pages (apps/cnw/DESIGN.md, "The watch board"): Codehouse's own tokens, phone
+   first, a tab bar of Board, Inbox, Server and You. Yellow is for what needs you and nothing else. Light or dark from
+   the device. No Anthropic logos, no shadows, glass, gradients or glow. */
 :root {
-  color-scheme: dark;
-  --bg: #14161c;
-  --s1: #1c1f27;
-  --line: #2c3040;
-  --tx: #e8e6e1;
-  --mut: #9aa0ad;
-  --acc: #e0a84b;
-  --ok: #6cc28a;
-  --sev: #e0706b;
-  font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+  --shell: oklch(25.5% 0.028 254);
+  --shell-raised: oklch(31% 0.032 254);
+  --shell-line: oklch(37% 0.034 254);
+  --shell-text: oklch(96.5% 0.006 250);
+  --shell-muted: oklch(78% 0.022 250);
+  --ground: oklch(97.2% 0.005 250);
+  --surface: oklch(100% 0 0);
+  --sunk: oklch(95.2% 0.007 250);
+  --line: oklch(87.5% 0.011 250);
+  --ink: oklch(22% 0.022 255);
+  --mut: oklch(45% 0.022 255);
+  --acc: oklch(46% 0.09 200);
+  --acc-ink: oklch(100% 0 0);
+  --yellow: oklch(86.5% 0.165 94);
+  --yellow-ink: oklch(21% 0.03 85);
+  --lit: oklch(96.5% 0.06 96);
+  --sev: oklch(46% 0.18 27);
+  --ok: oklch(42% 0.11 152);
+  --warn: oklch(46% 0.11 70);
+  --sans: "Segoe UI Variable Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --display: "Segoe UI Variable Display", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --mono: "Cascadia Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font: 16px/1.5 var(--sans);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shell: oklch(13.5% 0.02 254);
+    --shell-raised: oklch(20% 0.026 254);
+    --shell-line: oklch(30% 0.03 254);
+    --ground: oklch(17% 0.02 254);
+    --surface: oklch(21.5% 0.024 254);
+    --sunk: oklch(19% 0.022 254);
+    --line: oklch(32% 0.03 254);
+    --ink: oklch(95% 0.008 250);
+    --mut: oklch(76% 0.022 250);
+    --acc: oklch(78% 0.09 195);
+    --acc-ink: oklch(17% 0.02 254);
+    --lit: oklch(29% 0.06 92);
+    --sev: oklch(72% 0.15 25);
+    --ok: oklch(76% 0.12 152);
+    --warn: oklch(80% 0.12 75);
+  }
 }
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--tx);
-  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--ground);
+  color: var(--ink);
+  min-height: 100dvh;
 }
+a {
+  color: var(--acc);
+}
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+::selection {
+  background: var(--yellow);
+  color: var(--yellow-ink);
+}
+
+/* The shell: the frame never changes; the work area carries the light. */
 .bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
-  border-bottom: 1px solid var(--line);
+  padding: max(10px, env(safe-area-inset-top)) 16px 10px;
+  background: var(--shell);
+  color: var(--shell-text);
+  border-bottom: 1px solid var(--shell-line);
+}
+.bar strong {
+  font: 600 17px/1.2 var(--display);
 }
 .bar .sub {
-  color: var(--mut);
-  font-size: 12px;
+  color: var(--shell-muted);
+  font-size: 13px;
 }
-.bar .btn {
-  margin-left: auto;
-}
-main {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 16px;
-  display: grid;
-  gap: 16px;
-}
-@media (min-width: 760px) {
-  main.two {
-    grid-template-columns: 1fr 1fr;
+@media (max-width: 759px) {
+  .bar .sub {
+    display: none;
   }
 }
+[hidden] {
+  display: none !important;
+}
+.bar .spacer {
+  flex: 1;
+}
+.needs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--shell-line);
+  color: var(--shell-text);
+  background: transparent;
+  font: 600 15px var(--display);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.needs.on {
+  background: var(--yellow);
+  color: var(--yellow-ink);
+  border-color: var(--yellow);
+}
+.bar .btn {
+  background: transparent;
+  color: var(--shell-text);
+  border-color: var(--shell-line);
+}
+
+/* Board, Inbox, Server, You: a bottom tab bar on a phone, a rail from 760px. */
+.tabs {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: var(--shell);
+  border-top: 1px solid var(--shell-line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabs a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  color: var(--shell-muted);
+  text-decoration: none;
+  font: 500 14px var(--sans);
+}
+.tabs a[aria-current="page"] {
+  color: var(--shell-text);
+  box-shadow: inset 0 3px 0 var(--acc);
+}
+.tabs .count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 3px;
+  background: var(--yellow);
+  color: var(--yellow-ink);
+  font: 600 13px var(--display);
+  font-variant-numeric: tabular-nums;
+}
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 16px calc(84px + env(safe-area-inset-bottom));
+  display: grid;
+  gap: 20px;
+}
+@media (min-width: 760px) {
+  .tabs {
+    inset: 57px auto 0 0;
+    width: 160px;
+    grid-template-columns: none;
+    grid-auto-rows: 52px;
+    align-content: start;
+    border-top: 0;
+    border-right: 1px solid var(--shell-line);
+    padding: 8px 0;
+  }
+  .tabs a {
+    justify-content: flex-start;
+    padding: 0 20px;
+    min-height: 0;
+  }
+  .tabs a[aria-current="page"] {
+    box-shadow: inset 3px 0 0 var(--acc);
+    background: var(--shell-raised);
+  }
+  main.signed-in {
+    margin-left: 160px;
+    padding-bottom: 28px;
+  }
+}
+@media (min-width: 1260px) {
+  main.signed-in {
+    margin-left: max(160px, calc((100vw - 1100px) / 2));
+  }
+}
+
+h1 {
+  margin: 0;
+  font: 600 24px/1.15 var(--display);
+}
+h2 {
+  margin: 0;
+  font: 600 18px/1.2 var(--display);
+}
 .panel {
-  background: var(--s1);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 16px;
   display: grid;
-  gap: 10px;
-}
-h2 {
-  margin: 0;
-  font-size: 17px;
+  gap: 12px;
 }
 label {
   display: grid;
   gap: 4px;
 }
+label > span:first-child {
+  font: 500 13px var(--sans);
+}
 input,
 select {
   font: inherit;
   color: inherit;
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
   min-height: 44px;
+  width: 100%;
+}
+input:hover,
+select:hover {
+  border-color: var(--mut);
 }
 .btn {
-  font: inherit;
-  color: inherit;
-  background: var(--s1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: 500 15px var(--sans);
+  color: var(--ink);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   min-height: 44px;
   cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+/* In a panel, a button sits at the start rather than across it; on a phone it fills the width for the thumb. */
+@media (min-width: 760px) {
+  .panel > .btn {
+    justify-self: start;
+  }
+}
+.btn:hover {
+  background: var(--sunk);
 }
 .btn.primary {
   background: var(--acc);
-  color: #1b1405;
+  color: var(--acc-ink);
   border-color: var(--acc);
   font-weight: 600;
+}
+.btn.strong {
+  border: 2px solid var(--acc);
+  font-weight: 600;
+}
+.btn.danger {
+  border: 2px solid var(--sev);
+}
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .muted {
   color: var(--mut);
@@ -96,25 +282,12 @@ select {
   color: var(--sev);
   font-weight: 600;
 }
-.computer {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  border-top: 1px solid var(--line);
-}
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--mut);
-  flex: none;
-}
-.dot.on {
-  background: var(--ok);
+.warn {
+  color: var(--warn);
+  font-weight: 600;
 }
 .code {
-  font: 600 22px ui-monospace, monospace;
+  font: 600 22px var(--mono);
   letter-spacing: 0.08em;
 }
 /* A fingerprint wraps by its groups of four. */
@@ -123,4 +296,186 @@ select {
   letter-spacing: 0;
   word-spacing: 0.2em;
   overflow-wrap: anywhere;
+}
+.mono {
+  font-family: var(--mono);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+/* The board: one row per computer, lit when something waits. */
+.list {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  min-height: 64px;
+  border-top: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+}
+.item:first-child {
+  border-top: 0;
+}
+.item.lit {
+  background: var(--lit);
+}
+.item .name {
+  font: 600 16px/1.25 var(--display);
+}
+.item .meta {
+  color: var(--mut);
+  font-size: 14px;
+}
+.time {
+  display: inline-grid;
+  place-items: center;
+  min-width: 52px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 3px;
+  background: var(--sunk);
+  font: 600 16px var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.lit .time {
+  background: var(--yellow);
+  color: var(--yellow-ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .time.new {
+    animation: flip 260ms ease-out;
+  }
+}
+@keyframes flip {
+  from {
+    transform: rotateX(90deg);
+  }
+  to {
+    transform: none;
+  }
+}
+/* Online and offline: a word and a shape, never colour alone. */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.state::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--mut);
+}
+.state.on::before {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+/* Risk: a word, a number and a shape (circle, diamond, triangle, octagon); Severe is filled. */
+.risk {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 600 14px var(--display);
+  font-variant-numeric: tabular-nums;
+}
+.risk::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+}
+.risk.low::before {
+  border-radius: 50%;
+}
+.risk.moderate::before {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+}
+.risk.high {
+  color: var(--warn);
+}
+.risk.high::before {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+.risk.severe {
+  color: var(--sev);
+}
+.risk.severe::before {
+  width: 14px;
+  height: 14px;
+  clip-path: polygon(29% 0, 71% 0, 100% 29%, 100% 71%, 71% 100%, 29% 100%, 0 71%, 0 29%);
+}
+/* Severe is filled and outlined: an octagon that reads as one even at this size. */
+.risk.severe {
+  padding: 2px 8px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+
+/* The pass: what the request would do, then the decision. */
+.pass {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-top: 2px dashed var(--line);
+  background: var(--sunk);
+}
+.pass dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+}
+.pass dt {
+  font: 500 13px var(--sans);
+  color: var(--mut);
+}
+.pass dd {
+  margin: 0;
+}
+
+/* One toast at a time, above the tab bar; announced politely, never the only record. */
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(72px + env(safe-area-inset-bottom));
+  z-index: 3;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--shell);
+  color: var(--shell-text);
+  border: 1px solid var(--shell-line);
+}
+.toast[hidden] {
+  display: none;
+}
+@media (min-width: 760px) {
+  .toast {
+    bottom: 20px;
+  }
+}
+.banner {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 2px solid var(--warn);
+  background: var(--surface);
+}
+.signin {
+  max-width: 440px;
+  margin: 0 auto;
+  width: 100%;
 }

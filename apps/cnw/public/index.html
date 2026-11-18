@@ -3,20 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#14161c" />
+    <meta name="theme-color" content="#20252f" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1218" media="(prefers-color-scheme: dark)" />
     <title>Codehouse Neighbourhood Watch</title>
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/cnw.css" />
   </head>
   <body>
     <header class="bar">
-      <strong>Codehouse Neighbourhood Watch</strong>
-      <span class="sub">Powered by Claude</span>
+      <strong>Neighbourhood Watch</strong>
+      <span class="sub">Codehouse, powered by Claude</span>
+      <span class="spacer"></span>
+      <a id="needs" class="needs" href="#inbox" hidden>Nothing waits</a>
       <button id="signout" class="btn" hidden>Sign out</button>
     </header>
-    <main id="main" aria-live="polite">
+    <nav id="tabs" class="tabs" aria-label="Neighbourhood Watch" hidden>
+      <a href="#board" data-tab="board">Board</a>
+      <a href="#inbox" data-tab="inbox">Inbox<span id="inbox-count" class="count" hidden></span></a>
+      <a href="#server" data-tab="server">Server</a>
+      <a href="#you" data-tab="you">You</a>
+    </nav>
+    <main id="main">
       <p class="muted">Loading...</p>
     </main>
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
     <script type="module" src="/cnw.js"></script>
   </body>
 </html>

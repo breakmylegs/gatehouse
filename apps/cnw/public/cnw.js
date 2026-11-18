@@ -1,16 +1,27 @@
-// Codehouse Neighbourhood Watch's own pages (O41): first-time setup, sign-in (password, with passkeys offered),
-// the computers with Open, a pairing code for a new computer, and the IP allow list. Everything else is the full
-// Codehouse interface at /app/?computer=<id>. All text is set with textContent, never as HTML.
+// Codehouse Neighbourhood Watch's own pages (O41; the uplift, apps/cnw/DESIGN.md): first start, sign-in (an email and
+// a password, passkeys where the address allows), then four places: Board (every computer and what waits on it),
+// Inbox (every waiting request across computers), Server (CNW's own settings) and You (your sign-in, notifications).
+// Opening a computer is the full Codehouse interface at /app/?computer=<id>. All text is set with textContent, never
+// as HTML.
 const main = document.getElementById("main")
 const signout = document.getElementById("signout")
+const tabs = document.getElementById("tabs")
+const needs = document.getElementById("needs")
+const inboxCount = document.getElementById("inbox-count")
+const toastBox = document.getElementById("toast")
 let csrf = ""
+let me = {}
+let board = { board: [], inbox: [] }
+let seen = undefined
+let poll = 0
 
 const el = (tag, props = {}, ...kids) => {
   const e = document.createElement(tag)
   for (const [k, v] of Object.entries(props)) {
+    if (v === undefined || v === null || v === false) continue
     if (k === "text") e.textContent = v
     else if (k.startsWith("on")) e.addEventListener(k.slice(2), v)
-    else e.setAttribute(k, v)
+    else e.setAttribute(k, v === true ? "" : v)
   }
   for (const k of kids) if (k) e.append(k)
   return e
@@ -28,10 +39,10 @@ async function call(method, url, body) {
 
 function form(title, fields, submit, onSubmit, note) {
   const err = el("p", { class: "err", role: "alert" })
-  const f = el("form", { class: "panel" }, el("h2", { text: title }), note ? el("p", { class: "muted", text: note }) : null)
+  const f = el("form", { class: "panel" }, el("h1", { text: title }), note ? el("p", { class: "muted", text: note }) : null)
   const inputs = {}
   for (const [name, label, type, extra] of fields) {
-    const i = el("input", { name, type, required: "", ...(extra ?? {}) })
+    const i = el("input", { name, type, required: true, ...(extra ?? {}) })
     inputs[name] = i
     f.append(el("label", {}, el("span", { text: label }), i))
   }
@@ -44,6 +55,17 @@ function form(title, fields, submit, onSubmit, note) {
     if (msg) err.textContent = msg
   })
   return f
+}
+
+const canNotify = () => typeof Notification !== "undefined"
+
+// A toast for what happened elsewhere: one at a time, announced politely, never the only record.
+let toastTimer = 0
+function toast(text) {
+  toastBox.textContent = text
+  toastBox.hidden = false
+  clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toastBox.hidden = true), 6000)
 }
 
 // Passkeys through the browser's own WebAuthn JSON support (Edge, Chrome, Safari 18 and later).
@@ -77,17 +99,24 @@ async function passkeyAdd(say) {
 // Why passkeys are not offered here (CNW at an IP address), or "" when they are.
 let passkeysOff = ""
 
+const signedOutShell = () => {
+  tabs.hidden = true
+  needs.hidden = true
+  signout.hidden = true
+  main.className = "signin"
+  clearInterval(poll)
+}
+
 async function render() {
-  const me = (await call("GET", "/api/me")).json
+  me = (await call("GET", "/api/me")).json
   passkeysOff = me.passkeys === false ? (me.passkeyNote ?? "Passkeys are not available here.") : ""
   main.replaceChildren()
-  main.className = ""
-  signout.hidden = me.access !== "user"
   if (me.access === "user") {
     csrf = me.csrf
     sessionStorage.setItem("cnw.csrf", me.csrf)
   }
-  if (me.setup)
+  if (me.setup) {
+    signedOutShell()
     return main.append(
       form(
         "Set up Neighbourhood Watch",
@@ -105,7 +134,9 @@ async function render() {
         "The first account needs the code from `docker compose logs cnw`, so nobody who finds this page first can claim it.",
       ),
     )
+  }
   if (me.access === "none") {
+    signedOutShell()
     if (canPasskey() && !passkeysOff) {
       const err = el("p", { class: "err", role: "alert" })
       main.append(
@@ -137,7 +168,9 @@ async function render() {
     )
   }
   // Uplift phase 2: an account from before email sign-in adds its email, once, before anything else.
-  if (me.needsEmail)
+  if (me.needsEmail) {
+    signedOutShell()
+    signout.hidden = false
     return main.append(
       form(
         "Add your email",
@@ -151,13 +184,259 @@ async function render() {
         `From now on you sign in with your email instead of the name ${me.user}. Your password and passkeys stay as they are.`,
       ),
     )
-  await computers()
+  }
+  // Signed in, or on an allowed network: the four places.
+  tabs.hidden = false
+  needs.hidden = false
+  signout.hidden = me.access !== "user"
+  main.className = "signed-in"
+  await refresh(false)
+  clearInterval(poll)
+  // What waits, looked at again every 10 seconds while the page is open (Web Push for a closed tab follows later).
+  poll = setInterval(() => {
+    if (document.visibilityState === "visible" || (canNotify() && Notification.permission === "granted")) void refresh(true)
+  }, 10_000)
+  show()
+}
+
+/** Reads the board, updates the Needs you count, and tells you about anything newly waiting. */
+async function refresh(tell) {
+  const r = await call("GET", "/api/board")
+  if (!r.ok) return
+  board = r.json
+  const n = board.inbox.length
+  needs.textContent = n ? `${n} ${n === 1 ? "needs" : "need"} you` : "Nothing waits"
+  needs.classList.toggle("on", n > 0)
+  inboxCount.hidden = !n
+  inboxCount.textContent = String(n)
+  const ids = new Set(board.inbox.map((w) => `${w.computer}/${w.requestId}`))
+  const fresh = seen ? board.inbox.filter((w) => !seen.has(`${w.computer}/${w.requestId}`)) : []
+  seen = ids
+  if (tell && fresh.length) {
+    const w = fresh[0]
+    const text = fresh.length === 1 ? `${w.computerLabel}: ${w.tool} in ${w.project} waits for you.` : `${fresh.length} new requests wait for you.`
+    toast(text)
+    if (canNotify() && Notification.permission === "granted" && document.visibilityState !== "visible")
+      new Notification("Neighbourhood Watch", { body: text, tag: "cnw-waiting" })
+  }
+  // The board and the inbox follow; the Server and You pages are left alone while you type in them.
+  const tab = current()
+  if (tell && (tab === "board" || tab === "inbox")) show()
+}
+
+const current = () => (location.hash || "#board").slice(1)
+
+function show() {
+  const tab = current()
+  for (const a of tabs.querySelectorAll("a")) {
+    if (a.dataset.tab === tab) a.setAttribute("aria-current", "page")
+    else a.removeAttribute("aria-current")
+  }
+  main.replaceChildren()
+  if (tab === "inbox") return inboxView()
+  if (tab === "server") return void serverView()
+  if (tab === "you") return youView()
+  return boardView()
+}
+addEventListener("hashchange", () => (tabs.hidden ? undefined : show()))
+
+const band = (risk) => (risk >= 85 ? "Severe" : risk >= 70 ? "High" : risk >= 40 ? "Moderate" : "Low")
+const riskBadge = (risk) => el("span", { class: `risk ${band(risk).toLowerCase()}`, text: `${band(risk)} ${risk}` })
+const waited = (iso) => {
+  const s = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 1000))
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`
+}
+const ago = (ms) => (ms ? `last seen ${waited(new Date(ms).toISOString())} ago` : "never connected")
+
+function boardView() {
+  main.append(el("h1", { text: "Board" }))
+  const list = el("div", { class: "list", role: "list" })
+  if (!board.board.length) list.append(el("p", { class: "item muted", text: "No computer is paired yet. Pair one below, then enter the code in that computer's Codehouse, Settings, Neighbourhood Watch." }))
+  for (const c of board.board) {
+    const lit = c.waiting.length > 0
+    const oldest = lit ? c.waiting.reduce((a, b) => (Date.parse(a.since) < Date.parse(b.since) ? a : b)) : undefined
+    const parts = [
+      c.online ? (c.sessions ? `${c.sessions.working} working, ${c.sessions.waiting} waiting` : (c.note ?? "")) : ago(c.lastSeen),
+      c.version ? `Codehouse ${c.version}` : "",
+      c.kill ? "kill switch on" : "",
+      c.safeMode ? "safe mode" : "",
+    ].filter(Boolean)
+    list.append(
+      el(
+        "a",
+        {
+          class: `item${lit ? " lit" : ""}`,
+          role: "listitem",
+          href: `/app/?computer=${encodeURIComponent(c.id)}`,
+          "aria-label": `${c.label}: ${c.online ? "online" : "offline"}${lit ? `, ${c.waiting.length} waiting on you` : ""}. Open it.`,
+        },
+        el("span", { class: "time", text: lit ? waited(oldest.since) : "-" }),
+        el(
+          "span",
+          {},
+          el("span", { class: "name", text: c.label }),
+          el("br"),
+          el("span", { class: `state${c.online ? " on" : ""}`, text: c.online ? "Online" : "Offline" }),
+          el("span", { class: "meta", text: parts.length ? `, ${parts.join(", ")}` : "" }),
+          c.needsUpdate ? el("span", { class: "warn", text: ` ${c.needsUpdate === "cnw" ? "CNW needs updating" : "Codehouse needs updating"}` }) : null,
+        ),
+        el("span", { class: "meta", text: lit ? `${c.waiting.length} waiting` : "Open" }),
+      ),
+    )
+  }
+  main.append(list, pairPanel())
+}
+
+function pairPanel() {
+  const pairing = el("section", { class: "panel" }, el("h2", { text: "Pair a computer" }))
+  const out = el("p", { class: "code", "aria-live": "polite" })
+  pairing.append(
+    el("p", { class: "muted", text: `In that computer's Codehouse, Settings, Neighbourhood Watch, enter ${location.origin} and the code. A code works once, for ten minutes.` }),
+    el("button", {
+      class: "btn primary",
+      text: "Make a pairing code",
+      onclick: async () => {
+        const c = await call("POST", "/api/computers/code", { label: "" })
+        out.textContent = c.ok ? c.json.code : (c.json.error ?? "No code was made.")
+      },
+    }),
+    out,
+  )
+  return pairing
+}
+
+function inboxView() {
+  main.append(el("h1", { text: "Inbox" }))
+  if (!board.inbox.length) return main.append(el("p", { class: "panel muted", text: "Nothing waits on you on any computer." }))
+  const list = el("div", { class: "list", role: "list" })
+  for (const w of board.inbox) list.append(inboxRow(w))
+  main.append(list)
+}
+
+function inboxRow(w) {
+  const wrap = el("div", { role: "listitem" })
+  const pass = el("div", { class: "pass", hidden: true })
+  const head = el(
+    "button",
+    { class: "item lit", style: "width:100%;text-align:left;border:0;font:inherit;color:inherit;cursor:pointer", "aria-expanded": "false" },
+    el("span", { class: "time", text: waited(w.since) }),
+    el("span", {}, el("span", { class: "name", text: `${w.computerLabel}: ${w.tool}` }), el("br"), el("span", { class: "meta", text: w.project })),
+    riskBadge(w.risk),
+  )
+  head.addEventListener("click", () => {
+    pass.hidden = !pass.hidden
+    head.setAttribute("aria-expanded", String(!pass.hidden))
+  })
+  const say = el("p", { role: "status", class: "muted" })
+  const answer = async (decision) => {
+    say.textContent = "Sending..."
+    const r = await call("POST", "/api/inbox/answer", { computer: w.computer, requestId: w.requestId, decision })
+    if (r.status === 428 && r.json.reauth) return reauth(pass, say, () => answer(decision))
+    say.textContent = r.ok ? r.json.sent : (r.json.error ?? "Not sent.")
+    if (r.ok) setTimeout(() => refresh(false).then(show), 1500)
+  }
+  // Deny is one step and comes first; Allow once is never the default at risk 70 and over.
+  const deny = el("button", { class: "btn", text: "Deny", onclick: () => answer("deny") })
+  const allow = el("button", { class: `btn ${w.risk >= 70 ? "strong" : "primary"}`, text: w.risk >= 85 ? "Allow once (sign in again)" : "Allow once", onclick: () => answer("allow") })
+  pass.append(
+    el(
+      "dl",
+      {},
+      el("dt", { text: "Computer" }),
+      el("dd", { text: w.computerLabel }),
+      el("dt", { text: "Would run" }),
+      el("dd", { class: "mono", text: w.what || w.tool }),
+      el("dt", { text: "Why it waits" }),
+      el("dd", { text: w.reason || "Its rules ask you." }),
+      el("dt", { text: "Rule" }),
+      el("dd", { class: "mono", text: w.ruleId || "none" }),
+      el("dt", { text: "Risk" }),
+      el("dd", {}, riskBadge(w.risk)),
+    ),
+    el("p", { class: "muted", text: `Your answer goes to ${w.computerLabel}, whose own rules still decide.` }),
+    el("div", { class: "row-actions" }, deny, allow),
+    say,
+  )
+  wrap.append(head, pass)
+  return wrap
+}
+
+/** A Severe allow wants a recent sign-in: the password again, then the answer is sent. */
+function reauth(pass, say, then) {
+  say.textContent = "This is Severe: enter your password to allow it."
+  const pw = el("input", { type: "password", autocomplete: "current-password", "aria-label": "Your password" })
+  const box = el("div", { class: "row-actions" }, pw)
+  box.append(
+    el("button", {
+      class: "btn strong",
+      text: "Confirm and allow",
+      onclick: async () => {
+        const r = await call("POST", "/api/reauth", { password: pw.value })
+        if (!r.ok) return void (say.textContent = r.json.error ?? "That did not work.")
+        box.remove()
+        then()
+      },
+    }),
+  )
+  pass.append(box)
+  pw.focus()
+}
+
+async function serverView() {
+  main.append(el("h1", { text: "Server" }))
+  if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "Sign in to see and change the server's settings, even on an allowed network." }))
+  main.append(await serverPanel(), await allowPanel(), await updatesPanel())
+}
+
+async function allowPanel() {
+  const allow = el("section", { class: "panel" }, el("h2", { text: "Allowed networks" }))
+  const a = await call("GET", "/api/allowlist")
+  const box = el("input", { value: (a.json.ranges ?? []).join(", "), "aria-label": "Allowed address ranges", placeholder: "192.168.1.0/24" })
+  const msg = el("p", { class: "muted", "aria-live": "polite" })
+  allow.append(
+    el("p", { class: "muted", text: "Addresses here need no sign-in to look and answer. They still need it to change this list or the server's settings, remove a computer or allow a Severe request. Leave it empty to always sign in." }),
+    box,
+    el("button", {
+      class: "btn",
+      text: "Save",
+      onclick: async () => {
+        const ranges = box.value
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const r2 = await call("PUT", "/api/allowlist", { ranges })
+        msg.textContent = r2.ok ? "Saved." : (r2.json.error ?? "Not saved.")
+      },
+    }),
+    msg,
+  )
+  return allow
+}
+
+async function updatesPanel() {
+  const upd = el("section", { class: "panel" }, el("h2", { text: "Updates" }))
+  const v = await call("GET", "/api/version")
+  const say = el("p", { class: "muted", "aria-live": "polite", text: `This is Neighbourhood Watch ${v.json.version ?? "?"}.` })
+  upd.append(
+    say,
+    el("button", {
+      class: "btn",
+      text: "Update to the latest signed release",
+      onclick: async () => {
+        say.textContent = "Updating: this can take a few minutes, and the page reloads when it is done."
+        const r = await call("POST", "/api/update")
+        say.textContent = r.ok ? r.json.message : (r.json.error ?? "It did not update.")
+        if (r.ok && /Updated/.test(r.json.message ?? "")) setTimeout(() => location.reload(), 20000)
+      },
+    }),
+  )
+  return upd
 }
 
 // Uplift phase 2: the Server panel. CNW's address, its kind of certificate and its port, set here instead of .env; the
 // certificate's fingerprint to compare with Codehouse's pin; and caddy's root certificate to trust.
 async function serverPanel() {
-  const panel = el("section", { class: "panel", "aria-labelledby": "server-h" }, el("h2", { id: "server-h", text: "Server" }))
+  const panel = el("section", { class: "panel", "aria-labelledby": "server-h" }, el("h2", { id: "server-h", text: "Address and certificate" }))
   const r = await call("GET", "/api/server")
   if (!r.ok) {
     panel.append(el("p", { class: "muted", text: r.json.error ?? "Sign in to see the server's settings." }))
@@ -167,7 +446,11 @@ async function serverPanel() {
   const field = (label, input, help) => el("label", {}, el("span", { text: label }), input, help ? el("span", { class: "muted", text: help }) : null)
   const host = el("input", { value: v.effective.host, autocomplete: "off", autocapitalize: "none", spellcheck: "false" })
   const tlsSel = el("select", {})
-  for (const [val, text] of [["", "Chosen from the address"], ["internal", "caddy's own (home network, IP address)"], ["public", "Let's Encrypt (a public name)"]]) {
+  for (const [val, text] of [
+    ["", "Chosen from the address"],
+    ["internal", "caddy's own (home network, IP address)"],
+    ["public", "Let's Encrypt (a public name)"],
+  ]) {
     const opt = el("option", { value: val, text })
     if (val === (v.effective.tls ?? "")) opt.selected = true
     tlsSel.append(opt)
@@ -185,7 +468,14 @@ async function serverPanel() {
     panel.append(el("p", { class: "err", text: `.env sets the port to ${v.portInEnv || "443"}, which Docker uses when the stack is started by hand. Set CNW_PORT in .env to the same, or remove it.` }))
   if (v.certificate) panel.append(el("p", {}, el("span", { class: "muted", text: "Certificate fingerprint (SHA-256), the one Codehouse pins: " }), el("span", { class: "code fp", text: v.certificate })))
   if (v.rootCertificate)
-    panel.append(el("p", {}, el("a", { class: "btn", href: "/api/server/root.crt", download: "", text: "Download the root certificate" }), el("span", { class: "muted", text: " Trust it on your phone and computers: no warnings, and notifications can reach a closed tab." })))
+    panel.append(
+      el(
+        "p",
+        {},
+        el("a", { class: "btn", href: "/api/server/root.crt", download: true, text: "Download the root certificate" }),
+        el("span", { class: "muted", text: " Trust it on your phone and computers: no warnings, and notifications can reach a closed tab." }),
+      ),
+    )
   const save = async (confirm) => {
     say.textContent = "Saving..."
     const body = { host: host.value, tls: tlsSel.value, port: port.value, trustedProxy: proxy.value, ...(confirm ? { confirm: true } : {}) }
@@ -196,99 +486,87 @@ async function serverPanel() {
       if (window.confirm(`${s.json.error} That is every paired computer${names}. Change it?`)) return save(true)
       return
     }
-    say.textContent = s.ok ? s.json.message : s.json.error ?? s.json.message ?? "Not saved."
+    say.textContent = s.ok ? s.json.message : (s.json.error ?? s.json.message ?? "Not saved.")
   }
   panel.append(el("button", { class: "btn primary", text: "Save", onclick: () => save(false) }), say)
   return panel
 }
 
-async function computers() {
-  main.className = "two"
-  const list = el("section", { class: "panel" }, el("h2", { text: "Computers" }))
-  const r = await call("GET", "/api/computers")
-  const items = r.json.computers ?? []
-  if (!items.length) list.append(el("p", { class: "muted", text: "No computer is paired yet. Make a code on the right and enter it in Codehouse, Settings, Neighbourhood Watch." }))
-  for (const c of items) {
-    const row = el(
-      "div",
-      { class: "computer" },
-      el("span", { class: `dot${c.online ? " on" : ""}`, "aria-hidden": "true" }),
-      el("span", { text: `${c.label}${c.online ? "" : " (not connected)"}${c.version ? `, Codehouse ${c.version}` : ""}`, style: "flex:1" }),
-      // The protocol handshake (owner, 18 Nov): one side is older, said in words rather than losing data quietly.
-      c.needsUpdate ? el("strong", { class: "err", text: c.needsUpdate === "cnw" ? "CNW needs updating" : "Codehouse needs updating" }) : null,
-      el("a", { class: "btn primary", href: `/app/?computer=${encodeURIComponent(c.id)}`, text: "Open" }),
-      el("button", {
-        class: "btn",
-        text: "Remove",
-        "aria-label": `Remove ${c.label}`,
-        onclick: async () => {
-          if (!confirm(`Remove ${c.label}? It is disconnected at once and must be paired again.`)) return
-          const d = await call("DELETE", `/api/computers/${encodeURIComponent(c.id)}`)
-          if (!d.ok) alert(d.json.error ?? "Not removed.")
-          render()
-        },
-      }),
-    )
-    list.append(row)
-  }
-  const pairing = el("section", { class: "panel" }, el("h2", { text: "Pair a computer" }))
-  const out = el("p", { class: "code", "aria-live": "polite" })
-  pairing.append(
-    el("p", { class: "muted", text: "Make a code, then enter this page's address and the code in that computer's Codehouse, Settings, Neighbourhood Watch. A code works once, for ten minutes." }),
-    el("button", {
-      class: "btn primary",
-      text: "Make a pairing code",
-      onclick: async () => {
-        const c = await call("POST", "/api/computers/code", { label: "" })
-        out.textContent = c.ok ? c.json.code : c.json.error ?? "No code was made."
-      },
-    }),
-    out,
+function youView() {
+  main.append(el("h1", { text: "You" }))
+  if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "This page is open from an allowed network, without signing in. Sign in to see your account." }))
+  // Notifications while this page is open; asked for only when you choose, never on opening the page.
+  const note = el("section", { class: "panel" }, el("h2", { text: "Notifications" }))
+  const nsay = el("p", { class: "muted", role: "status" })
+  const state = () =>
+    !canNotify()
+      ? "This browser cannot show notifications."
+      : Notification.permission === "granted"
+        ? "On: while a Neighbourhood Watch tab is open, a new request shows as a notification even when you are in another app."
+        : Notification.permission === "denied"
+          ? "Blocked in this browser's settings for this site. Allow notifications there to use them."
+          : "Off. A new request still shows on this page."
+  nsay.textContent = state()
+  note.append(
+    nsay,
+    canNotify() && Notification.permission === "default"
+      ? el("button", {
+          class: "btn",
+          text: "Turn on notifications",
+          onclick: async () => {
+            await Notification.requestPermission()
+            nsay.textContent = state()
+          },
+        })
+      : null,
+    el("p", { class: "muted", text: "Notifications for a closed tab or a locked phone (Web Push) come in a later update, and need this server's root certificate trusted on the device." }),
   )
-  const allow = el("section", { class: "panel" }, el("h2", { text: "Allowed networks" }))
-  const a = await call("GET", "/api/allowlist")
-  const box = el("input", { value: (a.json.ranges ?? []).join(", "), "aria-label": "Allowed address ranges", placeholder: "192.168.1.0/24" })
-  const msg = el("p", { class: "muted", "aria-live": "polite" })
-  allow.append(
-    el("p", { class: "muted", text: "Addresses here need no sign-in. They still need it to change this list, remove a computer or approve a Severe request. Leave it empty to always sign in." }),
-    box,
-    el("button", {
-      class: "btn",
-      text: "Save",
-      onclick: async () => {
-        const ranges = box.value.split(",").map((s) => s.trim()).filter(Boolean)
-        const r2 = await call("PUT", "/api/allowlist", { ranges })
-        msg.textContent = r2.ok ? "Saved." : r2.json.error ?? "Not saved."
-      },
-    }),
-    msg,
-  )
-  const upd = el("section", { class: "panel" }, el("h2", { text: "Updates" }))
-  const v = await call("GET", "/api/version")
-  const say = el("p", { class: "muted", "aria-live": "polite", text: `This is Neighbourhood Watch ${v.json.version ?? "?"}.` })
-  upd.append(
-    say,
-    el("button", {
-      class: "btn",
-      text: "Update to the latest signed release",
-      onclick: async () => {
-        say.textContent = "Updating: this can take a few minutes, and the page reloads when it is done."
-        const r = await call("POST", "/api/update")
-        say.textContent = r.ok ? r.json.message : r.json.error ?? "It did not update."
-        if (r.ok && /Updated/.test(r.json.message ?? "")) setTimeout(() => location.reload(), 20000)
-      },
-    }),
-  )
+  const acct = el("section", { class: "panel" }, el("h2", { text: "Your email" }), el("p", { text: me.email ?? me.user }))
   const keys = el("section", { class: "panel" }, el("h2", { text: "Passkeys" }))
   const said = el("p", { class: "muted", "aria-live": "polite", text: "A passkey signs you in with your face, fingerprint or device PIN, and cannot be phished." })
-  keys.append(said, passkeysOff ? el("p", { class: "muted", text: passkeysOff }) : canPasskey() ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) }) : el("p", { class: "muted", text: "This browser cannot make passkeys." }))
-  main.append(list, pairing, allow, keys, await serverPanel(), upd)
+  keys.append(
+    said,
+    passkeysOff
+      ? el("p", { class: "muted", text: passkeysOff })
+      : canPasskey()
+        ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) })
+        : el("p", { class: "muted", text: "This browser cannot make passkeys." }),
+  )
+  main.append(acct, note, keys, computersPanel())
+}
+
+/** Removing a computer: on You, away from the board, with what it means said first. */
+function computersPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Paired computers" }))
+  for (const c of board.board)
+    panel.append(
+      el(
+        "div",
+        { class: "row-actions", style: "align-items:center" },
+        el("span", { style: "flex:1", text: c.label }),
+        el("button", {
+          class: "btn danger",
+          text: "Remove",
+          "aria-label": `Remove ${c.label}`,
+          onclick: async () => {
+            if (!confirm(`Remove ${c.label}? It is disconnected at once and must be paired again.`)) return
+            const d = await call("DELETE", `/api/computers/${encodeURIComponent(c.id)}`)
+            if (!d.ok) return toast(d.json.error ?? "Not removed.")
+            await refresh(false)
+            show()
+          },
+        }),
+      ),
+    )
+  if (!board.board.length) panel.append(el("p", { class: "muted", text: "None yet." }))
+  return panel
 }
 
 signout.addEventListener("click", async () => {
   await call("POST", "/api/logout")
   csrf = ""
   sessionStorage.removeItem("cnw.csrf")
+  seen = undefined
   render()
 })
 
