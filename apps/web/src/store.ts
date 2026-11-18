@@ -480,6 +480,9 @@ export const useStore = create<State>((set, get) => ({
         for (const p of e.pending) pending[p.request.id] = p
         const sessions: Record<string, SessionInfo> = {}
         for (const i of e.sessions) sessions[i.id] = i
+        // In Neighbourhood Watch each greeting (the page opening, and every return after a drop) reads each
+        // conversation afresh from the computer, so what was missed in a gap is not.
+        if (REMOTE) historyAsked.clear()
         for (const i of e.sessions) loadHistory(i)
         set((s) => ({
           sessions,
@@ -753,11 +756,30 @@ useStore.subscribe((s, prev) => {
 })
 
 const historyAsked = new Set<string>()
+
+/**
+ * In Neighbourhood Watch: the page did not see the conversation as it happened (it opened part way through, or the
+ * connection dropped), so each session's whole conversation is read from the computer and replaces what the page had.
+ * What was missed is in it, and nothing is shown twice. Read once per greeting from the computer.
+ */
+function loadRemoteHistory(info: SessionInfo): void {
+  const from = info.sdkSessionId ?? info.historyFrom
+  if (!from || historyAsked.has(info.id)) return
+  historyAsked.add(info.id)
+  void send({ type: "history_messages", sdkSessionId: from, cwd: info.cwd }, 60_000).then((r) => {
+    if (!r.ok || !Array.isArray(r.data)) return
+    let past = emptyTranscript()
+    for (const m of r.data as unknown[]) past = reduceHistory(past, m)
+    if (info.restarted) past = addSystem(past, restartLine(info))
+    useStore.setState((s) => ({ transcripts: { ...s.transcripts, [info.id]: past } }))
+  })
+}
 /**
  * A session that carries on an earlier conversation (Resume, Fork, or after a restart) shows what was said there,
  * read once through the Host, with a line when a restart cut a turn off.
  */
 function loadHistory(info: SessionInfo): void {
+  if (REMOTE) return loadRemoteHistory(info)
   if (!info.historyFrom || historyAsked.has(info.id)) return
   historyAsked.add(info.id)
   // Started again under the same id while this window was open (Force stop): what was said is on screen already.

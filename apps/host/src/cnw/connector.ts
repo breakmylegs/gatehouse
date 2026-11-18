@@ -29,6 +29,14 @@ export interface ConnectorOptions {
   createSocket?: (url: string, opts: WebSocket.ClientOptions) => WebSocket
 }
 
+/**
+ * A message longer than this goes to CNW as parts ({ type: "part", id, n, of, data }), put back together there. Shared
+ * with CNW's hub (apps/cnw/src/hub.ts, which keeps its own copy of both numbers).
+ */
+export const PART = 256 * 1024
+/** The most one message may be, in parts: a reply over it is answered "too large" instead. */
+export const MAX_MESSAGE = 64 * 1024 * 1024
+
 /** What the Host's server needs from a client socket: send, readyState, OPEN, bufferedAmount, and message and close. */
 export class VirtualSocket extends EventEmitter {
   readonly OPEN = 1
@@ -116,7 +124,7 @@ export class CnwConnector extends EventEmitter {
         ws.terminate()
       })
     ws.on("message", (raw: Buffer) => this.#message(raw.toString("utf8")))
-    ws.on("close", (code: number) => this.#closed(code))
+    ws.on("close", (code: number, reason: Buffer) => this.#closed(code, reason))
     ws.on("error", (e: Error) => this.#o.log(`neighbourhood watch: ${e.message}`))
   }
 
@@ -152,6 +160,13 @@ export class CnwConnector extends EventEmitter {
       return
     }
     if ((m.type === "snapshot" || m.type === "command") && typeof m.from === "string") {
+      if (m.type === "snapshot") {
+        // A tab opened, or CNW is back after a drop: the user's connection to the Host starts again, and the Host's
+        // greeting on it (its whole state, "hello") goes to their tabs, so none shows what it missed.
+        const key = `${m.from}\n${m.signedIn !== false}`
+        this.#tabs.get(key)?.close()
+        this.#tabs.delete(key)
+      }
       const tab = this.#tab(m.from, m.signedIn !== false)
       if (m.type === "command") tab.emit("message", Buffer.from(JSON.stringify(m.data)))
     }
@@ -171,10 +186,26 @@ export class CnwConnector extends EventEmitter {
 
   #raw(msg: unknown): void {
     // Never to a server whose certificate has not been checked against the pin.
-    if (this.#pinned && this.#ws?.readyState === WebSocket.OPEN) this.#ws.send(JSON.stringify(msg))
+    const ws = this.#ws
+    if (!this.#pinned || ws?.readyState !== WebSocket.OPEN) return
+    let text = JSON.stringify(msg)
+    if (text.length > MAX_MESSAGE) {
+      // Too big even in parts: a reply says so, so the page is not left waiting; anything else is left out.
+      const m = msg as { type?: string; to?: string; data?: { cmdId?: string } }
+      this.#o.log(`neighbourhood watch: a ${m.type ?? "message"} of ${Math.round(text.length / 1048576)} MB is over the ${MAX_MESSAGE / 1048576} MB limit, so it was not sent`)
+      if (m.type !== "reply" || !m.data?.cmdId) return
+      text = JSON.stringify({ type: "reply", to: m.to, data: { type: "reply", cmdId: m.data.cmdId, ok: false, error: { code: "too-large", message: "That is too large to send through Neighbourhood Watch." } } })
+    }
+    if (text.length <= PART) return void ws.send(text)
+    // A message over one part goes as parts, in order, which CNW puts back together: no frame nears its 4 MB cap.
+    const id = crypto.randomUUID()
+    const of = Math.ceil(text.length / PART)
+    for (let n = 0; n < of; n++) ws.send(JSON.stringify({ type: "part", id, n, of, data: text.slice(n * PART, (n + 1) * PART) }))
   }
 
-  #closed(code: number): void {
+  #closed(code: number, reason?: Buffer): void {
+    // Why it closed, so a refusal (1009, too large) or a drop shows in the Host's log.
+    if (!this.#stopped) this.#o.log(`neighbourhood watch: closed (${code}${reason?.length ? `, ${reason.toString("utf8").slice(0, 80)}` : ""})`)
     clearInterval(this.#ping)
     for (const t of this.#tabs.values()) t.close()
     this.#tabs.clear()

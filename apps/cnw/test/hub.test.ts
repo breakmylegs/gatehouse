@@ -2,7 +2,7 @@
 // with the user they came from, and its events to every tab watching; nothing reaches a computer that is not proved.
 import crypto from "node:crypto"
 import { describe, expect, it } from "vitest"
-import { Hub, MAX_COMMANDS_A_MINUTE, type Socket } from "../src/hub.js"
+import { Hub, MAX_COMMANDS_A_MINUTE, MAX_MESSAGE, PART, type Socket } from "../src/hub.js"
 
 const sock = () => {
   const sent: Array<Record<string, unknown>> = []
@@ -16,6 +16,51 @@ function paired() {
   const computer = { id: "c1", label: "Laptop", publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64url"), pairedAt: "" }
   return { computer, sign: (c: string) => crypto.sign(null, Buffer.from(c), privateKey).toString("base64url") }
 }
+
+describe("long messages in parts", () => {
+  function connected() {
+    const { computer, sign } = paired()
+    const hub = new Hub(() => [computer])
+    const tab = sock()
+    hub.watch("c1", tab.s, "ana")
+    const agent = sock()
+    hub.agentOpened(agent.s)
+    hub.agentMessage(agent.s, JSON.stringify({ type: "hello", computer: "c1", signature: sign(agent.sent[0]!.challenge as string) }))
+    return { hub, tab, agent }
+  }
+
+  it("puts parts back together in order, and refuses parts out of order, too many at once, or too large", () => {
+    const { hub, tab, agent } = connected()
+    const whole = JSON.stringify({ type: "event", data: { type: "big", text: "x".repeat(PART * 2) } })
+    const parts = [0, 1, 2].map((n) => JSON.stringify({ type: "part", id: "m1", n, of: 3, data: whole.slice(n * PART, (n + 1) * PART) }))
+    for (const p of parts) hub.agentMessage(agent.s, p)
+    expect((tab.sent.at(-1)!.data as { text: string }).text).toHaveLength(PART * 2)
+    // Out of order.
+    const a = connected()
+    a.hub.agentMessage(a.agent.s, JSON.stringify({ type: "part", id: "m2", n: 1, of: 2, data: "x" }))
+    expect(a.agent.closed()).toBe(1009)
+    // More than the most one message may be.
+    const b = connected()
+    b.hub.agentMessage(b.agent.s, JSON.stringify({ type: "part", id: "m3", n: 0, of: Math.ceil(MAX_MESSAGE / PART) + 1, data: "x" }))
+    expect(b.agent.closed()).toBe(1009)
+    // Too many begun at once.
+    const c = connected()
+    for (let i = 0; i < 9; i++) c.hub.agentMessage(c.agent.s, JSON.stringify({ type: "part", id: `m${i}`, n: 0, of: 2, data: "x" }))
+    expect(c.agent.closed()).toBe(1009)
+  })
+
+  it("asks a computer that comes back for each open tab's state", () => {
+    const { computer, sign } = paired()
+    const hub = new Hub(() => [computer])
+    hub.watch("c1", sock().s, "ana")
+    hub.watch("c1", sock().s, "ana")
+    hub.watch("c1", sock().s, "bob")
+    const agent = sock()
+    hub.agentOpened(agent.s)
+    hub.agentMessage(agent.s, JSON.stringify({ type: "hello", computer: "c1", signature: sign(agent.sent[0]!.challenge as string) }))
+    expect(agent.sent.filter((m) => m.type === "snapshot").map((m) => m.from)).toEqual(["ana", "bob"])
+  })
+})
 
 describe("the CNW hub (O41)", () => {
   it("lets in a computer only with its own signature over a fresh challenge", () => {

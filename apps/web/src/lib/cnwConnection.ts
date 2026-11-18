@@ -48,11 +48,14 @@ export class CnwConnection {
       if (f.type === "computer_online") {
         this.online = f.online === true
         this.#attempt = 0
-        this.onState(this.online ? "open" : "connecting", 0)
+        // Back online is not caught up: the page shows it is reconnecting until the computer's greeting (its whole
+        // state) has arrived.
+        this.onState("connecting", 0)
         return
       }
       const e = f.data
       if (!e) return
+      if (f.type === "event" && e.type === "hello") this.onState("open", 0)
       if (e.type === "reply" && e.cmdId) {
         const p = this.#pending.get(e.cmdId)
         if (p) {

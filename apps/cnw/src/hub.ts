@@ -10,6 +10,15 @@ import { verifyChallenge } from "./pairing.js"
  * stays on the computer, which records each command as from CNW and from whom.
  */
 export const MAX_FRAME = 4 * 1024 * 1024
+/**
+ * A computer sends a long message (a long session's transcript, a file) as parts of at most PART characters, in order;
+ * the hub puts them back together, up to MAX_MESSAGE, and passes on the whole. The same numbers as Codehouse's
+ * connector (apps/host/src/cnw/connector.ts).
+ */
+export const PART = 256 * 1024
+export const MAX_MESSAGE = 64 * 1024 * 1024
+/** Messages one computer may have part-sent at once. */
+const MAX_ASSEMBLING = 8
 /** Commands one browser may send in a minute. */
 export const MAX_COMMANDS_A_MINUTE = 240
 
@@ -45,6 +54,8 @@ export class Hub {
   readonly #watchers = new Map<string, Set<Watcher>>()
   readonly #challenges = new WeakMap<Socket, string>()
   readonly #http = new Map<string, { resolve: (r: HttpAnswer) => void; timer: ReturnType<typeof setTimeout> }>()
+  /** Messages arriving in parts, per computer connection: id to the parts so far. */
+  readonly #parts = new WeakMap<Socket, Map<string, { of: number; got: string[]; size: number }>>()
   readonly #now: () => number
 
   constructor(
@@ -85,10 +96,55 @@ export class Hub {
       this.#agents.set(computer.id, { socket, computer, ...(m.version ? { version: String(m.version).slice(0, 40) } : {}), connectedAt: t, lastSeen: t })
       socket.send(JSON.stringify({ type: "welcome" }))
       this.#broadcast(computer.id, { type: "computer_online", online: true })
+      // Back after a drop: each tab already open is sent the computer's state afresh, so no view is left stale with
+      // whatever it missed in the gap. One snapshot for each user, as watch() asks for one.
+      const users = new Set([...(this.#watchers.get(computer.id) ?? [])].map((w) => w.user))
+      for (const user of users) socket.send(JSON.stringify({ type: "snapshot", from: user }))
       return computer.id
     }
     const [id, agent] = known
     agent.lastSeen = this.#now()
+    if (m.type === "part") {
+      const whole = this.#assemble(socket, m as unknown as { id?: unknown; n?: unknown; of?: unknown; data?: unknown })
+      if (whole === "refused") return void socket.close(1009, "message too large")
+      if (whole === undefined) return id
+      // The whole message, handled as if it had come in one frame (its size was checked part by part).
+      return this.#handle(socket, id, agent, whole)
+    }
+    return this.#handle(socket, id, agent, m)
+  }
+
+  /**
+   * Adds a part; the whole message once its last part is in; "refused" for parts out of order, a message over
+   * MAX_MESSAGE, or too many at once.
+   */
+  #assemble(socket: Socket, p: { id?: unknown; n?: unknown; of?: unknown; data?: unknown }): Record<string, unknown> | "refused" | undefined {
+    if (typeof p.id !== "string" || p.id.length > 64 || typeof p.n !== "number" || typeof p.of !== "number" || typeof p.data !== "string") return "refused"
+    if (p.of < 1 || p.of > Math.ceil(MAX_MESSAGE / PART) || p.data.length > PART) return "refused"
+    const all = this.#parts.get(socket) ?? new Map<string, { of: number; got: string[]; size: number }>()
+    this.#parts.set(socket, all)
+    let a = all.get(p.id)
+    if (!a) {
+      if (p.n !== 0 || all.size >= MAX_ASSEMBLING) return "refused"
+      a = { of: p.of, got: [], size: 0 }
+      all.set(p.id, a)
+    }
+    if (p.of !== a.of || p.n !== a.got.length) return "refused"
+    a.got.push(p.data)
+    a.size += p.data.length
+    if (a.size > MAX_MESSAGE) return "refused"
+    if (a.got.length < a.of) return undefined
+    all.delete(p.id)
+    try {
+      return JSON.parse(a.got.join("")) as Record<string, unknown>
+    } catch {
+      return "refused"
+    }
+  }
+
+  #handle(socket: Socket, id: string, _agent: Agent, msg: Record<string, unknown>): string | undefined {
+    const m = msg as { type?: string; to?: string; data?: unknown }
+    if (m.type === "part") return void socket.close(1007, "a part inside parts")
     // An event the computer addressed to one CNW user (its Host connection for that user: their replies and what it
     // sends them) goes to that user's tabs only; one with no address goes to every tab.
     if (m.type === "event") {

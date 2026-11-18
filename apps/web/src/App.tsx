@@ -190,8 +190,9 @@ export function App() {
                 role="alert"
                 className="border-b border-sev bg-s1 px-4 py-2 font-semibold text-sev"
               >
-                Not connected to the Host. Decisions are paused, and requests keep waiting.
-                Reconnecting automatically.
+                {import.meta.env.VITE_CODEHOUSE_REMOTE === "cnw"
+                  ? "Reconnecting to this computer through Neighbourhood Watch. What you see may be behind until it catches up."
+                  : "Not connected to the Host. Decisions are paused, and requests keep waiting. Reconnecting automatically."}
               </div>
             ) : killed ? (
               <div

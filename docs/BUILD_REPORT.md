@@ -1470,6 +1470,20 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - **What resolves under /app/ (checked on a real CNW build):** scripts, preloads and the stylesheet are named `/app/assets/...`; lazy chunks are imported relative to the script; the pictures, icon sprite and favicons were already relative (`./codehouse/...`); the socket (`/ws/<computer>`) and the sign-in page (`/`) are CNW's own root paths.
   - **The start-up picture is safe:** if the page's script or stylesheet fails to load (or nothing has started after 20 s), it goes and says Codehouse could not start, instead of hiding the failure.
   - **Tests:** cnw-base (web: the base for each build; the fallback), server (CNW: /app/ and every file it names, 200; root /assets 404).
+- **CNW was not a faithful live copy of the desktop (owner, 18 Nov).** A long session showed "Nothing yet", and a chat stayed behind, still asking for permission for a Grep already stopped.
+  - **Confirmed from the code.** The Host's log shows only reconnects, because the connector logged errors and not close codes; CNW's log is on the owner's VM. The three causes:
+    1. CNW's hub closes a computer's connection (1009) on any frame over 4 MB, and a long session's transcript reply was one frame.
+    2. When the computer reconnected, the hub only said it was online and never asked for the open tabs' state; the connector had dropped its per-user connections to the Host, so those tabs got no events at all until reloaded.
+    3. The page asked for a conversation's history only for resumed sessions, so a live session opened part way through showed nothing earlier.
+  - **The fix:**
+    - The connector sends any message over 256 KB as ordered parts. The hub puts them back together (at most 64 MB, eight at once per computer, in order, or the connection is closed). A reply over 64 MB comes back "too large" rather than never.
+    - A computer that reconnects is asked for each open tab's state. The connector restarts that user's connection to the Host, so a fresh greeting (sessions, pending prompts, state) reaches every tab; this also fixes a second tab of the same user, which got no greeting before.
+    - In CNW, each greeting reads every session's conversation from the computer and replaces what the page had, so a gap leaves nothing missing and nothing doubled.
+    - The page shows "Reconnecting to this computer..." until the greeting has arrived.
+    - The connector now logs close codes.
+  - **Event types:** every event type reaches CNW tabs, in order, because CNW's per-user connections are ordinary clients of the Host's server.
+  - **Decided by me, theme:** CNW's /app view keeps its own theme per browser. The desktop's theme is a setting of the desktop window's browser storage, not of the Host, so there is no computer setting to read. Light or dark on a phone usually follows the phone. Recorded here as asked.
+  - **Tests:** cnw-sync (a 6 MB message through the real connector and hub; a forced drop and reconnect leaves the tab with the desktop's state, nothing missing or twice; a prompt withdrawn during a drop disappears), hub (parts and their limits; a returning computer asked for each user's state), cnw-history (the page reads and replaces each conversation on every greeting). Each fails without its fix. Threat T143.
 - **No stop at the start picture (owner, 17 Nov: "The start screen never had buttons. It shouldnt need buttons now. It should just load into the main screen on the computer it is connected to").**
   - The window opens on the main screen, the workspace (`MAIN_ROUTE` in `apps/web/src/store.ts`), or the page you were on. An older version's saved Home opens the main screen too.
   - Home is the picture alone, reached from the command deck: the invisible buttons laid over the drawn ones are gone.
