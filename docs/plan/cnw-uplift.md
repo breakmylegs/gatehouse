@@ -1,4 +1,8 @@
-# CNW front-end uplift (owner, 17 Nov): queued
+# CNW front-end uplift (owner, 17 Nov): in progress
+
+**Go-ahead given 18 Nov** (CNW opens the owner's computer and shows the full history). Phase 1 is done:
+`apps/cnw/PRODUCT.md`, `apps/cnw/DESIGN.md` and `docs/design/cnw-journeys.md`. The order is in
+`docs/plan/queue-2026-11-18.md`.
 
 **Start only after:** the current CNW fixes are done and released (the /app/ base path, the start screen opening on the
 main screen), and the owner confirms CNW opens their computer. Not before.
