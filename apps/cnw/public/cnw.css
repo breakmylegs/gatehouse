@@ -479,3 +479,26 @@ select:hover {
   margin: 0 auto;
   width: 100%;
 }
+
+/* The danger notice: a sheet over a scrim, not a shadow. On a phone it sits at the bottom, in reach of the thumb. */
+dialog.sheet {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  display: grid;
+  gap: 14px;
+}
+dialog.sheet:not([open]) {
+  display: none;
+}
+dialog.sheet::backdrop {
+  background: oklch(0% 0 0 / 0.4);
+}
+@media (max-width: 759px) {
+  dialog.sheet {
+    margin: auto auto calc(16px + env(safe-area-inset-bottom));
+  }
+}

@@ -59,6 +59,40 @@ function form(title, fields, submit, onSubmit, note) {
 
 const canNotify = () => typeof Notification !== "undefined"
 
+/**
+ * The danger notice (apps/cnw/DESIGN.md): what a change breaks, before it breaks it. A modal dialog, Cancel the default
+ * and first, Escape cancels, the confirm in a risk outline. Resolves to true only when confirmed. With fields, it
+ * resolves to their values, or undefined when cancelled.
+ */
+function ask(title, text, confirmLabel, fields = []) {
+  return new Promise((resolve) => {
+    const d = el("dialog", { class: "sheet", "aria-labelledby": "ask-h" })
+    const inputs = fields.map(([name, label, value]) => [name, el("input", { name, value: value ?? "", "aria-label": label })])
+    const cancel = el("button", { class: "btn", type: "button", text: "Cancel" })
+    const ok = el("button", { class: `btn ${fields.length ? "primary" : "danger"}`, type: "button", text: confirmLabel })
+    const done = (v) => {
+      d.close()
+      d.remove()
+      resolve(v)
+    }
+    cancel.addEventListener("click", () => done(fields.length ? undefined : false))
+    ok.addEventListener("click", () => done(fields.length ? Object.fromEntries(inputs.map(([n, i]) => [n, i.value])) : true))
+    d.addEventListener("cancel", (e) => {
+      e.preventDefault()
+      done(fields.length ? undefined : false)
+    })
+    d.append(
+      el("h2", { id: "ask-h", text: title }),
+      text ? el("p", { text }) : null,
+      ...inputs.map(([, i], k) => el("label", {}, el("span", { text: fields[k][1] }), i)),
+      el("div", { class: "row-actions" }, cancel, ok),
+    )
+    document.body.append(d)
+    d.showModal()
+    ;(inputs[0]?.[1] ?? cancel).focus()
+  })
+}
+
 // A toast for what happened elsewhere: one at a time, announced politely, never the only record.
 let toastTimer = 0
 function toast(text) {
@@ -282,10 +316,12 @@ function boardView() {
     ].filter(Boolean)
     list.append(
       el(
+        "div",
+        { role: "listitem" },
+        el(
         "a",
         {
           class: `item${lit ? " lit" : ""}`,
-          role: "listitem",
           href: `/app/?computer=${encodeURIComponent(c.id)}`,
           "aria-label": `${c.label}: ${c.online ? "online" : "offline"}${lit ? `, ${c.waiting.length} waiting on you` : ""}. Open it.`,
         },
@@ -300,6 +336,7 @@ function boardView() {
           c.needsUpdate ? el("span", { class: "warn", text: ` ${c.needsUpdate === "cnw" ? "CNW needs updating" : "Codehouse needs updating"}` }) : null,
         ),
         el("span", { class: "meta", text: lit ? `${c.waiting.length} waiting` : "Open" }),
+        ),
       ),
     )
   }
@@ -490,7 +527,7 @@ async function updatesPanel() {
         class: "btn",
         text: `Go back to ${u.previous.version}`,
         onclick: async () => {
-          if (!confirm(`Go back to ${u.previous.version}? CNW starts again with it.`)) return
+          if (!(await ask(`Go back to ${u.previous.version}?`, "CNW starts again with that version, which takes a minute.", "Go back"))) return
           const x = await call("POST", "/api/update/rollback")
           if (x.status === 428) return void (say.textContent = "Sign in again first (sign out and in), then go back.")
           say.textContent = x.ok ? x.json.message : (x.json.error ?? "It did not go back.")
@@ -550,7 +587,7 @@ function backupPanel() {
       onclick: async () => {
         const f = file.files?.[0]
         if (!f) return void (say.textContent = "Choose a backup file first.")
-        if (!confirm("Restore this backup? Everything here now is replaced by it, and CNW starts again.")) return
+        if (!(await ask("Restore this backup?", "Everything here now (people, settings, paired computers, the audit) is replaced by the backup, and CNW starts again.", "Restore it"))) return
         const x = await call("POST", "/api/restore", { backup: await f.text(), passphrase: pass2.value })
         say.textContent = x.ok ? x.json.message : fresh(x)
         if (x.ok) setTimeout(() => location.reload(), 8000)
@@ -638,7 +675,7 @@ async function serverPanel() {
     if (s.status === 409 && s.json.breaks) {
       const names = s.json.breaks.length ? `: ${s.json.breaks.join(", ")}` : ""
       say.textContent = ""
-      if (window.confirm(`${s.json.error} That is every paired computer${names}. Change it?`)) return save(true)
+      if (await ask("A new certificate", `${s.json.error} That is every paired computer${names}.`, "Change it")) return save(true)
       return
     }
     say.textContent = s.ok ? s.json.message : (s.json.error ?? s.json.message ?? "Not saved.")
@@ -705,10 +742,12 @@ function computersPanel() {
               text: "Rename",
               "aria-label": `Rename ${c.label}`,
               onclick: async () => {
-                const label = prompt(`A new name for ${c.label}`, c.label)
-                if (label === null) return
-                const tags = prompt("Tags to group it by, separated by commas (or none)", (c.tags ?? []).join(", "))
-                const r = await call("PATCH", `/api/computers/${encodeURIComponent(c.id)}`, { label, ...(tags !== null ? { tags: tags.split(",").map((t) => t.trim()).filter(Boolean) } : {}) })
+                const v = await ask(`Rename ${c.label}`, "", "Save", [
+                  ["label", "Its name", c.label],
+                  ["tags", "Tags to group it by, separated by commas", (c.tags ?? []).join(", ")],
+                ])
+                if (!v) return
+                const r = await call("PATCH", `/api/computers/${encodeURIComponent(c.id)}`, { label: v.label, tags: v.tags.split(",").map((t) => t.trim()).filter(Boolean) })
                 if (!r.ok) return toast(r.json.error ?? "Not renamed.")
                 await refresh(false)
                 show()
@@ -720,7 +759,7 @@ function computersPanel() {
           text: "Remove",
           "aria-label": `Remove ${c.label}`,
           onclick: async () => {
-            if (!confirm(`Remove ${c.label}? It is disconnected at once and must be paired again.`)) return
+            if (!(await ask(`Remove ${c.label}?`, "It is disconnected at once, and must be paired again to come back.", "Remove it"))) return
             const d = await call("DELETE", `/api/computers/${encodeURIComponent(c.id)}`)
             if (!d.ok) return toast(d.json.error ?? "Not removed.")
             await refresh(false)
@@ -871,7 +910,7 @@ async function peoplePanel() {
               class: "btn danger",
               text: "Remove",
               onclick: async () => {
-                if (!confirm(`Remove ${p.email ?? p.name}? They are signed out at once.`)) return
+                if (!(await ask(`Remove ${p.email ?? p.name}?`, "They are signed out everywhere at once, and need a new invite to come back.", "Remove them"))) return
                 const d = await call("DELETE", `/api/people/${encodeURIComponent(p.name)}`)
                 if (!d.ok) return void (say.textContent = d.json.error ?? "Not removed.")
                 show()
