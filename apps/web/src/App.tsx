@@ -22,6 +22,7 @@ import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
 import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
 import { START_ROUTE, usePendingCount, useStore } from "./store"
+import { SafeModeBanner } from "./components/SafeModeBanner"
 
 const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
 const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.Policy })))
@@ -194,6 +195,8 @@ export function App() {
                   ? "Reconnecting to this computer through Neighbourhood Watch. What you see may be behind until it catches up."
                   : "Not connected to the Host. Decisions are paused, and requests keep waiting. Reconnecting automatically."}
               </div>
+            ) : health?.safeMode?.on ? (
+              <SafeModeBanner reason={health.safeMode.reason} />
             ) : killed ? (
               <div
                 role="alert"

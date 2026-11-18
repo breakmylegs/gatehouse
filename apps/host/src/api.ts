@@ -6,6 +6,7 @@ import { registerFilesRoutes } from "./files-api.js"
 import type { SlackSecrets, SlackStatus } from "./push/slack.js"
 import type { Conflict } from "./conflict-check.js"
 import type { CanaryRun } from "./canaries.js"
+import { registerSafeModeRoutes, type SafeMode } from "./safe-mode.js"
 import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
@@ -211,6 +212,8 @@ export interface AdminContext {
   auditVerifier?: string
   /** E-100: the last run of the invariant canaries, for Doctor. */
   canaries?: () => CanaryRun | undefined
+  /** E-096: safe mode, entered from Doctor and left from the desktop's banner. */
+  safeMode?: SafeMode
   /** C-011: the key a session's timeline export is signed with. */
   timelineSigner?: TimelineSigner
   /** D-029: the audit anchors. */
@@ -893,6 +896,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     ...(cnw ? { cnwStatus: () => { const s = cnw.status(); return { paired: s.paired, on: s.on, state: s.state } } } : {}),
   })
   registerWorktreeRoutes(app, ctx)
+  if (ctx.safeMode) registerSafeModeRoutes(app, ctx.safeMode)
   if (ctx.board)
     registerBoardRoutes(app, { board: ctx.board.store, audit: ctx.audit, start: ctx.board.start })
   registerGitPanelRoutes(app, ctx)

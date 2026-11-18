@@ -43,7 +43,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | Id | Title | Wave | Status | Branch | BUILD_REPORT | Note |
 |---|---|---|---|---|---|---|
 | E-100 | Invariant canaries | E1 | done | feat/canaries | yes | 8 canaries at start and daily; failure blocks sessions and shows in Doctor; canary_run audited; safe mode waits for E-096 |
-| E-096 | Safe mode | E1 | todo | | |  |
+| E-096 | Safe mode | E1 | done | feat/canaries | yes | after 3 crash restarts in 10 min, a failed canary, Doctor or GATEHOUSE_SAFE_MODE=1; nothing restored or started; banner; leaving from the desktop; tray item to follow |
 | E-097 | Crash bundle | E1 | todo | | |  |
 | E-099 | Health score | E1 | todo | | |  |
 | E-011 | Destructive migration guard | E1 | done | feat/guards-2 | yes | destructive-migration at 85; golden 29 (15 + 10); statement reader, no parser dependency |

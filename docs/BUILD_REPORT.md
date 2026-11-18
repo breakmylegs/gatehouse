@@ -1484,9 +1484,22 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
 
   **Decided by me:**
   - On a Mac without PowerShell 7 the PowerShell verifier is noted, not failed, so that Mac is not refused every session.
-  - The spec's "offers safe mode" waits for E-096 (safe mode is not built), so the message points to Doctor for now.
+  - "Offers safe mode": a failing canary puts Codehouse in safe mode (E-096, below), and the message points to Doctor.
 
   Each canary has a break check that makes only it fail. Threat T144. Tests: canaries.
+- **E-096, safe mode:** `apps/host/src/safe-mode.ts`.
+  - **What it leaves out:** no session brought back (they are kept for later), no routines or triggers, no MCP servers started with Codehouse, the push channels (ntfy, Slack) paused, no warm chat, and every installed plugin off in each session started (`claude plugin list`, then `enabledPlugins` false for each). A banner across the top says why.
+  - **How it starts:**
+    - after three crash restarts in ten minutes;
+    - when a safety canary fails;
+    - from Doctor ("Start in safe mode", from the next start);
+    - with `GATEHOUSE_SAFE_MODE=1` at start, for the tray.
+  - **Leaving:** the banner's "Leave safe mode", on the desktop. The Host's API is the desktop's alone, and Neighbourhood Watch shows the banner without the button. Both are audited: `safe_mode_entered` with the reason, `safe_mode_left`.
+  - **Counting crashes:** the Host notes each start in `starts.json` and marks it clean on an orderly stop, so a start before which three starts in ten minutes never stopped cleanly is the fourth after three crashes. Nothing outside the Host is needed.
+  - **Decided by me:**
+    - The tray's "Start in safe mode" menu item is left for a packaging change of its own (the shell starting the Host with `GATEHOUSE_SAFE_MODE=1`), which needs the update checks run; the Host side is ready.
+    - Entering or leaving takes effect from the next start (restart Codehouse), so nothing running is torn down under you.
+  - Tests: safe-mode (three crashes; clean stops and old crashes not counted; entered on purpose once; a session in safe mode has every plugin off and no warm chat), safe-mode-banner.
 - **CNW was not a faithful live copy of the desktop (owner, 18 Nov).** A long session showed "Nothing yet", and a chat stayed behind, still asking for permission for a Grep already stopped.
   - **Confirmed from the code.** The Host's log shows only reconnects, because the connector logged errors and not close codes; CNW's log is on the owner's VM. The three causes:
     1. CNW's hub closes a computer's connection (1009) on any frame over 4 MB, and a long session's transcript reply was one frame.

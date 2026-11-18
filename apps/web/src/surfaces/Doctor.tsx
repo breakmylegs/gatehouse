@@ -3,6 +3,8 @@ import { CopyButton } from "../components/CopyButton"
 import { Icon, type IconName } from "../components/Icon"
 import { api } from "../lib/api"
 import { startTriage } from "../lib/triage"
+import { toast } from "sonner"
+import { useStore } from "../store"
 
 /** What the Host's checks found (apps/host/src/doctor.ts). */
 export interface DoctorCheck {
@@ -42,6 +44,28 @@ export function summary(checks: DoctorCheck[]): string {
  * The Doctor (B07): what Codehouse needs to work safely on this computer, checked now, each with what to do. The
  * report to copy names no email address, token or file path of yours.
  */
+/**
+ * E-096: start Codehouse in safe mode from its next start: no sessions brought back, no plugins, routines, warm chat,
+ * or push channels. The banner says how to leave it. The desktop's alone (CNW cannot reach the Host's settings).
+ */
+export function SafeModeButton() {
+  const safe = useStore((s) => s.health?.safeMode?.on === true)
+  if (safe || import.meta.env.VITE_CODEHOUSE_REMOTE === "cnw") return null
+  return (
+    <button
+      type="button"
+      className="btn"
+      onClick={async () => {
+        const r = await api("POST", "/api/safe-mode", { on: true })
+        if (r.ok) toast("Safe mode is on. Restart Codehouse to start with nothing brought back or started.", { id: "safe-mode" })
+        else toast.error(r.error ?? "Safe mode could not be turned on.", { id: "safe-mode" })
+      }}
+    >
+      Start in safe mode
+    </button>
+  )
+}
+
 export function Doctor() {
   const [result, setResult] = useState<DoctorResult>()
   const [busy, setBusy] = useState(false)
@@ -119,6 +143,7 @@ export function Doctor() {
             Ask Claude to triage
           </button>
         ) : null}
+        <SafeModeButton />
       </div>
       {result ? (
         <p className="m-0 text-xs text-mut">

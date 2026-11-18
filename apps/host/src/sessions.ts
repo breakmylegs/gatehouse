@@ -443,6 +443,10 @@ export interface SessionDeps {
   managedPolicyProblem?: () => string | undefined
   /** E-100: why the invariant canaries refuse new sessions (one failed at start or at the daily run), or undefined. */
   canaryProblem?: () => string | undefined
+  /** E-096: Codehouse is in safe mode, so no warm chat is started. */
+  safeMode?: () => boolean
+  /** E-096: plugins switched off in each session started now (in safe mode, every installed one). */
+  pluginsOff?: () => string[]
   /** C-004: refuses a new session or chat while this computer's memory is committed over the point in Settings. */
   governor?: { admit(what: HeavyJob, detail?: Record<string, unknown>): Promise<void> }
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
@@ -1408,10 +1412,12 @@ export class Session extends EventEmitter<SessionEvents> {
         : {}),
     }
     const ev = this.#opts.evaluation
-    if (ev && !ev.with)
+    // E-096: in safe mode every installed plugin is off; an evaluation without its plugin turns that one off.
+    const off = [...(d.pluginsOff?.() ?? []), ...(ev && !ev.with ? [ev.plugin] : [])]
+    if (off.length)
       options.settings = {
         ...(typeof options.settings === "object" ? options.settings : {}),
-        enabledPlugins: { [ev.plugin]: false },
+        enabledPlugins: Object.fromEntries(off.map((p) => [p, false])),
       }
     assertSafeOptions(options)
 
@@ -2976,6 +2982,8 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
    * cannot start is dropped quietly and the next chat starts as before.
    */
   warmChat(): void {
+    // E-096: nothing is started ahead of time in safe mode.
+    if (this.#deps.safeMode?.()) return
     const w = this.#warm
     if (w) {
       w.seen = Date.now()

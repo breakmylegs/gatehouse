@@ -66,6 +66,7 @@ import { readItModels } from "./providers/it-models.js"
 import { claudeVersion } from "./doctor.js"
 import { Worktrees } from "./worktrees.js"
 import { canaryProblem, runCanaries, type CanaryRun } from "./canaries.js"
+import { REASON_TEXT, SafeMode, safeModePlan, type SafeModeReason } from "./safe-mode.js"
 import { ConflictWatch, conflictLine } from "./conflict-check.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
@@ -229,6 +230,28 @@ export function createHost(opts: HostOptions = {}): Host {
     new AuditWriter({ dir, redact: (v) => redact(v, { terms: config.redactTerms }) }),
     log,
   )
+  // E-096: safe mode, its record of starts, and what this start leaves out (all on until start() reads it).
+  const safeMode = new SafeMode(gatehouseDataDir(env), {
+    audit: (event, input) =>
+      audit.record({
+        session: "desktop",
+        event,
+        channel: "host",
+        tool: "safe-mode",
+        input,
+        verdict: {
+          outcome: "allow",
+          ruleId: event.replace(/_/g, "-"),
+          reason: event === "safe_mode_entered" ? `Codehouse went into safe mode: ${REASON_TEXT[(input.reason as SafeModeReason) ?? "doctor"]}.` : "Codehouse left safe mode from the desktop.",
+          risk: 0,
+          decidedBy: event === "safe_mode_left" ? "human-desktop" : "rules",
+          policyHash: "",
+        },
+        latencyMs: 0,
+      }),
+  })
+  let plan = safeModePlan(false)
+  let safePluginsOff: string[] = []
   const phoneHolder: { svc?: PhoneService } = {}
   const broker = new Broker({
     phone: {
@@ -452,6 +475,9 @@ export function createHost(opts: HostOptions = {}): Host {
     resumeSettings: (id) => sessionMeta.settings(id),
     managedPolicyProblem: () => store.status().errors.find((e) => e.startsWith(MANAGED_ERROR)),
     canaryProblem: () => canaryProblem(lastCanaries),
+    // E-096: in safe mode, no warm chat and every installed plugin off in each session.
+    safeMode: () => !plan.warmChat,
+    pluginsOff: () => (plan.plugins ? [] : safePluginsOff),
     // Models on this computer (ADR 0011), only while other providers are on, checked before each chat starts.
     local: {
       label: () =>
@@ -1292,6 +1318,8 @@ export function createHost(opts: HostOptions = {}): Host {
     const ks = kill.status()
     const policy = store.status()
     return {
+      // E-096: on, why and since when, for the banner and Doctor.
+      ...(safeMode.on ? { safeMode: safeMode.state() } : {}),
       approver: {
         state: approverProcess?.state ?? (spawnApprover ? "stopped" : "up"),
         ...(policy.hash ? { policyHash: policy.hash } : {}),
@@ -1607,6 +1635,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // G30: the verifier that goes in each audit bundle (scripts\verify-audit.ps1, in the app folder too).
       auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
       canaries: () => lastCanaries,
+      safeMode,
       // C-011: the key timeline exports are signed with, sealed for this Windows user.
       timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
       anchors,
@@ -1669,6 +1698,19 @@ export function createHost(opts: HostOptions = {}): Host {
     async start() {
       const step = opts.onProgress ?? (() => undefined)
       fs.mkdirSync(gatehouseDataDir(env), { recursive: true })
+      // E-096: this start written down (a start before it that never stopped cleanly was a crash); safe mode when
+      // asked for at start (the tray) or after three crash restarts in ten minutes.
+      await safeMode.noteStart()
+      if (env.GATEHOUSE_SAFE_MODE === "1") await safeMode.enter("start-flag")
+      plan = safeModePlan(safeMode.on)
+      if (safeMode.on) {
+        log(`safe mode: ${REASON_TEXT[safeMode.state().reason ?? "doctor"]}; nothing is brought back or started with Codehouse`)
+        // Every plugin off in each session started while it lasts (Claude Code lists them; none listed, none off).
+        void marketplace
+          .installedIds()
+          .then((ids) => (safePluginsOff = ids))
+          .catch((e: Error) => log(`safe mode: the plugins could not be listed (${e.message})`))
+      }
       step("Loading your rules")
       store.load()
       try {
@@ -1730,7 +1772,11 @@ export function createHost(opts: HostOptions = {}): Host {
         })
         lastCanaries = run
         const failing = run.results.filter((r) => !r.ok).map((r) => r.id)
-        if (failing.length) log(`canaries: ${failing.length} failed (${failing.join(", ")})`)
+        if (failing.length) {
+          log(`canaries: ${failing.length} failed (${failing.join(", ")})`)
+          // E-096: a failing canary puts Codehouse in safe mode, from the next start, and says so now.
+          await safeMode.enter("canary", { failing })
+        }
         await audit.record({
           session: "host",
           event: "canary_run",
@@ -1752,10 +1798,11 @@ export function createHost(opts: HostOptions = {}): Host {
       void runCanaryCheck().catch((e: Error) => log(`canaries could not run: ${e.message}`))
       setInterval(() => void runCanaryCheck().catch(() => undefined), 24 * 60 * 60_000).unref()
       step("Connecting notifications and updates")
-      ntfy.start()
+      // E-096: the push channels stay paused in safe mode.
+      if (plan.pushChannels) ntfy.start()
       await updateToken.load()
       updates.start()
-      void slack.start()
+      if (plan.pushChannels) void slack.start()
       // The Relay inside Codehouse starts with it when you turned it on. A failure only shows on Devices.
       if (config.localRelay?.enabled)
         void localRelay
@@ -1814,7 +1861,8 @@ export function createHost(opts: HostOptions = {}): Host {
           .catch((e: Error) => log(`routine run not noted: ${e.message}`))
         return session.id
       }
-      new RoutineScheduler({ store: routines, log, start: runRoutine }).start()
+      // E-096: no routines, and none started by triggers, in safe mode.
+      if (plan.routines) new RoutineScheduler({ store: routines, log, start: runRoutine }).start()
       // And those started by a new commit or by files changing, never by their own session's work.
       routineTriggers = new TriggerWatcher({
         list: () => routines.list(),
@@ -1825,9 +1873,10 @@ export function createHost(opts: HostOptions = {}): Host {
         },
         log,
       })
-      routineTriggers.start()
-      // In the background: the window opens at once and each session appears as it comes back.
-      if (openSessions)
+      if (plan.routines) routineTriggers.start()
+      // In the background: the window opens at once and each session appears as it comes back. In safe mode, none
+      // comes back (E-096); they are kept for when it is left.
+      if (openSessions && plan.restoreSessions)
         void restoreOpenSessions(openSessions, {
           start: (o) => manager.start(o),
           expect: (o) => manager.expect(o),
@@ -1859,12 +1908,14 @@ export function createHost(opts: HostOptions = {}): Host {
             }),
         }).then((n) => (n ? log(`brought back ${n} open session(s)`) : undefined))
       // O39: the servers you built that start with Codehouse; one that fails says why in MCP, and the rest go on.
-      void mcpRunner.startAutostart().catch((e: Error) => log(`mcp builder: ${e.message}`))
+      if (plan.autostartMcp) void mcpRunner.startAutostart().catch((e: Error) => log(`mcp builder: ${e.message}`))
       // O42: the ten-minute summaries for each session's timeline.
       timeline.start()
       settler.start()
     },
     async stop() {
+      // E-096: an orderly stop, so this start is not counted as a crash.
+      safeMode.noteCleanStop()
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()

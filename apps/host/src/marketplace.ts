@@ -274,6 +274,11 @@ export class Marketplace {
     return out
   }
 
+  /** E-096: the ids of the plugins Claude Code has installed, for safe mode to switch them all off. */
+  async installedIds(): Promise<string[]> {
+    return [...(await this.#installed()).keys()]
+  }
+
   /** Every plugin of every marketplace on this computer, with what it holds and whether Codehouse will install it. */
   async catalogue(): Promise<{ marketplaces: string[]; plugins: CatalogueEntry[] }> {
     const [markets, installed] = await Promise.all([this.#marketplaces(), this.#installed()])

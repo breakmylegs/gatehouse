@@ -602,6 +602,14 @@ export const Resolution = z.object({
 export type Resolution = z.infer<typeof Resolution>
 
 export const Health = z.object({
+  /** E-096: Codehouse is in safe mode: why, and since when. Absent when it is not. */
+  safeMode: z
+    .object({
+      on: z.boolean(),
+      reason: z.enum(["doctor", "start-flag", "crash-restarts", "canary"]).optional(),
+      since: z.string().optional(),
+    })
+    .optional(),
   approver: z.object({
     state: z.enum(["stopped", "starting", "up", "down"]),
     policyHash: z.string().optional(),
