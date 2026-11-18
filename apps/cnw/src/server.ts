@@ -19,6 +19,7 @@ import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passke
 import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
 import { bareHost } from "./tls.js"
 import { BackupError, makeBackup, openBackup, restoreFiles } from "./backup.js"
+import { CHANNEL_KINDS, checkChannel, checkRule, ruleAllows, sendMail, sendTo, type Channel, type ChannelKind } from "./channels.js"
 import { checkSubscription, sendPush, Vapid, type Subscription } from "./webpush.js"
 import { base32, hashRecovery, newSecret, otpauthUri, recoveryCodes, Sealer, verifyCode } from "./totp.js"
 import { commandAllowed, httpAllowed, roleMay, roleOf, ROLES, seesComputer, type Role } from "./roles.js"
@@ -43,6 +44,8 @@ export interface CnwOptions {
   caddyConfigDir?: string
   /** Reads the certificate caddy serves for a host, as SHA-256 hex; for tests. */
   certificateOf?: (host: string) => Promise<string | undefined>
+  /** Sends one email; for tests. */
+  smtp?: typeof sendMail
   /** Posts a push to its service; for tests. */
   post?: (url: string, init: { method: string; headers: Record<string, string>; body: Buffer }) => Promise<{ status: number }>
   /** Ends the process after a restore, so it starts again from the restored files; for tests. */
@@ -159,7 +162,7 @@ export async function createCnw(o: CnwOptions) {
     if (o2 && o2 !== origin && !req.url.startsWith("/agent")) return reply.code(403).send({ error: "Wrong origin." })
     // /agent is a computer, not a browser: no cookie gives it anything, and it proves itself with the pairing code or
     // its signed key, so a CSRF token means nothing there.
-    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login") && !req.url.startsWith("/api/invite/accept")) {
+    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login") && !req.url.startsWith("/api/invite/accept") && !req.url.startsWith("/api/password/")) {
       if (!csrfOk(access(req), String(req.headers["x-csrf-token"] ?? ""))) return reply.code(403).send({ error: "Sign in again." })
     }
   })
@@ -419,7 +422,7 @@ export async function createCnw(o: CnwOptions) {
   // most every few seconds; an offline one keeps only its last seen.
   const boardCache = new Map<string, { at: number; row: BoardRow }>()
   const rowOf = async (c: ReturnType<Hub["status"]>[number], user: string, signedIn: boolean): Promise<BoardRow> => {
-    const base: BoardRow = { id: c.id, label: c.label, online: c.online, waiting: [], ...(c.lastSeen ? { lastSeen: c.lastSeen } : {}), ...(c.version ? { version: c.version } : {}), ...(c.needsUpdate ? { needsUpdate: c.needsUpdate } : {}) }
+    const base: BoardRow = { id: c.id, label: c.label, ...(c.tags?.length ? { tags: c.tags } : {}), online: c.online, waiting: [], ...(c.lastSeen ? { lastSeen: c.lastSeen } : {}), ...(c.version ? { version: c.version } : {}), ...(c.needsUpdate ? { needsUpdate: c.needsUpdate } : {}) }
     if (!c.online) return { ...base, note: "Not connected." }
     const t = (o.now ?? Date.now)()
     const hit = boardCache.get(c.id)
@@ -446,6 +449,118 @@ export async function createCnw(o: CnwOptions) {
   })
 
   // Signing in again, for a Severe approval: the password, checked as at sign-in, makes this sign-in recent.
+  // Notification channels (Server, for an owner or admin): email, ntfy, Pushover, Telegram, webhooks, each with its own
+  // rule. A secret is sealed when saved and never sent back; left blank on a change, the one saved is kept.
+  const channelStore = new JsonStore<{ channels: Channel[] }>(o.dataDir, "channels", () => ({ channels: [] }))
+  const channelView = (c: Channel) => ({ id: c.id, kind: c.kind, on: c.on, rule: c.rule, config: c.config, hasSecret: Boolean(c.sealedSecret) })
+  const secretOf = (c: Channel) => {
+    try {
+      return c.sealedSecret ? sealer.open(c.sealedSecret).toString("utf8") : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const channelDeps = { ...(o.post ? { post: async (url: string, init: { method: string; headers: Record<string, string>; body: string }) => o.post!(url, { ...init, body: Buffer.from(init.body) }) } : {}), ...(o.smtp ? { smtp: o.smtp } : {}) }
+  app.get("/api/channels", async (req, reply) => (need(req, reply, "server") ? { channels: channelStore.read().channels.map(channelView) } : undefined))
+  const saveChannel = async (req: FastifyRequest, reply: FastifyReply, id?: string) => {
+    const a = need(req, reply, "server")
+    if (!a || a.kind !== "user") return
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const before = id ? channelStore.read().channels.find((c) => c.id === id) : undefined
+    if (id && !before) return reply.code(404).send({ error: "There is no such channel." })
+    const kind = (before?.kind ?? b.kind) as ChannelKind
+    if (!(CHANNEL_KINDS as readonly string[]).includes(String(kind))) return reply.code(422).send({ error: "Email, ntfy, Pushover, Telegram or a webhook." })
+    const checked = checkChannel(kind, { ...b, ...(b.secret ? {} : before ? { secret: secretOf(before) ?? "" } : {}) })
+    if (typeof checked === "string") return reply.code(422).send({ error: checked })
+    const rule = checkRule(b.rule)
+    if (typeof rule === "string") return reply.code(422).send({ error: rule })
+    const ch: Channel = { id: before?.id ?? crypto.randomUUID(), kind, on: b.on !== false, rule, config: checked.config, ...(checked.secret ? { sealedSecret: sealer.seal(Buffer.from(checked.secret)) } : {}) }
+    channelStore.update((v) => ({ channels: [...v.channels.filter((c) => c.id !== ch.id), ch].slice(-20) }))
+    record(a.user, before ? "channel-changed" : "channel-added", `${kind}${ch.on ? "" : " (off)"}, ${rule.minRisk ? `risk ${rule.minRisk} and over` : "every request"}`)
+    return { channel: channelView(ch) }
+  }
+  app.post("/api/channels", async (req, reply) => saveChannel(req, reply))
+  app.put("/api/channels/:id", async (req, reply) => saveChannel(req, reply, (req.params as { id: string }).id))
+  app.delete("/api/channels/:id", async (req, reply) => {
+    const a = need(req, reply, "server")
+    if (!a || a.kind !== "user") return
+    const id = (req.params as { id: string }).id
+    const c = channelStore.read().channels.find((x) => x.id === id)
+    if (!c) return reply.code(404).send({ error: "There is no such channel." })
+    channelStore.update((v) => ({ channels: v.channels.filter((x) => x.id !== id) }))
+    record(a.user, "channel-removed", c.kind)
+    return { ok: true }
+  })
+  app.post("/api/channels/:id/test", async (req, reply) => {
+    const a = need(req, reply, "server")
+    if (!a || a.kind !== "user") return
+    const c = channelStore.read().channels.find((x) => x.id === (req.params as { id: string }).id)
+    if (!c) return reply.code(404).send({ error: "There is no such channel." })
+    try {
+      await sendTo(c, secretOf(c), { title: "Neighbourhood Watch", body: "A test: this channel works.", url: `${origin}/#server` }, channelDeps)
+      return { ok: true }
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message })
+    }
+  })
+  /** Tells every channel whose rule allows it; a channel that fails says so in CNW's log, and the rest go on. */
+  const tellChannels = async (w: { computer: string; computerLabel: string; tool: string; project: string; risk: number; requestId: string }) => {
+    let n = 0
+    for (const c of channelStore.read().channels.filter((x) => x.on && ruleAllows(x.rule, w, new Date((o.now ?? Date.now)())))) {
+      const band = w.risk >= 85 ? "Severe" : w.risk >= 70 ? "High" : w.risk >= 40 ? "Moderate" : "Low"
+      try {
+        await sendTo(c, secretOf(c), { title: `${w.computerLabel} needs you`, body: `${w.tool} in ${w.project}, ${band} ${w.risk}`, url: `${origin}/#inbox` }, channelDeps)
+        n++
+      } catch (e) {
+        log(`channel ${c.kind}: ${(e as Error).message}`)
+      }
+    }
+    return n
+  }
+  /** The email channel's server, for invites and password resets to someone else's address. */
+  const mailTo = async (to: string, subject: string, text: string): Promise<boolean> => {
+    const c = channelStore.read().channels.find((x) => x.kind === "email" && x.on)
+    if (!c) return false
+    try {
+      await (o.smtp ?? sendMail)({ host: c.config.host!, port: Number(c.config.port), tls: c.config.tls === "implicit" ? "implicit" : "starttls", user: c.config.user || undefined, pass: secretOf(c), from: c.config.from!, to }, subject, text)
+      return true
+    } catch (e) {
+      log(`email to ${to}: ${(e as Error).message}`)
+      return false
+    }
+  }
+
+  // Forgotten passwords, when email is set up: a link by email, used once, for 30 minutes. The answer is the same
+  // whether or not the email has an account. A second factor still applies after a reset.
+  const resets = new Map<string, { user: string; until: number }>()
+  app.post("/api/password/forgot", async (req, reply) => {
+    const key = `forgot:${ipOf(req)}`
+    if (throttle.wait(key)) return reply.code(429).send({ error: "Too many tries. Wait a while." })
+    throttle.failed(key)
+    const addr = String((req.body as { email?: unknown })?.email ?? "").trim().toLowerCase().slice(0, 254)
+    const u = users.read().users.find((x) => x.email === addr)
+    if (u) {
+      const token = crypto.randomBytes(24).toString("base64url")
+      resets.set(sha(token), { user: u.name, until: (o.now ?? Date.now)() + 30 * 60_000 })
+      const sent = await mailTo(addr, "Neighbourhood Watch: set a new password", `Someone asked to set a new password for ${addr} on Neighbourhood Watch.\n\nOpen this link within 30 minutes to set one:\n${origin}/#reset=${token}\n\nIf it was not you, do nothing: your password stays as it is.`)
+      record(u.name, "password-reset-asked", sent ? "a link was emailed" : "no email channel, nothing was sent")
+    }
+    return { ok: true, message: "If that email has an account here and email is set up, a link to set a new password is on its way." }
+  })
+  app.post("/api/password/reset", async (req, reply) => {
+    const b = (req.body ?? {}) as { token?: unknown; password?: unknown }
+    const r = resets.get(sha(String(b.token ?? "")))
+    const password = String(b.password ?? "")
+    if (!r || r.until < (o.now ?? Date.now)()) return reply.code(403).send({ error: "That link has been used or has expired. Ask for a new one." })
+    if (password.length < 12 || password.length > 500) return reply.code(422).send({ error: "A password of 12 characters or more." })
+    const hash = await hashPassword(password)
+    users.update((v) => ({ ...v, users: v.users.map((x) => (x.name === r.user ? { ...x, password: hash } : x)) }))
+    resets.delete(sha(String(b.token)))
+    sessions.endUser(r.user)
+    record(r.user, "password-reset", "a new password was set from an emailed link; every device was signed out")
+    return { ok: true }
+  })
+
   // Web Push (owner, 17 Nov): a closed tab or a locked phone hears when something newly waits. Each device subscribes
   // from You; CNW then looks at its computers every 15 seconds while anyone is subscribed, and tells each person what
   // newly waits on a computer they see, at the risk they chose. A push says the computer, the tool, the project and
@@ -488,7 +603,7 @@ export async function createCnw(o: CnwOptions) {
   const told = new Map<string, Set<string>>()
   const pushLook = async (): Promise<number> => {
     const subs = pushStore.read().subs
-    if (!subs.length) return 0
+    if (!subs.length && !channelStore.read().channels.some((c) => c.on)) return 0
     let sent = 0
     for (const c of hub.status().filter((x) => x.online)) {
       boardCache.delete(c.id)
@@ -497,7 +612,8 @@ export async function createCnw(o: CnwOptions) {
       const now = new Set(row.waiting.map((w) => w.requestId))
       told.set(c.id, now)
       if (!before) continue
-      for (const w of row.waiting.filter((x) => !before.has(x.requestId)))
+      for (const w of row.waiting.filter((x) => !before.has(x.requestId))) {
+        sent += await tellChannels(w)
         for (const s of subs) {
           const u = userOf(s.user)
           if (!u || !seesComputer(u.computers, c.id) || w.risk < s.minRisk) continue
@@ -506,6 +622,7 @@ export async function createCnw(o: CnwOptions) {
           if (r === "sent") sent++
           if (r === "gone") pushStore.update((v) => ({ subs: v.subs.filter((x) => x.sub.endpoint !== s.sub.endpoint) }))
         }
+      }
     }
     return sent
   }
@@ -660,7 +777,9 @@ export async function createCnw(o: CnwOptions) {
     const expires = new Date((o.now ?? Date.now)() + 7 * 24 * 3_600_000).toISOString()
     invites.update((v) => ({ invites: [...v.invites.filter((i) => i.email !== b.data.email), { hash: sha(token), email: b.data.email, role: b.data.role, ...(b.data.computers ? { computers: b.data.computers } : {}), by: a.user, expires }].slice(-100) }))
     record(a.user, "invite", `${b.data.email} as ${b.data.role}${b.data.computers ? ` for ${b.data.computers.length} computer(s)` : ""}`)
-    return { link: `${origin}/#invite=${token}`, expires }
+    const link = `${origin}/#invite=${token}`
+    const emailed = await mailTo(b.data.email, "You are invited to Neighbourhood Watch", `${a.user} invited you to Codehouse Neighbourhood Watch as ${b.data.role}.\n\nOpen this link within seven days to choose a password and join:\n${link}\n`)
+    return { link, expires, emailed }
   })
   app.post("/api/invite/accept", async (req, reply) => {
     const b = z.object({ token: z.string().min(10).max(100), password: z.string().min(12).max(500) }).safeParse(req.body)

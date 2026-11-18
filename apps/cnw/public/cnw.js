@@ -183,6 +183,24 @@ async function render() {
       ),
     )
   }
+  const reset = /^#reset=([A-Za-z0-9_-]{10,100})$/.exec(location.hash)
+  if (reset && me.access !== "user") {
+    signedOutShell()
+    return main.append(
+      form(
+        "Set a new password",
+        [["password", "A new password of 12 characters or more", "password", { autocomplete: "new-password", minlength: "12" }]],
+        "Set it",
+        async (v) => {
+          const r = await call("POST", "/api/password/reset", { token: reset[1], password: v.password })
+          if (!r.ok) return r.json.error ?? "That did not work."
+          history.replaceState(null, "", "#board")
+          render()
+        },
+        "Every device signed in with your old password is signed out. A second factor, if you have one, is still asked for.",
+      ),
+    )
+  }
   const invite = /^#invite=([A-Za-z0-9_-]{10,100})$/.exec(location.hash)
   if (invite && me.access !== "user") {
     signedOutShell()
@@ -232,6 +250,7 @@ async function render() {
         },
         "Signed in with a name before? Use your name once: CNW then asks for your email, and keeps your password.",
       ),
+      forgotPanel(),
     )
   }
   // Uplift phase 2: an account from before email sign-in adds its email, once, before anything else.
@@ -318,7 +337,14 @@ const ago = (ms) => (ms ? `last seen ${waited(new Date(ms).toISOString())} ago` 
 
 function boardView() {
   main.append(el("h1", { text: "Board" }))
-  const list = el("div", { class: "list", role: "list" })
+  // Grouped by each computer's first tag (given on You), untagged first; within a group, the board's own order.
+  const groups = new Map()
+  const listFor = (c) => {
+    const g = c.tags?.[0] ?? ""
+    if (!groups.has(g)) groups.set(g, el("div", { class: "list", role: "list", ...(g ? { "aria-label": g } : {}) }))
+    return groups.get(g)
+  }
+  const list = listFor({})
   if (!board.board.length) list.append(el("p", { class: "item muted", text: "No computer is paired yet. Pair one below, then enter the code in that computer's Codehouse, Settings, Neighbourhood Watch." }))
   for (const c of board.board) {
     const lit = c.waiting.length > 0
@@ -329,7 +355,7 @@ function boardView() {
       c.kill ? "kill switch on" : "",
       c.safeMode ? "safe mode" : "",
     ].filter(Boolean)
-    list.append(
+    listFor(c).append(
       el(
         "div",
         { role: "listitem" },
@@ -355,7 +381,12 @@ function boardView() {
       ),
     )
   }
-  main.append(list, pairPanel())
+  for (const [g, l] of [...groups].sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)))) {
+    if (!l.children.length) continue
+    if (g) main.append(el("h2", { text: g }))
+    main.append(l)
+  }
+  main.append(pairPanel())
 }
 
 function pairPanel() {
@@ -458,7 +489,7 @@ async function serverView() {
   main.append(el("h1", { text: "Server" }))
   if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "Sign in to see and change the server's settings, even on an allowed network." }))
   if (me.role !== "owner" && me.role !== "admin") return main.append(el("p", { class: "panel muted", text: "Your role looks and answers; an owner or an admin runs the server." }))
-  main.append(await healthPanel(), await serverPanel(), await peoplePanel(), await allowPanel(), await updatesPanel(), backupPanel(), await auditPanel())
+  main.append(await healthPanel(), await serverPanel(), await peoplePanel(), await channelsPanel(), await allowPanel(), await updatesPanel(), backupPanel(), await auditPanel())
 }
 
 async function allowPanel() {
@@ -840,6 +871,109 @@ function pushPanel() {
     say,
   )
   return panel
+}
+
+/** Server: notification channels, each with its rule. A secret is never shown again; left blank, it is kept. */
+async function channelsPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Notification channels" }))
+  const r = await call("GET", "/api/channels")
+  if (!r.ok) return panel.append(el("p", { class: "muted", text: r.json.error ?? "Not available." })), panel
+  const say = el("p", { class: "muted", role: "status" })
+  const kinds = {
+    email: { name: "Email", fields: [["host", "SMTP server"], ["port", "Port (587 or 465)"], ["user", "Its user name (if it asks for one)"], ["from", "From address"], ["to", "To address"]], secret: "Its password" },
+    ntfy: { name: "ntfy", fields: [["url", "The topic's address, https://..."]], secret: "An access token (if the topic has one)" },
+    pushover: { name: "Pushover", fields: [["user", "Your user key"]], secret: "The application token" },
+    telegram: { name: "Telegram", fields: [["chat", "The chat id, or @channel"]], secret: "The bot token" },
+    webhook: { name: "Webhook", fields: [["url", "The address, https://..."]], secret: "A secret to sign each call with (optional)" },
+  }
+  const ruleText = (rule) => `${rule.minRisk ? (rule.minRisk >= 85 ? "Severe only" : "High and Severe") : "every request"}${rule.quiet ? `, quiet ${rule.quiet.from} to ${rule.quiet.to}` : ""}`
+  panel.append(el("p", { class: "muted", text: "Besides notifications on your devices, CNW can tell a channel when something newly waits: the computer, the tool, the project and the risk, never the command. No channel can point into this server's own network." }))
+  for (const c of r.json.channels)
+    panel.append(
+      el(
+        "div",
+        { class: "row-actions", style: "align-items:center" },
+        el("span", { style: "flex:1", text: `${kinds[c.kind]?.name ?? c.kind}${c.config.url ? ` (${new URL(c.config.url).hostname})` : c.config.to ? ` (${c.config.to})` : ""}: ${ruleText(c.rule)}${c.on ? "" : ", off"}` }),
+        el("button", {
+          class: "btn",
+          text: "Test",
+          onclick: async () => {
+            const t = await call("POST", `/api/channels/${encodeURIComponent(c.id)}/test`)
+            say.textContent = t.ok ? "Sent. Check that it arrived." : (t.json.error ?? "It did not send.")
+          },
+        }),
+        el("button", {
+          class: "btn danger",
+          text: "Remove",
+          onclick: async () => {
+            if (!(await ask(`Remove the ${kinds[c.kind]?.name ?? c.kind} channel?`, "It stops being told anything.", "Remove it"))) return
+            await call("DELETE", `/api/channels/${encodeURIComponent(c.id)}`)
+            show()
+          },
+        }),
+      ),
+    )
+  const kind = el("select", { "aria-label": "Kind of channel" })
+  for (const [k, v] of Object.entries(kinds)) kind.append(el("option", { value: k, text: v.name }))
+  const fields = el("div", { style: "display:grid;gap:12px" })
+  const inputs = {}
+  const draw = () => {
+    fields.replaceChildren()
+    for (const k of Object.keys(inputs)) delete inputs[k]
+    const kd = kinds[kind.value]
+    for (const [name, label] of kd.fields) {
+      inputs[name] = el("input", { autocomplete: "off", autocapitalize: "none", spellcheck: "false" })
+      fields.append(el("label", {}, el("span", { text: label }), inputs[name]))
+    }
+    inputs.secret = el("input", { type: "password", autocomplete: "new-password" })
+    fields.append(el("label", {}, el("span", { text: kd.secret }), inputs.secret))
+  }
+  kind.addEventListener("change", draw)
+  draw()
+  const risk = el("select", { "aria-label": "Which requests" })
+  for (const [v, t] of [["0", "Every request"], ["70", "High and Severe"], ["85", "Severe only"]]) risk.append(el("option", { value: v, text: t }))
+  const qFrom = el("input", { placeholder: "22:00", inputmode: "numeric", "aria-label": "Quiet from" })
+  const qTo = el("input", { placeholder: "07:00", inputmode: "numeric", "aria-label": "Quiet until" })
+  panel.append(
+    el("h2", { text: "Add a channel" }),
+    el("label", {}, el("span", { text: "Kind" }), kind),
+    fields,
+    el("label", {}, el("span", { text: "Tell it about" }), risk),
+    el("div", { class: "row-actions", style: "align-items:end" }, el("label", {}, el("span", { text: "Quiet from" }), qFrom), el("label", {}, el("span", { text: "until" }), qTo)),
+    el("button", {
+      class: "btn primary",
+      text: "Add it",
+      onclick: async () => {
+        const body = { kind: kind.value, ...Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value])), rule: { minRisk: Number(risk.value), ...(qFrom.value || qTo.value ? { quiet: { from: qFrom.value, to: qTo.value } } : {}) } }
+        const a = await call("POST", "/api/channels", body)
+        if (!a.ok) return void (say.textContent = a.json.error ?? "Not added.")
+        show()
+      },
+    }),
+    say,
+  )
+  return panel
+}
+
+/** Sign-in: a forgotten password, by an emailed link when email is set up on the Server page. */
+function forgotPanel() {
+  const say = el("p", { class: "muted", role: "status" })
+  const email = el("input", { type: "email", inputmode: "email", autocomplete: "username", "aria-label": "Your email" })
+  const box = el("section", { class: "panel", hidden: true }, el("h2", { text: "Forgot your password?" }), el("label", {}, el("span", { text: "Your email" }), email))
+  box.append(
+    el("button", {
+      class: "btn",
+      text: "Email me a link",
+      onclick: async () => {
+        const r = await call("POST", "/api/password/forgot", { email: email.value })
+        say.textContent = r.ok ? r.json.message : (r.json.error ?? "That did not work.")
+      },
+    }),
+    el("p", { class: "muted", text: "This works when an owner has set up email on the Server page. Otherwise, an owner or admin can remove you and send a new invite." }),
+    say,
+  )
+  const open = el("button", { class: "btn", text: "Forgot your password?", onclick: () => ((box.hidden = false), open.remove(), email.focus()) })
+  return el("div", { style: "display:grid;gap:12px" }, open, box)
 }
 
 /** After the password, with a second factor: a code from the app, or a recovery code. */

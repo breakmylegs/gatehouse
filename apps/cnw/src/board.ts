@@ -29,6 +29,8 @@ export interface Waiting {
 export interface BoardRow {
   id: string
   label: string
+  /** Tags given on You: the board groups by the first. */
+  tags?: string[]
   online: boolean
   lastSeen?: number
   version?: string

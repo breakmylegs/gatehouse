@@ -27,7 +27,7 @@ beforeAll(async () => {
       if (url === "/api/me") return json({ access: "user", user: "ana@example.com", email: "ana@example.com", role: "owner", csrf: "t", passkeys: true })
       if (url === "/api/board")
         return json({
-          board: [{ id: "c1", label: "Laptop", online: true, sessions: { total: 1, working: 0, waiting: 1 }, waiting: [{ computer: "c1", computerLabel: "Laptop", requestId: "r1", tool: "Bash", project: "billing", risk: 40, since: new Date().toISOString() }] }],
+          board: [{ id: "c1", label: "Laptop", tags: ["work"], online: true, sessions: { total: 1, working: 0, waiting: 1 }, waiting: [{ computer: "c1", computerLabel: "Laptop", requestId: "r1", tool: "Bash", project: "billing", risk: 40, since: new Date().toISOString() }] }],
           inbox: [{ computer: "c1", computerLabel: "Laptop", requestId: "r1", tool: "Bash", project: "billing", risk: 40, since: new Date().toISOString() }],
         })
       return json({})
@@ -41,7 +41,10 @@ beforeAll(async () => {
 
 describe("CNW's page", () => {
   it("lists each computer as a link inside a list item, and shows what needs you", () => {
-    const link = document.querySelector<HTMLAnchorElement>('[role="list"] > [role="listitem"] > a.item')!
+    // Grouped under its first tag, with the tag as the group's heading.
+    const group = document.querySelector('[role="list"][aria-label="work"]')!
+    expect(group.previousElementSibling?.textContent).toBe("work")
+    const link = group.querySelector<HTMLAnchorElement>(':scope > [role="listitem"] > a.item')!
     expect(link.getAttribute("href")).toBe("/app/?computer=c1")
     expect(link.getAttribute("role")).toBeNull()
     expect(link.getAttribute("aria-label")).toMatch(/Laptop: online, 1 waiting on you/)

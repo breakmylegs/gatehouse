@@ -152,6 +152,13 @@ tool, the project and the risk, never the command, and only that browser can rea
 certificate first: download the root certificate from the Server panel and trust it on the device. On an iPhone, add
 Neighbourhood Watch to the Home Screen and turn it on from there.
 
+### Channels
+
+An owner or admin can also send notifications to email (SMTP), ntfy, Pushover, Telegram or a webhook: Server,
+Notification channels. Each has its own rule (every request, High and Severe, or Severe only; which computers; quiet
+hours) and a Test button. Passwords and tokens are kept sealed and never shown again. With email set up, invites are
+emailed, and **Forgot your password?** on the sign-in page emails a link to set a new one.
+
 ## Updates
 
 **On the server, one command** (from any folder; the script works on the clone it sits in):
