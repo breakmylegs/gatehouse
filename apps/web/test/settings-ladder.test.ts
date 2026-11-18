@@ -68,6 +68,17 @@ describe("writing rules (E-086)", () => {
   })
 })
 
+describe("team redaction list keys (E-080)", () => {
+  it("saves each PEM block as a key, and nothing when the box is empty", () => {
+    const d = data()
+    expect(bodyOf(d, valuesOf(d))).not.toHaveProperty("redactionListKeys")
+    const pem = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA\n-----END PUBLIC KEY-----"
+    const body = bodyOf(d, { ...valuesOf(d), teamKeys: `${pem}\n\n${pem.replace("MCow", "MCox")}` })
+    expect(body.redactionListKeys).toHaveLength(2)
+    expect(valuesOf(data({ redactionListKeys: body.redactionListKeys })).teamKeys).toContain("MCox")
+  })
+})
+
 describe("settling finished sessions (T-024)", () => {
   it("is three days unless you choose, and only another choice is saved", () => {
     const d = data()

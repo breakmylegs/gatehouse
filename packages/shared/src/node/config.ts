@@ -47,6 +47,8 @@ function build(loose: boolean) {
   return obj({
     /** Client names, internal host names and the like, redacted everywhere (invariant 12). */
     redactTerms: z.array(z.string()).default([]),
+    /** E-080: the public keys (PEM, Ed25519) whose signed team redaction lists may be imported. */
+    redactionListKeys: z.array(z.string().max(2000)).max(20).optional(),
     /**
      * E-086: writing rules for what Codehouse writes (corrected, listed in the preview) and what agents write (checked,
      * never rewritten). Absent: UK spelling and no dashes, the house style. Read tolerantly by the Host.

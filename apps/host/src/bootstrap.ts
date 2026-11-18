@@ -68,6 +68,7 @@ import { claudeVersion } from "./doctor.js"
 import { Worktrees } from "./worktrees.js"
 import { canaryProblem, runCanaries, type CanaryRun } from "./canaries.js"
 import { REASON_TEXT, SafeMode, safeModePlan, type SafeModeReason } from "./safe-mode.js"
+import { RedactionLists, withTeamTerms } from "./redaction-lists.js"
 import { ConflictWatch, conflictLine } from "./conflict-check.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
@@ -199,6 +200,9 @@ export function createHost(opts: HostOptions = {}): Host {
   const env = opts.env ?? process.env
   const log = opts.log ?? ((line: string) => process.stderr.write(`[host] ${line}\n`))
   const config = opts.config ?? loadConfig(env)
+  // E-080: your redaction list and every imported team list, together, wherever config.redactTerms is read.
+  const redactionLists = new RedactionLists(gatehouseDataDir(env))
+  const teamTerms = withTeamTerms(config, redactionLists)
   const rulesPath =
     opts.rulesPath ??
     env.GATEHOUSE_RULES_PATH ??
@@ -1679,6 +1683,8 @@ export function createHost(opts: HostOptions = {}): Host {
       auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
       canaries: () => lastCanaries,
       safeMode,
+      redactionLists,
+      ownRedactTerms: teamTerms.ownTerms,
       // C-011: the key timeline exports are signed with, sealed for this Windows user.
       timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
       anchors,

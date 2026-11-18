@@ -47,10 +47,12 @@ import { parsePricing, pricingText, type ModelPrice } from "../lib/pricing"
 import { EFFORTS } from "../lib/modes"
 import { isMac, onMac } from "../lib/platform-mac" // Mac fork
 import { send, useStore } from "../store"
+import { TeamLists } from "../components/TeamLists"
 
 interface Config {
   redactTerms: string[]
   /** E-086 (absent: UK spelling and no dashes). */
+  redactionListKeys?: string[]
   writingRules?: { ukSpelling?: boolean; noDashes?: boolean; terms?: Array<{ use: string; not: string[] }>; banned?: string[] }
   expectedOrg?: string
   workspaceRoots?: string[]
@@ -153,6 +155,8 @@ interface Values {
   terms: string
   writeUk: boolean
   writeDashes: boolean
+  /** E-080: the trusted keys for team redaction lists, PEM blocks one after another. */
+  teamKeys: string
   writeTerms: string
   writeBanned: string
   cpEsc: boolean
@@ -249,6 +253,7 @@ export function valuesOf(d: SettingsData): Values {
     digestOn: c.digestTime !== null,
     digestAt: c.digestTime ?? "08:00",
     terms: c.redactTerms.join("\n"),
+    teamKeys: (c.redactionListKeys ?? []).join("\n"),
     writeUk: c.writingRules?.ukSpelling ?? true,
     writeDashes: c.writingRules?.noDashes ?? true,
     writeTerms: (c.writingRules?.terms ?? []).map((t) => `${t.use} = ${t.not.join(", ")}`).join("\n"),
@@ -318,6 +323,10 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   }
   if (v.org.trim()) body.expectedOrg = v.org.trim()
   else delete body.expectedOrg
+  // E-080: each PEM block in the box is one trusted key; none, no setting.
+  const keysIn = v.teamKeys.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? []
+  if (keysIn.length) body.redactionListKeys = keysIn.map((k) => k.trim())
+  else delete body.redactionListKeys
   const rl = lines(v.roots)
   if (rl.length) body.workspaceRoots = rl
   else delete body.workspaceRoots
@@ -552,6 +561,7 @@ export const DEFAULT_VALUES: Values = {
   terms: "",
   writeUk: true,
   writeDashes: true,
+  teamKeys: "",
   writeTerms: "",
   writeBanned: "",
   cpEsc: true,
@@ -1736,6 +1746,24 @@ export function Settings() {
                   value={v.terms}
                   onChange={(e) => edit({ terms: e.target.value })}
                   onBlur={() => commit("Redaction list")}
+                  spellCheck={false}
+                />
+              </Field>
+            </Group>
+
+            <Group section="privacy" title="Team redaction lists" gap="gap-3" changed={differs(v, ["teamKeys"])}>
+              <p className="m-0 text-[13px] text-mut">
+                A list your team signed adds its words to yours, hidden everywhere. A list can only add words; one that
+                would remove any, or that is not signed with a key below, is refused.
+              </p>
+              <TeamLists />
+              <Field label="Trusted keys" help="Your team's public keys, as PEM (BEGIN PUBLIC KEY). Saves when you leave the box.">
+                <textarea
+                  className="field mono"
+                  rows={3}
+                  value={v.teamKeys}
+                  onChange={(e) => edit({ teamKeys: e.target.value })}
+                  onBlur={() => commit("Team redaction lists")}
                   spellCheck={false}
                 />
               </Field>

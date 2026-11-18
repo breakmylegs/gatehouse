@@ -1489,6 +1489,12 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - "Offers safe mode": a failing canary puts Codehouse in safe mode (E-096, below), and the message points to Doctor.
 
   Each canary has a break check that makes only it fail. Threat T144. Tests: canaries.
+- **E-080, shared signed redaction lists:** `apps/host/src/redaction-lists.ts`.
+  - **The list:** a team's list is a JSON file (name, source, date, terms) and an Ed25519 signature over its exact bytes. It is used only when the signature checks out with a key in Settings, Privacy, "Team redaction lists" (trusted keys, as PEM).
+  - **Add only:** a list that says to remove words, or a newer copy of the same list that leaves out a word the one before had, is refused, and says so.
+  - **Where its words apply:** everywhere redaction runs (the audit log, the phone, exports, logs), because `config.redactTerms` is now your own words and every imported list's together (a getter on the running config). Saving Settings changes only your own words, and the Settings page is sent only yours.
+  - **Shown and recorded:** each list is shown with its source, its date and how many words it hides. Each import is audited as `redaction_list_imported`, with the name, source, date and size, never the words.
+  - Threat T146. Tests: redaction-lists, settings-ladder.
 - **E-099, health score:** `apps/host/src/health-score.ts`, at GET /api/health-score (worked out at most once a minute). It is shown on the dashboard, listing only what needs looking at, and in full in Doctor. Seven factors, each with its last 30 days by day as small bars (described in words for a screen reader) and a button to where it comes from:
   - the safety checks' runs (`canary_run`);
   - unexpected stops (`host_crash_restart`, now written by safe mode's start record);

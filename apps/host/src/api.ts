@@ -9,6 +9,7 @@ import type { CanaryRun } from "./canaries.js"
 import { registerSafeModeRoutes, type SafeMode } from "./safe-mode.js"
 import { registerCrashBundleRoutes } from "./crash-bundle.js"
 import { registerHealthScoreRoutes } from "./health-score.js"
+import { registerRedactionListRoutes, type RedactionLists } from "./redaction-lists.js"
 import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
@@ -216,6 +217,9 @@ export interface AdminContext {
   canaries?: () => CanaryRun | undefined
   /** E-096: safe mode, entered from Doctor and left from the desktop's banner. */
   safeMode?: SafeMode
+  /** E-080: imported team redaction lists, and your own words without them (what Settings edits). */
+  redactionLists?: RedactionLists
+  ownRedactTerms?: () => string[]
   /** C-011: the key a session's timeline export is signed with. */
   timelineSigner?: TimelineSigner
   /** D-029: the audit anchors. */
@@ -933,6 +937,21 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   })
   registerWorktreeRoutes(app, ctx)
   if (ctx.safeMode) registerSafeModeRoutes(app, ctx.safeMode)
+  if (ctx.redactionLists)
+    registerRedactionListRoutes(app, {
+      lists: ctx.redactionLists,
+      trustedKeys: () => ctx.config().redactionListKeys ?? [],
+      record: (input) =>
+        ctx.audit.record({
+          session: "desktop",
+          event: "redaction_list_imported",
+          channel: "desktop",
+          tool: "redaction",
+          input,
+          verdict: { outcome: "allow", ruleId: "redaction-list-imported", reason: "A team's signed redaction list was imported from the desktop; its words are hidden everywhere from now on.", risk: 0, decidedBy: "human-desktop", policyHash: "" },
+          latencyMs: 0,
+        }),
+    })
   if (ctx.board)
     registerBoardRoutes(app, { board: ctx.board.store, audit: ctx.audit, start: ctx.board.start })
   registerGitPanelRoutes(app, ctx)
@@ -1326,7 +1345,8 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     return {
       path: file,
       saved,
-      running: ctx.config(),
+      // E-080: your own words only; imported team lists are shown, and kept, on their own.
+      running: ctx.ownRedactTerms ? { ...ctx.config(), redactTerms: ctx.ownRedactTerms() } : ctx.config(),
       workspaceRootsInEffect: ctx.store.current?.rules.workspaceRoots ?? [],
       quietHoursInPolicy: ctx.store.current?.rules.quietHours ?? null,
     }
@@ -1869,6 +1889,8 @@ const LIVE_SETTINGS = [
   "redactTerms",
   // E-086: read each time an export is made or a commit checked.
   "writingRules",
+  // E-080: read at each import.
+  "redactionListKeys",
   "digestTime",
   "extremeCarryOn",
   "planLimitPause",

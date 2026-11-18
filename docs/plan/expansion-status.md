@@ -55,7 +55,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-030 | Toolchain manager guard | E1 | done | feat/guards | yes | toolchain-change; golden 27; pip and Set-ExecutionPolicy left to their own rules |
 | E-093 | Card data guard | E1 | done | feat/guards-2 | yes | commit scan refuses a staged card number; card-data on edits at 80; redaction masks card numbers |
 | E-086 | Writing rules enforcement | E1 | done | feat/about-title | yes | exports corrected with a listed preview; agent commit messages flagged in the session; Settings, Privacy; project .codehouse/writing-rules.json |
-| E-080 | Shared signed redaction lists | E1 | todo | | |  |
+| E-080 | Shared signed redaction lists | E1 | done | feat/health | yes | Ed25519-signed JSON lists, add-only, with source and date; trusted keys in Settings; redaction_list_imported |
 | E-051 | Merge conflict pre-check | E1 | done | feat/about-title | yes | git merge-tree every 5 min while worktree sessions run; told in each session once; shown on Worktrees; committed work only |
 | E-052 | Structured task results | E1 | todo | | |  |
 | E-089 | Battery-aware scheduling | E1 | todo | | |  |
