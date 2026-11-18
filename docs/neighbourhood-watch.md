@@ -144,6 +144,14 @@ Under **Allowed networks** you can list address ranges, such as `192.168.1.0/24`
 it empty to always sign in. Ranges wider than /8 (IPv4) or /16 (IPv6) are refused. Even on an allowed network, changing
 this list, removing a computer and approving a Severe request need someone signed in.
 
+## Notifications
+
+On You, **Notify this device** lets a closed tab or a locked phone hear when something newly waits on a computer
+you see (every request, or High and Severe only; **Send a test** checks it). A notification says the computer, the
+tool, the project and the risk, never the command, and only that browser can read it. The browser must trust CNW's
+certificate first: download the root certificate from the Server panel and trust it on the device. On an iPhone, add
+Neighbourhood Watch to the Home Screen and turn it on from there.
+
 ## Updates
 
 **On the server, one command** (from any folder; the script works on the clone it sits in):

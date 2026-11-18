@@ -726,7 +726,6 @@ async function youView() {
           },
         })
       : null,
-    el("p", { class: "muted", text: "Notifications for a closed tab or a locked phone (Web Push) come in a later update, and need this server's root certificate trusted on the device." }),
   )
   const acct = el("section", { class: "panel" }, el("h2", { text: "Your email" }), el("p", { text: me.email ?? me.user }))
   const keys = el("section", { class: "panel" }, el("h2", { text: "Passkeys" }))
@@ -739,7 +738,7 @@ async function youView() {
         ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) })
         : el("p", { class: "muted", text: "This browser cannot make passkeys." }),
   )
-  main.append(acct, note, keys, totpPanel(), await devicesPanel(), computersPanel())
+  main.append(acct, note, pushPanel(), keys, totpPanel(), await devicesPanel(), computersPanel())
 }
 
 /** Removing a computer: on You, away from the board, with what it means said first. */
@@ -784,6 +783,62 @@ function computersPanel() {
       ),
     )
   if (!board.board.length) panel.append(el("p", { class: "muted", text: "None yet." }))
+  return panel
+}
+
+/**
+ * You: Web Push for this device, so a closed tab or a locked phone hears when something waits. It needs a service
+ * worker, which a browser allows only when it trusts this server's certificate; when it does not, the reason is said.
+ * On an iPhone it works for Neighbourhood Watch added to the Home Screen (iOS 16.4 and later).
+ */
+function pushPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "On a closed tab or a locked phone" }))
+  const say = el("p", { class: "muted", role: "status" })
+  const can = "serviceWorker" in navigator && "PushManager" in window && canNotify()
+  if (!can) {
+    panel.append(
+      el("p", { class: "muted", text: "This browser cannot get notifications with the tab closed. On an iPhone: add Neighbourhood Watch to the Home Screen (Share, Add to Home Screen), open it from there, and come back to this page." }),
+    )
+    return panel
+  }
+  const only = el("input", { type: "checkbox" })
+  const turnOn = el("button", {
+    class: "btn primary",
+    text: "Notify this device",
+    onclick: async () => {
+      say.textContent = "Asking this browser..."
+      try {
+        const key = await call("GET", "/api/push/key")
+        if (!key.ok) return void (say.textContent = key.json.error ?? "Not available.")
+        if ((await Notification.requestPermission()) !== "granted") return void (say.textContent = "Notifications are blocked for this site in this browser's settings.")
+        const reg = await navigator.serviceWorker.register("/sw.js")
+        await navigator.serviceWorker.ready
+        const raw = Uint8Array.from(atob(key.json.publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw })
+        const r = await call("POST", "/api/push/subscribe", { subscription: sub.toJSON(), minRisk: only.checked ? 70 : 0 })
+        say.textContent = r.ok ? "On: this device hears when something newly waits, even with the tab closed." : (r.json.error ?? "Not turned on.")
+      } catch (e) {
+        say.textContent =
+          e && e.name === "SecurityError"
+            ? "This browser does not trust this server's certificate yet, so it will not run the part that receives notifications. Download the root certificate on the Server page, trust it on this device, reload, and try again."
+            : `This browser said no: ${e && e.message ? e.message : "it could not subscribe"}.`
+      }
+    },
+  })
+  const test = el("button", {
+    class: "btn",
+    text: "Send a test",
+    onclick: async () => {
+      const r = await call("POST", "/api/push/test")
+      say.textContent = r.ok ? `Sent to ${r.json.sent} of ${r.json.of} device(s).` : (r.json.error ?? "Not sent.")
+    },
+  })
+  panel.append(
+    el("p", { class: "muted", text: "CNW tells this device when something newly waits on a computer you see: the computer, the tool, the project and the risk, never the command. Only this browser can read it." }),
+    el("label", { style: "display:flex;gap:8px;align-items:center" }, only, el("span", { text: "Only High and Severe requests" })),
+    el("div", { class: "row-actions" }, turnOn, test),
+    say,
+  )
   return panel
 }
 

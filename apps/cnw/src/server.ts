@@ -19,6 +19,7 @@ import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passke
 import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
 import { bareHost } from "./tls.js"
 import { BackupError, makeBackup, openBackup, restoreFiles } from "./backup.js"
+import { checkSubscription, sendPush, Vapid, type Subscription } from "./webpush.js"
 import { base32, hashRecovery, newSecret, otpauthUri, recoveryCodes, Sealer, verifyCode } from "./totp.js"
 import { commandAllowed, httpAllowed, roleMay, roleOf, ROLES, seesComputer, type Role } from "./roles.js"
 
@@ -42,6 +43,8 @@ export interface CnwOptions {
   caddyConfigDir?: string
   /** Reads the certificate caddy serves for a host, as SHA-256 hex; for tests. */
   certificateOf?: (host: string) => Promise<string | undefined>
+  /** Posts a push to its service; for tests. */
+  post?: (url: string, init: { method: string; headers: Record<string, string>; body: Buffer }) => Promise<{ status: number }>
   /** Ends the process after a restore, so it starts again from the restored files; for tests. */
   exit?: (code: number) => void
   /** Asks the updater to apply the Server page's settings; for tests. */
@@ -443,6 +446,73 @@ export async function createCnw(o: CnwOptions) {
   })
 
   // Signing in again, for a Severe approval: the password, checked as at sign-in, makes this sign-in recent.
+  // Web Push (owner, 17 Nov): a closed tab or a locked phone hears when something newly waits. Each device subscribes
+  // from You; CNW then looks at its computers every 15 seconds while anyone is subscribed, and tells each person what
+  // newly waits on a computer they see, at the risk they chose. A push says the computer, the tool, the project and
+  // the risk band, never the command (as the ntfy channel's rule), and only the subscribed browser can read it.
+  const vapid = new Vapid(o.dataDir, sealer)
+  const pushStore = new JsonStore<{ subs: Array<{ user: string; sub: Subscription; minRisk: number; at: string }> }>(o.dataDir, "push", () => ({ subs: [] }))
+  const subject = origin
+  app.get("/api/push/key", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    return { publicKey: vapid.publicKey, subscribed: pushStore.read().subs.filter((x) => x.user === a.user).map((x) => ({ endpointHost: new URL(x.sub.endpoint).hostname, minRisk: x.minRisk })) }
+  })
+  app.post("/api/push/subscribe", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const b = (req.body ?? {}) as { subscription?: unknown; minRisk?: unknown }
+    const sub = checkSubscription(b.subscription)
+    if (typeof sub === "string") return reply.code(422).send({ error: sub })
+    const minRisk = b.minRisk === 70 ? 70 : 0
+    pushStore.update((v) => ({ subs: [...v.subs.filter((x) => x.sub.endpoint !== sub.endpoint), { user: a.user, sub, minRisk, at: new Date((o.now ?? Date.now)()).toISOString() }].filter((x, i, all) => all.filter((y) => y.user === x.user).indexOf(x) < 10) }))
+    record(a.user, "push-on", `a device (${new URL(sub.endpoint).hostname})${minRisk ? ", High and Severe only" : ""}`)
+    return { ok: true }
+  })
+  app.delete("/api/push/subscribe", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const endpoint = String((req.body as { endpoint?: unknown })?.endpoint ?? "")
+    pushStore.update((v) => ({ subs: v.subs.filter((x) => !(x.user === a.user && x.sub.endpoint === endpoint)) }))
+    return { ok: true }
+  })
+  app.post("/api/push/test", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a || a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const mine = pushStore.read().subs.filter((x) => x.user === a.user)
+    if (!mine.length) return reply.code(409).send({ error: "This account has no device that asked for notifications yet." })
+    const results = await Promise.all(mine.map((x) => sendPush(x.sub, { title: "Neighbourhood Watch", body: "Notifications reach this device.", url: "/#you" }, vapid, subject, o.post)))
+    return { sent: results.filter((r) => r === "sent").length, of: results.length }
+  })
+  // What waited at the last look, by computer: only requests newly waiting are told, and the first look tells nothing.
+  const told = new Map<string, Set<string>>()
+  const pushLook = async (): Promise<number> => {
+    const subs = pushStore.read().subs
+    if (!subs.length) return 0
+    let sent = 0
+    for (const c of hub.status().filter((x) => x.online)) {
+      boardCache.delete(c.id)
+      const row = await rowOf(c, "Neighbourhood Watch notifications", false)
+      const before = told.get(c.id)
+      const now = new Set(row.waiting.map((w) => w.requestId))
+      told.set(c.id, now)
+      if (!before) continue
+      for (const w of row.waiting.filter((x) => !before.has(x.requestId)))
+        for (const s of subs) {
+          const u = userOf(s.user)
+          if (!u || !seesComputer(u.computers, c.id) || w.risk < s.minRisk) continue
+          const band = w.risk >= 85 ? "Severe" : w.risk >= 70 ? "High" : w.risk >= 40 ? "Moderate" : "Low"
+          const r = await sendPush(s.sub, { title: `${c.label} needs you`, body: `${w.tool} in ${w.project}, ${band} ${w.risk}`, tag: `${c.id}/${w.requestId}`, url: "/#inbox" }, vapid, subject, o.post)
+          if (r === "sent") sent++
+          if (r === "gone") pushStore.update((v) => ({ subs: v.subs.filter((x) => x.sub.endpoint !== s.sub.endpoint) }))
+        }
+    }
+    return sent
+  }
+  const pushTimer = setInterval(() => void pushLook().catch((e: Error) => log(`push: ${e.message}`)), 15_000)
+  pushTimer.unref()
+  app.addHook("onClose", async () => clearInterval(pushTimer))
+
   app.post("/api/reauth", async (req, reply) => {
     const a = access(req)
     if (a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
@@ -914,5 +984,5 @@ export async function createCnw(o: CnwOptions) {
   if (fs.existsSync(path.join(web, "index.html")))
     await app.register(fastifyStatic, { root: web, prefix: "/app/", decorateReply: false, index: ["index.html"] })
 
-  return { app, hub }
+  return { app, hub, pushLook }
 }
