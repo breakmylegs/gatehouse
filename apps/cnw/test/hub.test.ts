@@ -2,7 +2,7 @@
 // with the user they came from, and its events to every tab watching; nothing reaches a computer that is not proved.
 import crypto from "node:crypto"
 import { describe, expect, it } from "vitest"
-import { Hub, MAX_COMMANDS_A_MINUTE, MAX_MESSAGE, PART, type Socket } from "../src/hub.js"
+import { Hub, MAX_COMMANDS_A_MINUTE, MAX_MESSAGE, PART, PROTOCOL, protocolGap, type Socket } from "../src/hub.js"
 
 const sock = () => {
   const sent: Array<Record<string, unknown>> = []
@@ -16,6 +16,28 @@ function paired() {
   const computer = { id: "c1", label: "Laptop", publicKey: publicKey.export({ format: "der", type: "spki" }).toString("base64url"), pairedAt: "" }
   return { computer, sign: (c: string) => crypto.sign(null, Buffer.from(c), privateKey).toString("base64url") }
 }
+
+// Owner, 18 Nov: a stale CNW image lost histories after the sync fix. Each side says its protocol; on a mismatch the
+// board says which side needs updating, rather than losing data quietly.
+describe("the protocol handshake", () => {
+  const hello = (protocol?: number) => {
+    const { computer, sign } = paired()
+    const hub = new Hub(() => [computer])
+    const agent = sock()
+    hub.agentOpened(agent.s)
+    hub.agentMessage(agent.s, JSON.stringify({ type: "hello", computer: "c1", signature: sign(agent.sent[0]!.challenge as string), ...(protocol !== undefined ? { protocol } : {}) }))
+    return { hub, agent }
+  }
+
+  it("tells the computer its own number, and marks a Codehouse from before the handshake as needing an update", () => {
+    const old = hello()
+    expect(old.agent.sent.at(-1)).toEqual({ type: "welcome", protocol: PROTOCOL })
+    expect(old.hub.status()[0]).toMatchObject({ online: true, needsUpdate: "codehouse" })
+    expect(hello(PROTOCOL).hub.status()[0]!.needsUpdate).toBeUndefined()
+    expect(hello(PROTOCOL + 1).hub.status()[0]!.needsUpdate).toBe("cnw")
+    expect(protocolGap(PROTOCOL, "2")).toBe("codehouse")
+  })
+})
 
 describe("long messages in parts", () => {
   function connected() {
@@ -74,7 +96,7 @@ describe("the CNW hub (O41)", () => {
     hub.agentOpened(good.s)
     const challenge = good.sent[0]!.challenge as string
     expect(hub.agentMessage(good.s, JSON.stringify({ type: "hello", computer: "c1", signature: sign(challenge), version: "2.0.351" }))).toBe("c1")
-    expect(good.sent.at(-1)).toEqual({ type: "welcome" })
+    expect(good.sent.at(-1)).toMatchObject({ type: "welcome" })
     expect(hub.status()).toEqual([expect.objectContaining({ id: "c1", online: true, version: "2.0.351" })])
   })
 

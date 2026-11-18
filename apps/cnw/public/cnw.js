@@ -93,7 +93,7 @@ async function render() {
         "Set up Neighbourhood Watch",
         [
           ["code", "Setup code (printed once in the server's log)", "text", { autocomplete: "off" }],
-          ["name", "Your name", "text", { autocomplete: "username" }],
+          ["email", "Your email (you sign in with it)", "email", { autocomplete: "username", inputmode: "email" }],
           ["password", "A password of 12 characters or more", "password", { autocomplete: "new-password", minlength: "12" }],
         ],
         "Set up",
@@ -122,7 +122,8 @@ async function render() {
       form(
         "Sign in",
         [
-          ["name", "Name", "text", { autocomplete: "username webauthn" }],
+          // Text, not email: an account from before email sign-in still signs in once with its name.
+          ["login", "Email", "text", { autocomplete: "username webauthn", inputmode: "email", autocapitalize: "none", spellcheck: "false" }],
           ["password", "Password", "password", { autocomplete: "current-password" }],
         ],
         "Sign in",
@@ -131,9 +132,25 @@ async function render() {
           if (!r.ok) return r.json.error ?? "That did not work."
           render()
         },
+        "Signed in with a name before? Use your name once: CNW then asks for your email, and keeps your password.",
       ),
     )
   }
+  // Uplift phase 2: an account from before email sign-in adds its email, once, before anything else.
+  if (me.needsEmail)
+    return main.append(
+      form(
+        "Add your email",
+        [["email", "Your email", "email", { autocomplete: "email", inputmode: "email" }]],
+        "Save and carry on",
+        async (v) => {
+          const r = await call("POST", "/api/account/email", v)
+          if (!r.ok) return r.json.error ?? "That did not work."
+          render()
+        },
+        `From now on you sign in with your email instead of the name ${me.user}. Your password and passkeys stay as they are.`,
+      ),
+    )
   await computers()
 }
 
@@ -149,6 +166,8 @@ async function computers() {
       { class: "computer" },
       el("span", { class: `dot${c.online ? " on" : ""}`, "aria-hidden": "true" }),
       el("span", { text: `${c.label}${c.online ? "" : " (not connected)"}${c.version ? `, Codehouse ${c.version}` : ""}`, style: "flex:1" }),
+      // The protocol handshake (owner, 18 Nov): one side is older, said in words rather than losing data quietly.
+      c.needsUpdate ? el("strong", { class: "err", text: c.needsUpdate === "cnw" ? "CNW needs updating" : "Codehouse needs updating" }) : null,
       el("a", { class: "btn primary", href: `/app/?computer=${encodeURIComponent(c.id)}`, text: "Open" }),
       el("button", {
         class: "btn",

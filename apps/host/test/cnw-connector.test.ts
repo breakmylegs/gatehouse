@@ -4,7 +4,7 @@
 import crypto from "node:crypto"
 import { EventEmitter } from "node:events"
 import { describe, expect, it } from "vitest"
-import { CnwConnector, newComputerKey, type VirtualSocket } from "../src/cnw/connector.js"
+import { CNW_PROTOCOL, CnwConnector, newComputerKey, protocolGap, type VirtualSocket } from "../src/cnw/connector.js"
 
 class FakeWs extends EventEmitter {
   readyState = 1
@@ -58,6 +58,40 @@ describe("the Neighbourhood Watch connector (O41)", () => {
     attached[0]!.socket.send(JSON.stringify({ type: "session", info: { id: "s1" } }))
     expect(ws.sent.at(-1)).toEqual({ type: "event", to: "ana", data: { type: "session", info: { id: "s1" } } })
     c.stop()
+  })
+
+  // Owner, 18 Nov: a stale CNW image lost histories after the sync fix. Codehouse says its protocol in its hello, and
+  // says "CNW needs updating" when CNW is older (one from before the handshake sends no number), or the reverse.
+  it("sends its protocol, and says which side needs updating when CNW's differs", () => {
+    const key = newComputerKey()
+    const logs: string[] = []
+    const run = (welcome: Record<string, unknown>) => {
+      const sockets: FakeWs[] = []
+      const c = new CnwConnector({
+        url: "https://cnw.home.arpa",
+        computerId: "c1",
+        privateKey: key.privateKey,
+        version: "x",
+        attach: () => undefined,
+        log: (l) => void logs.push(l),
+        createSocket: () => {
+          const w = new FakeWs()
+          sockets.push(w)
+          return w as never
+        },
+      })
+      c.start()
+      sockets[0]!.emit("message", Buffer.from(JSON.stringify({ type: "challenge", challenge: "abc" })))
+      expect(sockets[0]!.sent[0]).toMatchObject({ type: "hello", protocol: CNW_PROTOCOL })
+      sockets[0]!.emit("message", Buffer.from(JSON.stringify({ type: "welcome", ...welcome })))
+      c.stop()
+      return c.needsUpdate
+    }
+    expect(run({})).toBe("cnw")
+    expect(logs.join("\n")).toMatch(/CNW needs updating/)
+    expect(run({ protocol: CNW_PROTOCOL })).toBeUndefined()
+    expect(run({ protocol: CNW_PROTOCOL + 1 })).toBe("codehouse")
+    expect(protocolGap(CNW_PROTOCOL, CNW_PROTOCOL)).toBeUndefined()
   })
 
   it("stops for good when CNW refuses the computer", () => {

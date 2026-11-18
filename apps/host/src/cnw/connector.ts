@@ -37,6 +37,19 @@ export const PART = 256 * 1024
 /** The most one message may be, in parts: a reply over it is answered "too large" instead. */
 export const MAX_MESSAGE = 64 * 1024 * 1024
 
+/**
+ * The protocol between Codehouse and CNW, raised whenever either side's messages change in a way the other must know
+ * (owner, 18 Nov: a stale CNW image lost histories after the sync fix). 1: before this number existed (no parts, no
+ * resync); 2: messages in parts and the snapshot on reconnect. Shared with CNW's hub (apps/cnw/src/hub.ts, PROTOCOL).
+ */
+export const CNW_PROTOCOL = 2
+
+/** Which side needs updating, from the two protocol numbers; a side that sends none is 1. */
+export function protocolGap(codehouse: number, cnw: unknown): "cnw" | "codehouse" | undefined {
+  const theirs = typeof cnw === "number" && Number.isInteger(cnw) && cnw > 0 ? cnw : 1
+  return theirs < codehouse ? "cnw" : theirs > codehouse ? "codehouse" : undefined
+}
+
 /** What the Host's server needs from a client socket: send, readyState, OPEN, bufferedAmount, and message and close. */
 export class VirtualSocket extends EventEmitter {
   readonly OPEN = 1
@@ -68,6 +81,8 @@ export class CnwConnector extends EventEmitter {
   status: "off" | "connecting" | "connected" | "refused" = "off"
   /** Why it was refused: CNW does not know this computer (removed), or its certificate changed. */
   refusal: "removed" | "certificate" | undefined
+  /** Connected, but the two sides speak different versions of the protocol: which one needs updating. */
+  needsUpdate: "cnw" | "codehouse" | undefined
   /** Whether CNW's certificate has been checked against the pin on this connection (or there is no pin). */
   #pinned = false
   #pinFailed = false
@@ -129,7 +144,7 @@ export class CnwConnector extends EventEmitter {
   }
 
   #message(text: string): void {
-    let m: { type?: string; challenge?: string; from?: string; signedIn?: boolean; data?: unknown }
+    let m: { type?: string; challenge?: string; from?: string; signedIn?: boolean; data?: unknown; protocol?: unknown }
     try {
       m = JSON.parse(text)
     } catch {
@@ -138,11 +153,20 @@ export class CnwConnector extends EventEmitter {
     if (m.type === "challenge" && typeof m.challenge === "string") {
       const key = crypto.createPrivateKey({ key: this.#o.privateKey, format: "der", type: "pkcs8" })
       const signature = crypto.sign(null, Buffer.from(m.challenge), key).toString("base64url")
-      this.#raw({ type: "hello", computer: this.#o.computerId, signature, version: this.#o.version })
+      this.#raw({ type: "hello", computer: this.#o.computerId, signature, version: this.#o.version, protocol: CNW_PROTOCOL })
       return
     }
     if (m.type === "welcome") {
       this.#attempt = 0
+      // A CNW from before the handshake sends no number: it is older, and says nothing itself, so this side says it.
+      const gap = protocolGap(CNW_PROTOCOL, m.protocol)
+      if (gap !== this.needsUpdate && gap)
+        this.#o.log(
+          gap === "cnw"
+            ? "neighbourhood watch: it is older than this Codehouse, so long histories may not reach it: CNW needs updating"
+            : "neighbourhood watch: it is newer than this Codehouse: Codehouse needs updating",
+        )
+      this.needsUpdate = gap
       this.#set("connected")
       clearInterval(this.#ping)
       this.#ping = setInterval(() => this.#ws?.ping(), 25_000)

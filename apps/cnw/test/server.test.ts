@@ -55,9 +55,9 @@ describe("CNW at an address, and behind a proxy", () => {
     expect(me.passkeyNote).toMatch(/browsers refuse them at an IP address/)
     expect((await app.inject({ method: "POST", url: "/api/passkey/login/options", headers: { origin: "https://192.168.1.225:8443" } })).statusCode).toBe(409)
     const code = /shown once\): (\S+)/.exec(lines.join("\n"))?.[1]
-    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    const setup = await app.inject({ method: "POST", url: "/api/setup", payload: { code, email: "ana@example.com", password: "a long password here" } })
     expect(setup.statusCode).toBe(200)
-    const login = await app.inject({ method: "POST", url: "/api/login", payload: { name: "ana", password: "a long password here" } })
+    const login = await app.inject({ method: "POST", url: "/api/login", payload: { login: "ana@example.com", password: "a long password here" } })
     expect(login.statusCode).toBe(200)
     // Signed in, adding a passkey is refused the same way.
     const add = await app.inject({
@@ -98,27 +98,84 @@ describe("CNW at an address, and behind a proxy", () => {
   })
 })
 
+// Uplift phase 2 (owner, 17 Nov): the email is the username; an account from before is asked for one at its next
+// sign-in, keeping its password, and can do nothing else until it has one.
+describe("signing in with an email", () => {
+  const PW = "a long password here"
+  const post = (app: Awaited<ReturnType<typeof createCnw>>["app"], url: string, payload: object, cookie?: string, csrf?: string) =>
+    app.inject({ method: "POST", url, payload, headers: { ...(cookie ? { cookie } : {}), ...(csrf ? { "x-csrf-token": csrf } : {}) } })
+
+  it("signs in with the email in any case, and no longer with a name", async () => {
+    const { app, code } = await start()
+    expect((await post(app, "/api/setup", { code, email: "Ana@Example.com", password: PW })).statusCode).toBe(200)
+    const ok = await post(app, "/api/login", { login: "ANA@example.COM", password: PW })
+    expect(ok.statusCode).toBe(200)
+    expect(ok.json().needsEmail).toBeUndefined()
+    // The account's name is its email here; a bare name signs nothing in.
+    expect((await post(app, "/api/login", { login: "ana", password: PW })).statusCode).toBe(401)
+    expect((await post(app, "/api/setup", { code: "x", email: "not an email", password: PW })).statusCode).toBe(422)
+    await app.close()
+  })
+
+  it("asks an account from before for its email, keeps its password, and allows nothing else until then", async () => {
+    // An account as CNW made it before email sign-in: a name and a password.
+    const { app, code } = await start()
+    await post(app, "/api/setup", { code, name: "ana", password: PW })
+    const s = await post(app, "/api/login", { name: "ana", password: PW })
+    expect(s.statusCode).toBe(200)
+    expect(s.json().needsEmail).toBe(true)
+    const cookie = cookieOf(s)
+    const csrf = s.json().csrf as string
+    const me = (await app.inject({ method: "GET", url: "/api/me", headers: { cookie } })).json()
+    expect(me).toMatchObject({ access: "user", user: "ana", needsEmail: true })
+    const blocked = await app.inject({ method: "GET", url: "/api/computers", headers: { cookie } })
+    expect(blocked.statusCode).toBe(403)
+    expect(blocked.json().needEmail).toBe(true)
+    expect((await post(app, "/api/computers/code", { label: "" }, cookie, csrf)).statusCode).toBe(403)
+    // Adding it needs the CSRF token like any change, and no password: it has just signed in.
+    expect((await post(app, "/api/account/email", { email: "ana@example.com" }, cookie)).statusCode).toBe(403)
+    expect((await post(app, "/api/account/email", { email: "ana@example.com" }, cookie, csrf)).statusCode).toBe(200)
+    expect((await app.inject({ method: "GET", url: "/api/computers", headers: { cookie } })).statusCode).toBe(200)
+    // From now on, the email and the same password; the name no longer.
+    expect((await post(app, "/api/login", { login: "ana@example.com", password: PW })).statusCode).toBe(200)
+    expect((await post(app, "/api/login", { name: "ana", password: PW })).statusCode).toBe(401)
+    await app.close()
+  })
+
+  it("changes an email only with the password, and never to another account's", async () => {
+    const { app, code } = await start()
+    const s = await post(app, "/api/setup", { code, email: "ana@example.com", password: PW })
+    const cookie = cookieOf(s)
+    const csrf = s.json().csrf as string
+    expect((await post(app, "/api/account/email", { email: "new@example.com" }, cookie, csrf)).statusCode).toBe(403)
+    expect((await post(app, "/api/account/email", { email: "new@example.com", password: "wrong" }, cookie, csrf)).statusCode).toBe(403)
+    expect((await post(app, "/api/account/email", { email: "new@example.com", password: PW }, cookie, csrf)).statusCode).toBe(200)
+    expect((await post(app, "/api/login", { login: "new@example.com", password: PW })).statusCode).toBe(200)
+    await app.close()
+  })
+})
+
 describe("the CNW server (O41)", () => {
   it("makes the first account only with the setup code, then signs in with a strict cookie", async () => {
     const { app, code } = await start()
     expect(code).toBeTruthy()
-    const bad = await app.inject({ method: "POST", url: "/api/setup", payload: { code: "guess", name: "ana", password: "a long password here" } })
+    const bad = await app.inject({ method: "POST", url: "/api/setup", payload: { code: "guess", email: "ana@example.com", password: "a long password here" } })
     expect(bad.statusCode).toBe(403)
-    const ok = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    const ok = await app.inject({ method: "POST", url: "/api/setup", payload: { code, email: "ana@example.com", password: "a long password here" } })
     expect(ok.statusCode).toBe(200)
     expect(String(ok.headers["set-cookie"])).toMatch(/HttpOnly; Secure; SameSite=Strict/)
     const again = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "bo", password: "another long password" } })
     expect(again.statusCode).toBe(403)
-    const login = await app.inject({ method: "POST", url: "/api/login", payload: { name: "ana", password: "a long password here" } })
+    const login = await app.inject({ method: "POST", url: "/api/login", payload: { login: "ana@example.com", password: "a long password here" } })
     expect(login.statusCode).toBe(200)
-    for (let i = 0; i < 5; i++) await app.inject({ method: "POST", url: "/api/login", payload: { name: "ana", password: "wrong" } })
-    expect((await app.inject({ method: "POST", url: "/api/login", payload: { name: "ana", password: "a long password here" } })).statusCode).toBe(429)
+    for (let i = 0; i < 5; i++) await app.inject({ method: "POST", url: "/api/login", payload: { login: "ana@example.com", password: "wrong" } })
+    expect((await app.inject({ method: "POST", url: "/api/login", payload: { login: "ana@example.com", password: "a long password here" } })).statusCode).toBe(429)
     await app.close()
   })
 
   it("wants the CSRF token on a change, and refuses another site's origin", async () => {
     const { app, code } = await start()
-    const s = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    const s = await app.inject({ method: "POST", url: "/api/setup", payload: { code, email: "ana@example.com", password: "a long password here" } })
     const cookie = cookieOf(s)
     const csrf = s.json().csrf as string
     const put = (headers: Record<string, string>) =>
@@ -133,7 +190,7 @@ describe("the CNW server (O41)", () => {
 
   it("lets an allowed network look without signing in, but not remove a computer or change the list", async () => {
     const { app, code } = await start()
-    const s = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    const s = await app.inject({ method: "POST", url: "/api/setup", payload: { code, email: "ana@example.com", password: "a long password here" } })
     await app.inject({ method: "PUT", url: "/api/allowlist", headers: { cookie: cookieOf(s), "x-csrf-token": s.json().csrf }, payload: { ranges: ["127.0.0.0/8"] } })
     expect((await app.inject({ method: "GET", url: "/api/computers" })).statusCode).toBe(200)
     expect((await app.inject({ method: "DELETE", url: "/api/computers/x" })).statusCode).toBe(401)
@@ -143,7 +200,7 @@ describe("the CNW server (O41)", () => {
 
   it("pairs a computer once with a code and an Ed25519 key", async () => {
     const { app, code } = await start()
-    const s = await app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    const s = await app.inject({ method: "POST", url: "/api/setup", payload: { code, email: "ana@example.com", password: "a long password here" } })
     const made = await app.inject({ method: "POST", url: "/api/computers/code", headers: { cookie: cookieOf(s), "x-csrf-token": s.json().csrf }, payload: { label: "Laptop" } })
     const pairCode = made.json().code as string
     const pub = crypto.generateKeyPairSync("ed25519").publicKey.export({ format: "der", type: "spki" }).toString("base64url")

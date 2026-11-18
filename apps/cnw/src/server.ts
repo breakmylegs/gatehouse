@@ -33,7 +33,9 @@ export interface CnwOptions {
 }
 
 interface Users {
-  users: Array<{ name: string; password: string; passkeys: Array<{ id: string; publicKey: string; counter: number }> }>
+  /** `name` is the account's key and display name; `email` is what you sign in with (uplift phase 2). An account
+   * made before email sign-in has none until its next sign-in asks for it. */
+  users: Array<{ name: string; email?: string; password: string; passkeys: Array<{ id: string; publicKey: string; counter: number }> }>
   setupHash?: string
 }
 interface Settings {
@@ -47,8 +49,13 @@ interface Paired {
 /** An address as compared: no IPv4-mapped prefix, no brackets, lower case. */
 const bare = (a: string) => a.trim().replace(/^\[|\]$/g, "").replace(/^::ffff:/i, "").toLowerCase()
 
-const Login = z.object({ name: z.string().min(1).max(60), password: z.string().min(1).max(500) })
-const Setup = z.object({ code: z.string().min(1).max(100), name: z.string().min(1).max(60), password: z.string().min(12).max(500) })
+/** An email address as CNW takes it: one @, a dot in the domain, no spaces, at most 254 characters. */
+export const EMAIL = /^[^s@]{1,64}@[^s@.]+(.[^s@.]+)+$/
+const email = z.string().trim().toLowerCase().max(254).regex(EMAIL)
+// `login` (or `email`, or `name` from an older page) is an email, or the name of an account that has no email yet.
+const Login = z.object({ login: z.string().min(1).max(254).optional(), email: z.string().max(254).optional(), name: z.string().max(60).optional(), password: z.string().min(1).max(500) })
+const Setup = z.object({ code: z.string().min(1).max(100), email: email.optional(), name: z.string().min(1).max(60).optional(), password: z.string().min(12).max(500) }).refine((b) => b.email || b.name)
+const SetEmail = z.object({ email, password: z.string().max(500).optional() })
 
 export async function createCnw(o: CnwOptions) {
   const log = o.log ?? ((l: string) => process.stdout.write(`[cnw] ${l}\n`))
@@ -100,8 +107,15 @@ export async function createCnw(o: CnwOptions) {
     }
   })
 
+  const userOf = (name: string) => users.read().users.find((u) => u.name === name)
+  // Uplift phase 2: an account from before email sign-in adds its email first; until then it can do nothing else.
+  const needsEmail = (a: Access) => a.kind === "user" && !userOf(a.user)?.email
   const need = (req: FastifyRequest, reply: FastifyReply, action: string): Access | undefined => {
     const a = access(req)
+    if (needsEmail(a)) {
+      reply.code(403).send({ error: "Add your email first: it is how you sign in from now on.", needEmail: true })
+      return undefined
+    }
     if (!may(a, action)) {
       reply.code(401).send({ error: a.kind === "allowlisted" ? "This needs you to sign in, even on an allowed network." : "Sign in first." })
       return undefined
@@ -113,7 +127,7 @@ export async function createCnw(o: CnwOptions) {
     const a = access(req)
     return {
       access: a.kind,
-      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey } : {}),
+      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey, ...(userOf(a.user)?.email ? { email: userOf(a.user)!.email } : { needsEmail: true }) } : {}),
       setup: !users.read().users.length,
       // Passkeys cannot work at an IP address; the page says so and offers the password only.
       passkeys: passkeysPossible(rpId),
@@ -123,37 +137,64 @@ export async function createCnw(o: CnwOptions) {
 
   app.post("/api/setup", async (req, reply) => {
     const b = Setup.safeParse(req.body)
-    if (!b.success) return reply.code(422).send({ error: "A name, a password of 12 or more characters, and the setup code." })
+    if (!b.success) return reply.code(422).send({ error: "Your email, a password of 12 or more characters, and the setup code." })
     const u = users.read()
     const given = crypto.createHash("sha256").update(b.data.code).digest("hex")
     if (u.users.length || !u.setupHash || u.setupHash !== given) return reply.code(403).send({ error: "That setup code is not right, or CNW is set up already." })
     const password = await hashPassword(b.data.password)
-    users.write({ users: [{ name: b.data.name, password, passkeys: [] }] })
-    const s = sessions.start(b.data.name, false)
+    const name = b.data.name ?? b.data.email!
+    users.write({ users: [{ name, ...(b.data.email ? { email: b.data.email } : {}), password, passkeys: [] }] })
+    const s = sessions.start(name, false)
     setCookie(reply, s.id, 7 * 24 * 3600)
-    log(`First account made: ${b.data.name}`)
+    log(`First account made: ${name}`)
     return { ok: true, csrf: s.csrf }
   })
 
   app.post("/api/login", async (req, reply) => {
     const b = Login.safeParse(req.body)
-    if (!b.success) return reply.code(422).send({ error: "A name and a password." })
-    const keys = [`name:${b.data.name.toLowerCase()}`, `ip:${ipOf(req)}`]
+    const login = (b.success ? (b.data.login ?? b.data.email ?? b.data.name ?? "") : "").trim().toLowerCase()
+    if (!b.success || !login) return reply.code(422).send({ error: "Your email and your password." })
+    const keys = [`name:${login}`, `ip:${ipOf(req)}`]
     const wait = Math.max(...keys.map((k) => throttle.wait(k)))
     if (wait) return reply.code(429).send({ error: `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` })
-    const user = users.read().users.find((x) => x.name.toLowerCase() === b.data.name.toLowerCase())
+    // An email signs in its account; a name only an account that has no email yet, once, to add one.
+    const user = users.read().users.find((x) => (x.email ? x.email === login : x.name.toLowerCase() === login))
     // The same work whether or not the name exists, so a wrong name and a wrong password look alike.
     const ok = await verifyPassword(b.data.password, user?.password ?? "scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
     if (!user || !ok) {
       for (const k of keys) throttle.failed(k)
-      log(`Sign-in refused for ${b.data.name} from ${ipOf(req)}`)
-      return reply.code(401).send({ error: "That name and password do not match." })
+      log(`Sign-in refused for ${login} from ${ipOf(req)}`)
+      return reply.code(401).send({ error: "That email and password do not match." })
     }
     for (const k of keys) throttle.succeeded(k)
     const s = sessions.start(user.name, false)
     setCookie(reply, s.id, 7 * 24 * 3600)
     log(`Signed in: ${user.name} from ${ipOf(req)}`)
-    return { ok: true, csrf: s.csrf }
+    return { ok: true, csrf: s.csrf, ...(user.email ? {} : { needsEmail: true }) }
+  })
+
+  // Your email: added once by an account from before email sign-in (no password asked again, it has just signed in),
+  // and changed later only with the password.
+  app.post("/api/account/email", async (req, reply) => {
+    const a = access(req)
+    if (a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const b = SetEmail.safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "That is not an email address." })
+    const me = userOf(a.user)
+    if (!me) return reply.code(401).send({ error: "Sign in first." })
+    if (me.email) {
+      const wait = throttle.wait(`name:${me.email}`)
+      if (wait) return reply.code(429).send({ error: `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` })
+      if (!b.data.password || !(await verifyPassword(b.data.password, me.password))) {
+        throttle.failed(`name:${me.email}`)
+        return reply.code(403).send({ error: "Your password is needed to change your email, and that is not it." })
+      }
+    }
+    if (users.read().users.some((u) => u.name !== a.user && u.email === b.data.email))
+      return reply.code(409).send({ error: "Another account uses that email." })
+    users.update((u) => ({ ...u, users: u.users.map((x) => (x.name === a.user ? { ...x, email: b.data.email } : x)) }))
+    log(`Email ${me.email ? "changed" : "added"} for ${a.user}`)
+    return { ok: true, email: b.data.email }
   })
 
   // Passkeys, beside the password.
@@ -276,7 +317,7 @@ export async function createCnw(o: CnwOptions) {
 
   app.get("/ws/:computer", { websocket: true }, (socket, req) => {
     const a = access(req)
-    if (!may(a, "view")) return socket.close(4401, "sign in")
+    if (!may(a, "view") || needsEmail(a)) return socket.close(4401, "sign in")
     const user = a.kind === "user" ? a.user : "allowed network"
     const id = (req.params as { computer: string }).computer
     const s = { send: (d: string) => socket.send(d), close: (c?: number, r?: string) => socket.close(c, r) }

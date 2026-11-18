@@ -65,7 +65,7 @@ describe("Neighbourhood Watch end to end (O41)", () => {
   it("pairs a computer, which dials out, and a signed-in tab on CNW approves a request on it", async () => {
     // The owner's first account, and a pairing code made in CNW.
     const code = (globalThis as { cnwSetupCode?: string }).cnwSetupCode!
-    const setup = await cnw.app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", password: "a long password here" } })
+    const setup = await cnw.app.inject({ method: "POST", url: "/api/setup", payload: { code, name: "ana", email: "ana@example.com", password: "a long password here" } })
     expect(setup.statusCode).toBe(200)
     const cookie = String(setup.headers["set-cookie"] ?? "").split(";")[0]!
     const made = await cnw.app.inject({ method: "POST", url: "/api/computers/code", headers: { cookie, "x-csrf-token": setup.json().csrf }, payload: { label: "Laptop" } })

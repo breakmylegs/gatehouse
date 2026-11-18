@@ -9,6 +9,14 @@ interface Status {
   state: "off" | "connecting" | "connected" | "refused"
   /** Why it was refused (absent from an older Host). */
   refusal?: "removed" | "certificate"
+  /** Connected, but one side is older (the protocol handshake; absent from an older Host). */
+  needsUpdate?: "cnw" | "codehouse"
+}
+
+/** Owner, 18 Nov: a version mismatch is said, never left to lose data quietly. */
+export const UPDATE_TEXT: Record<"cnw" | "codehouse", string> = {
+  cnw: "CNW needs updating: it is older than this Codehouse, so some of what this computer sends, such as long histories, may not reach it. Update it from its own page, or with git pull and a rebuild on its server.",
+  codehouse: "Codehouse needs updating: Neighbourhood Watch is newer than this Codehouse. Update Codehouse from Settings, About.",
 }
 
 /** What the panel says about the connection: a changed certificate is told apart from a computer CNW removed. */
@@ -81,6 +89,11 @@ export function NeighbourhoodWatchPanel() {
       <p className="m-0">
         Paired with <span className="mono">{s.url}</span>: <strong>{stateText(s)}</strong>
       </p>
+      {s.needsUpdate ? (
+        <p role="status" className="m-0 font-semibold text-warn">
+          {UPDATE_TEXT[s.needsUpdate]}
+        </p>
+      ) : null}
       <label className="flex items-center gap-2">
         <input
           type="checkbox"

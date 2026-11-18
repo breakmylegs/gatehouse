@@ -26,7 +26,15 @@ docker compose logs cnw | grep "Setup code"
 ```
 
 Browse to the address. The first page asks for the setup code from the log (shown once, so whoever reaches a new CNW
-first cannot claim it), your name and a password of 12 characters or more.
+first cannot claim it), your email and a password of 12 characters or more. You sign in with the email.
+
+**Made your account before email sign-in?** Sign in once with your name and password as before; CNW then asks for
+your email, keeps your password and passkeys, and from then on you sign in with the email.
+
+**"CNW needs updating" or "Codehouse needs updating"**: the two speak different versions of their protocol, so what the
+older one cannot carry (such as a long history) may not arrive. CNW says it on its list of computers, and Codehouse in
+Settings, Neighbourhood Watch. Update the older one: CNW with `git pull` and a rebuild on its server, Codehouse from
+Settings, About.
 
 **An IP address on your home network**, such as `192.168.1.225`:
 

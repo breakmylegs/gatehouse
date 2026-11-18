@@ -17,6 +17,19 @@ export const MAX_FRAME = 4 * 1024 * 1024
  */
 export const PART = 256 * 1024
 export const MAX_MESSAGE = 64 * 1024 * 1024
+/**
+ * The protocol between Codehouse and CNW: the same number as Codehouse's connector (CNW_PROTOCOL), and the same rule.
+ * 1: before the number existed; 2: parts and the snapshot on reconnect. On a mismatch both sides say which one needs
+ * updating (owner, 18 Nov), rather than losing what the older one cannot carry.
+ */
+export const PROTOCOL = 2
+
+/** Which side needs updating, from the two protocol numbers; a side that sends none is 1. */
+export function protocolGap(cnw: number, codehouse: unknown): "cnw" | "codehouse" | undefined {
+  const theirs = typeof codehouse === "number" && Number.isInteger(codehouse) && codehouse > 0 ? codehouse : 1
+  return theirs < cnw ? "codehouse" : theirs > cnw ? "cnw" : undefined
+}
+
 /** Messages one computer may have part-sent at once. */
 const MAX_ASSEMBLING = 8
 /** Commands one browser may send in a minute. */
@@ -37,6 +50,8 @@ interface Agent {
   socket: Socket
   computer: Computer
   version?: string
+  /** Which side needs updating, when this computer's Codehouse speaks another protocol version. */
+  needsUpdate?: "cnw" | "codehouse"
   connectedAt: number
   lastSeen: number
 }
@@ -75,7 +90,7 @@ export class Hub {
   /** A frame from a computer. Returns the computer's id once it has proved itself. */
   agentMessage(socket: Socket, raw: string): string | undefined {
     if (raw.length > MAX_FRAME) return void socket.close(1009, "too large")
-    let m: { type?: string; computer?: string; signature?: string; version?: string; to?: string; data?: unknown }
+    let m: { type?: string; computer?: string; signature?: string; version?: string; protocol?: unknown; to?: string; data?: unknown }
     try {
       m = JSON.parse(raw)
     } catch {
@@ -93,8 +108,10 @@ export class Hub {
       // A second connection from the same computer replaces the first.
       this.#agents.get(computer.id)?.socket.close(4409, "replaced")
       const t = this.#now()
-      this.#agents.set(computer.id, { socket, computer, ...(m.version ? { version: String(m.version).slice(0, 40) } : {}), connectedAt: t, lastSeen: t })
-      socket.send(JSON.stringify({ type: "welcome" }))
+      // The protocol handshake (owner, 18 Nov): a Codehouse from before it sends no number, and is older.
+      const needsUpdate = protocolGap(PROTOCOL, m.protocol)
+      this.#agents.set(computer.id, { socket, computer, ...(m.version ? { version: String(m.version).slice(0, 40) } : {}), ...(needsUpdate ? { needsUpdate } : {}), connectedAt: t, lastSeen: t })
+      socket.send(JSON.stringify({ type: "welcome", protocol: PROTOCOL }))
       this.#broadcast(computer.id, { type: "computer_online", online: true })
       // Back after a drop: each tab already open is sent the computer's state afresh, so no view is left stale with
       // whatever it missed in the gap. One snapshot for each user, as watch() asks for one.
@@ -225,10 +242,10 @@ export class Hub {
   }
 
   /** Each paired computer, and whether it is connected now. */
-  status(): Array<{ id: string; label: string; online: boolean; version?: string; lastSeen?: number }> {
+  status(): Array<{ id: string; label: string; online: boolean; version?: string; lastSeen?: number; needsUpdate?: "cnw" | "codehouse" }> {
     return this.computers().map((c) => {
       const a = this.#agents.get(c.id)
-      return { id: c.id, label: c.label, online: Boolean(a), ...(a?.version ? { version: a.version } : {}), ...(a ? { lastSeen: a.lastSeen } : {}) }
+      return { id: c.id, label: c.label, online: Boolean(a), ...(a?.version ? { version: a.version } : {}), ...(a ? { lastSeen: a.lastSeen } : {}), ...(a?.needsUpdate ? { needsUpdate: a.needsUpdate } : {}) }
     })
   }
 

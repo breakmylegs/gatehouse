@@ -60,10 +60,11 @@ export class CnwService {
     fs.renameSync(tmp, this.#file)
   }
 
-  status(): { paired: boolean; on: boolean; url?: string; state: CnwConnector["status"]; refusal?: "removed" | "certificate" } {
+  status(): { paired: boolean; on: boolean; url?: string; state: CnwConnector["status"]; refusal?: "removed" | "certificate"; needsUpdate?: "cnw" | "codehouse" } {
     const s = this.saved()
     const refusal = this.#conn?.status === "refused" ? this.#conn.refusal : undefined
-    return { paired: Boolean(s), on: s?.on ?? false, ...(s ? { url: s.url } : {}), state: this.#conn?.status ?? "off", ...(refusal ? { refusal } : {}) }
+    const needsUpdate = this.#conn?.status === "connected" ? this.#conn.needsUpdate : undefined
+    return { paired: Boolean(s), on: s?.on ?? false, ...(s ? { url: s.url } : {}), state: this.#conn?.status ?? "off", ...(refusal ? { refusal } : {}), ...(needsUpdate ? { needsUpdate } : {}) }
   }
 
   /** Called once the Host's server is up: CNW's commands join it as clients. */
