@@ -33,7 +33,7 @@ your email, keeps your password and passkeys, and from then on you sign in with 
 
 **"CNW needs updating" or "Codehouse needs updating"**: the two speak different versions of their protocol, so what the
 older one cannot carry (such as a long history) may not arrive. CNW says it on its list of computers, and Codehouse in
-Settings, Neighbourhood Watch. Update the older one: CNW with `git pull` and a rebuild on its server, Codehouse from
+Settings, Neighbourhood Watch. Update the older one: CNW with `scripts/update.sh` on its server (see Updates), Codehouse from
 Settings, About.
 
 **An IP address on your home network**, such as `192.168.1.225`:
@@ -146,7 +146,23 @@ this list, removing a computer and approving a Severe request need someone signe
 
 ## Updates
 
-CNW checks this repository for a signed CNW release. **Update** asks the updater service (the only part that can reach
+**On the server, one command** (from any folder; the script works on the clone it sits in):
+
+```sh
+/opt/gatehouse/scripts/update.sh
+```
+
+It notes the commit running now, runs `git pull`, then `docker compose --progress plain up -d --build` in
+`docker/cnw` (with `compose.own-proxy.yml` too when `.env` sets CNW up behind your own proxy), showing every line of
+the build. It waits up to four minutes for CNW's health check. If CNW does not come up healthy, it goes back to the
+noted commit, rebuilds it, says **ROLLED BACK** and exits with an error. At the end it prints the old and new commit
+and CNW's protocol number (the handshake with Codehouse). It stops at the first error, refuses to run over files you
+changed by hand, and uses `sudo` only for docker, only when your user cannot reach Docker itself.
+
+The first time, the script is not on the server yet: run `git -C /opt/gatehouse pull` once, then the script. After
+that, the script alone.
+
+**From CNW's own page**, CNW checks this repository for a signed CNW release. **Update** asks the updater service (the only part that can reach
 Docker, and only through a restricted socket proxy) to fetch that release, check its signature, check out exactly the
 signed commit, rebuild and restart CNW. Your data volume is kept. Anything unsigned, or a different commit, is refused
 and CNW stays as it was.

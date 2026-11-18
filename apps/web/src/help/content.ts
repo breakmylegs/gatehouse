@@ -649,6 +649,19 @@ Earlier sessions are listed for the main account only, for now. Your laptop's ma
 **Updating** is the same install command again; paired phones are kept. The Relay only ever holds encrypted data, and every answer from the phone is checked here before it counts.`,
   },
   {
+    id: "neighbourhood-watch",
+    title: "Neighbourhood Watch",
+    body: `Codehouse Neighbourhood Watch is a server you run at home (docker compose) that shows every paired computer's sessions in a browser, a tablet or a phone. Each Codehouse connects out to it, so nothing at your desk needs a port opened. Pair this computer in Settings, Neighbourhood Watch.
+
+**Updating it** is one command on the server, from any folder:
+   /opt/gatehouse/scripts/update.sh
+(use the folder you cloned the repository into). It notes the version running now, pulls the newest code, rebuilds and starts CNW again showing the whole build, and waits for CNW to report healthy. If it does not, it goes back to the version from before, rebuilds that, and says ROLLED BACK. At the end it prints the old and new version and CNW's protocol number.
+
+The first time, the script is not on the server yet: run git -C /opt/gatehouse pull once, then the script. After that, the script alone.
+
+**"CNW needs updating"** in Settings, Neighbourhood Watch means CNW speaks an older protocol than this Codehouse, so some of what this computer sends, such as long histories, may not reach it: run the update on the server. **"Codehouse needs updating"** means the reverse: update Codehouse from Settings, About.`,
+  },
+  {
     id: "updates",
     title: "Updates",
     body: `You install Codehouse once, with Codehouse-Setup.exe. After that it keeps itself up to date.

@@ -15,7 +15,7 @@ interface Status {
 
 /** Owner, 18 Nov: a version mismatch is said, never left to lose data quietly. */
 export const UPDATE_TEXT: Record<"cnw" | "codehouse", string> = {
-  cnw: "CNW needs updating: it is older than this Codehouse, so some of what this computer sends, such as long histories, may not reach it. Update it from its own page, or with git pull and a rebuild on its server.",
+  cnw: "CNW needs updating: it is older than this Codehouse, so some of what this computer sends, such as long histories, may not reach it. Update it on its server with scripts/update.sh, or from its own page.",
   codehouse: "Codehouse needs updating: Neighbourhood Watch is newer than this Codehouse. Update Codehouse from Settings, About.",
 }
 

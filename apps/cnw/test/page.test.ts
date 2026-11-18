@@ -33,7 +33,9 @@ beforeAll(async () => {
       return json({})
     }),
   )
-  await import("../public/cnw.js")
+  // A plain script, not typed: imported by name so TypeScript does not look for its types.
+  const page = "../public/cnw.js"
+  await import(/* @vite-ignore */ page)
   await vi.waitFor(() => expect(document.querySelector("main h1")?.textContent).toBe("Board"))
 })
 

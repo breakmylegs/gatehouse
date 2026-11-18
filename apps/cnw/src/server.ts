@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url"
 import { z } from "zod"
 import { accessOf, COOKIE, csrfOk, may, Sessions, Throttle, type Access } from "./auth.js"
 import { parseRange, type Range } from "./allowlist.js"
-import { Hub } from "./hub.js"
+import { Hub, PROTOCOL } from "./hub.js"
 import { FRESH_MS, order, SEVERE_RISK, summarise, type BoardRow } from "./board.js"
 import { checkPublicKey, newCode, redeem, type Computer, type PendingCode } from "./pairing.js"
 import { hashPassword, verifyPassword } from "./passwords.js"
@@ -821,7 +821,8 @@ export async function createCnw(o: CnwOptions) {
   })
 
   // Update: the updater service (the only part that reaches Docker) fetches the signed release and rebuilds CNW.
-  app.get("/api/version", async () => ({ version: process.env.CNW_VERSION ?? "0.0.0" }))
+  // The protocol number too (the handshake with Codehouse), for scripts/update.sh to print.
+  app.get("/api/version", async () => ({ version: process.env.CNW_VERSION ?? "0.0.0", protocol: PROTOCOL }))
   app.post("/api/update", async (req, reply) => {
     const a = need(req, reply, "update")
     if (!a) return
