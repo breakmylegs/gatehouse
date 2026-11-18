@@ -101,7 +101,7 @@ export function accessOf(ip: string, sessionId: string | undefined, sessions: Se
  * The three things an allow-listed address cannot do without signing in (decided under the standing instruction):
  * change the allow list, remove a computer, and approve a Severe request.
  */
-export const NEEDS_SIGN_IN = new Set(["allowlist", "unpair", "severe-approve", "update"])
+export const NEEDS_SIGN_IN = new Set(["allowlist", "unpair", "severe-approve", "update", "server"])
 
 export function may(access: Access, action: string): boolean {
   if (access.kind === "user") return true

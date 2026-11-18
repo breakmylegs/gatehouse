@@ -98,7 +98,8 @@ The bundled caddy chooses by itself from `CNW_HOST`: its own certificate authori
 home-network name, Let's Encrypt for a public name.
 
 With caddy's own authority, a browser warns the first time ("Your connection isn't private") until you trust caddy's
-root certificate on that device. Get it with
+root certificate on that device. Download it from CNW's Server panel (Download the root certificate; it is there from
+the second start, once caddy has made it), or get it with
 `docker compose exec caddy cat /data/caddy/pki/authorities/local/root.crt`, and add it to the device's trusted roots
 (Windows: Manage computer certificates, Trusted Root Certification Authorities; iPhone: install the profile, then turn it
 on in Settings, General, About, Certificate Trust Settings). Or accept the warning once per browser.
@@ -106,6 +107,17 @@ on in Settings, General, About, Certificate Trust Settings). Or accept the warni
 Codehouse does not need the root trusted: it pins CNW's certificate when you pair. The authority and certificates live
 in the `caddy-data` volume, so they stay the same across restarts and CNW updates and the pin keeps working. Never
 remove that volume (`docker compose down -v` would); if it is lost, pair each computer again.
+
+## The Server panel
+
+Once signed in, the Server panel sets CNW's address, its kind of certificate and its port (and, behind your own
+proxy, the proxy's address). Saved there, they win over `.env`; Save writes caddy's configuration again and starts
+caddy and CNW again, which takes a minute. It also shows the fingerprint of CNW's certificate, the one Codehouse pins.
+
+A new address, or the other kind of certificate, gives CNW a new certificate: the panel names every paired computer
+that will stop connecting, and changes it only when you confirm; pair each one again after. Docker publishes the port
+from `.env` when you start the stack by hand, so keep `CNW_PORT` in `.env` the same as the panel's port, or remove it;
+the panel says when they differ. An allowed network cannot see or change any of this.
 
 ## Pair a computer
 

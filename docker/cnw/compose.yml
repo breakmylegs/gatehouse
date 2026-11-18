@@ -9,7 +9,8 @@
 name: codehouse-cnw
 
 services:
-  # Writes caddy's configuration from .env, then stops; caddy starts only once it has.
+  # Writes caddy's configuration from the settings saved on CNW's Server page, else .env, then stops; caddy starts only
+  # once it has. It reads caddy's data only to copy its root certificate (the public part) for the Server page.
   cnw-config:
     image: codehouse-cnw:${CNW_VERSION:-latest}
     pull_policy: never
@@ -19,8 +20,11 @@ services:
       CNW_TLS: ${CNW_TLS:-}
       CNW_PORT: ${CNW_PORT:-}
       CNW_CADDY_OUT: /caddy-config/Caddyfile
+      CNW_SETTINGS_FILE: /data/server.json
     volumes:
       - caddy-config:/caddy-config
+      - cnw-data:/data:ro
+      - caddy-data:/caddy-data:ro
     network_mode: none
     restart: "no"
     depends_on: [cnw]
@@ -56,11 +60,16 @@ services:
     restart: unless-stopped
     environment:
       CNW_HOST: ${CNW_HOST:?Set CNW_HOST in .env, such as cnw.home.arpa or 192.168.1.225}
+      CNW_TLS: ${CNW_TLS:-}
       CNW_PORT: ${CNW_PORT:-}
       CNW_TRUSTED_PROXY: 172.30.0.10
       CNW_UPDATER: http://updater:8090
+      # caddy, for the certificate fingerprint the Server page shows (the one Codehouse pins).
+      CNW_CADDY_ADDR: 172.30.0.10
     volumes:
       - cnw-data:/data
+      # caddy's configuration and root certificate (public), read only, for the Server page.
+      - caddy-config:/caddy-config:ro
     networks:
       front:
         ipv4_address: 172.30.0.20

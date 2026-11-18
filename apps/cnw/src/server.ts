@@ -1,4 +1,5 @@
 import crypto from "node:crypto"
+import tls from "node:tls"
 import Fastify, { type FastifyReply, type FastifyRequest } from "fastify"
 import websocket from "@fastify/websocket"
 import fastifyStatic from "@fastify/static"
@@ -13,6 +14,8 @@ import { checkPublicKey, newCode, redeem, type Computer, type PendingCode } from
 import { hashPassword, verifyPassword } from "./passwords.js"
 import { JsonStore } from "./store.js"
 import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passkeys.js"
+import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
+import { bareHost } from "./tls.js"
 
 /**
  * The CNW server (O41). Behind caddy, which ends TLS and passes the client's address in a header only caddy can set
@@ -28,6 +31,14 @@ export interface CnwOptions {
   trustedProxy?: string
   /** The built Codehouse interface (apps/web/dist), served at /app/. */
   webDir?: string
+  /** The environment the settings fall back to (CNW_HOST, CNW_TLS, CNW_PORT, CNW_MODE...). */
+  env?: Record<string, string | undefined>
+  /** caddy's configuration folder (root.crt), read only. */
+  caddyConfigDir?: string
+  /** Reads the certificate caddy serves for a host, as SHA-256 hex; for tests. */
+  certificateOf?: (host: string) => Promise<string | undefined>
+  /** Asks the updater to apply the Server page's settings; for tests. */
+  applySettings?: (s: { host: string; tls: string; port: string }) => Promise<{ ok: boolean; message: string }>
   now?: () => number
   log?: (line: string) => void
 }
@@ -40,6 +51,10 @@ interface Users {
 }
 interface Settings {
   allowlist: string[]
+}
+/** What changed CNW's own settings, and who: kept for the audit log viewer (uplift phase 5), the newest 1000. */
+interface Audit {
+  entries: Array<{ at: string; user: string; action: string; detail: string }>
 }
 interface Paired {
   computers: Computer[]
@@ -62,6 +77,12 @@ export async function createCnw(o: CnwOptions) {
   const users = new JsonStore<Users>(o.dataDir, "users", () => ({ users: [] }))
   const settings = new JsonStore<Settings>(o.dataDir, "settings", () => ({ allowlist: [] }))
   const paired = new JsonStore<Paired>(o.dataDir, "computers", () => ({ computers: [], pending: [] }))
+  const server = new JsonStore<ServerSettings>(o.dataDir, "server", () => ({}))
+  const audit = new JsonStore<Audit>(o.dataDir, "audit", () => ({ entries: [] }))
+  const env = o.env ?? process.env
+  const ownProxy = env.CNW_MODE === "own-proxy"
+  const record = (user: string, action: string, detail: string) =>
+    audit.update((a) => ({ entries: [...a.entries, { at: new Date((o.now ?? Date.now)()).toISOString(), user, action, detail }].slice(-1000) }))
   const sessions = new Sessions(o.now)
   const throttle = new Throttle(o.now)
   const hub = new Hub(() => paired.read().computers, o.now)
@@ -78,11 +99,16 @@ export async function createCnw(o: CnwOptions) {
   const ranges = (): Range[] => settings.read().allowlist.map(parseRange).filter((r): r is Range => typeof r !== "string")
   // X-Forwarded-For is believed only from the trusted proxy (the bundled caddy, or your own); from anyone else, or
   // with no trusted proxy set, it is ignored and the connection's own address counts.
-  const trusted = new Set((o.trustedProxy ?? "").split(",").map((a) => bare(a)).filter(Boolean))
+  // Behind your own proxy, the one saved on the Server page wins over .env; with the bundled caddy it is always caddy.
+  const trusted = () => {
+    const saved = server.read().trustedProxy
+    const list = ownProxy && saved !== undefined ? saved : (o.trustedProxy ?? "")
+    return new Set(list.split(",").map((a) => bare(a)).filter(Boolean))
+  }
   const ipOf = (req: FastifyRequest) => {
     const direct = req.socket.remoteAddress ?? ""
     const fwd = String(req.headers["x-forwarded-for"] ?? "").split(",")[0]?.trim()
-    return trusted.has(bare(direct)) && fwd ? fwd : direct
+    return trusted().has(bare(direct)) && fwd ? fwd : direct
   }
   const cookieOf = (req: FastifyRequest) =>
     String(req.headers.cookie ?? "")
@@ -235,6 +261,89 @@ export async function createCnw(o: CnwOptions) {
     settings.update((s) => ({ ...s, allowlist: list.data }))
     log(`Allow list changed by ${(access(req) as { user?: string }).user ?? "?"}: ${list.data.join(", ") || "(empty)"}`)
     return { ranges: list.data }
+  })
+
+  // Uplift phase 2: CNW's own settings, on its Server page. Reading and changing them needs a signed-in person.
+  const caddyDir = o.caddyConfigDir ?? "/caddy-config"
+  const certificateOf =
+    o.certificateOf ??
+    ((host: string) =>
+      new Promise<string | undefined>((resolve) => {
+        const addr = env.CNW_CADDY_ADDR
+        if (!addr) return resolve(undefined)
+        // An IP address is sent no server name (caddy answers it through default_sni); a name is.
+        const name = bareHost(host)
+        const s = tls.connect({ host: addr, port: 443, ...(name && !/^[\d.:a-f]+$/.test(name) ? { servername: name } : {}), rejectUnauthorized: false, timeout: 4000 }, () => {
+          const raw = s.getPeerCertificate(false)?.raw
+          s.end()
+          resolve(raw ? crypto.createHash("sha256").update(raw).digest("hex") : undefined)
+        })
+        s.on("error", () => resolve(undefined))
+        s.on("timeout", () => (s.destroy(), resolve(undefined)))
+      }))
+  const applySettings =
+    o.applySettings ??
+    (async (s: { host: string; tls: string; port: string }) => {
+      if (!env.CNW_UPDATER) return { ok: false, message: "There is no updater in this setup, so start the stack again yourself: docker compose up -d." }
+      try {
+        const r = await fetch(new URL("/apply", env.CNW_UPDATER), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(s) })
+        return { ok: r.ok, message: await r.text() }
+      } catch (e) {
+        return { ok: false, message: `The updater could not be reached: ${(e as Error).message}` }
+      }
+    })
+  const serverView = async () => {
+    const saved = server.read()
+    const e = effective(env, saved)
+    const sha = await certificateOf(e.host).catch(() => undefined)
+    return {
+      saved,
+      effective: e,
+      ownProxy,
+      // Docker publishes the port from .env when the stack is started by hand; a different one saved here is lost then.
+      ...(saved.port !== undefined && (env.CNW_PORT ?? "") !== saved.port ? { portInEnv: env.CNW_PORT ?? "" } : {}),
+      ...(sha ? { certificate: grouped(sha) } : {}),
+      rootCertificate: fs.existsSync(path.join(caddyDir, "root.crt")),
+    }
+  }
+  app.get("/api/server", async (req, reply) => (need(req, reply, "server") ? await serverView() : undefined))
+  app.put("/api/server", async (req, reply) => {
+    const a = need(req, reply, "server")
+    if (!a || a.kind !== "user") return
+    const checked = checkSettings(req.body)
+    if ("error" in checked) return reply.code(422).send({ error: checked.error })
+    const before = effective(env, server.read())
+    const next = checked.settings
+    // A new certificate unpairs every computer: said first, with their names, and done only when confirmed.
+    if (!ownProxy && newCertificate(before, next) && (req.body as { confirm?: unknown })?.confirm !== true)
+      return reply.code(409).send({
+        breaks: paired.read().computers.map((c) => c.label),
+        error: "This gives CNW a new certificate, so every paired computer stops connecting until you pair it again.",
+      })
+    server.write({
+      host: next.host,
+      tls: next.tls,
+      port: next.port,
+      ...(ownProxy ? { trustedProxy: next.trustedProxy } : {}),
+      savedAt: new Date((o.now ?? Date.now)()).toISOString(),
+      savedBy: a.user,
+    })
+    const detail = `address ${next.host}, certificate ${next.tls || "chosen from the address"}, port ${next.port || "443"}${ownProxy ? `, trusted proxy ${next.trustedProxy || "none"}` : ""}`
+    record(a.user, "server-settings", detail)
+    log(`Server settings changed by ${a.user}: ${detail}`)
+    const changed = before.host !== next.host || before.tls !== next.tls || before.port !== next.port
+    if (!changed) return { ok: true, applied: false, message: "Saved. Nothing caddy uses changed, so nothing starts again." }
+    const r = await applySettings({ host: next.host, tls: next.tls, port: next.port })
+    return reply.code(r.ok ? 200 : 502).send({ ok: r.ok, applied: r.ok, message: r.message })
+  })
+  // caddy's root certificate, the public part, for a phone or computer to trust (Web Push needs a trusted one).
+  app.get("/api/server/root.crt", async (_req, reply) => {
+    const file = path.join(caddyDir, "root.crt")
+    if (!fs.existsSync(file)) return reply.code(404).send({ error: "caddy has not made its root certificate yet; it is here after the next start." })
+    return reply
+      .header("content-disposition", 'attachment; filename="codehouse-neighbourhood-watch-root.crt"')
+      .type("application/x-x509-ca-cert")
+      .send(fs.readFileSync(file))
   })
 
   app.get("/api/computers", async (req, reply) => (need(req, reply, "view") ? { computers: hub.status() } : undefined))

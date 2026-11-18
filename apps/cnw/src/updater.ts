@@ -4,6 +4,7 @@ import fs from "node:fs"
 import http from "node:http"
 import path from "node:path"
 import { CNW_RELEASE_KEYS } from "./release-key.js"
+import { checkSettings } from "./server-settings.js"
 
 /**
  * The CNW updater (O41). It runs as its own service, the only one that can reach Docker (through a socket proxy), and
@@ -94,13 +95,54 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
 }
 
 /**
- * The updater's HTTP service: POST /update runs one update at a time; GET /health answers 200 for the container's
- * health check, touching neither Docker nor the clone. Anything else is 404.
+ * Uplift phase 2: what applying a change from CNW's Server page runs. cnw-config writes caddy's configuration again
+ * from the saved settings, then caddy and cnw are recreated, with the port in the environment so Docker publishes the
+ * one chosen. Behind your own proxy there is no caddy: only cnw is recreated.
  */
-export function updaterServer(update: () => Promise<string>): http.Server {
+export function applyCommands(s: { host: string; tls: string; port: string }, ownProxy: boolean): { commands: string[][]; env: Record<string, string> } {
+  const env = { CNW_HOST: s.host, CNW_TLS: s.tls, CNW_PORT: s.port }
+  if (ownProxy) return { commands: [["compose", "up", "-d", "--force-recreate", "--no-deps", "cnw"]], env }
+  return {
+    commands: [
+      ["compose", "run", "--rm", "--no-deps", "cnw-config"],
+      ["compose", "up", "-d", "--force-recreate", "--no-deps", "caddy", "cnw"],
+    ],
+    env,
+  }
+}
+
+async function readBody(req: http.IncomingMessage): Promise<unknown> {
+  let text = ""
+  for await (const chunk of req) {
+    text += String(chunk)
+    if (text.length > 10_000) throw new Error("too large")
+  }
+  return JSON.parse(text || "{}")
+}
+
+/**
+ * The updater's HTTP service: POST /update runs one update at a time; POST /apply takes the Server page's settings,
+ * checks them again, answers at once (cnw is recreated by it, which ends the request that asked) and then applies them;
+ * GET /health answers 200 for the container's health check, touching neither Docker nor the clone. Anything else is 404.
+ */
+export function updaterServer(update: () => Promise<string>, apply?: (s: { host: string; tls: string; port: string }) => Promise<void>): http.Server {
   let busy = false
   return http.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") return res.writeHead(200, { "content-type": "text/plain" }).end("ok")
+    if (req.method === "POST" && req.url === "/apply" && apply) {
+      if (busy) return res.writeHead(409).end("An update or a change is already running.")
+      let checked: ReturnType<typeof checkSettings>
+      try {
+        checked = checkSettings(await readBody(req))
+      } catch {
+        return res.writeHead(400).end("That is not a setting.")
+      }
+      if ("error" in checked) return res.writeHead(422).end(checked.error)
+      busy = true
+      res.writeHead(202).end("Applying: caddy and CNW start again with it, which takes a minute.")
+      void apply(checked.settings).finally(() => (busy = false))
+      return
+    }
     if (req.method !== "POST" || req.url !== "/update") return res.writeHead(404).end()
     if (busy) return res.writeHead(409).end("An update is already running.")
     busy = true
@@ -119,13 +161,27 @@ if (process.argv[1] && path.basename(process.argv[1]).startsWith("updater")) {
   // The release key is built in (release-key.ts); CNW_UPDATE_KEY may name a file with another, for a fork.
   const keyPem = process.env.CNW_UPDATE_KEY ? fs.readFileSync(process.env.CNW_UPDATE_KEY, "utf8") : CNW_RELEASE_KEYS[0]!
   const repoDir = process.env.CNW_REPO_DIR ?? "/repo"
-  updaterServer(() =>
-    updateNow({
-      repoDir,
-      composeDir: process.env.CNW_COMPOSE_DIR ?? "/stack",
-      keyPem,
-      current: builtVersion(repoDir),
-      log: (l) => process.stdout.write(`[updater] ${l}\n`),
-    }),
+  const composeDir = process.env.CNW_COMPOSE_DIR ?? "/stack"
+  const log = (l: string) => process.stdout.write(`[updater] ${l}\n`)
+  updaterServer(
+    () => updateNow({ repoDir, composeDir, keyPem, current: builtVersion(repoDir), log }),
+    async (s) => {
+      // Behind your own proxy, COMPOSE_FILE in .env names compose.own-proxy.yml, and there is no caddy to recreate.
+      const envFile = path.join(composeDir, ".env")
+      const ownProxy = /own-proxy/.test(fs.existsSync(envFile) ? fs.readFileSync(envFile, "utf8") : "")
+      const plan = applyCommands(s, ownProxy)
+      try {
+        for (const args of plan.commands)
+          await new Promise<void>((resolve, reject) =>
+            execFile("docker", args, { cwd: composeDir, env: { ...process.env, ...plan.env }, timeout: 5 * 60_000 }, (e, _out, err) =>
+              e ? reject(new Error(String(err || e.message).slice(-2000))) : resolve(),
+            ),
+          )
+        log(`applied the Server page's settings for ${s.host}`)
+      } catch (e) {
+        log(`the Server page's settings could not be applied: ${(e as Error).message}`)
+      }
+    },
   ).listen(8090, "0.0.0.0")
+
 }

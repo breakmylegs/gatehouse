@@ -154,6 +154,54 @@ async function render() {
   await computers()
 }
 
+// Uplift phase 2: the Server panel. CNW's address, its kind of certificate and its port, set here instead of .env; the
+// certificate's fingerprint to compare with Codehouse's pin; and caddy's root certificate to trust.
+async function serverPanel() {
+  const panel = el("section", { class: "panel", "aria-labelledby": "server-h" }, el("h2", { id: "server-h", text: "Server" }))
+  const r = await call("GET", "/api/server")
+  if (!r.ok) {
+    panel.append(el("p", { class: "muted", text: r.json.error ?? "Sign in to see the server's settings." }))
+    return panel
+  }
+  const v = r.json
+  const field = (label, input, help) => el("label", {}, el("span", { text: label }), input, help ? el("span", { class: "muted", text: help }) : null)
+  const host = el("input", { value: v.effective.host, autocomplete: "off", autocapitalize: "none", spellcheck: "false" })
+  const tlsSel = el("select", {})
+  for (const [val, text] of [["", "Chosen from the address"], ["internal", "caddy's own (home network, IP address)"], ["public", "Let's Encrypt (a public name)"]]) {
+    const opt = el("option", { value: val, text })
+    if (val === (v.effective.tls ?? "")) opt.selected = true
+    tlsSel.append(opt)
+  }
+  const port = el("input", { value: v.effective.port ?? "", inputmode: "numeric", placeholder: "443" })
+  const proxy = el("input", { value: v.effective.trustedProxy ?? "", placeholder: "192.168.1.10" })
+  const say = el("p", { class: "muted", role: "status" })
+  panel.append(
+    el("p", { class: "muted", text: "Saved here, these win over .env. A change to the address or the kind of certificate gives CNW a new certificate, and every paired computer must be paired again." }),
+    field("Address people browse to", host),
+  )
+  if (!v.ownProxy) panel.append(field("Certificate", tlsSel), field("Port", port, "Leave empty for 443."))
+  else panel.append(field("Your proxy's address (trusted proxy)", proxy, "Only its X-Forwarded-For is believed."))
+  if (v.portInEnv !== undefined)
+    panel.append(el("p", { class: "err", text: `.env sets the port to ${v.portInEnv || "443"}, which Docker uses when the stack is started by hand. Set CNW_PORT in .env to the same, or remove it.` }))
+  if (v.certificate) panel.append(el("p", {}, el("span", { class: "muted", text: "Certificate fingerprint (SHA-256), the one Codehouse pins: " }), el("span", { class: "code fp", text: v.certificate })))
+  if (v.rootCertificate)
+    panel.append(el("p", {}, el("a", { class: "btn", href: "/api/server/root.crt", download: "", text: "Download the root certificate" }), el("span", { class: "muted", text: " Trust it on your phone and computers: no warnings, and notifications can reach a closed tab." })))
+  const save = async (confirm) => {
+    say.textContent = "Saving..."
+    const body = { host: host.value, tls: tlsSel.value, port: port.value, trustedProxy: proxy.value, ...(confirm ? { confirm: true } : {}) }
+    const s = await call("PUT", "/api/server", body)
+    if (s.status === 409 && s.json.breaks) {
+      const names = s.json.breaks.length ? `: ${s.json.breaks.join(", ")}` : ""
+      say.textContent = ""
+      if (window.confirm(`${s.json.error} That is every paired computer${names}. Change it?`)) return save(true)
+      return
+    }
+    say.textContent = s.ok ? s.json.message : s.json.error ?? s.json.message ?? "Not saved."
+  }
+  panel.append(el("button", { class: "btn primary", text: "Save", onclick: () => save(false) }), say)
+  return panel
+}
+
 async function computers() {
   main.className = "two"
   const list = el("section", { class: "panel" }, el("h2", { text: "Computers" }))
@@ -234,7 +282,7 @@ async function computers() {
   const keys = el("section", { class: "panel" }, el("h2", { text: "Passkeys" }))
   const said = el("p", { class: "muted", "aria-live": "polite", text: "A passkey signs you in with your face, fingerprint or device PIN, and cannot be phished." })
   keys.append(said, passkeysOff ? el("p", { class: "muted", text: passkeysOff }) : canPasskey() ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) }) : el("p", { class: "muted", text: "This browser cannot make passkeys." }))
-  main.append(list, pairing, allow, keys, upd)
+  main.append(list, pairing, allow, keys, await serverPanel(), upd)
 }
 
 signout.addEventListener("click", async () => {

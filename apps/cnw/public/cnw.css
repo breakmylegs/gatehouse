@@ -63,7 +63,8 @@ label {
   display: grid;
   gap: 4px;
 }
-input {
+input,
+select {
   font: inherit;
   color: inherit;
   background: var(--bg);
@@ -115,4 +116,11 @@ input {
 .code {
   font: 600 22px ui-monospace, monospace;
   letter-spacing: 0.08em;
+}
+/* A fingerprint wraps by its groups of four. */
+.code.fp {
+  font-size: 15px;
+  letter-spacing: 0;
+  word-spacing: 0.2em;
+  overflow-wrap: anywhere;
 }
