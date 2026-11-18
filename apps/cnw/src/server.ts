@@ -17,6 +17,7 @@ import { JsonStore } from "./store.js"
 import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passkeys.js"
 import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
 import { bareHost } from "./tls.js"
+import { commandAllowed, httpAllowed, roleMay, roleOf, ROLES, seesComputer, type Role } from "./roles.js"
 
 /**
  * The CNW server (O41). Behind caddy, which ends TLS and passes the client's address in a header only caddy can set
@@ -47,7 +48,18 @@ export interface CnwOptions {
 interface Users {
   /** `name` is the account's key and display name; `email` is what you sign in with (uplift phase 2). An account
    * made before email sign-in has none until its next sign-in asks for it. */
-  users: Array<{ name: string; email?: string; password: string; passkeys: Array<{ id: string; publicKey: string; counter: number }> }>
+  users: Array<{
+    name: string
+    email?: string
+    password: string
+    passkeys: Array<{ id: string; publicKey: string; counter: number }>
+    /** Uplift phase 4: absent on an account from before roles, which is an owner. */
+    role?: Role
+    /** The computers this person sees; absent for every one. */
+    computers?: string[]
+    /** A second factor (TOTP), its secret sealed. */
+    totp?: { sealed: string; recovery: string[] }
+  }>
   setupHash?: string
 }
 interface Settings {
@@ -56,6 +68,10 @@ interface Settings {
 /** What changed CNW's own settings, and who: kept for the audit log viewer (uplift phase 5), the newest 1000. */
 interface Audit {
   entries: Array<{ at: string; user: string; action: string; detail: string }>
+}
+/** Invites to join, kept as hashes of their links, for seven days. */
+interface Invites {
+  invites: Array<{ hash: string; email: string; role: Role; computers?: string[]; by: string; expires: string }>
 }
 interface Paired {
   computers: Computer[]
@@ -80,6 +96,8 @@ export async function createCnw(o: CnwOptions) {
   const paired = new JsonStore<Paired>(o.dataDir, "computers", () => ({ computers: [], pending: [] }))
   const server = new JsonStore<ServerSettings>(o.dataDir, "server", () => ({}))
   const audit = new JsonStore<Audit>(o.dataDir, "audit", () => ({ entries: [] }))
+  const invites = new JsonStore<Invites>(o.dataDir, "invites", () => ({ invites: [] }))
+  const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex")
   const env = o.env ?? process.env
   const ownProxy = env.CNW_MODE === "own-proxy"
   const record = (user: string, action: string, detail: string) =>
@@ -129,7 +147,7 @@ export async function createCnw(o: CnwOptions) {
     if (o2 && o2 !== origin && !req.url.startsWith("/agent")) return reply.code(403).send({ error: "Wrong origin." })
     // /agent is a computer, not a browser: no cookie gives it anything, and it proves itself with the pairing code or
     // its signed key, so a CSRF token means nothing there.
-    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login")) {
+    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login") && !req.url.startsWith("/api/invite/accept")) {
       if (!csrfOk(access(req), String(req.headers["x-csrf-token"] ?? ""))) return reply.code(403).send({ error: "Sign in again." })
     }
   })
@@ -147,14 +165,23 @@ export async function createCnw(o: CnwOptions) {
       reply.code(401).send({ error: a.kind === "allowlisted" ? "This needs you to sign in, even on an allowed network." : "Sign in first." })
       return undefined
     }
+    // Uplift phase 4: what this person's role allows.
+    if (a.kind === "user" && !roleMay(roleOf(userOf(a.user)?.role), action)) {
+      reply.code(403).send({ error: "Your role in Neighbourhood Watch does not allow that. An owner or an admin can change it." })
+      return undefined
+    }
     return a
   }
+  // The role a request acts with: a person's own; an allowed network's as before roles (everything but the signed-in
+  // actions, which may() refuses it).
+  const roleFor = (a: Access): Role => (a.kind === "user" ? roleOf(userOf(a.user)?.role) : "owner")
+  const sees = (a: Access, id: string) => a.kind !== "user" || seesComputer(userOf(a.user)?.computers, id)
 
   app.get("/api/me", async (req) => {
     const a = access(req)
     return {
       access: a.kind,
-      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey, ...(userOf(a.user)?.email ? { email: userOf(a.user)!.email } : { needsEmail: true }) } : {}),
+      ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey, role: roleFor(a), ...(userOf(a.user)?.email ? { email: userOf(a.user)!.email } : { needsEmail: true }) } : {}),
       setup: !users.read().users.length,
       // Passkeys cannot work at an IP address; the page says so and offers the password only.
       passkeys: passkeysPossible(rpId),
@@ -368,7 +395,7 @@ export async function createCnw(o: CnwOptions) {
   }
   const boardFor = async (a: Access) => {
     const user = a.kind === "user" ? a.user : "allowed network"
-    const rows = await Promise.all(hub.status().map((c) => rowOf(c, user, a.kind === "user")))
+    const rows = await Promise.all(hub.status().filter((c) => sees(a, c.id)).map((c) => rowOf(c, user, a.kind === "user")))
     return order(rows)
   }
   app.get("/api/board", async (req, reply) => {
@@ -404,11 +431,11 @@ export async function createCnw(o: CnwOptions) {
     message: z.string().max(500).optional(),
   })
   app.post("/api/inbox/answer", async (req, reply) => {
-    const a = need(req, reply, "view")
+    const a = need(req, reply, "answer")
     if (!a) return
     const b = Answer.safeParse(req.body)
     if (!b.success) return reply.code(422).send({ error: "Say which computer, which request, and allow or deny." })
-    const c = hub.status().find((x) => x.id === b.data.computer)
+    const c = hub.status().find((x) => x.id === b.data.computer && sees(a, x.id))
     if (!c?.online) return reply.code(409).send({ error: "That computer is not connected." })
     boardCache.delete(c.id)
     const user = a.kind === "user" ? a.user : "allowed network"
@@ -431,7 +458,91 @@ export async function createCnw(o: CnwOptions) {
     return { ok: true, sent: `Sent to ${c.label}. Its own rules decide; the inbox shows what it did.` }
   })
 
-  app.get("/api/computers", async (req, reply) => (need(req, reply, "view") ? { computers: hub.status() } : undefined))
+  // Uplift phase 4: people. An owner or an admin invites by email with a role and, if chosen, only some computers; the
+  // invite is a link to copy (email follows once SMTP is set on the Server page), used once, for seven days. Only an
+  // owner adds, changes or removes an owner, and there is always one left.
+  const peopleView = () =>
+    users.read().users.map((u) => ({ name: u.name, ...(u.email ? { email: u.email } : {}), role: roleOf(u.role), ...(u.computers ? { computers: u.computers } : {}), totp: Boolean(u.totp) }))
+  const owners = () => users.read().users.filter((u) => roleOf(u.role) === "owner").length
+  const Invite = z.object({ email, role: z.enum(ROLES), computers: z.array(z.string().max(100)).max(100).optional() })
+  app.get("/api/people", async (req, reply) => {
+    if (!need(req, reply, "people")) return
+    return { people: peopleView(), invites: invites.read().invites.filter((i) => Date.parse(i.expires) > (o.now ?? Date.now)()).map((i) => ({ email: i.email, role: i.role, expires: i.expires })) }
+  })
+  app.post("/api/people/invite", async (req, reply) => {
+    const a = need(req, reply, "people")
+    if (!a || a.kind !== "user") return
+    const b = Invite.safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "An email and a role." })
+    if (b.data.role === "owner" && !roleMay(roleOf(userOf(a.user)?.role), "owners")) return reply.code(403).send({ error: "Only an owner can invite an owner." })
+    if (users.read().users.some((u) => u.email === b.data.email)) return reply.code(409).send({ error: "Someone already signs in with that email." })
+    const token = crypto.randomBytes(24).toString("base64url")
+    const expires = new Date((o.now ?? Date.now)() + 7 * 24 * 3_600_000).toISOString()
+    invites.update((v) => ({ invites: [...v.invites.filter((i) => i.email !== b.data.email), { hash: sha(token), email: b.data.email, role: b.data.role, ...(b.data.computers ? { computers: b.data.computers } : {}), by: a.user, expires }].slice(-100) }))
+    record(a.user, "invite", `${b.data.email} as ${b.data.role}${b.data.computers ? ` for ${b.data.computers.length} computer(s)` : ""}`)
+    return { link: `${origin}/#invite=${token}`, expires }
+  })
+  app.post("/api/invite/accept", async (req, reply) => {
+    const b = z.object({ token: z.string().min(10).max(100), password: z.string().min(12).max(500) }).safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "A password of 12 characters or more." })
+    const key = `invite:${ipOf(req)}`
+    const wait = throttle.wait(key)
+    if (wait) return reply.code(429).send({ error: `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` })
+    const inv = invites.read().invites.find((i) => i.hash === sha(b.data.token) && Date.parse(i.expires) > (o.now ?? Date.now)())
+    if (!inv || users.read().users.some((u) => u.email === inv.email)) {
+      throttle.failed(key)
+      return reply.code(403).send({ error: "That invite is not right, has been used, or has expired." })
+    }
+    const password = await hashPassword(b.data.password)
+    users.update((u) => ({ ...u, users: [...u.users, { name: inv.email, email: inv.email, password, passkeys: [], role: inv.role, ...(inv.computers ? { computers: inv.computers } : {}) }] }))
+    invites.update((v) => ({ invites: v.invites.filter((i) => i.hash !== inv.hash) }))
+    record(inv.email, "joined", `invited by ${inv.by} as ${inv.role}`)
+    const s = sessions.start(inv.email, false)
+    setCookie(reply, s.id, 7 * 24 * 3600)
+    return { ok: true, csrf: s.csrf }
+  })
+  const Change = z.object({ role: z.enum(ROLES).optional(), computers: z.array(z.string().max(100)).max(100).nullable().optional() })
+  app.patch("/api/people/:name", async (req, reply) => {
+    const a = need(req, reply, "people")
+    if (!a || a.kind !== "user") return
+    const name = (req.params as { name: string }).name
+    const them = userOf(name)
+    const b = Change.safeParse(req.body)
+    if (!them || !b.success) return reply.code(them ? 422 : 404).send({ error: them ? "A role, or the computers they see." : "There is no such person." })
+    const touchesOwner = roleOf(them.role) === "owner" || b.data.role === "owner"
+    if (touchesOwner && !roleMay(roleOf(userOf(a.user)?.role), "owners")) return reply.code(403).send({ error: "Only an owner can change an owner." })
+    if (roleOf(them.role) === "owner" && b.data.role && b.data.role !== "owner" && owners() <= 1) return reply.code(409).send({ error: "There must always be an owner." })
+    users.update((u) => ({
+      ...u,
+      users: u.users.map((x) => {
+        if (x.name !== name) return x
+        const next = { ...x, ...(b.data.role ? { role: b.data.role } : {}) }
+        if (b.data.computers === null) delete next.computers
+        else if (b.data.computers) next.computers = b.data.computers
+        return next
+      }),
+    }))
+    record(a.user, "person-changed", `${name}${b.data.role ? ` now ${b.data.role}` : ""}${b.data.computers !== undefined ? `, ${b.data.computers === null ? "every computer" : `${b.data.computers.length} computer(s)`}` : ""}`)
+    return { people: peopleView() }
+  })
+  app.delete("/api/people/:name", async (req, reply) => {
+    const a = need(req, reply, "people")
+    if (!a || a.kind !== "user") return
+    const name = (req.params as { name: string }).name
+    const them = userOf(name)
+    if (!them) return reply.code(404).send({ error: "There is no such person." })
+    if (roleOf(them.role) === "owner" && !roleMay(roleOf(userOf(a.user)?.role), "owners")) return reply.code(403).send({ error: "Only an owner can remove an owner." })
+    if (roleOf(them.role) === "owner" && owners() <= 1) return reply.code(409).send({ error: "There must always be an owner." })
+    users.update((u) => ({ ...u, users: u.users.filter((x) => x.name !== name) }))
+    sessions.endUser(name)
+    record(a.user, "person-removed", name)
+    return { people: peopleView() }
+  })
+
+  app.get("/api/computers", async (req, reply) => {
+    const a = need(req, reply, "view")
+    return a ? { computers: hub.status().filter((c) => sees(a, c.id)) } : undefined
+  })
   app.post("/api/computers/code", async (req, reply) => {
     if (!need(req, reply, "pair")) return
     const label = String((req.body as { label?: unknown })?.label ?? "").slice(0, 60)
@@ -496,6 +607,8 @@ export async function createCnw(o: CnwOptions) {
     const a = need(req, reply, "view")
     if (!a) return
     const { computer } = req.params as { computer: string }
+    if (!sees(a, computer)) return reply.code(404).send({ error: "That computer is not one you see." })
+    if (!httpAllowed(roleFor(a), req.method)) return reply.code(403).send({ error: "Your role in Neighbourhood Watch only looks at this computer." })
     const rest = req.url.slice(`/c/${computer}`.length)
     if (!rest.startsWith("/api/")) return reply.code(404).send({ error: "Not found." })
     const body = req.body === undefined ? undefined : typeof req.body === "string" ? req.body : JSON.stringify(req.body)
@@ -514,9 +627,18 @@ export async function createCnw(o: CnwOptions) {
     if (!may(a, "view") || needsEmail(a)) return socket.close(4401, "sign in")
     const user = a.kind === "user" ? a.user : "allowed network"
     const id = (req.params as { computer: string }).computer
+    if (!sees(a, id)) return socket.close(4404, "not yours")
     const s = { send: (d: string) => socket.send(d), close: (c?: number, r?: string) => socket.close(c, r) }
     const stop = hub.watch(id, s, user, a.kind === "user")
     socket.on("message", (raw: Buffer) => {
+      // An approver's tab sends answers only, a viewer's nothing; the role is read at each command.
+      let data: unknown
+      try {
+        data = JSON.parse(raw.toString())
+      } catch {
+        data = undefined
+      }
+      if (!commandAllowed(roleFor(access(req)), data)) return s.send(JSON.stringify({ type: "refused", why: "role" }))
       const r = hub.command(id, s, raw.toString())
       if (r !== "sent") s.send(JSON.stringify({ type: "refused", why: r }))
     })
