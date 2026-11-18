@@ -65,6 +65,7 @@ import { EvalStore, PluginEvaluator } from "./plugin-eval.js"
 import { readItModels } from "./providers/it-models.js"
 import { claudeVersion } from "./doctor.js"
 import { Worktrees } from "./worktrees.js"
+import { canaryProblem, runCanaries, type CanaryRun } from "./canaries.js"
 import { ConflictWatch, conflictLine } from "./conflict-check.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
@@ -215,6 +216,8 @@ export function createHost(opts: HostOptions = {}): Host {
 
   const store = new PolicyStore(loadOptions)
   const pwsh = new PwshWorker()
+  // E-100: the last run of the invariant canaries; a failure there refuses new sessions (canaryProblem below).
+  let lastCanaries: CanaryRun | undefined
   const engine = new PolicyEngine({
     getPolicy: () => store.current,
     pwsh,
@@ -448,6 +451,7 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     resumeSettings: (id) => sessionMeta.settings(id),
     managedPolicyProblem: () => store.status().errors.find((e) => e.startsWith(MANAGED_ERROR)),
+    canaryProblem: () => canaryProblem(lastCanaries),
     // Models on this computer (ADR 0011), only while other providers are on, checked before each chat starts.
     local: {
       label: () =>
@@ -1602,6 +1606,7 @@ export function createHost(opts: HostOptions = {}): Host {
       changelog,
       // G30: the verifier that goes in each audit bundle (scripts\verify-audit.ps1, in the app folder too).
       auditVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
+      canaries: () => lastCanaries,
       // C-011: the key timeline exports are signed with, sealed for this Windows user.
       timelineSigner: new TimelineSigner({ dir: gatehouseDataDir(env), sealer: () => sealer() }),
       anchors,
@@ -1713,6 +1718,39 @@ export function createHost(opts: HostOptions = {}): Host {
         })
       }
       await kill.syncApprover()
+      // E-100: the invariant canaries, now (so after every update, which restarts the Host) and once a day, with the
+      // running Approver. A failure refuses new sessions until a later run passes; each run is in the audit log.
+      const runCanaryCheck = async (): Promise<void> => {
+        const run = await runCanaries({
+          policy: () => store.current,
+          pwsh,
+          rulesPath,
+          ...(approverUrl ? { approverUrl } : {}),
+          psVerifier: path.join(REPO_ROOT, "scripts", "verify-audit.ps1"),
+        })
+        lastCanaries = run
+        const failing = run.results.filter((r) => !r.ok).map((r) => r.id)
+        if (failing.length) log(`canaries: ${failing.length} failed (${failing.join(", ")})`)
+        await audit.record({
+          session: "host",
+          event: "canary_run",
+          channel: "host",
+          tool: "canaries",
+          input: { passed: run.passed, failed: run.failed, ms: run.ms, failing },
+          verdict: {
+            outcome: failing.length ? "deny" : "allow",
+            ruleId: "invariant-canaries",
+            reason: failing.length ? "A safety canary failed, so new sessions are refused until it passes." : "Every safety canary passed.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: store.current?.hash ?? "",
+          },
+          latencyMs: run.ms,
+        })
+        opts.onHealthChanged?.()
+      }
+      void runCanaryCheck().catch((e: Error) => log(`canaries could not run: ${e.message}`))
+      setInterval(() => void runCanaryCheck().catch(() => undefined), 24 * 60 * 60_000).unref()
       step("Connecting notifications and updates")
       ntfy.start()
       await updateToken.load()

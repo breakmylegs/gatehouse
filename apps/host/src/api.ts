@@ -5,6 +5,7 @@ import { registerAttachRoutes } from "./attach-api.js"
 import { registerFilesRoutes } from "./files-api.js"
 import type { SlackSecrets, SlackStatus } from "./push/slack.js"
 import type { Conflict } from "./conflict-check.js"
+import type { CanaryRun } from "./canaries.js"
 import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
@@ -208,6 +209,8 @@ export interface AdminContext {
   changelog?: ChangelogStore
   /** G30: the PowerShell verifier, put in each audit bundle. */
   auditVerifier?: string
+  /** E-100: the last run of the invariant canaries, for Doctor. */
+  canaries?: () => CanaryRun | undefined
   /** C-011: the key a session's timeline export is signed with. */
   timelineSigner?: TimelineSigner
   /** D-029: the audit anchors. */

@@ -1470,6 +1470,23 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - **What resolves under /app/ (checked on a real CNW build):** scripts, preloads and the stylesheet are named `/app/assets/...`; lazy chunks are imported relative to the script; the pictures, icon sprite and favicons were already relative (`./codehouse/...`); the socket (`/ws/<computer>`) and the sign-in page (`/`) are CNW's own root paths.
   - **The start-up picture is safe:** if the page's script or stylesheet fails to load (or nothing has started after 20 s), it goes and says Codehouse could not start, instead of hiding the failure.
   - **Tests:** cnw-base (web: the base for each build; the fallback), server (CNW: /app/ and every file it names, 200; root /assets 404).
+- **E-100, invariant canaries:** `apps/host/src/canaries.ts` runs eight canaries with no model and no session, at every start of the Host (which an update always restarts, so "after each update" needs no hook of its own) and once a day:
+  - the floor (the live policy) denies a Read of a canary .env;
+  - redaction masks a canary API key;
+  - the Approver client answers escalate, never allow, with a wrong token against the running Approver and against a server that never answers;
+  - the listener guard refuses no token, a wrong Host header and a foreign Origin;
+  - a canary audit chain verifies with the Node and the PowerShell verifier, and the Node verifier refuses it once one byte is changed;
+  - the organisation guard refuses a fake account;
+  - the in-process check names a stdio MCP server;
+  - the loader refuses a managed policy changed after signing.
+
+  A failure refuses new sessions (`CanaryFailedError` in `SessionManager.start`, after the managed policy check), names the canary, and Doctor shows it first after Claude Code with what to do. Each run is audited as `canary_run`, with the pass and fail counts. A run takes well under 5 s apart from PowerShell's own start (the test times the canaries with that verifier stubbed).
+
+  **Decided by me:**
+  - On a Mac without PowerShell 7 the PowerShell verifier is noted, not failed, so that Mac is not refused every session.
+  - The spec's "offers safe mode" waits for E-096 (safe mode is not built), so the message points to Doctor for now.
+
+  Each canary has a break check that makes only it fail. Threat T144. Tests: canaries.
 - **CNW was not a faithful live copy of the desktop (owner, 18 Nov).** A long session showed "Nothing yet", and a chat stayed behind, still asking for permission for a Grep already stopped.
   - **Confirmed from the code.** The Host's log shows only reconnects, because the connector logged errors and not close codes; CNW's log is on the owner's VM. The three causes:
     1. CNW's hub closes a computer's connection (1009) on any frame over 4 MB, and a long session's transcript reply was one frame.

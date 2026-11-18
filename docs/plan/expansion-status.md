@@ -42,7 +42,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 | Id | Title | Wave | Status | Branch | BUILD_REPORT | Note |
 |---|---|---|---|---|---|---|
-| E-100 | Invariant canaries | E1 | todo | | |  |
+| E-100 | Invariant canaries | E1 | done | feat/canaries | yes | 8 canaries at start and daily; failure blocks sessions and shows in Doctor; canary_run audited; safe mode waits for E-096 |
 | E-096 | Safe mode | E1 | todo | | |  |
 | E-097 | Crash bundle | E1 | todo | | |  |
 | E-099 | Health score | E1 | todo | | |  |

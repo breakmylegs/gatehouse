@@ -102,6 +102,9 @@ export class OrgGuardError extends Error {
 export class SessionFolderError extends Error {}
 
 /** B37: IT's signed policy could not be checked, so no session may start. */
+/** E-100: a safety canary failed, so no session starts (the message names it and points to Doctor). */
+export class CanaryFailedError extends Error {}
+
 export class ManagedPolicyError extends Error {
   constructor(why: string) {
     super(
@@ -438,6 +441,8 @@ export interface SessionDeps {
   }
   /** B37: why IT's signed policy could not be checked, if it could not; then no session starts. */
   managedPolicyProblem?: () => string | undefined
+  /** E-100: why the invariant canaries refuse new sessions (one failed at start or at the daily run), or undefined. */
+  canaryProblem?: () => string | undefined
   /** C-004: refuses a new session or chat while this computer's memory is committed over the point in Settings. */
   governor?: { admit(what: HeavyJob, detail?: Record<string, unknown>): Promise<void> }
   /** What a Claude Code session last ran with (model, effort, mode, resources), so Resume starts it the same way. */
@@ -2718,6 +2723,9 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     // B37: IT's policy for this computer is there but does not check out, so nothing starts until it does.
     const managed = this.#deps.managedPolicyProblem?.()
     if (managed) throw new ManagedPolicyError(managed)
+    // E-100: a safety canary failed on this build; nothing starts until it passes.
+    const canary = this.#deps.canaryProblem?.()
+    if (canary) throw new CanaryFailedError(canary)
     // Resume starts a conversation with what it last ran with, for anything the screen did not choose (owner, 31 Oct).
     // The mode is checked again with every other option before Claude Code starts (invariant 3).
     if (opts.resume !== undefined && !opts.restore) {

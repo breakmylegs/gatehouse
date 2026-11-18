@@ -72,6 +72,7 @@ import {
   SessionLimitError,
   LockedTestsChangedError,
   ManagedPolicyError,
+  CanaryFailedError,
   type SessionManager,
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
@@ -1608,6 +1609,7 @@ function classify(e: unknown): CommandError {
   if (e instanceof LockedTestsChangedError) return new CommandError("locked-tests", e.message)
   if (e instanceof InstructionsChangedError) return new CommandError("instructions-changed", e.message)
   if (e instanceof ManagedPolicyError) return new CommandError("managed-policy", e.message)
+  if (e instanceof CanaryFailedError) return new CommandError("canary-failed", e.message)
   if (e instanceof ChatModeError) return new CommandError("chat-mode", e.message)
   if (e instanceof SafetyError) return new CommandError("safety", e.message)
   return new CommandError("failed", (e as Error).message ?? "The command failed")

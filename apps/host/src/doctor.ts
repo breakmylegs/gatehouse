@@ -14,6 +14,7 @@ import { readItModels } from "./providers/it-models.js"
 import { redactString } from "@gatehouse/policy"
 import { checkRuntime, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
+import { CANARY_FIX, type CanaryRun } from "./canaries.js"
 
 export type DoctorState = "ok" | "warn" | "fail"
 
@@ -42,6 +43,23 @@ export interface DoctorFacts {
   vulnSnapshot?: SnapshotState
   /** O41: the connection to Codehouse Neighbourhood Watch. Never its address. */
   cnw?: { paired: boolean; on: boolean; state: "off" | "connecting" | "connected" | "refused" }
+  /** E-100: the last run of the invariant canaries (undefined until the first, a few seconds after start). */
+  canaries?: CanaryRun
+}
+
+/** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
+export function canaryCheck(run: CanaryRun | undefined): DoctorCheck {
+  const label = "Safety checks"
+  if (!run) return { id: "canaries", label, state: "warn", detail: "The safety checks have not finished their first run yet.", fix: "Wait a few seconds and look again." }
+  const bad = run.results.filter((r) => !r.ok)
+  if (!bad.length) return { id: "canaries", label, state: "ok", detail: `All ${run.passed} safety checks passed at ${run.at.slice(11, 16)}, in ${run.ms} ms.` }
+  return {
+    id: "canaries",
+    label,
+    state: "fail",
+    detail: `${bad.map((r) => `${r.label}: ${r.detail}`).join(" ")} No session can start until every check passes.`,
+    fix: bad.map((r) => CANARY_FIX[r.id]).join(" "),
+  }
 }
 
 /** O41: how the connection to Neighbourhood Watch stands. Optional, so off is ok. */
@@ -106,6 +124,8 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
               fix: "Restart Codehouse. If this stays, install it again with Codehouse-Setup.exe.",
             },
   )
+  // E-100: a failing safety check stops every session, so it comes straight after Claude Code itself.
+  if ("canaries" in f) add(canaryCheck(f.canaries))
 
   const s = h.signin
   add(
@@ -393,6 +413,8 @@ export function registerDoctorRoutes(
     vulnSnapshot?: () => SnapshotState
     /** O41: how the connection to Neighbourhood Watch stands. */
     cnwStatus?: () => NonNullable<DoctorFacts["cnw"]>
+    /** E-100: the last canary run. */
+    canaries?: () => CanaryRun | undefined
   },
 ): void {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -413,6 +435,7 @@ export function registerDoctorRoutes(
       claude: claude.value,
       ...(ctx.vulnSnapshot ? { vulnSnapshot: ctx.vulnSnapshot() } : {}),
       ...(ctx.cnwStatus ? { cnw: ctx.cnwStatus() } : {}),
+      ...(ctx.canaries ? { canaries: ctx.canaries() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status
