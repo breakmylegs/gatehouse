@@ -81,15 +81,10 @@ export type ReleasePart = ReleaseManifest["parts"][number]
 
 export type Verified = { ok: true; manifest: ReleaseManifest } | { ok: false; error: string }
 
-/** Checks the signature over the exact bytes, then the shape. Only a published, downloadable release passes. */
-export function verifyRelease(
-  bytes: Buffer,
-  signature: string,
-  keys: readonly string[] = RELEASE_KEYS,
-  product: string = PRODUCT,
-): Verified {
+/** Whether one of the keys signed exactly these bytes (Ed25519). Shared with the Mac's releases (release-mac.ts). */
+export function signedBy(bytes: Buffer, signature: string, keys: readonly string[]): boolean {
   const sig = Buffer.from(signature.trim(), "base64")
-  const signed =
+  return (
     sig.length === 64 &&
     keys.some((pem) => {
       try {
@@ -98,7 +93,17 @@ export function verifyRelease(
         return false
       }
     })
-  if (!signed)
+  )
+}
+
+/** Checks the signature over the exact bytes, then the shape. Only a published, downloadable release passes. */
+export function verifyRelease(
+  bytes: Buffer,
+  signature: string,
+  keys: readonly string[] = RELEASE_KEYS,
+  product: string = PRODUCT,
+): Verified {
+  if (!signedBy(bytes, signature, keys))
     return {
       ok: false,
       error: "The update is not signed with Codehouse's release key, so it was refused.",

@@ -34,6 +34,7 @@
     "install:local": "node scripts/install-local.mjs",
     "release": "tsx scripts/release.ts ship",
     "release:cnw": "tsx scripts/release-cnw.ts",
+    "release:mac": "tsx scripts/release-mac.ts",
     "release:version": "tsx scripts/release.ts version"
   },
   "devDependencies": {

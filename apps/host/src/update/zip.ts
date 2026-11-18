@@ -16,15 +16,30 @@ const inflate = promisify(zlib.inflateRaw)
 const UTF8 = 0x0800
 const MAX = 0xffffffff
 
+/** A symbolic link, in a zip's Unix mode. */
+const S_IFLNK = 0o120000
+const S_IFREG = 0o100000
+const S_IFMT = 0o170000
+
+/** A link's target that climbs only at its start, then names folders: read as text, it lands where the system lands. */
+function plainTarget(to: string): boolean {
+  const segs = to.split("/")
+  let i = 0
+  while (segs[i] === "..") i++
+  return segs.slice(i).every((s) => s !== "" && s !== "." && s !== "..")
+}
+
 /**
  * Writes the given files (forward-slash paths relative to root) into a zip, in that order. Update parts carry a fixed
  * date so the same files make the same zip; a zip for people to download can carry a real one.
+ * Mac fork: with `unix`, each entry also carries its Unix mode (executable or not) and a symbolic link is stored as
+ * one, its target as its content, for a Mac app's Node, program and workspace links. Without it the bytes are as before.
  */
 export async function writeZip(
   file: string,
   root: string,
   rels: string[],
-  opts: { date?: Date } = {},
+  opts: { date?: Date; unix?: boolean } = {},
 ): Promise<void> {
   const d = opts.date
   const dosTime = d
@@ -43,10 +58,19 @@ export async function writeZip(
     for (let i = 0; i < rels.length; i += batch) {
       const chunk = rels.slice(i, i + batch)
       const packed = await mapLimit(chunk, batch, async (rel) => {
-        const data = await fs.promises.readFile(path.join(root, rel))
+        const full = path.join(root, rel)
+        let mode = 0
+        let data: Buffer
+        if (opts.unix) {
+          const st = await fs.promises.lstat(full)
+          mode = st.isSymbolicLink() ? S_IFLNK | 0o777 : S_IFREG | (st.mode & 0o111 ? 0o755 : 0o644)
+          data = st.isSymbolicLink()
+            ? Buffer.from(await fs.promises.readlink(full), "utf8")
+            : await fs.promises.readFile(full)
+        } else data = await fs.promises.readFile(full)
         const squeezed = await deflate(data)
         const stored = squeezed.length >= data.length
-        return { rel, data, body: stored ? data : squeezed, method: stored ? 0 : 8 }
+        return { rel, data, mode, body: stored ? data : squeezed, method: stored ? 0 : 8 }
       })
       for (const p of packed) {
         const name = Buffer.from(p.rel, "utf8")
@@ -68,7 +92,7 @@ export async function writeZip(
         await out.write(Buffer.concat([local, name, p.body]))
         const c = Buffer.alloc(46)
         c.writeUInt32LE(0x02014b50, 0)
-        c.writeUInt16LE(20, 4)
+        c.writeUInt16LE(opts.unix ? (3 << 8) | 20 : 20, 4) // made by: Unix with a mode, else MS-DOS
         c.writeUInt16LE(20, 6)
         c.writeUInt16LE(UTF8, 8)
         c.writeUInt16LE(p.method, 10)
@@ -78,6 +102,7 @@ export async function writeZip(
         c.writeUInt32LE(p.body.length, 20)
         c.writeUInt32LE(p.data.length, 24)
         c.writeUInt16LE(name.length, 28)
+        if (opts.unix) c.writeUInt32LE((p.mode << 16) >>> 0, 38)
         c.writeUInt32LE(offset, 42)
         central.push(c, name)
         offset += 30 + name.length + p.body.length
@@ -103,10 +128,16 @@ interface Entry {
   packed: number
   size: number
   offset: number
+  /** The Unix mode, when the zip was made on Unix with one. */
+  mode?: number
 }
 
 /** A name an update may write: a relative path inside the given part, with nothing that could climb out. */
-export function allowedName(name: string, part: PartName): boolean {
+export function allowedName(
+  name: string,
+  part: string,
+  of: (rel: string) => string | undefined = partOf, // Mac fork: a Mac app's parts
+): boolean {
   const isDir = name.endsWith("/")
   const bare = isDir ? name.slice(0, -1) : name
   const segs = bare.split("/")
@@ -116,7 +147,7 @@ export function allowedName(name: string, part: PartName): boolean {
     !name.startsWith("/") &&
     !/[\\:\0]/.test(name) &&
     !segs.some((s) => s === "" || s === "." || s === "..") &&
-    (isDir ? partOf(bare + "/x") : partOf(bare)) === part
+    (isDir ? of(bare + "/x") : of(bare)) === part
   )
 }
 
@@ -146,6 +177,8 @@ async function readEntries(
   for (let i = 0; i < count; i++) {
     if (p + 46 > cd.length || cd.readUInt32LE(p) !== 0x02014b50)
       throw new UpdateError(`${label} is damaged.`)
+    const madeBy = cd.readUInt16LE(p + 4)
+    const attrs = cd.readUInt32LE(p + 38)
     const flags = cd.readUInt16LE(p + 8)
     const nameLen = cd.readUInt16LE(p + 28)
     const extraLen = cd.readUInt16LE(p + 30)
@@ -158,6 +191,7 @@ async function readEntries(
       packed: cd.readUInt32LE(p + 20),
       size: cd.readUInt32LE(p + 24),
       offset: cd.readUInt32LE(p + 42),
+      ...(madeBy >> 8 === 3 && attrs >>> 16 ? { mode: attrs >>> 16 } : {}),
     })
     p += 46 + nameLen + extraLen + commentLen
   }
@@ -168,12 +202,15 @@ async function readEntries(
  * Unpacks one part's zip into dest. Refused, before anything is written, if a name is not allowed, if an entry is
  * not plain deflate or stored, or if it holds more files or bytes than the signed release says the part has.
  * Each file is checked against its CRC as it is written.
+ * Mac fork: with `unix`, a file keeps whether it is executable and a symbolic link is made as one, refused when it
+ * points outside dest; any other kind of entry is refused. `of` names a Mac app's parts.
  */
 export async function extractZip(
   file: string,
   dest: string,
-  part: PartName,
+  part: PartName | string,
   limits: { files: number; bytes: number },
+  opts: { unix?: boolean; of?: (rel: string) => string | undefined } = {},
 ): Promise<number> {
   const label = path.basename(file)
   const fh = await fs.promises.open(file, "r")
@@ -184,20 +221,28 @@ export async function extractZip(
     let files = 0
     let bytes = 0
     for (const e of entries) {
-      if (!allowedName(e.name, part))
+      if (!allowedName(e.name, part, opts.of))
         throw new UpdateError(
           `${label} holds "${e.name}", which an update may not write. It was refused.`,
         )
       if (e.name.endsWith("/")) continue
       if (e.method !== 0 && e.method !== 8)
         throw new UpdateError(`${label} uses a kind of compression Codehouse does not read.`)
+      const kind = (e.mode ?? S_IFREG) & S_IFMT
+      if (opts.unix && kind !== S_IFREG && kind !== S_IFLNK)
+        throw new UpdateError(`${label} holds "${e.name}", which is neither a file nor a link. It was refused.`)
       files++
       bytes += e.size
     }
     if (files > limits.files || bytes > limits.bytes)
       throw new UpdateError(`${label} holds more than the signed release says. It was refused.`)
     const made = new Set<string>()
+    const names = new Set<string>()
+    if (opts.unix) await fs.promises.mkdir(dest, { recursive: true })
+    const realDest = opts.unix ? await fs.promises.realpath(dest) : dest
     for (const e of entries) {
+      if (opts.unix && names.has(e.name)) throw new UpdateError(`${label} holds ${e.name} twice. It was refused.`)
+      names.add(e.name)
       const target = path.join(dest, ...e.name.split("/").filter(Boolean))
       if (e.name.endsWith("/")) {
         await fs.promises.mkdir(target, { recursive: true })
@@ -216,9 +261,20 @@ export async function extractZip(
       const dir = path.dirname(target)
       if (!made.has(dir)) {
         await fs.promises.mkdir(dir, { recursive: true })
+        // Mac fork: nothing is written through a link, so a link cannot carry a later entry outside dest.
+        if (opts.unix && path.relative(realDest, await fs.promises.realpath(dir)) !== path.relative(dest, dir))
+          throw new UpdateError(`${label} would write ${e.name} through a link. It was refused.`)
         made.add(dir)
       }
-      await fs.promises.writeFile(target, data)
+      if (opts.unix && ((e.mode ?? 0) & S_IFMT) === S_IFLNK) {
+        const to = data.toString("utf8")
+        const lands = path.relative(path.resolve(dest), path.resolve(path.dirname(target), to))
+        if (!plainTarget(to) || to.includes("\0") || path.isAbsolute(to) || lands.startsWith("..") || path.isAbsolute(lands))
+          throw new UpdateError(`${label} holds a link at ${e.name} that points outside the update. It was refused.`)
+        await fs.promises.symlink(to, target)
+      } else if (opts.unix)
+        await fs.promises.writeFile(target, data, { mode: (e.mode ?? 0) & 0o111 ? 0o755 : 0o644 })
+      else await fs.promises.writeFile(target, data)
     }
     return files
   } finally {
