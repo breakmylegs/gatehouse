@@ -4,7 +4,7 @@
  * a query given on the command line, and Export-Csv. An export to a place outside the project is higher risk, since the
  * data then leaves where the project keeps its work. Read from the command's own words; nothing is run or opened.
  */
-import path from "node:path"
+import { isInside, lexicalResolve } from "./paths.js"
 import type { Segment } from "./segments.js"
 
 export const BULK_EXPORT_RULE = "bulk-export"
@@ -71,11 +71,14 @@ export function exportOf(seg: Segment): { tool: string; what: string; to?: strin
 
 const pick = (to: string | undefined) => (to ? { to } : {})
 
-/** Whether a path is inside the project folder. */
+/**
+ * Whether a path is inside the project folder. The policy's own resolution, so C:/... and /c/... read the same on
+ * either machine (node's path.resolve took C:/Users/me/Downloads as a folder inside the project on a Mac).
+ */
 function inside(to: string, cwd: string): boolean {
-  const abs = path.resolve(cwd, to)
-  const rel = path.relative(path.resolve(cwd), abs)
-  return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel)
+  const root = lexicalResolve(cwd, "/").key
+  const key = lexicalResolve(to, cwd).key
+  return key !== root && isInside(key, root)
 }
 
 /** A redirect after the tool's name in the whole command: the segment's text leaves redirects out. */
