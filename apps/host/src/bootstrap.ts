@@ -245,7 +245,12 @@ export function createHost(opts: HostOptions = {}): Host {
         verdict: {
           outcome: "allow",
           ruleId: event.replace(/_/g, "-"),
-          reason: event === "safe_mode_entered" ? `Codehouse went into safe mode: ${REASON_TEXT[(input.reason as SafeModeReason) ?? "doctor"]}.` : "Codehouse left safe mode from the desktop.",
+          reason:
+            event === "safe_mode_entered"
+              ? `Codehouse went into safe mode: ${REASON_TEXT[(input.reason as SafeModeReason) ?? "doctor"]}.`
+              : event === "host_crash_restart"
+                ? "Codehouse started after stopping unexpectedly."
+                : "Codehouse left safe mode from the desktop.",
           risk: 0,
           decidedBy: event === "safe_mode_left" ? "human-desktop" : "rules",
           policyHash: "",

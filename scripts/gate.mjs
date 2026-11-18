@@ -27,6 +27,7 @@ import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { directTests, relatedTests } from "./related-tests.mjs"
+import { recordDevCheck } from "./dev-checks.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -327,4 +328,6 @@ function execList() {
 say(
   failures.length ? `FAILED: ${failures.join(", ")}` : dry ? "dry run: nothing was run" : "passed",
 )
+// E-099: each gate's result, for the health score (a dry run is not a result).
+if (!dry) recordDevCheck("gates", { ok: failures.length === 0 })
 process.exit(failures.length ? 1 : 0)

@@ -12,6 +12,7 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { recordDevCheck } from "./dev-checks.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
@@ -130,8 +131,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   )
   const r = await runShards(files, { batch: BATCH })
   const secs = Math.round((Date.now() - started) / 1000)
-  for (const f of r.passedOnRetry)
+  for (const f of r.passedOnRetry) {
     console.log(`[shards] passed on its retry (logged as flaky): ${f}`)
+    // E-099: kept for the health score's flaky files.
+    recordDevCheck("flaky", { file: f })
+  }
   console.log(
     r.failed.length
       ? `[shards] FAILED: ${r.failed.length} of ${files.length} files, in ${secs}s`

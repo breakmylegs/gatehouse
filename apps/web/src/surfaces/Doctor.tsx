@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { CopyButton } from "../components/CopyButton"
 import { CrashBundle } from "../components/CrashBundle"
+import { HealthScore } from "../components/HealthScore"
 import { Icon, type IconName } from "../components/Icon"
 import { api } from "../lib/api"
 import { startTriage } from "../lib/triage"
@@ -147,6 +148,7 @@ export function Doctor() {
         <SafeModeButton />
         <CrashBundle />
       </div>
+      <HealthScore />
       {result ? (
         <p className="m-0 text-xs text-mut">
           Codehouse {result.version}, checked at{" "}

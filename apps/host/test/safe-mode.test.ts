@@ -49,7 +49,9 @@ describe("safe mode (E-096)", () => {
       clock.t += 60_000
     }
     expect(await safe.noteStart()).toMatchObject({ on: true, reason: "crash-restarts" })
-    expect(audited).toEqual([{ event: "safe_mode_entered", input: { reason: "crash-restarts", crashes: 3 } }])
+    expect(audited.filter((a) => a.event === "safe_mode_entered")).toEqual([{ event: "safe_mode_entered", input: { reason: "crash-restarts", crashes: 3 } }])
+    // E-099: each start after one that never stopped cleanly is recorded for the health score.
+    expect(audited.filter((a) => a.event === "host_crash_restart")).toHaveLength(3)
     // It stays on through later starts until you leave it, which is audited too.
     clock.t += 60_000
     expect((await safe.noteStart()).on).toBe(true)

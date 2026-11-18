@@ -8,6 +8,7 @@ import type { Conflict } from "./conflict-check.js"
 import type { CanaryRun } from "./canaries.js"
 import { registerSafeModeRoutes, type SafeMode } from "./safe-mode.js"
 import { registerCrashBundleRoutes } from "./crash-bundle.js"
+import { registerHealthScoreRoutes } from "./health-score.js"
 import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
@@ -895,6 +896,19 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   const doctor = registerDoctorRoutes(app, {
     ...ctx,
     ...(cnw ? { cnwStatus: () => { const s = cnw.status(); return { paired: s.paired, on: s.on, state: s.state } } } : {}),
+  })
+  // E-099: the health score, for the dashboard's tile and Doctor.
+  registerHealthScoreRoutes(app, {
+    auditDir: ctx.auditDir,
+    dataDir: gatehouseDataDir(ctx.env),
+    ...(ctx.updates
+      ? {
+          updates: () => {
+            const s = ctx.updates!.status()
+            return s.checkError ? { checkError: s.checkError } : {}
+          },
+        }
+      : {}),
   })
   // E-097: the crash bundle, previewed first and saved to Downloads exactly as previewed; audited.
   registerCrashBundleRoutes(app, {

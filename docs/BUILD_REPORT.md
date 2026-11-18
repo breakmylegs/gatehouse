@@ -1489,6 +1489,15 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - "Offers safe mode": a failing canary puts Codehouse in safe mode (E-096, below), and the message points to Doctor.
 
   Each canary has a break check that makes only it fail. Threat T144. Tests: canaries.
+- **E-099, health score:** `apps/host/src/health-score.ts`, at GET /api/health-score (worked out at most once a minute). It is shown on the dashboard, listing only what needs looking at, and in full in Doctor. Seven factors, each with its last 30 days by day as small bars (described in words for a screen reader) and a button to where it comes from:
+  - the safety checks' runs (`canary_run`);
+  - unexpected stops (`host_crash_restart`, now written by safe mode's start record);
+  - memory refusals (`memory_refused`);
+  - flaky test files and gate results (on a developer's computer: `scripts/dev-checks.mjs`, which the test runner and the gate now write to dev-checks.json in the data folder);
+  - whether the update check works;
+  - whether the audit chain verifies.
+
+  The overall state is the worst factor's, never a weighted score. A factor with nothing to go on (no test runs on an ordinary computer) shows "No data" and does not count. Tests: health-score (host and web), safe-mode.
 - **E-097, crash bundle:** Doctor's "Make a crash bundle" shows every file first, then "Save to Downloads" writes exactly the previewed files as a zip. The preview is kept under an id for ten minutes and used once, so the two cannot differ. It holds:
   - the last 2 MB of host.log, redacted;
   - version.json;

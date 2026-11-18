@@ -86,7 +86,7 @@ export class SafeMode {
     dataDir: string,
     private readonly o: {
       /** Records safe_mode_entered and safe_mode_left. */
-      audit: (event: "safe_mode_entered" | "safe_mode_left", input: Record<string, unknown>) => Promise<unknown>
+      audit: (event: "safe_mode_entered" | "safe_mode_left" | "host_crash_restart", input: Record<string, unknown>) => Promise<unknown>
       now?: () => number
     },
   ) {
@@ -109,7 +109,11 @@ export class SafeMode {
    */
   async noteStart(): Promise<SafeModeState> {
     const now = this.o.now?.() ?? Date.now()
-    const recent = read<Starts>(this.#starts, { starts: [] }).starts.filter((s) => typeof s.at === "number" && now - s.at < CRASH_WINDOW_MS)
+    const all = read<Starts>(this.#starts, { starts: [] }).starts
+    // E-099: the start before this one never stopped cleanly, so this one follows a crash; the health score counts them.
+    const previous = all.at(-1)
+    if (previous && !previous.clean) await this.o.audit("host_crash_restart", { previousStart: new Date(previous.at).toISOString() })
+    const recent = all.filter((s) => typeof s.at === "number" && now - s.at < CRASH_WINDOW_MS)
     const crashes = recent.filter((s) => !s.clean).length
     write(this.#starts, { starts: [...recent, { at: now, clean: false }].slice(-20) })
     if (crashes >= CRASHES_FOR_SAFE_MODE && !this.on) await this.enter("crash-restarts", { crashes })

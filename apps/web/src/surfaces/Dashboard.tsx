@@ -1,6 +1,7 @@
 import clsx from "clsx"
 import { useEffect, useMemo, useState } from "react"
 import { ApprovalCard } from "../components/ApprovalCard"
+import { HealthScore } from "../components/HealthScore"
 import { RiskBadge } from "../components/RiskBadge"
 import { QuickDecision } from "../components/QuickDecision"
 import { SessionCode } from "../components/SessionCode"
@@ -295,6 +296,7 @@ export function Dashboard() {
           </div>
           {digest ? <p className="m-0 text-[13.5px] text-mut">{digest.text}</p> : null}
         </section>
+        <HealthScore compact />
       </div>
 
       <section aria-label="Lately" className="dash-feed">
