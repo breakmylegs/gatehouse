@@ -134,6 +134,8 @@ async function passkeyAdd(say) {
 let passkeysOff = ""
 
 const signedOutShell = () => {
+  // The roadhouse picture, faintly, behind the pages before sign-in only (apps/cnw/DESIGN.md).
+  document.body.classList.add("out")
   tabs.hidden = true
   needs.hidden = true
   signout.hidden = true
@@ -239,6 +241,7 @@ async function render() {
     )
   }
   // Signed in, or on an allowed network: the four places.
+  document.body.classList.remove("out")
   tabs.hidden = false
   needs.hidden = false
   signout.hidden = me.access !== "user"

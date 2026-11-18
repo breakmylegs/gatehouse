@@ -6,7 +6,7 @@ import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { RELEASE_KEYS } from "../../host/src/update/manifest.js"
 import { CNW_RELEASE_KEYS } from "../src/release-key.js"
-import { builtVersion, newer, updaterServer, verifyManifest } from "../src/updater.js"
+import { builtVersion, newer, updaterServer, verifyManifest, waitHealthy } from "../src/updater.js"
 
 describe("the updater's service", () => {
   it("answers GET /health with 200 without updating, runs POST /update, and refuses anything else", async () => {
@@ -25,6 +25,27 @@ describe("the updater's service", () => {
     } finally {
       await new Promise((r) => server.close(r))
     }
+  })
+})
+
+// Uplift phase 6: an update from CNW's page waits for CNW's health check as scripts/update.sh does, and is undone
+// when CNW does not come up healthy.
+describe("the health wait after an update", () => {
+  it("is done at the first healthy, stops at unhealthy or a container gone, and gives up after four minutes of looks", async () => {
+    const waited: number[] = []
+    const wait = async (ms: number) => void waited.push(ms)
+    const answers = (list: string[]) => {
+      let i = 0
+      return async () => list[Math.min(i++, list.length - 1)]!
+    }
+    expect(await waitHealthy(answers(["starting", "starting", "healthy"]), wait)).toBe("healthy")
+    expect(waited).toEqual([5000, 5000])
+    expect(await waitHealthy(answers(["starting", "unhealthy"]), wait)).toBe("unhealthy")
+    expect(await waitHealthy(answers(["exited"]), wait)).toBe("exited")
+    waited.length = 0
+    expect(await waitHealthy(answers(["starting"]), wait)).toBe("timed out")
+    expect(waited).toHaveLength(48)
+    expect(await waitHealthy(async () => Promise.reject(new Error("docker down")), wait, 2)).toBe("timed out")
   })
 })
 

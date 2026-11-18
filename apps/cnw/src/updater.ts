@@ -76,7 +76,27 @@ async function fetchText(url: string): Promise<string> {
   return await r.text()
 }
 
-export async function updateNow(o: { repoDir: string; composeDir: string; keyPem: string; current: string; log: (l: string) => void }): Promise<string> {
+/**
+ * Waits for CNW's own health check (its image's HEALTHCHECK), as scripts/update.sh does: up to 48 looks, five seconds
+ * apart (four minutes). "healthy", or why not: "unhealthy", the container gone ("exited", "dead"), or "timed out".
+ */
+export async function waitHealthy(read: () => Promise<string>, wait: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)), looks = 48): Promise<string> {
+  for (let i = 0; i < looks; i++) {
+    const status = await read().catch(() => "unknown")
+    if (status === "healthy" || status === "unhealthy" || status === "exited" || status === "dead") return status
+    await wait(5000)
+  }
+  return "timed out"
+}
+
+/** The cnw container's health, as docker reports it. */
+async function cnwHealth(composeDir: string): Promise<string> {
+  const id = (await run("docker", ["compose", "ps", "-q", "cnw"], composeDir, 30_000)).trim()
+  if (!id) return "starting"
+  return (await run("docker", ["inspect", "--format", "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}", id], composeDir, 30_000)).trim()
+}
+
+export async function updateNow(o: { repoDir: string; composeDir: string; keyPem: string; current: string; log: (l: string) => void; wait?: (ms: number) => Promise<void> }): Promise<string> {
   const base = `${REPO}/releases/download/cnw-latest`
   const [json, sig] = await Promise.all([fetchText(`${base}/cnw-update.json`), fetchText(`${base}/cnw-update.sig`)])
   const m = verifyManifest(json, sig, o.keyPem)
@@ -97,7 +117,13 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
   // kept. CNW_REPO_DIR (set for this service) is the build context, the clone just checked out.
   await run("docker", ["compose", "build", "cnw"], o.composeDir)
   await run("docker", ["compose", "up", "-d", "cnw"], o.composeDir, 5 * 60_000)
-  return `Updated to ${m.version}.`
+  // Uplift phase 6: the same check as scripts/update.sh. CNW must report healthy within four minutes, or the update
+  // is undone: the kept image and commit go back, and the answer says so.
+  const health = await waitHealthy(() => cnwHealth(o.composeDir), o.wait)
+  if (health === "healthy") return `Updated to ${m.version}.`
+  o.log(`CNW ${m.version} did not come up healthy (${health}); going back`)
+  await rollback({ repoDir: o.repoDir, composeDir: o.composeDir, log: o.log })
+  return `Rolled back: CNW ${m.version} did not come up healthy (${health}), so the version from before runs again.`
 }
 
 /** What Server, Updates shows: this version, the newest signed one with its notes, and the one to go back to. */

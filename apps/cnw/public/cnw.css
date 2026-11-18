@@ -502,3 +502,20 @@ dialog.sheet::backdrop {
     margin: auto auto calc(16px + env(safe-area-inset-bottom));
   }
 }
+
+/* Before sign-in only: the Codehouse roadhouse at night, very faint and never clickable (apps/cnw/DESIGN.md). The board
+   and settings have none: on a phone it costs contrast. */
+body.out::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url("/app/codehouse/start-screen.png") center / cover no-repeat;
+  opacity: 0.08;
+  pointer-events: none;
+}
+@media (prefers-color-scheme: dark) {
+  body.out::before {
+    opacity: 0.11;
+  }
+}
