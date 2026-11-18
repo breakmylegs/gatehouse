@@ -66,6 +66,8 @@ export async function startChild(
       title: string
     }): Promise<{ id: string; prompt(text: string): void }>
     record(input: Record<string, unknown>): Promise<unknown>
+    /** E-052: told the new session's id, before its prompt is sent (so a result schema is known for it). */
+    onStarted?(id: string): void
   },
 ): Promise<{ text: string; isError?: boolean }> {
   if (!me) return { text: "This session is not open.", isError: true }
@@ -87,6 +89,7 @@ export async function startChild(
   }
   d.counts.set(me.id, (d.counts.get(me.id) ?? 0) + 1)
   me.adopt(child.id)
+  d.onStarted?.(child.id)
   await d.record({ child: child.id, mode: info.mode, chars: prompt.length })
   child.prompt(agentPrompt(prompt))
   return { text: `Started session ${child.id}. Read it with read_linked_session, or wait for it with wait_for_session.` }

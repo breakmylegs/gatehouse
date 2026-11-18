@@ -697,6 +697,7 @@ export class Session extends EventEmitter<SessionEvents> {
   readonly #carry = new CarryOn(() => carryOnLimits(this.#deps.config().extremeCarryOn))
   /** The session's total cost after its last turn, so a run counts only what it spends. */
   #lastCost = 0
+  #lastResult = ""
   /** You asked to compact while a turn ran: it compacts when the turn ends. */
   #compactAfterTurn = false
   /** Paused at the plan limit: nothing carries on by itself until it starts again. */
@@ -734,6 +735,16 @@ export class Session extends EventEmitter<SessionEvents> {
   /** D-015: why a rule must not be remembered from this session, or undefined. */
   untrustedMention(rule: RuleTerms): string | undefined {
     return this.#provenance.mentions(rule, this.cwd)
+  }
+
+  /** E-052: the final words of the last turn that finished. */
+  lastResult(): string {
+    return this.#lastResult
+  }
+
+  /** E-052: what this session read from outside, for a result it hands back. */
+  taint(): "injection" | "untrusted" | "none" {
+    return this.#provenance.sessionTaint()
   }
 
   dismissCounterexample(id: string): void {
@@ -1592,6 +1603,8 @@ export class Session extends EventEmitter<SessionEvents> {
         void this.#recheckMutant(task)
       }
       this.#deps.usage.record(this.id, this.project, m)
+      // E-052: the turn's final words, kept before it goes idle so a waiting session reads this turn's result.
+      if (typeof m.result === "string") this.#lastResult = m.result
       this.#running = false
       this.#stuck.stop()
       this.#setState("idle")

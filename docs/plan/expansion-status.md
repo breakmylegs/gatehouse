@@ -57,7 +57,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-086 | Writing rules enforcement | E1 | done | feat/about-title | yes | exports corrected with a listed preview; agent commit messages flagged in the session; Settings, Privacy; project .codehouse/writing-rules.json |
 | E-080 | Shared signed redaction lists | E1 | done | feat/health | yes | Ed25519-signed JSON lists, add-only, with source and date; trusted keys in Settings; redaction_list_imported |
 | E-051 | Merge conflict pre-check | E1 | done | feat/about-title | yes | git merge-tree every 5 min while worktree sessions run; told in each session once; shown on Worktrees; committed work only |
-| E-052 | Structured task results | E1 | todo | | |  |
+| E-052 | Structured task results | E1 | done | feat/health | yes | start_session resultSchema; wait_for_session checks it (zod fromJSONSchema), sends back once, then fails; result says the side session's taint |
 | E-089 | Battery-aware scheduling | E1 | todo | | |  |
 | E-094 | Escalation ladder | E1 | done | feat/escalation-ladder | yes | broker, settings-ladder tests |
 | E-095 | Phone pause per project | E1 | done | feat/escalation-ladder | yes | relay-e2e, limit-pause tests; T130 |

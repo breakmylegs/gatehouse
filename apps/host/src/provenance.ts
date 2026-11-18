@@ -112,6 +112,11 @@ export class Provenance {
     return this.#raised !== undefined
   }
 
+  /** E-052: this session's taint, for what it hands back to the session that started it. */
+  sessionTaint(): "injection" | "untrusted" | "none" {
+    return this.#raised !== undefined ? "injection" : this.#reads > 0 || this.#texts.length > 0 ? "untrusted" : "none"
+  }
+
   /** D-017: a subagent (the Task or Agent tool) is starting. */
   subagentStarted(toolUseId: string): void {
     this.#subagents.set(toolUseId, this.#reads)

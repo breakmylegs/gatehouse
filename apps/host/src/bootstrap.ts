@@ -69,6 +69,7 @@ import { Worktrees } from "./worktrees.js"
 import { canaryProblem, runCanaries, type CanaryRun } from "./canaries.js"
 import { REASON_TEXT, SafeMode, safeModePlan, type SafeModeReason } from "./safe-mode.js"
 import { RedactionLists, withTeamTerms } from "./redaction-lists.js"
+import { readSchema, resultInstruction, TaskResults } from "./task-results.js"
 import { ConflictWatch, conflictLine } from "./conflict-check.js"
 import { checkRuntime, runtimeLabel, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { localQuery } from "./providers/local-query.js"
@@ -445,6 +446,8 @@ export function createHost(opts: HostOptions = {}): Host {
   for (const t of cleanupTimers) t.unref?.()
   // T-121: how many sessions each session has started.
   const childCount = new Map<string, number>()
+  // E-052: side tasks that declared the shape of their result.
+  const taskResults = new TaskResults()
   // T-122: routines a session drafted, for you to save on the desktop.
   const routineDrafts = new RoutineDrafts()
   const board = new BoardStore(path.join(gatehouseDataDir(env), "board.json"))
@@ -597,10 +600,14 @@ export function createHost(opts: HostOptions = {}): Host {
         ...(kind !== "chat"
           ? {
               orchestrate: {
-                start: (prompt: string, title?: string) =>
-                  startChild(manager.get(sessionId), prompt, title, {
+                start: async (prompt: string, title?: string, resultSchema?: string) => {
+                  // E-052: a result schema, checked now; the side session is told to end with JSON in that shape.
+                  const shape = resultSchema === undefined ? undefined : readSchema(resultSchema)
+                  if (typeof shape === "string") return { text: `Not started: ${shape}`, isError: true }
+                  return startChild(manager.get(sessionId), shape ? `${prompt}${resultInstruction(shape.text)}` : prompt, title, {
                     counts: childCount,
                     start: (o) => manager.start(o),
+                    ...(shape ? { onStarted: (id: string) => taskResults.expect(id, shape.schema) } : {}),
                     record: (input) =>
                       audit.record({
                         session: sessionId,
@@ -619,12 +626,19 @@ export function createHost(opts: HostOptions = {}): Host {
                         },
                         latencyMs: 0,
                       }),
-                  }),
+                  })
+                },
                 wait: async (id: string, minutes: number) => {
                   const me = manager.get(sessionId)
                   if (!me?.linked().has(id))
                     return { text: "Only a session this one started, or one the person named, can be waited for.", isError: true }
                   const w = await waitForSession(() => manager.get(id)?.info(), minutes)
+                  // E-052: a side task with a result schema hands over its result only once it matches.
+                  const child = manager.get(id)
+                  if (w.done && child && taskResults.has(id)) {
+                    const r = await taskResults.finished(id, child.lastResult(), child.taint(), (p) => child.prompt(p))
+                    if (r) return r
+                  }
                   const read = await readLinked(me.linked(), id, (x) => manager.get(x)?.info(), aboutDeps())
                   return { text: `${w.done ? `It has ${w.state === "idle" ? "finished its turn" : w.state}.` : "It is still working; wait again or read it later."}\n${read.text}` }
                 },

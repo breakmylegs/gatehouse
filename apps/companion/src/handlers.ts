@@ -58,7 +58,8 @@ export interface LinkedReadClient {
 
 /** T-121: start a session in this folder, and wait for one this session started or was given. */
 export interface OrchestrateClient {
-  start(prompt: string, title?: string): Promise<ToolText>
+  /** E-052: resultSchema, a JSON Schema the side session's result must match. */
+  start(prompt: string, title?: string, resultSchema?: string): Promise<ToolText>
   wait(sessionId: string, minutes: number): Promise<ToolText>
 }
 
@@ -200,10 +201,10 @@ export class CompanionHandlers {
     return await this.#deps.about.offer(clean.slice(0, OFFER_MAX_CHARS), why.trim().slice(0, 500))
   }
 
-  async startSession(prompt: string, title?: string): Promise<ToolText> {
+  async startSession(prompt: string, title?: string, resultSchema?: string): Promise<ToolText> {
     if (!this.#deps.orchestrate) return { text: "Sessions cannot be started from here.", isError: true }
     if (!prompt.trim()) return { text: "Not started: say what the session is to do.", isError: true }
-    return await this.#deps.orchestrate.start(prompt.trim().slice(0, 8000), title?.trim().slice(0, 60) || undefined)
+    return await this.#deps.orchestrate.start(prompt.trim().slice(0, 8000), title?.trim().slice(0, 60) || undefined, resultSchema?.trim() || undefined)
   }
 
   async waitForSession(id: string, minutes: number): Promise<ToolText> {
@@ -473,10 +474,11 @@ export const ORCHESTRATE_TOOLS: readonly CompanionToolDef[] = [
   {
     name: "start_session",
     description:
-      "Start another Codehouse session in this folder, in this session's mode and never in Extreme approval, and send it the prompt. Use it to hand a separate piece of work to another agent. The person approves each start (or Extreme approval does), at most 3 from one session. You get its id: read it with read_linked_session and wait for it with wait_for_session.",
-    shape: { prompt: z.string().min(1).max(8000), title: z.string().max(60).optional() },
+      "Start another Codehouse session in this folder, in this session's mode and never in Extreme approval, and send it the prompt. Use it to hand a separate piece of work to another agent. The person approves each start (or Extreme approval does), at most 3 from one session. You get its id: read it with read_linked_session and wait for it with wait_for_session. To get a structured result, give resultSchema (a JSON Schema, as JSON text): the session is asked to end with JSON in that shape, and wait_for_session hands it to you only once it matches (sent back once with what is wrong, then failed).",
+    shape: { prompt: z.string().min(1).max(8000), title: z.string().max(60).optional(), resultSchema: z.string().max(20_000).optional() },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-    run: (h, a) => h.startSession(String(a.prompt ?? ""), typeof a.title === "string" ? a.title : undefined),
+    run: (h, a) =>
+      h.startSession(String(a.prompt ?? ""), typeof a.title === "string" ? a.title : undefined, typeof a.resultSchema === "string" ? a.resultSchema : undefined),
   },
   {
     name: "wait_for_session",

@@ -1489,6 +1489,11 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - "Offers safe mode": a failing canary puts Codehouse in safe mode (E-096, below), and the message points to Doctor.
 
   Each canary has a break check that makes only it fail. Threat T144. Tests: canaries.
+- **E-052, structured task results:** `apps/host/src/task-results.ts`.
+  - **The schema:** the Companion's `start_session` (hand off a side task) takes an optional `resultSchema`, a JSON Schema as JSON text. It is checked at once (`z.fromJSONSchema`, in the pinned zod 4.6.7, so no new dependency), and the side session is asked to end its last message with one JSON block in that shape.
+  - **Checking it:** when the side session finishes its turn, `wait_for_session` takes the last JSON block of the turn's final words and checks it. A valid result is handed over, saying what the side session read (untrusted content, something that looked like prompt injection, or nothing untrusted); `wait_for_session`'s output was already read as untrusted by the session that asked. An invalid one is refused with its errors and sent back to the side session once; invalid again, the task is marked failed.
+  - **Decided by me:** the "Hand off a side task" of the spec is `start_session` (T-121), the Companion's way for a session to hand work to another, since there is no other hand-off.
+  - Tests: task-results, with orchestrate and companion handlers as regressions.
 - **E-080, shared signed redaction lists:** `apps/host/src/redaction-lists.ts`.
   - **The list:** a team's list is a JSON file (name, source, date, terms) and an Ed25519 signature over its exact bytes. It is used only when the signature checks out with a key in Settings, Privacy, "Team redaction lists" (trusted keys, as PEM).
   - **Add only:** a list that says to remove words, or a newer copy of the same list that leaves out a word the one before had, is refused, and says so.
