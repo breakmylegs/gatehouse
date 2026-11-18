@@ -1148,6 +1148,15 @@ export function createHost(opts: HostOptions = {}): Host {
         }),
       })
     : new UpdateService(updateOptions)
+  // Test hook only (scripts/update-e2e-mac.ts): with the local stand-in and its key set, look at once and install what
+  // is found, as the Update button would. Never from GitHub: without GATEHOUSE_UPDATE_BASE and its key it does nothing.
+  if (testBase && testKey && env.GATEHOUSE_UPDATE_TEST_INSTALL === "1") {
+    updates.on("status", (s) => {
+      if (s.available && s.canInstall && s.phase === "idle" && s.latest && !s.applyWhenReady)
+        void updates.install(s.latest.version).catch(() => undefined)
+    })
+    setTimeout(() => void updates.check(), 3_000).unref()
+  }
   const localRelay = new LocalRelay({
     command: process.execPath,
     args: childArgs("relay"),
