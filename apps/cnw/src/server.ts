@@ -10,6 +10,7 @@ import { z } from "zod"
 import { accessOf, COOKIE, csrfOk, may, Sessions, Throttle, type Access } from "./auth.js"
 import { parseRange, type Range } from "./allowlist.js"
 import { Hub } from "./hub.js"
+import { FRESH_MS, order, SEVERE_RISK, summarise, type BoardRow } from "./board.js"
 import { checkPublicKey, newCode, redeem, type Computer, type PendingCode } from "./pairing.js"
 import { hashPassword, verifyPassword } from "./passwords.js"
 import { JsonStore } from "./store.js"
@@ -344,6 +345,90 @@ export async function createCnw(o: CnwOptions) {
       .header("content-disposition", 'attachment; filename="codehouse-neighbourhood-watch-root.crt"')
       .type("application/x-x509-ca-cert")
       .send(fs.readFileSync(file))
+  })
+
+  // Uplift phase 3: the board across computers and the one inbox. Each connected computer is asked for its state at
+  // most every few seconds; an offline one keeps only its last seen.
+  const boardCache = new Map<string, { at: number; row: BoardRow }>()
+  const rowOf = async (c: ReturnType<Hub["status"]>[number], user: string, signedIn: boolean): Promise<BoardRow> => {
+    const base: BoardRow = { id: c.id, label: c.label, online: c.online, waiting: [], ...(c.lastSeen ? { lastSeen: c.lastSeen } : {}), ...(c.version ? { version: c.version } : {}), ...(c.needsUpdate ? { needsUpdate: c.needsUpdate } : {}) }
+    if (!c.online) return { ...base, note: "Not connected." }
+    const t = (o.now ?? Date.now)()
+    const hit = boardCache.get(c.id)
+    if (hit && t - hit.at < 3000) return { ...hit.row, ...base, waiting: hit.row.waiting }
+    const r = await hub.http(c.id, { method: "GET", path: "/api/state", user, signedIn })
+    let row: BoardRow
+    try {
+      row = r.status === 200 ? { ...base, ...summarise(c, JSON.parse(r.body.toString("utf8"))) } : { ...base, note: "It did not answer." }
+    } catch {
+      row = { ...base, note: "It did not answer." }
+    }
+    boardCache.set(c.id, { at: t, row })
+    return row
+  }
+  const boardFor = async (a: Access) => {
+    const user = a.kind === "user" ? a.user : "allowed network"
+    const rows = await Promise.all(hub.status().map((c) => rowOf(c, user, a.kind === "user")))
+    return order(rows)
+  }
+  app.get("/api/board", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a) return
+    return await boardFor(a)
+  })
+
+  // Signing in again, for a Severe approval: the password, checked as at sign-in, makes this sign-in recent.
+  app.post("/api/reauth", async (req, reply) => {
+    const a = access(req)
+    if (a.kind !== "user") return reply.code(401).send({ error: "Sign in first." })
+    const me = userOf(a.user)
+    const key = `name:${me?.email ?? a.user}`
+    const wait = throttle.wait(key)
+    if (wait) return reply.code(429).send({ error: `Too many tries. Wait ${Math.ceil(wait / 1000)} seconds.` })
+    const password = String((req.body as { password?: unknown })?.password ?? "").slice(0, 500)
+    if (!me || !(await verifyPassword(password, me.password))) {
+      throttle.failed(key)
+      return reply.code(403).send({ error: "That is not your password." })
+    }
+    throttle.succeeded(key)
+    sessions.confirm(cookieOf(req))
+    return { ok: true }
+  })
+
+  // An answer from the inbox: sent to that computer, whose floor and policy decide. The risk is read again from the
+  // computer, never taken from the page; a Severe allow needs a signed-in person who signed in in the last five minutes.
+  const Answer = z.object({
+    computer: z.string().min(1).max(100),
+    requestId: z.string().min(1).max(100),
+    decision: z.enum(["allow", "deny"]),
+    message: z.string().max(500).optional(),
+  })
+  app.post("/api/inbox/answer", async (req, reply) => {
+    const a = need(req, reply, "view")
+    if (!a) return
+    const b = Answer.safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "Say which computer, which request, and allow or deny." })
+    const c = hub.status().find((x) => x.id === b.data.computer)
+    if (!c?.online) return reply.code(409).send({ error: "That computer is not connected." })
+    boardCache.delete(c.id)
+    const user = a.kind === "user" ? a.user : "allowed network"
+    const row = await rowOf(c, user, a.kind === "user")
+    const w = row.waiting.find((x) => x.requestId === b.data.requestId)
+    if (!w) return reply.code(410).send({ error: "That request is no longer waiting: it was answered or ended." })
+    if (b.data.decision === "allow" && w.risk >= SEVERE_RISK) {
+      if (!may(a, "severe-approve")) return reply.code(401).send({ error: "A Severe request needs you signed in, even on an allowed network." })
+      if (a.kind === "user" && (o.now ?? Date.now)() - a.confirmedAt > FRESH_MS)
+        return reply.code(428).send({ error: "This is Severe: sign in again to allow it.", reauth: true })
+    }
+    const data =
+      b.data.decision === "allow"
+        ? { type: "approve", requestId: w.requestId, ...(b.data.message ? { message: b.data.message } : {}) }
+        : { type: "deny", requestId: w.requestId, ...(b.data.message ? { message: b.data.message } : {}) }
+    const sent = hub.commandAs(c.id, user, a.kind === "user", data)
+    if (sent !== "sent") return reply.code(409).send({ error: "That computer is not connected." })
+    boardCache.delete(c.id)
+    record(user, `inbox-${b.data.decision}`, `${c.label}: ${w.tool} in ${w.project} (risk ${w.risk})`)
+    return { ok: true, sent: `Sent to ${c.label}. Its own rules decide; the inbox shows what it did.` }
   })
 
   app.get("/api/computers", async (req, reply) => (need(req, reply, "view") ? { computers: hub.status() } : undefined))

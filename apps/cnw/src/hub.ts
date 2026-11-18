@@ -224,6 +224,17 @@ export class Hub {
   }
 
   /**
+   * Uplift phase 3: a command CNW's own pages send for a user (an answer from the inbox), as that user's tab would.
+   * The computer's floor and policy decide, as for any command, and it records who sent it.
+   */
+  commandAs(computerId: string, user: string, signedIn: boolean, data: unknown): "sent" | "offline" {
+    const agent = this.#agents.get(computerId)
+    if (!agent) return "offline"
+    agent.socket.send(JSON.stringify({ type: "command", from: user, signedIn, data }))
+    return "sent"
+  }
+
+  /**
    * A page's call to its computer's own API (files, settings and the rest), passed to the computer and answered by its
    * Host, as at the desk. 60 s at most; the user it came from goes with it.
    */

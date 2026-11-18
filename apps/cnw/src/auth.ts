@@ -17,6 +17,8 @@ interface Session {
   seen: number
   /** Signed in with a passkey, which the riskiest actions want. */
   passkey: boolean
+  /** When the person last proved it is them (signing in, or signing in again): a Severe allow wants it recent. */
+  confirmed: number
 }
 
 const hash = (s: string) => crypto.createHash("sha256").update(s).digest("hex")
@@ -33,7 +35,7 @@ export class Sessions {
     const id = crypto.randomBytes(32).toString("base64url")
     const csrf = crypto.randomBytes(24).toString("base64url")
     const t = this.#now()
-    this.#byHash.set(hash(id), { user, csrf, created: t, seen: t, passkey })
+    this.#byHash.set(hash(id), { user, csrf, created: t, seen: t, passkey, confirmed: t })
     return { id, csrf }
   }
 
@@ -48,6 +50,12 @@ export class Sessions {
     }
     s.seen = t
     return s
+  }
+
+  /** The person proved it is them again (their password): this sign-in counts as recent. */
+  confirm(id: string | undefined): void {
+    const s = this.get(id)
+    if (s) s.confirmed = this.#now()
   }
 
   end(id: string | undefined): void {
@@ -88,11 +96,11 @@ export class Throttle {
 }
 
 /** What a request may do: signed in, from an allow-listed address, or neither. */
-export type Access = { kind: "user"; user: string; passkey: boolean; csrf: string } | { kind: "allowlisted" } | { kind: "none" }
+export type Access = { kind: "user"; user: string; passkey: boolean; csrf: string; confirmedAt: number } | { kind: "allowlisted" } | { kind: "none" }
 
 export function accessOf(ip: string, sessionId: string | undefined, sessions: Sessions, ranges: readonly Range[]): Access {
   const s = sessions.get(sessionId)
-  if (s) return { kind: "user", user: s.user, passkey: s.passkey, csrf: s.csrf }
+  if (s) return { kind: "user", user: s.user, passkey: s.passkey, csrf: s.csrf, confirmedAt: s.confirmed }
   if (ranges.length && allowed(ip, ranges)) return { kind: "allowlisted" }
   return { kind: "none" }
 }
