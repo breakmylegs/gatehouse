@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { CodeEditor, CodeView } from "./CodeViews"
 import { Outline } from "./Outline"
+import { TS_FILE, TypeScriptHelp } from "./TypeScriptHelp"
 import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
 import { LINK_PARTS } from "../lib/links"
@@ -10,7 +11,8 @@ import { api } from "../lib/api"
 import type { Item } from "../lib/transcript"
 import { MAX_ROWS, parseDelimited, separatorOf, TABLE } from "../lib/delimited"
 
-export type Opened = { kind: "file"; rel: string } | { kind: "browser"; url: string }
+/** A file to show (C-032: at a line, when opened from a definition or a reference), or a local page. */
+export type Opened = { kind: "file"; rel: string; line?: number } | { kind: "browser"; url: string }
 
 interface Entry {
   name: string
@@ -228,7 +230,10 @@ export function Viewer({
   // G33: your edit, kept here until saved; saved only over the version opened.
   const [editing, setEditing] = useState(false)
   // C-031: the line the outline last sent the view to.
-  const [goTo, setGoTo] = useState<{ line: number; n: number }>()
+  const [goTo, setGoTo] = useState<{ line: number; n: number } | undefined>(opened.kind === "file" && opened.line ? { line: opened.line, n: 1 } : undefined)
+  // C-032: the cursor, for the TypeScript language service, and F12 asking for a definition.
+  const [cursorAt, setCursorAt] = useState(0)
+  const [askDefinition, setAskDefinition] = useState(0)
   const [draft, setDraft] = useState("")
   const [saving, setSaving] = useState(false)
 
@@ -462,7 +467,23 @@ export function Viewer({
         ) : (
           // C-031: the file's outline beside it, and go to symbol.
           <div className="grid min-h-0 grid-cols-[1fr_auto]">
-            <CodeView text={read.text} label={`${rel}, read only`} {...(goTo ? { goTo } : {})} />
+            <div className="grid min-h-0 content-start">
+              <CodeView
+                text={read.text}
+                label={`${rel}, read only`}
+                {...(goTo ? { goTo } : {})}
+                {...(TS_FILE.test(rel) ? { onCursor: setCursorAt, onDefinition: () => setAskDefinition((n) => n + 1) } : {})}
+              />
+              {TS_FILE.test(rel) ? (
+                <TypeScriptHelp
+                  sessionId={sessionId}
+                  rel={rel}
+                  pos={cursorAt}
+                  ask={askDefinition}
+                  onGo={(file, line) => (file === rel ? setGoTo((g) => ({ line, n: (g?.n ?? 0) + 1 })) : onNavigate({ kind: "file", rel: file, line }))}
+                />
+              ) : null}
+            </div>
             <div className="max-h-[80vh] w-56 overflow-auto">
               <Outline sessionId={sessionId} rel={rel} onGo={(line) => setGoTo((g) => ({ line, n: (g?.n ?? 0) + 1 }))} />
             </div>

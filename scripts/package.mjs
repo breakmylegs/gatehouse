@@ -154,6 +154,8 @@ if (!exeOnly) {
     "fastify/package.json",
     "web-tree-sitter/package.json",
     "@vscode/tree-sitter-wasm/wasm/tree-sitter-typescript.wasm",
+    // C-032: the TypeScript language service the file view asks.
+    "typescript/package.json",
   ])
     if (!fs.existsSync(path.join(app, "node_modules", must)))
       throw new Error(`node_modules/${must} was not installed`)

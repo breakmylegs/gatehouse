@@ -7,6 +7,7 @@ import { secretGlobs } from "@gatehouse/policy"
 import { createCheckpoint, writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
 import { languageOf, outline } from "./outline.js"
+import { TsService, type TsOp } from "./ts-service.js"
 import {
   applyReplace,
   previewReplace,
@@ -191,6 +192,12 @@ export function findFiles(root: string, query: string): string[] {
 }
 
 export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & FilesDeps): void {
+  // C-032: one TypeScript language service for this Host, started at its first question, closed with the Host.
+  let tsService: TsService | undefined
+  const ts = { ask: (op: TsOp, root: string, file: string, pos: number) => (tsService ??= new TsService()).ask(op, root, file, pos) }
+  app.addHook("onClose", async () => {
+    await tsService?.close()
+  })
   // Preview addresses: /preview/<token>/<path>. A token belongs to one session and its folder, and ends when that
   // session closes or no longer works there (backlog O13: they used to last while Codehouse ran).
   const previews = new Map<string, { root: string; session: string }>()
@@ -426,6 +433,33 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     if (await blocked(where.abs, root)) return { symbols: [], language: lang }
     const symbols = await outline(fs.readFileSync(where.abs, "utf8"), lang).catch(() => [])
     return { symbols, language: lang }
+  })
+
+  // C-032: TypeScript's language service for a .ts, .tsx, .js or .jsx file in the session's folder: diagnostics, what
+  // the name at a position is, its definition and its references. The same checks as reading the file; results outside
+  // the session's folder are left out, and paths are given from it.
+  app.get("/api/files/ts", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const where = locate(q, root)
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    const op = String(q.op ?? "")
+    if (!["diagnostics", "info", "definition", "references"].includes(op)) return bad(reply, 422, "Diagnostics, info, definition or references.")
+    if (!/\.(m|c)?(t|j)sx?$/i.test(where.abs)) return bad(reply, 422, "Only TypeScript and JavaScript files.")
+    if (!fs.existsSync(where.abs) || !fs.statSync(where.abs).isFile() || fs.statSync(where.abs).size > MAX_TEXT) return bad(reply, 422, "That file cannot be read here.")
+    if (await blocked(where.abs, root)) return bad(reply, 403, "The floor blocks that file.")
+    const pos = Math.max(0, Math.min(Number(q.pos) || 0, MAX_TEXT))
+    try {
+      const result = await ts.ask(op as TsOp, path.resolve(root), path.resolve(where.abs), pos)
+      // Only what is inside the session's folder, with paths from it.
+      const inside = (r: { file?: string }) => !r.file || path.resolve(r.file).startsWith(path.resolve(root) + path.sep)
+      const rel = <T extends { file?: string }>(r: T): T => (r.file ? { ...r, file: path.relative(root, r.file).split(path.sep).join("/") } : r)
+      if (Array.isArray(result)) return { op, results: (result as Array<{ file?: string }>).filter(inside).map(rel) }
+      return { op, result }
+    } catch (e) {
+      return bad(reply, 503, (e as Error).message)
+    }
   })
 
   // G33: your own edit to a file in the session's folder, saved only if the file is still as it was when you opened

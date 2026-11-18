@@ -99,17 +99,45 @@ export function CodeView({
   text,
   label,
   goTo,
+  onCursor,
+  onDefinition,
 }: {
   text: string
   label: string
   /** C-031: a line to show and put the cursor on; `n` changes each time, so the same line can be gone to again. */
   goTo?: { line: number; n: number }
+  /** C-032: where the cursor is, as an offset in the text, each time it moves. */
+  onCursor?: (pos: number) => void
+  /** C-032: F12, go to the definition of the name at the cursor. */
+  onDefinition?: () => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | undefined>(undefined)
+  // Read at each event, so a new callback needs no new editor.
+  const cursor = useRef(onCursor)
+  const definition = useRef(onDefinition)
+  cursor.current = onCursor
+  definition.current = onDefinition
   useEffect(() => {
     if (!host.current) return
-    const view = new EditorView({ doc: text, extensions: base(label), parent: host.current })
+    const view = new EditorView({
+      doc: text,
+      extensions: [
+        base(label),
+        EditorView.updateListener.of((u) => {
+          if (u.selectionSet) cursor.current?.(u.state.selection.main.head)
+        }),
+        EditorView.domEventHandlers({
+          keydown: (e) => {
+            if (e.key !== "F12" || !definition.current) return false
+            e.preventDefault()
+            definition.current()
+            return true
+          },
+        }),
+      ],
+      parent: host.current,
+    })
     viewRef.current = view
     return () => {
       viewRef.current = undefined

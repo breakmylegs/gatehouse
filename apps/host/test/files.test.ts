@@ -70,6 +70,20 @@ afterAll(async () => {
 
 const get = (url: string) => app.inject({ method: "GET", url })
 
+// C-032: TypeScript's language service through the files API, with the same checks as reading a file.
+describe("the TypeScript language service for the file view", () => {
+  it("answers for a TypeScript file in the session's folder, from it, and refuses other files and outside paths", { timeout: 120_000 }, async () => {
+    const r = await get("/api/files/ts?session=s1&path=src/a.ts&op=definition&pos=13")
+    expect(r.statusCode).toBe(200)
+    expect(r.json()).toEqual({ op: "definition", results: [expect.objectContaining({ file: "src/a.ts", line: 1 })] })
+    expect((await get("/api/files/ts?session=s1&path=src/a.ts&op=diagnostics")).json()).toEqual({ op: "diagnostics", results: [] })
+    expect((await get("/api/files/ts?session=s1&path=README.md&op=diagnostics")).statusCode).toBe(422)
+    expect((await get("/api/files/ts?session=s1&path=src/a.ts&op=rename")).statusCode).toBe(422)
+    expect((await get("/api/files/ts?session=s1&path=../outside/private.txt&op=diagnostics")).statusCode).toBe(403)
+    expect((await get("/api/files/ts?session=s9&path=src/a.ts&op=diagnostics")).statusCode).toBe(404)
+  })
+})
+
 describe("a file the session wrote outside its folder (owner, 4 Nov)", () => {
   it("opens in the pane, copies out and shows in Explorer, while one it did not write stays refused", async () => {
     const plan = path.join(outside, "plan.md")
