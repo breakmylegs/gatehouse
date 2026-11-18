@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react"
+import { toast } from "sonner"
 import { useStore } from "../store"
 import { inShell, onShell, tellShell } from "./shell"
 
@@ -79,6 +80,11 @@ export function startShell(): () => void {
     if (m.startsWith("open-folder:")) {
       const folder = m.slice(12).trim()
       if (folder && folder.length <= 1000 && !/[\r\n]/.test(folder)) useStore.getState().openFolder(folder)
+      return
+    }
+    // T-005: something dropped on the sidebar that is not a folder.
+    if (m === "drop-not-folder") {
+      toast("Drop a folder to open it as a project; a file cannot be one.", { id: "drop" })
       return
     }
     // Mac fork: a request opened from the wing beside the notch (NotchMac.tsx), on Approvals.

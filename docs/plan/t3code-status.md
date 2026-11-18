@@ -16,7 +16,7 @@ Slices, in order:
 | T-002 | Open a project in the running app from a terminal (`t3 app <folder>`). | Build, S | built | feat/open-folder | `Codehouse.exe <folder>` opens the start-session form on it, in the running copy too; nothing starts until you say what to build |
 | T-003 | Background service at sign-in, restarted if it exits. | Have | built (Codehouse had it) | | |
 | T-004 | Welcome page that finds installed agents and imports recent projects and conversations from Claude Code's history. | Partly | todo | | |
-| T-005 | Drop a folder on the sidebar to open it as a project. | Build, S | waiting | | a page is not given a dropped folder's path; needs the window to take the drop (WebView2 postMessageWithAdditionalObjects), not checked on this runtime yet |
+| T-005 | Drop a folder on the sidebar to open it as a project. | Build, S | built | feat/t005 | WebView2 1.0.4314.35 has postMessageWithAdditionalObjects and CoreWebView2File.Path (checked); the window reads the dropped folder's path and sends T-002's open-folder; Windows window only, a browser, CNW and the Mac say how to open a folder instead |
 | T-006 | Threads without a project, in dated scratch folders, and Turn into project. | Partly | built in part | slice/t4 | scratch sessions in dated folders; Turn into project not yet |
 | T-007 | Desktop as a remote only, with no local server. | Conflicts | listed for decision | | |
 | T-008 | Run agents and projects inside a WSL distro. | Build, L | todo | | |

@@ -384,6 +384,7 @@ internal sealed class MainForm : Form
             else if (m == "voice") VoiceTyping();
             else if (m != null && m.StartsWith("hotkey:")) SetHotkey(m.Substring("hotkey:".Length));
             else if (m != null && m.StartsWith("popout:")) PopOut(m.Substring("popout:".Length));
+            else if (m == "folder-drop") FolderDropped(e);
         };
         // Only the window's own loads of its page count: a link the guard cancelled, and opened in your browser, also
         // finishes as a failure (OperationCanceled) and must leave the interface as it is (owner, 18 Nov).
@@ -625,6 +626,26 @@ internal sealed class MainForm : Form
         if (folder.Length == 0 || folder.Length > 1000 || folder.IndexOfAny(new[] { '\r', '\n' }) >= 0 || !Directory.Exists(folder)) return;
         ShowWindow();
         Tell("open-folder:" + folder);
+    }
+
+    /// <summary>T-005: a folder dropped on the sidebar. The page cannot know its path; WebView2 gives the window the
+    /// dropped item (CoreWebView2File), whose path opens the start-session form as a folder from a terminal does.
+    /// Nothing starts until you say what to do. A file is answered "drop-not-folder".</summary>
+    private void FolderDropped(CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        string path = null;
+        try
+        {
+            foreach (object o in e.AdditionalObjects)
+            {
+                CoreWebView2File f = o as CoreWebView2File;
+                if (f != null) { path = f.Path; break; }
+            }
+        }
+        catch (Exception ex) { Remember("[drop] the dropped item could not be read: " + ex.Message); return; }
+        string what = NavGuard.Dropped(path, path != null && Directory.Exists(path), path != null && File.Exists(path));
+        if (what == "folder") Tell("open-folder:" + path);
+        else if (what == "not-folder") Tell("drop-not-folder");
     }
 
     // ---- the wing at the top of the screen (O37, the Windows version of the Mac's beside the notch) ----

@@ -203,6 +203,7 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
     body: `A project gathers what a set of chats should know, so you do not repeat it each time.
 
 - **Make the project** from a name. Choose it in the list to see it.
+- **Drop a folder on the sidebar** (in the Codehouse window on Windows) to start a session in it: the start form opens with that folder filled in, and nothing starts until you choose.
 - **Instructions** are your own words, for every chat in the project: how you like answers, what the project is, what to avoid. They save when you leave the box.
 - **Who this project's chats may use** lists Claude and, where IT set one up, models on this computer or your organisation's gateway. Untick one to keep the project's work off it: Start a chat then offers only the others, and a chat on a provider the project does not allow does not start. One always stays ticked.
 - **Where your words go**, in Settings under Other AI providers, is a card for each provider: what it keeps and for how long, whether it trains on what you send, where it is processed, whether there is a zero data retention agreement, and when and where you checked. Codehouse cannot find this out, so you record it, and each change is recorded in the audit log.

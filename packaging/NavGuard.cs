@@ -64,6 +64,16 @@ internal static class NavGuard
         return Web(uri) ? NavAction.External : NavAction.Refuse;
     }
 
+    /// <summary>T-005: what a path dropped on the sidebar is. "folder" opens the start-session form with it (as a
+    /// folder opened from a terminal, T-002); "not-folder" is a file; "refuse" is nothing usable (empty, too long, or
+    /// with a line break, which would break the message to the page).</summary>
+    internal static string Dropped(string path, bool isFolder, bool isFile)
+    {
+        if (string.IsNullOrEmpty(path) || path.Length > 1000 || path.IndexOfAny(new[] { '\r', '\n' }) >= 0) return "refuse";
+        if (isFolder) return "folder";
+        return isFile ? "not-folder" : "refuse";
+    }
+
     /// <summary>A navigation that finished. <paramref name="own"/>: one to Codehouse's own page that started in the
     /// window itself (its first load or a reload); a link the guard cancelled is never own. <paramref name="loaded"/>:
     /// the page has loaded before. Only a failure of the window's own load is fatal, so a link opened in your browser
@@ -111,6 +121,12 @@ internal static class NavGuard
             NavAction a = Decide(args[1], args[2], args[3]);
             Console.WriteLine(a.ToString().ToLowerInvariant());
             if (a != NavAction.Allow) Console.WriteLine(Report(args[3], args[1], a));
+            return 0;
+        }
+        // --dropped <path>: prints folder, not-folder or refuse, for what is at that path now.
+        if (args.Length == 2 && args[0] == "--dropped")
+        {
+            Console.WriteLine(Dropped(args[1], System.IO.Directory.Exists(args[1]), System.IO.File.Exists(args[1])));
             return 0;
         }
         // --completed <true|false> <status> <own true|false> <loaded true|false>: prints loaded, fatal or ignore.

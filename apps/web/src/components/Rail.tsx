@@ -18,6 +18,7 @@ import {
 import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { askAbout } from "../lib/askAbout"
+import { dropToShell } from "../lib/shell"
 import { openExport } from "./ExportDialog"
 import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
@@ -193,7 +194,20 @@ export function Rail({ onHide }: { onHide: () => void }) {
   ]
 
   return (
-    <nav aria-label="Sidebar" className="rail shell">
+    <nav
+      aria-label="Sidebar"
+      className="rail shell"
+      // T-005: a folder dropped here opens the start-session form with it, through the window.
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault()
+      }}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return
+        e.preventDefault()
+        if (dropToShell(e.dataTransfer.files) === "no-shell")
+          toast("Dropping a folder works in the Codehouse window on Windows. Here, start a session and choose its folder.", { id: "drop" })
+      }}
+    >
       {/* The wordmark is in the command deck above (Stitch, R2). */}
       <div className="flex items-center gap-2 px-3 pt-3">
         <button

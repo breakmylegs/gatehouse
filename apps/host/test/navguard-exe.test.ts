@@ -90,6 +90,17 @@ describe.skipIf(!csc)("the window's navigation guard", () => {
     expect(completed(true, "Unknown", true, false)).toBe("loaded")
   })
 
+  // T-005: a folder dropped on the sidebar opens the start-session form; a file, or nothing usable, does not.
+  it("knows a dropped folder from a file and from nothing usable", () => {
+    const dropped = (p: string) => execFileSync(exe, ["--dropped", p], { windowsHide: true }).toString().trim()
+    const file = path.join(dir, "a.txt")
+    fs.writeFileSync(file, "x")
+    expect(dropped(dir)).toBe("folder")
+    expect(dropped(file)).toBe("not-folder")
+    expect(dropped(path.join(dir, "gone"))).toBe("refuse")
+    expect(dropped("")).toBe("refuse")
+  })
+
   it("refuses addresses that are not web pages without opening them", () => {
     expect(decide("file:///C:/Users/someone/secret.txt")).toEqual({
       action: "refuse",
@@ -103,6 +114,13 @@ describe.skipIf(!csc)("the window's navigation guard", () => {
 describe("the windows' handling of a finished navigation", () => {
   // Every NavigationCompleted in the Windows windows decides through NavGuard.Completed, with the ids of its own loads,
   // so a cancelled link can never fail a window or the quick prompt again.
+  it("opens a dropped folder only through NavGuard.Dropped, as a folder from a terminal", () => {
+    const src = fs.readFileSync(path.join(REPO, "packaging", "CodehouseApp.cs"), "utf8")
+    expect(src).toMatch(/m == "folder-drop"\) FolderDropped\(e\)/)
+    expect(src).toMatch(/NavGuard\.Dropped\(path, /)
+    expect(src).toMatch(/if \(what == "folder"\) Tell\("open-folder:" \+ path\)/)
+  })
+
   it("goes through NavGuard.Completed, never failing on IsSuccess alone", () => {
     for (const f of ["CodehouseApp.cs", "Overlay.cs"]) {
       const src = fs.readFileSync(path.join(REPO, "packaging", f), "utf8")

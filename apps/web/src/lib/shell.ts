@@ -6,6 +6,8 @@
  */
 interface WebViewHost {
   postMessage(message: string): void
+  /** WebView2: a message with files the window can read the paths of (a dropped folder, T-005). */
+  postMessageWithAdditionalObjects?(message: string, objects: ArrayLike<File>): void
   addEventListener(type: "message", listener: (e: { data: unknown }) => void): void
   removeEventListener(type: "message", listener: (e: { data: unknown }) => void): void
 }
@@ -37,6 +39,22 @@ export function tellShell(message: ShellMessage): void {
     host()?.postMessage(message)
   } catch {
     /* the window is going away */
+  }
+}
+
+/**
+ * T-005: a folder dropped on the sidebar. A page is never given a dropped item's path, so the files go to the window,
+ * which reads the folder's real path (WebView2's postMessageWithAdditionalObjects) and answers with the same
+ * open-folder message as a folder opened from a terminal (T-002). "no-shell" in a browser, CNW or a window without it.
+ */
+export function dropToShell(files: ArrayLike<File>): "sent" | "no-shell" {
+  const h = host()
+  if (!h?.postMessageWithAdditionalObjects || !files.length) return "no-shell"
+  try {
+    h.postMessageWithAdditionalObjects("folder-drop", files)
+    return "sent"
+  } catch {
+    return "no-shell"
   }
 }
 
