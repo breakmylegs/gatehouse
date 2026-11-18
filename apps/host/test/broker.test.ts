@@ -587,6 +587,59 @@ describe("the escalation ladder (E-094)", () => {
     expect(pushed).toEqual([])
   })
 
+  // Mac fork (owner, 18 Nov): "only ... if I am not active here, or I am active here but haven't responded for 2 minutes".
+  describe("waiting only while someone is using the computer", () => {
+    const ladder = () => ({ phoneMs: 2 * 60_000, pushMs: 2 * 60_000, onlyWhenHere: true })
+    const settle = async () => {
+      for (let i = 0; i < 5; i++) await Promise.resolve()
+    }
+
+    it("tells the phone and the push channels at once when nobody is using it", async () => {
+      const { broker, phone } = make({ ladder, away: async () => true })
+      const pushed: string[] = []
+      broker.on("push_due", (v) => pushed.push(v.request.id))
+      void broker.request(spec())
+      await settle()
+      expect(phone.delivered.map((r) => r.id)).toEqual([firstId(broker)])
+      expect(pushed).toEqual([firstId(broker)])
+    })
+
+    it("waits as the ladder says while someone is, and tells nobody else of what they answer in time", async () => {
+      const { broker, phone } = make({ ladder, away: async () => false })
+      const pushed: string[] = []
+      broker.on("push_due", (v) => pushed.push(v.request.id))
+      void broker.request(spec())
+      await settle()
+      expect(phone.delivered).toHaveLength(0)
+      vi.advanceTimersByTime(2 * 60_000)
+      await settle()
+      expect(phone.delivered).toHaveLength(1)
+      expect(pushed).toHaveLength(1)
+
+      const p = broker.request(spec())
+      await settle()
+      broker.resolve(broker.list().at(-1)!.request.id, { kind: "decision", decision: "allow" }, "desktop")
+      expect((await p).outcome).toBe("allow")
+      vi.advanceTimersByTime(5 * 60_000)
+      expect(phone.delivered).toHaveLength(1)
+      expect(pushed).toHaveLength(1)
+    })
+
+    it("waits whether or not anyone is there unless it is chosen, and when the reading fails", async () => {
+      for (const o of [
+        { ladder: () => ({ phoneMs: 60_000 }), away: async () => true },
+        { ladder, away: () => Promise.reject(new Error("no ioreg")) },
+      ]) {
+        const { broker, phone } = make(o)
+        void broker.request(spec())
+        await settle()
+        expect(phone.delivered).toHaveLength(0)
+        vi.advanceTimersByTime(60_000)
+        expect(phone.delivered).toHaveLength(o.ladder === ladder ? 0 : 1)
+      }
+    })
+  })
+
   it("tells every channel at once without a ladder, as before", () => {
     const { broker, phone } = make()
     const pushed: string[] = []

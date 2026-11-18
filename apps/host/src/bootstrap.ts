@@ -9,6 +9,7 @@ import { InstructionPins } from "./instruction-pins.js"
 import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
+import { macAway } from "./away-mac.js" // Mac fork
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
@@ -271,8 +272,10 @@ export function createHost(opts: HostOptions = {}): Host {
         ? {
             phoneMs: (config.escalationLadder.phoneAfterMinutes ?? 0) * 60_000,
             pushMs: (config.escalationLadder.pushAfterMinutes ?? 0) * 60_000,
+            onlyWhenHere: config.escalationLadder.onlyWhenHere === true,
           }
         : undefined,
+    ...(process.platform === "darwin" ? { away: macAway() } : {}), // Mac fork
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
   // 15 seconds, or 35 while the policy has the judge on (its own limit is 25). Still bounded, still fail-closed.

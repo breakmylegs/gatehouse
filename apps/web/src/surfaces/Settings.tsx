@@ -45,7 +45,7 @@ import { modelsText, parseModels, setCustomModels } from "../lib/models"
 import { setSendKey, useSendKey, type SendKey } from "../lib/sendKey"
 import { parsePricing, pricingText, type ModelPrice } from "../lib/pricing"
 import { EFFORTS } from "../lib/modes"
-import { onMac } from "../lib/platform-mac" // Mac fork
+import { isMac, onMac } from "../lib/platform-mac" // Mac fork
 import { send, useStore } from "../store"
 
 interface Config {
@@ -58,7 +58,7 @@ interface Config {
   digestTime?: string | null
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   /** E-094: minutes the phone and the push channels wait before they are told; absent, all at once. */
-  escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number }
+  escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number; onlyWhenHere?: boolean }
   /** O42: false turns off the ten-minute summaries. */
   timelineSummaries?: boolean
   /** T-020: false turns off the suggested next prompt. */
@@ -166,6 +166,7 @@ interface Values {
   /** E-094: minutes before the phone, and before ntfy and Slack, are told; "0" for at once. */
   ladPhone: string
   ladPush: string
+  ladHere: boolean // Mac fork
   /** O42: the ten-minute summaries for each session's timeline. */
   tlOn: boolean
   /** T-020: a suggested next prompt after each turn. */
@@ -260,6 +261,7 @@ export function valuesOf(d: SettingsData): Values {
     memPoint: c.memoryGovernor?.on === true && !c.memoryGovernor.off ? String(c.memoryGovernor.percent) : "off",
     ladPhone: String(c.escalationLadder?.phoneAfterMinutes ?? 0),
     ladPush: String(c.escalationLadder?.pushAfterMinutes ?? 0),
+    ladHere: c.escalationLadder?.onlyWhenHere === true,
     tlOn: c.timelineSummaries !== false,
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
@@ -473,6 +475,7 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
       ...(d.saved.escalationLadder ?? {}),
       phoneAfterMinutes: Number(v.ladPhone),
       pushAfterMinutes: Number(v.ladPush),
+      ...(v.ladHere ? { onlyWhenHere: true } : { onlyWhenHere: undefined }),
     }
   // A name the Host accepts, or none: half-typed or odd names are not saved.
   if (STYLE_NAME.test(v.style.trim())) body.outputStyle = v.style.trim()
@@ -559,6 +562,7 @@ export const DEFAULT_VALUES: Values = {
   memPoint: "off",
   ladPhone: "0",
   ladPush: "0",
+  ladHere: false,
   tlOn: true,
   psOn: true,
   cmText: "",
@@ -849,7 +853,7 @@ export function Settings() {
   const extremeChanged = differs(v, ["ecTurns", "ecUsd", "exLimit"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
-  const ladChanged = differs(v, ["ladPhone", "ladPush"])
+  const ladChanged = differs(v, ["ladPhone", "ladPush", "ladHere"])
   const tlChanged = differs(v, ["tlOn"])
   const psChanged = differs(v, ["psOn"])
   const cmChanged = differs(v, ["cmText"])
@@ -1674,6 +1678,24 @@ export function Settings() {
                   </select>
                 </Field>
               ))}
+              {isMac() && (v.ladPhone !== "0" || v.ladPush !== "0") ? (
+                // Mac fork (owner, 18 Nov): away-mac.ts says whether anyone is using the Mac.
+                <label className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={v.ladHere}
+                    onChange={(e) => change({ ladHere: e.target.checked }, "Who is told, and when")}
+                  />
+                  <span>
+                    Wait only while I am using this Mac
+                    <span className="block text-xs text-mut">
+                      When nobody has touched the keyboard, mouse or trackpad for 2 minutes, or the Mac is locked or
+                      asleep, the phone and the push channels are told at once.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
             </Group>
 
             <Group section="phone" title="Daily digest" gap="gap-2" changed={digestChanged}>
