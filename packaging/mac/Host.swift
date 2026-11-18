@@ -10,7 +10,7 @@ enum HostEvent {
   case restart
   case progress(String)
   case awake(Bool)
-  case applyUpdate
+  case applyUpdate(updater: String, plan: String)
   case other(String)
 
   static func parse(_ line: String) -> HostEvent {
@@ -24,7 +24,9 @@ enum HostEvent {
     case "restart": return .restart
     case "progress": return .progress(j["text"] as? String ?? "")
     case "awake": return .awake(j["on"] as? Bool ?? false)
-    case "apply-update": return .applyUpdate
+    case "apply-update":
+      guard let updater = j["updater"] as? String, let plan = j["plan"] as? String else { return .other(line) }
+      return .applyUpdate(updater: updater, plan: plan)
     default: return .other(line)
     }
   }
@@ -175,6 +177,8 @@ final class HostProcess {
     env["GATEHOUSE_EXIT_ON_STDIN_CLOSE"] = "1"
     env["GATEHOUSE_CAN_RESTART"] = "1"
     env["GATEHOUSE_MAC_APP_VERSION"] = version
+    // The in-app updater (apps/host/src/update/service-mac.ts) replaces this app where it is.
+    env["GATEHOUSE_MAC_APP_PATH"] = Bundle.main.bundlePath
     // The resource limits per session (packaging/mac/limits), beside this program.
     if let dir = Bundle.main.executableURL?.deletingLastPathComponent() {
       env["GATEHOUSE_MAC_LIMITS"] = dir.appendingPathComponent("codehouse-limits").path

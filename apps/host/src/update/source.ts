@@ -52,6 +52,11 @@ export interface GitHubSourceOptions {
   /** Tests only: more local origins a redirect may lead to (a stand-in download host). */
   testOrigins?: string[]
   fetchImpl?: typeof fetch
+  /**
+   * Mac fork (18 Nov): read the newest description from a release that is never Latest (the Mac's mac-channel), and
+   * each version's signature and parts from that version's own release. Unset: Latest and v<version>, as Windows.
+   */
+  channel?: { tag: string; manifest: string; signature: string; tagOf: (version: string) => string }
 }
 
 export class GitHubSource implements UpdateSource {
@@ -60,6 +65,7 @@ export class GitHubSource implements UpdateSource {
   readonly #base: URL | undefined
   readonly #testOrigins: string[]
   readonly #fetch: typeof fetch
+  readonly #channel: GitHubSourceOptions["channel"]
   /** Asset download addresses by version, from the API (token mode only). */
   readonly #assets = new Map<string, Map<string, string>>()
 
@@ -69,6 +75,18 @@ export class GitHubSource implements UpdateSource {
     this.#base = o.base ? new URL(o.base) : undefined
     this.#testOrigins = o.base ? (o.testOrigins ?? []) : []
     this.#fetch = o.fetchImpl ?? fetch
+    this.#channel = o.channel
+  }
+
+  /** A version's release tag, and the names of the description and its signature. */
+  #tag(version: string): string {
+    return this.#channel ? this.#channel.tagOf(version) : `v${version}`
+  }
+  get #manifestName(): string {
+    return this.#channel?.manifest ?? UPDATE_FILE
+  }
+  get #signatureName(): string {
+    return this.#channel?.signature ?? UPDATE_SIGNATURE
   }
 
   describe(): string {
@@ -126,7 +144,11 @@ export class GitHubSource implements UpdateSource {
   async latest(): Promise<LatestRelease | undefined> {
     if (this.#token()) return this.#latestApi()
     const bytes = await this.#small(
-      this.#web(`releases/latest/download/${UPDATE_FILE}`),
+      this.#web(
+        this.#channel
+          ? `releases/download/${this.#channel.tag}/${this.#manifestName}`
+          : `releases/latest/download/${UPDATE_FILE}`,
+      ),
       "application/octet-stream",
       MAX_MANIFEST,
     )
@@ -135,7 +157,7 @@ export class GitHubSource implements UpdateSource {
     // cannot pair one release's description with another's signature.
     const version = versionIn(bytes)
     const sig = await this.#small(
-      this.#web(`releases/download/v${version}/${UPDATE_SIGNATURE}`),
+      this.#web(`releases/download/${this.#tag(version)}/${this.#signatureName}`),
       "application/octet-stream",
       MAX_SIGNATURE,
     )
@@ -143,12 +165,9 @@ export class GitHubSource implements UpdateSource {
     return { bytes, signature: sig.toString("utf8") }
   }
 
-  async #latestApi(): Promise<LatestRelease | undefined> {
-    const meta = await this.#small(
-      this.#api("releases/latest"),
-      "application/vnd.github+json",
-      4 * 1024 * 1024,
-    )
+  /** A release's assets by name, from the API; undefined when there is no such release. */
+  async #release(p: string): Promise<{ tag: string; assets: Map<string, string> } | undefined> {
+    const meta = await this.#small(this.#api(p), "application/vnd.github+json", 4 * 1024 * 1024)
     if (!meta) return undefined
     const rel = JSON.parse(meta.toString("utf8")) as {
       tag_name?: string
@@ -156,16 +175,23 @@ export class GitHubSource implements UpdateSource {
     }
     const assets = new Map<string, string>()
     for (const a of rel.assets ?? []) if (a.name && a.url) assets.set(a.name, a.url)
-    const m = assets.get(UPDATE_FILE)
-    const s = assets.get(UPDATE_SIGNATURE)
-    if (!m || !s)
-      throw new UpdateError(
-        `Release ${rel.tag_name ?? ""} has no ${!m ? UPDATE_FILE : UPDATE_SIGNATURE}.`,
-      )
+    return { tag: rel.tag_name ?? "", assets }
+  }
+
+  async #latestApi(): Promise<LatestRelease | undefined> {
+    const rel = await this.#release(this.#channel ? `releases/tags/${this.#channel.tag}` : "releases/latest")
+    if (!rel) return undefined
+    const m = rel.assets.get(this.#manifestName)
+    if (!m) throw new UpdateError(`Release ${rel.tag} has no ${this.#manifestName}.`)
     const bytes = await this.#small(m, "application/octet-stream", MAX_MANIFEST)
+    if (!bytes) throw new UpdateError("A release file disappeared while it was read.")
+    // Mac fork: the signature and the parts are on the version's own release, not the channel.
+    const own = this.#channel ? await this.#release(`releases/tags/${this.#tag(versionIn(bytes))}`) : rel
+    const s = own?.assets.get(this.#signatureName)
+    if (!own || !s) throw new UpdateError(`Release ${own?.tag ?? this.#tag(versionIn(bytes))} has no ${this.#signatureName}.`)
     const sig = await this.#small(s, "application/octet-stream", MAX_SIGNATURE)
-    if (!bytes || !sig) throw new UpdateError("A release file disappeared while it was read.")
-    this.#assets.set(versionIn(bytes), assets)
+    if (!sig) throw new UpdateError("A release file disappeared while it was read.")
+    this.#assets.set(versionIn(bytes), own.assets)
     return { bytes, signature: sig.toString("utf8") }
   }
 
@@ -202,7 +228,7 @@ export class GitHubSource implements UpdateSource {
   ): Promise<void> {
     const url = this.#token()
       ? this.#assets.get(version)?.get(archive)
-      : this.#web(`releases/download/v${version}/${archive}`)
+      : this.#web(`releases/download/${this.#tag(version)}/${archive}`)
     if (!url)
       throw new UpdateError(`Release ${version} has no ${archive}. Check for updates again.`)
     const ctl = new AbortController()
