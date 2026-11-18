@@ -50,6 +50,7 @@ import { createRecapWriter } from "./recap-writer.js"
 import { createBtwWriter } from "./btw.js"
 import { createTitleWriter } from "./title-writer.js"
 import { SessionTimeline } from "./session-timeline.js"
+import { Power } from "./power.js"
 import { SessionSettler } from "./session-settle.js"
 import { createTimelineWriter } from "./timeline-writer.js"
 import { chatFolderOf } from "./triage.js"
@@ -480,8 +481,40 @@ export function createHost(opts: HostOptions = {}): Host {
     audit,
     log,
   })
+  // E-089: on battery the heavy work Codehouse starts by itself waits, new sessions start lower, and Extreme approval
+  // pauses only when you chose so in Settings. Each change of power state is audited.
+  const power = new Power({
+    pauseExtremeOnBattery: () => config.pauseExtremeOnBattery === true,
+    pauseExtreme: () =>
+      void manager
+        .pauseForBattery()
+        .then((n) => (n ? log(`power: paused ${n} Extreme session(s) on battery`) : undefined)),
+    resumeExtreme: () => void manager.resumeAfterBattery(),
+    log,
+    audit: ({ source, was }) =>
+      audit.record({
+        session: "host",
+        event: "power_state_changed",
+        channel: "host",
+        tool: "power",
+        input: { source, was },
+        verdict: {
+          outcome: "allow",
+          ruleId: "power-state",
+          reason:
+            source === "battery"
+              ? "The computer went on battery: routines and timeline summaries wait, and new sessions start lower."
+              : "The computer is on mains power: what waited for it runs now.",
+          risk: 0,
+          decidedBy: "rules",
+          policyHash: store.current?.hash ?? "",
+        },
+        latencyMs: 0,
+      }),
+  })
   const deps: SessionDeps = {
     governor,
+    defaultResources: () => (power.onBattery ? "low" : undefined),
     queryFn,
     worktrees,
     sessionMeta: (id) => sessionMeta.get(id),
@@ -875,6 +908,7 @@ export function createHost(opts: HostOptions = {}): Host {
     dir: path.join(gatehouseDataDir(env), "timelines"),
     writer: createTimelineWriter(),
     enabled: () => config.timelineSummaries !== false,
+    wait: () => power.onBattery,
     session: (id) => {
       const i = manager.get(id)?.info()
       return i ? { project: i.project, ...(i.local ? { local: true } : {}), ...(i.evaluation ? { evaluation: true } : {}) } : undefined
@@ -1924,12 +1958,17 @@ export function createHost(opts: HostOptions = {}): Host {
           .catch((e: Error) => log(`routine run not noted: ${e.message}`))
         return session.id
       }
+      // E-089: on battery a routine that is due waits, one of each, and runs when mains power is back.
+      const heavyRoutine = async (r: Routine): Promise<void> => {
+        const run = () => void runRoutine(r).catch((e: Error) => log(`routine ${r.name} did not start: ${e.message}`))
+        if (power.heavy(`routine ${r.id}`, run) === "deferred") log(`routine ${r.name} waits for mains power`)
+      }
       // E-096: no routines, and none started by triggers, in safe mode.
-      if (plan.routines) new RoutineScheduler({ store: routines, log, start: runRoutine }).start()
+      if (plan.routines) new RoutineScheduler({ store: routines, log, start: heavyRoutine }).start()
       // And those started by a new commit or by files changing, never by their own session's work.
       routineTriggers = new TriggerWatcher({
         list: () => routines.list(),
-        start: runRoutine,
+        start: heavyRoutine,
         working: (id) => {
           const st = manager.get(id)?.info().state
           return st === "running" || st === "waiting"
@@ -1975,6 +2014,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // O42: the ten-minute summaries for each session's timeline.
       timeline.start()
       settler.start()
+      power.start()
     },
     async stop() {
       // E-096: an orderly stop, so this start is not counted as a crash.
@@ -1982,6 +2022,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
+      power.stop()
       cnw.stop()
       timeline.stop()
       settler.stop()

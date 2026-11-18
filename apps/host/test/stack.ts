@@ -44,6 +44,8 @@ export interface Stack {
     limitCheck?: () => Promise<void>
     /** C-004: the memory governor's check before a new session; a test sets it. */
     admit?: (what: string, detail?: Record<string, unknown>) => Promise<void>
+    /** E-089: the level a new session starts at when none is chosen; a test sets it. */
+    defaultResources?: () => "low" | undefined
   }
   sdk: FakeSdk
   repo: string
@@ -185,6 +187,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
         await hooks.admit?.(what, detail)
       },
     },
+    defaultResources: () => hooks.defaultResources?.(),
     queryFn: sdk.queryFn,
     config: () => config,
     policy: () => store.current,

@@ -63,6 +63,8 @@ interface Config {
   escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number; onlyWhenHere?: boolean }
   /** O42: false turns off the ten-minute summaries. */
   timelineSummaries?: boolean
+  /** E-089: true pauses Extreme sessions on battery. */
+  pauseExtremeOnBattery?: boolean
   /** T-020: false turns off the suggested next prompt. */
   promptSuggestions?: boolean
   /** T-016: models of your own, with their names. */
@@ -173,6 +175,8 @@ interface Values {
   ladHere: boolean // Mac fork
   /** O42: the ten-minute summaries for each session's timeline. */
   tlOn: boolean
+  /** E-089: Extreme approval pauses on battery. */
+  batPause: boolean
   /** T-020: a suggested next prompt after each turn. */
   psOn: boolean
   /** T-016: your own models, "id = Display name" one to a line. */
@@ -268,6 +272,7 @@ export function valuesOf(d: SettingsData): Values {
     ladPush: String(c.escalationLadder?.pushAfterMinutes ?? 0),
     ladHere: c.escalationLadder?.onlyWhenHere === true,
     tlOn: c.timelineSummaries !== false,
+    batPause: c.pauseExtremeOnBattery === true,
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
     settleDays: String(c.settleAfterDays ?? 3),
@@ -477,6 +482,8 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.promptSuggestions = false
   if (v.tlOn) delete body.timelineSummaries
   else body.timelineSummaries = false
+  if (v.batPause) body.pauseExtremeOnBattery = true
+  else delete body.pauseExtremeOnBattery
   // E-094: saved only when a channel waits; all at once is no setting at all.
   if (v.ladPhone === "0" && v.ladPush === "0") delete body.escalationLadder
   else
@@ -574,6 +581,7 @@ export const DEFAULT_VALUES: Values = {
   ladPush: "0",
   ladHere: false,
   tlOn: true,
+  batPause: false,
   psOn: true,
   cmText: "",
   settleDays: "3",
@@ -865,6 +873,7 @@ export function Settings() {
   const memChanged = differs(v, ["memPoint"])
   const ladChanged = differs(v, ["ladPhone", "ladPush", "ladHere"])
   const tlChanged = differs(v, ["tlOn"])
+  const batChanged = differs(v, ["batPause"])
   const psChanged = differs(v, ["psOn"])
   const cmChanged = differs(v, ["cmText"])
   const settleChanged = differs(v, ["settleDays"])
@@ -1599,6 +1608,17 @@ export function Settings() {
                 Claude writes a few sentences from the session's messages and tool calls, with your redaction list applied
                 first. It uses a little of your plan each time, and never runs for a model on this computer.
               </p>
+            </Group>
+
+            <Group section="sessions" title="On battery" gap="gap-2" changed={batChanged}>
+              <p className="m-0 text-sm text-mut">
+                On battery, the routines and timeline summaries Codehouse starts by itself wait until mains power is back, and new
+                sessions start at a low resource level. Extreme approval keeps working unless you choose otherwise here.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.batPause} onChange={(e) => change({ batPause: e.target.checked }, "On battery")} />
+                Pause Extreme approval sessions on battery, and start them again on mains power
+              </label>
             </Group>
 
             <Group section="sessions" title="Memory" gap="gap-2" changed={memChanged}>

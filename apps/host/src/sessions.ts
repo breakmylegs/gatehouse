@@ -265,12 +265,14 @@ async function recordInstructionsChanged(
 }
 
 export class LimitPausedError extends Error {
-  constructor(reason?: "spend" | "risk" | "heartbeat" | "phone") {
+  constructor(reason?: "spend" | "risk" | "heartbeat" | "phone" | "battery") {
     super(
       reason === "risk"
         ? "This session is paused: its risk budget is spent. Start it again from its pane when you have looked at what it did."
         : reason === "heartbeat"
           ? "This session is paused: nothing was heard from you within its dead-man time. Start it again from its pane when you have looked at what it did."
+          : reason === "battery"
+          ? "This session is paused: the computer is on battery and Settings pauses Extreme approval on battery. It starts again by itself on mains power, or start it from its pane."
           : reason === "phone"
           ? "This session is paused: you paused its project from the phone. Start it again from its pane on the computer."
           : reason === "spend"
@@ -373,7 +375,7 @@ export interface SessionInfo {
   /** Owner, 9 Nov: your bypass of the limits for this session, while it lasts. */
   bypass?: { since: string; until?: string; maxUsd?: number; spentUsd: number }
   /** Paused at the plan's 5-hour limit: starts again when it resets, or when you start it. */
-  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" | "heartbeat" | "phone" }
+  paused?: { until?: string; percent: number; wasRunning: boolean; reason?: "spend" | "risk" | "heartbeat" | "phone" | "battery" }
 }
 
 export interface SessionEvents {
@@ -443,6 +445,8 @@ export interface SessionDeps {
   managedPolicyProblem?: () => string | undefined
   /** E-100: why the invariant canaries refuse new sessions (one failed at start or at the daily run), or undefined. */
   canaryProblem?: () => string | undefined
+  /** E-089: the resource level a new session starts with when none is chosen (lower on battery). Absent: high. */
+  defaultResources?: () => ResourceLevel | undefined
   /** E-096: Codehouse is in safe mode, so no warm chat is started. */
   safeMode?: () => boolean
   /** E-096: plugins switched off in each session started now (in safe mode, every installed one). */
@@ -945,7 +949,8 @@ export class Session extends EventEmitter<SessionEvents> {
       opts.localModel !== undefined ? undefined : capEffort(opts.effort, deps.config().effortCap)
     this.#extreme = opts.extreme === true
     this.#extremeMax = opts.extreme === true && opts.extremeMax === true
-    this.#resources = opts.resources ?? "high"
+    // E-089: on battery, a new session starts lower unless you chose its level.
+    this.#resources = opts.resources ?? deps.defaultResources?.() ?? "high"
     this.#account = opts.account ?? MAIN_ACCOUNT
     if (opts.kind === "chat" && opts.title) this.#label = chatTitle(opts.title)
     this.#localLabel = opts.localModel !== undefined ? deps.local?.label?.() : undefined
@@ -2216,7 +2221,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * background work stop, nothing carries on by itself, and it is recorded. It starts again when the limit resets, or
    * when you start it.
    */
-  async pause(percent: number, until?: string, reason?: "spend" | "risk" | "heartbeat" | "phone"): Promise<void> {
+  async pause(percent: number, until?: string, reason?: "spend" | "risk" | "heartbeat" | "phone" | "battery"): Promise<void> {
     if (!this.live || this.#paused) return
     const wasRunning = this.#running || this.#background.size > 0
     this.#paused = {
@@ -2233,7 +2238,9 @@ export class Session extends EventEmitter<SessionEvents> {
         wasRunning,
         ...(until ? { until } : {}),
       },
-      reason === "heartbeat"
+      reason === "battery"
+        ? "The computer went on battery and Settings pauses Extreme approval on battery, so Codehouse paused this Extreme session until mains power is back."
+        : reason === "heartbeat"
         ? "Nothing was heard from you in time, so Codehouse paused this Extreme session until you start it again."
         : reason === "risk"
         ? "The session's risk budget is spent, so Codehouse paused this Extreme session until you start it again."
@@ -2254,11 +2261,13 @@ export class Session extends EventEmitter<SessionEvents> {
    * Starts a paused session again, when the limit resets or when you ask. One that was working carries on where it
    * stopped; one that was idle simply becomes ready. Nothing changes if it is not paused.
    */
-  async resume(by: "you" | "limit-reset"): Promise<boolean> {
+  async resume(by: "you" | "limit-reset" | "mains"): Promise<boolean> {
     const p = this.#paused
     if (!p) return false
     // D-018: a session its risk budget paused starts again only when you start it, with its budget full. D-025: one
     // the dead-man timer paused, only when you start it, and that is hearing from you.
+    // E-089: a pause for the battery ends on mains power or when you start it, never at a limit reset.
+    if (p.reason === "battery" && by === "limit-reset") return false
     if (p.reason === "risk" || p.reason === "heartbeat") {
       if (by !== "you") return false
       if (p.reason === "risk") this.#fillBudget()
@@ -2374,7 +2383,7 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!written) throw new Error("The bypass could not be recorded in the audit log, so it was not set.")
   }
 
-  async #endPause(by: "you" | "limit-reset"): Promise<void> {
+  async #endPause(by: "you" | "limit-reset" | "mains"): Promise<void> {
     if (!this.#paused) return
     const p = this.#paused
     this.#paused = undefined
@@ -2384,7 +2393,9 @@ export class Session extends EventEmitter<SessionEvents> {
       { by, wasRunning: p.wasRunning },
       by === "you"
         ? "You started this paused session again."
-        : "The plan's 5-hour limit reset, so Codehouse started this paused session again.",
+        : by === "mains"
+          ? "The computer is on mains power again, so Codehouse started this Extreme session again."
+          : "The plan's 5-hour limit reset, so Codehouse started this paused session again.",
       by === "you" ? "human-desktop" : "rules",
     )
     this.emit("event", { type: "resumed", data: { by } })
@@ -3160,6 +3171,23 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
   /** D-025: you were heard from, on the desktop or the phone: every session's dead-man timer starts again. */
   heartbeat(): void {
     for (const s of this.#sessions.values()) s.heartbeat()
+  }
+
+  /** E-089: on battery, with "Pause Extreme on battery" on in Settings, each working Extreme session pauses. */
+  async pauseForBattery(): Promise<number> {
+    let n = 0
+    for (const s of this.#sessions.values())
+      if (s.live && !s.paused && s.info().extreme) {
+        await s.pause(0, undefined, "battery").catch((e: Error) => this.#deps.log(`session ${s.id}: ${e.message}`))
+        n++
+      }
+    return n
+  }
+
+  /** E-089: on mains power again, each session the battery paused starts again. */
+  async resumeAfterBattery(): Promise<void> {
+    for (const s of this.#sessions.values())
+      if (s.paused?.reason === "battery") await s.resume("mains").catch((e: Error) => this.#deps.log(`session ${s.id}: ${e.message}`))
   }
 
   /** The kill switch: every turn and every background task stops. */

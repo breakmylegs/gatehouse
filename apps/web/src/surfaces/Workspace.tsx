@@ -1825,7 +1825,13 @@ function PausedLine({
   const [busy, setBusy] = useState(false)
   return (
     <div role="status" className="pane-stopped flex-wrap">
-      {paused.reason === "heartbeat" ? (
+      {paused.reason === "battery" ? (
+        // E-089: on battery, with "Pause Extreme approval sessions on battery" on in Settings.
+        <span>
+          <strong>Paused.</strong> The computer is on battery, and Settings pauses Extreme approval on battery. It starts
+          again by itself on mains power, or start it now.
+        </span>
+      ) : paused.reason === "heartbeat" ? (
         // D-025: nothing was heard from you in time.
         <span>
           <strong>Paused.</strong> Nothing was heard from you within this session's dead-man timer, so

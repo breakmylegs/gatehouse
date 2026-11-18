@@ -42,6 +42,8 @@ export interface TimelineDeps {
   writer: TimelineWriter
   /** Settings: on unless turned off. */
   enabled: () => boolean
+  /** E-089: on battery the summaries wait, with what happened kept, until mains power is back. */
+  wait?: () => boolean
   session: (id: string) => { project: string; local?: boolean; evaluation?: boolean } | undefined
   orgOk: () => boolean
   redact: (text: string) => string
@@ -122,7 +124,7 @@ export class SessionTimeline {
 
   /** Sums up every session that did something since its last summary. One look at a time. */
   async tick(): Promise<number> {
-    if (this.#busy) return 0
+    if (this.#busy || this.#d.wait?.()) return 0
     this.#busy = true
     let written = 0
     try {

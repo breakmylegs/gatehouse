@@ -1920,6 +1920,8 @@ const LIVE_SETTINGS = [
   "escalationLadder",
   // O42: read at each ten-minute look.
   "timelineSummaries",
+  // E-089: read when the computer goes on battery.
+  "pauseExtremeOnBattery",
   // T-020: read when a session starts.
   "promptSuggestions",
   // T-024: read at each hourly look.

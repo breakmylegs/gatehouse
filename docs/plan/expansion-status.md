@@ -58,7 +58,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-080 | Shared signed redaction lists | E1 | done | feat/health | yes | Ed25519-signed JSON lists, add-only, with source and date; trusted keys in Settings; redaction_list_imported |
 | E-051 | Merge conflict pre-check | E1 | done | feat/about-title | yes | git merge-tree every 5 min while worktree sessions run; told in each session once; shown on Worktrees; committed work only |
 | E-052 | Structured task results | E1 | done | feat/health | yes | start_session resultSchema; wait_for_session checks it (zod fromJSONSchema), sends back once, then fails; result says the side session's taint |
-| E-089 | Battery-aware scheduling | E1 | todo | | |  |
+| E-089 | Battery-aware scheduling | E1 | done | feat/battery | yes | power.ts reads Win32_Battery or pmset every 2 min; on battery routines and timeline summaries wait (one of each), new sessions start low; Settings "Pause Extreme approval sessions on battery" (off) pauses them, mains starts them again; power_state_changed audited. Deviation: the Host reads the power state itself, no shell change |
 | E-094 | Escalation ladder | E1 | done | feat/escalation-ladder | yes | broker, settings-ladder tests |
 | E-095 | Phone pause per project | E1 | done | feat/escalation-ladder | yes | relay-e2e, limit-pause tests; T130 |
 | E-001 | Visual regression baselines | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |

@@ -138,6 +138,8 @@ function build(loose: boolean) {
     promptSuggestions: z.boolean().optional(),
     /** O42: Claude sums up each session every ten minutes for its timeline. On unless false. */
     timelineSummaries: z.boolean().optional(),
+    /** E-089: on battery, Extreme sessions pause until mains power is back. Off unless true. */
+    pauseExtremeOnBattery: z.boolean().optional(),
     escalationLadder: obj({
       phoneAfterMinutes: z.number().int().min(0).max(60).optional(),
       pushAfterMinutes: z.number().int().min(0).max(60).optional(),
