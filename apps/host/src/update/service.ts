@@ -637,6 +637,32 @@ export class UpdateService extends EventEmitter<{
 }
 
 /**
+ * What the Host uses of an update service. Mac fork (18 Nov): the Mac app's own is MacUpdateService (service-mac.ts),
+ * with the same face, so this class and Windows' updates are unchanged.
+ */
+export interface Updates {
+  readonly current: string
+  status(): UpdateStatus
+  start(): void
+  stop(): void
+  check(): Promise<UpdateStatus>
+  prepare(version: string): Promise<UpdateStatus>
+  install(version: string): Promise<UpdateStatus>
+  apply(version: string): Promise<UpdateStatus>
+  rollback(): Promise<UpdateStatus>
+  moveOver(): Promise<UpdateStatus>
+  markStarted(pid: number): void
+  skip(version: string): Promise<UpdateStatus>
+  unskip(version: string): Promise<UpdateStatus>
+  setSettings(p: Partial<Pick<UpdateSettings, "checkEveryMinutes" | "downloadInBackground">>): Promise<UpdateStatus>
+  dismissResult(): UpdateStatus
+  on(event: "status", listener: (s: UpdateStatus) => void): unknown
+  on(event: "apply", listener: (a: { updater: string; plan: string }) => void): unknown
+  off(event: "status", listener: (s: UpdateStatus) => void): unknown
+  off(event: "apply", listener: (a: { updater: string; plan: string }) => void): unknown
+}
+
+/**
  * The updater in a version's folder.
  */
 export function updaterIn(dir: string): string | undefined {
