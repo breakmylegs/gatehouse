@@ -101,8 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     case .restart: restart("Starting again")
     case .progress(let text): step(text)
     case .awake(let on): keepAwake(on)
-    case .applyUpdate:
-      remember("[update] an update was offered, but Codehouse updates on a Mac by installing a newer Codehouse.app")
+    case .applyUpdate(let updater, let plan): startUpdater(updater, plan)
     case .other(let line): remember(line)
     }
   }
@@ -270,6 +269,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     var text = "\(stage)  (\(now) s)"
     if total > 20 { text += "\nThe first start after installing is the slowest." }
     main?.say(text)
+  }
+
+  /// The in-app update (owner, 18 Nov): starts the updater the Host copied into its updates folder, then quits so it can
+  /// swap the apps (packaging/mac/codehouse-update.sh). Only that script with that plan is ever run, never another path.
+  private func startUpdater(_ updater: String, _ plan: String) {
+    let dir = Paths.dataDir.appendingPathComponent("updates").standardizedFileURL.path
+    guard updater == dir + "/codehouse-update.sh", plan == dir + "/plan.txt",
+      FileManager.default.fileExists(atPath: updater)
+    else {
+      remember("[update] refused an updater that is not in Codehouse's updates folder: \(updater)")
+      return
+    }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/bin/sh")
+    p.arguments = [updater, plan, String(ProcessInfo.processInfo.processIdentifier)]
+    p.standardInput = FileHandle.nullDevice
+    p.standardOutput = FileHandle.nullDevice
+    p.standardError = FileHandle.nullDevice
+    do {
+      try p.run()
+    } catch {
+      remember("[update] could not start the updater: \(error.localizedDescription)")
+      return
+    }
+    remember("[update] switching versions: Codehouse quits and opens again")
+    NSApp.terminate(nil)
   }
 
   private func remember(_ line: String) {

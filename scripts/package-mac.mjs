@@ -136,6 +136,11 @@ if (!has("--swift-only")) {
 }
 if (!fs.existsSync(path.join(resources, "app")))
   throw new Error(`${appBundle} has not been built. Run without --swift-only.`)
+// The in-app updater's script (apps/host/src/update/service-mac.ts copies it out before it runs).
+fs.copyFileSync(
+  path.join(root, "packaging", "mac", "codehouse-update.sh"),
+  path.join(resources, "codehouse-update.sh"),
+)
 
 say("compiling the window and the limits helper")
 const swiftDir = path.join(root, "packaging", "mac")
