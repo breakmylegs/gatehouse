@@ -1487,6 +1487,15 @@ ebuilds`) and shows it in Explorer (`apps/host/src/rebuild.ts`, `POST /api/timel
   - "Offers safe mode": a failing canary puts Codehouse in safe mode (E-096, below), and the message points to Doctor.
 
   Each canary has a break check that makes only it fail. Threat T144. Tests: canaries.
+- **E-097, crash bundle:** Doctor's "Make a crash bundle" shows every file first, then "Save to Downloads" writes exactly the previewed files as a zip. The preview is kept under an id for ten minutes and used once, so the two cannot differ. It holds:
+  - the last 2 MB of host.log, redacted;
+  - version.json;
+  - the Doctor report;
+  - the last 200 audit records as when, kind, channel, outcome, rule and risk (never inputs, folders or reasons);
+  - the crash codes the log names, with what they usually mean;
+  - the settings' key names, never their values.
+
+  Each saved bundle is audited as `crash_bundle_exported` with its file names and size; one that cannot be recorded is deleted. **Decided by me:** the zip is written with Codehouse's own zip writer (`update/zip.ts`); no dependency. Threat T145. Tests: crash-bundle (host and web).
 - **E-096, safe mode:** `apps/host/src/safe-mode.ts`.
   - **What it leaves out:** no session brought back (they are kept for later), no routines or triggers, no MCP servers started with Codehouse, the push channels (ntfy, Slack) paused, no warm chat, and every installed plugin off in each session started (`claude plugin list`, then `enabledPlugins` false for each). A banner across the top says why.
   - **How it starts:**

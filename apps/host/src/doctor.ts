@@ -416,14 +416,18 @@ export function registerDoctorRoutes(
     /** E-100: the last canary run. */
     canaries?: () => CanaryRun | undefined
   },
-): void {
+): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
   let claude: { at: number; value: DoctorFacts["claude"] } | undefined
   app.get("/api/doctor", async (req, reply) => {
     if (!ctx.health) return reply.code(404).send({ error: "The checks are not available here." })
+    return await run(req.server.server.address())
+  })
+  /** E-097: the checks and the report to share, for the crash bundle as for the page. */
+  const run = async (where: ReturnType<FastifyInstance["server"]["address"]>) => {
+    if (!ctx.health) throw new Error("The checks are not available here.")
     if (!claude || Date.now() - claude.at > 600_000)
       claude = { at: Date.now(), value: (await ctx.claude?.()) ?? { found: false } }
-    const where = req.server.server.address()
     const status = ctx.updates?.status()
     const local = ctx.config().providers
     const diskFree = await fs.promises
@@ -463,7 +467,8 @@ export function registerDoctorRoutes(
     const at = new Date().toISOString()
     const version = status?.current ?? "unknown"
     return { version, at, checks, report: forSharing(doctorReport(checks, { version, at })) }
-  })
+  }
+  return { report: async () => (await run(app.server.address())).report }
 }
 
 /** A report to send to someone: secrets redacted as everywhere, and email addresses taken out too. */

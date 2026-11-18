@@ -7,6 +7,7 @@ import type { SlackSecrets, SlackStatus } from "./push/slack.js"
 import type { Conflict } from "./conflict-check.js"
 import type { CanaryRun } from "./canaries.js"
 import { registerSafeModeRoutes, type SafeMode } from "./safe-mode.js"
+import { registerCrashBundleRoutes } from "./crash-bundle.js"
 import { ownTopic, randomTopic, type NtfySettings, type NtfyStatus } from "./push/ntfy.js"
 import type { LocalRelayStatus } from "./relay/local.js"
 import { registerExportRoutes } from "./export-api.js"
@@ -891,9 +892,30 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerEvalRoutes(app, ctx)
   // O41: the Doctor's Neighbourhood Watch line, without its address.
   const cnw = ctx.cnw
-  registerDoctorRoutes(app, {
+  const doctor = registerDoctorRoutes(app, {
     ...ctx,
     ...(cnw ? { cnwStatus: () => { const s = cnw.status(); return { paired: s.paired, on: s.on, state: s.state } } } : {}),
+  })
+  // E-097: the crash bundle, previewed first and saved to Downloads exactly as previewed; audited.
+  registerCrashBundleRoutes(app, {
+    sources: {
+      logPath: path.join(gatehouseDataDir(ctx.env), "host.log"),
+      auditDir: ctx.auditDir,
+      version: ctx.updates?.status().current ?? "unknown",
+      doctorReport: () => doctor.report().catch(() => "The Doctor report could not be made."),
+      settings: () => ctx.config(),
+      redactTerms: () => ctx.config().redactTerms ?? [],
+    },
+    record: (input) =>
+      ctx.audit.record({
+        session: "desktop",
+        event: "crash_bundle_exported",
+        channel: "desktop",
+        tool: "crash-bundle",
+        input,
+        verdict: { outcome: "allow", ruleId: "crash-bundle-exported", reason: "A crash bundle was saved to Downloads from Doctor: logs and outcomes, redacted, without inputs.", risk: 0, decidedBy: "human-desktop", policyHash: "" },
+        latencyMs: 0,
+      }),
   })
   registerWorktreeRoutes(app, ctx)
   if (ctx.safeMode) registerSafeModeRoutes(app, ctx.safeMode)

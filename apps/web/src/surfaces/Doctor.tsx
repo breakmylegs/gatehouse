@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { CopyButton } from "../components/CopyButton"
+import { CrashBundle } from "../components/CrashBundle"
 import { Icon, type IconName } from "../components/Icon"
 import { api } from "../lib/api"
 import { startTriage } from "../lib/triage"
@@ -144,6 +145,7 @@ export function Doctor() {
           </button>
         ) : null}
         <SafeModeButton />
+        <CrashBundle />
       </div>
       {result ? (
         <p className="m-0 text-xs text-mut">
