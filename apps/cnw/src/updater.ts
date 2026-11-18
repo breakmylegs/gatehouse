@@ -22,6 +22,8 @@ export interface UpdateManifest {
   commit: string
   /** The oldest version that can update straight to this one. */
   minFrom?: string
+  /** What changed, in plain words (uplift phase 5). */
+  notes?: string
 }
 
 /** Checks the manifest against its Ed25519 signature; returns it only when the signature holds. */
@@ -32,7 +34,7 @@ export function verifyManifest(json: string, sigB64: string, publicKeyPem: strin
     const m = JSON.parse(json) as Partial<UpdateManifest>
     if (typeof m.version !== "string" || !/^\d+\.\d+\.\d+$/.test(m.version)) return undefined
     if (typeof m.commit !== "string" || !/^[0-9a-f]{40}$/.test(m.commit)) return undefined
-    return { version: m.version, commit: m.commit, ...(typeof m.minFrom === "string" ? { minFrom: m.minFrom } : {}) }
+    return { version: m.version, commit: m.commit, ...(typeof m.minFrom === "string" ? { minFrom: m.minFrom } : {}), ...(typeof m.notes === "string" ? { notes: m.notes.slice(0, 4000) } : {}) }
   } catch {
     return undefined
   }
@@ -85,6 +87,10 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
   await git("fetch", "--depth", "1", "origin", m.commit)
   const head = (await git("rev-parse", "FETCH_HEAD")).trim()
   if (head !== m.commit) throw new Error("The fetched commit is not the one signed, so it was not used.")
+  // Uplift phase 5: what runs now is kept to go back to: its image as codehouse-cnw:previous, its commit in .git.
+  const before = (await git("rev-parse", "HEAD")).trim()
+  await run("docker", ["image", "tag", "codehouse-cnw:latest", "codehouse-cnw:previous"], o.composeDir).catch((e: Error) => o.log(`the running image could not be kept to go back to: ${e.message}`))
+  fs.writeFileSync(path.join(o.repoDir, ".git", "cnw-previous"), JSON.stringify({ commit: before, version: o.current, at: new Date().toISOString() }))
   await git("checkout", "--detach", m.commit)
   o.log(`building CNW ${m.version}`)
   // No -f: compose reads compose.yml and .env from the stack's folder, so a COMPOSE_FILE set there (your own proxy) is
@@ -92,6 +98,54 @@ export async function updateNow(o: { repoDir: string; composeDir: string; keyPem
   await run("docker", ["compose", "build", "cnw"], o.composeDir)
   await run("docker", ["compose", "up", "-d", "cnw"], o.composeDir, 5 * 60_000)
   return `Updated to ${m.version}.`
+}
+
+/** What Server, Updates shows: this version, the newest signed one with its notes, and the one to go back to. */
+export async function updateInfo(o: { repoDir: string; keyPem: string; current: string }): Promise<{ current: string; latest?: string; notes?: string; newer: boolean; previous?: { version: string; at: string } }> {
+  const previous = previousOf(o.repoDir)
+  try {
+    const base = `${REPO}/releases/download/cnw-latest`
+    const [json, sig] = await Promise.all([fetchText(`${base}/cnw-update.json`), fetchText(`${base}/cnw-update.sig`)])
+    const m = verifyManifest(json, sig, o.keyPem)
+    if (!m) return { current: o.current, newer: false, ...(previous ? { previous } : {}) }
+    return { current: o.current, latest: m.version, ...(m.notes ? { notes: m.notes } : {}), newer: newer(m.version, o.current), ...(previous ? { previous } : {}) }
+  } catch {
+    return { current: o.current, newer: false, ...(previous ? { previous } : {}) }
+  }
+}
+
+/** The version kept to go back to, when an update made one. */
+export function previousOf(repoDir: string): { version: string; at: string; commit: string } | undefined {
+  try {
+    const p = JSON.parse(fs.readFileSync(path.join(repoDir, ".git", "cnw-previous"), "utf8")) as { version?: unknown; at?: unknown; commit?: unknown }
+    return typeof p.commit === "string" && /^[0-9a-f]{40}$/.test(p.commit) ? { version: String(p.version ?? "?"), at: String(p.at ?? ""), commit: p.commit } : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** What going back runs: the kept image becomes the running one, the clone goes back to its commit, cnw starts again. */
+export function rollbackCommands(commit: string): string[][] {
+  return [
+    ["git", "-c", "safe.directory=REPO", "checkout", "--detach", commit],
+    ["docker", "image", "tag", "codehouse-cnw:previous", "codehouse-cnw:latest"],
+    ["docker", "compose", "up", "-d", "--force-recreate", "--no-deps", "cnw"],
+  ]
+}
+
+export async function rollback(o: { repoDir: string; composeDir: string; log: (l: string) => void }): Promise<void> {
+  const p = previousOf(o.repoDir)
+  if (!p) return o.log("there is no previous version to go back to")
+  try {
+    for (const [cmd, ...args] of rollbackCommands(p.commit)) {
+      const fixed = args.map((a) => (a === "safe.directory=REPO" ? `safe.directory=${o.repoDir}` : a))
+      await run(cmd!, fixed, cmd === "git" ? o.repoDir : o.composeDir, 10 * 60_000)
+    }
+    fs.rmSync(path.join(o.repoDir, ".git", "cnw-previous"), { force: true })
+    o.log(`went back to CNW ${p.version}`)
+  } catch (e) {
+    o.log(`going back did not work: ${(e as Error).message}`)
+  }
 }
 
 /**
@@ -125,10 +179,29 @@ async function readBody(req: http.IncomingMessage): Promise<unknown> {
  * checks them again, answers at once (cnw is recreated by it, which ends the request that asked) and then applies them;
  * GET /health answers 200 for the container's health check, touching neither Docker nor the clone. Anything else is 404.
  */
-export function updaterServer(update: () => Promise<string>, apply?: (s: { host: string; tls: string; port: string }) => Promise<void>): http.Server {
+export function updaterServer(
+  update: () => Promise<string>,
+  apply?: (s: { host: string; tls: string; port: string }) => Promise<void>,
+  extra: { info?: () => Promise<unknown>; rollback?: () => Promise<void> } = {},
+): http.Server {
   let busy = false
   return http.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/health") return res.writeHead(200, { "content-type": "text/plain" }).end("ok")
+    if (req.method === "GET" && req.url === "/info" && extra.info) {
+      try {
+        return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(await extra.info()))
+      } catch (e) {
+        return res.writeHead(502).end((e as Error).message)
+      }
+    }
+    if (req.method === "POST" && req.url === "/rollback" && extra.rollback) {
+      if (busy) return res.writeHead(409).end("An update or a change is already running.")
+      busy = true
+      // Answered first: going back recreates cnw, which ends the request that asked.
+      res.writeHead(202).end("Going back to the previous version: CNW starts again with it in a minute.")
+      void extra.rollback().finally(() => (busy = false))
+      return
+    }
     if (req.method === "POST" && req.url === "/apply" && apply) {
       if (busy) return res.writeHead(409).end("An update or a change is already running.")
       let checked: ReturnType<typeof checkSettings>
@@ -181,6 +254,10 @@ if (process.argv[1] && path.basename(process.argv[1]).startsWith("updater")) {
       } catch (e) {
         log(`the Server page's settings could not be applied: ${(e as Error).message}`)
       }
+    },
+    {
+      info: () => updateInfo({ repoDir, keyPem, current: builtVersion(repoDir) }),
+      rollback: () => rollback({ repoDir, composeDir, log }),
     },
   ).listen(8090, "0.0.0.0")
 

@@ -66,6 +66,14 @@ interface Watcher {
 
 export class Hub {
   readonly #agents = new Map<string, Agent>()
+  /** Uplift phase 5: each computer's connections and drops, the newest 50, for Server, Health. */
+  readonly #history = new Map<string, Array<{ at: number; event: "connected" | "dropped" }>>()
+  #note(id: string, event: "connected" | "dropped"): void {
+    this.#history.set(id, [...(this.#history.get(id) ?? []), { at: this.#now(), event }].slice(-50))
+  }
+  history(id: string): Array<{ at: number; event: "connected" | "dropped" }> {
+    return [...(this.#history.get(id) ?? [])]
+  }
   readonly #watchers = new Map<string, Set<Watcher>>()
   readonly #challenges = new WeakMap<Socket, string>()
   readonly #http = new Map<string, { resolve: (r: HttpAnswer) => void; timer: ReturnType<typeof setTimeout> }>()
@@ -111,6 +119,7 @@ export class Hub {
       // The protocol handshake (owner, 18 Nov): a Codehouse from before it sends no number, and is older.
       const needsUpdate = protocolGap(PROTOCOL, m.protocol)
       this.#agents.set(computer.id, { socket, computer, ...(m.version ? { version: String(m.version).slice(0, 40) } : {}), ...(needsUpdate ? { needsUpdate } : {}), connectedAt: t, lastSeen: t })
+      this.#note(computer.id, "connected")
       socket.send(JSON.stringify({ type: "welcome", protocol: PROTOCOL }))
       this.#broadcast(computer.id, { type: "computer_online", online: true })
       // Back after a drop: each tab already open is sent the computer's state afresh, so no view is left stale with
@@ -188,6 +197,7 @@ export class Hub {
     for (const [id, a] of this.#agents)
       if (a.socket === socket) {
         this.#agents.delete(id)
+        this.#note(id, "dropped")
         this.#broadcast(id, { type: "computer_online", online: false })
       }
   }
@@ -253,10 +263,10 @@ export class Hub {
   }
 
   /** Each paired computer, and whether it is connected now. */
-  status(): Array<{ id: string; label: string; online: boolean; version?: string; lastSeen?: number; needsUpdate?: "cnw" | "codehouse" }> {
+  status(): Array<{ id: string; label: string; tags?: string[]; online: boolean; version?: string; lastSeen?: number; needsUpdate?: "cnw" | "codehouse" }> {
     return this.computers().map((c) => {
       const a = this.#agents.get(c.id)
-      return { id: c.id, label: c.label, online: Boolean(a), ...(a?.version ? { version: a.version } : {}), ...(a ? { lastSeen: a.lastSeen } : {}), ...(a?.needsUpdate ? { needsUpdate: a.needsUpdate } : {}) }
+      return { id: c.id, label: c.label, ...(c.tags?.length ? { tags: c.tags } : {}), online: Boolean(a), ...(a?.version ? { version: a.version } : {}), ...(a ? { lastSeen: a.lastSeen } : {}), ...(a?.needsUpdate ? { needsUpdate: a.needsUpdate } : {}) }
     })
   }
 

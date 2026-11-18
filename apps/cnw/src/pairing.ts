@@ -19,6 +19,8 @@ export interface Computer {
   /** Ed25519 public key, SPKI DER, base64url. */
   publicKey: string
   pairedAt: string
+  /** Uplift phase 5: tags you give it, to group computers on the board. */
+  tags?: string[]
 }
 
 const hashOf = (code: string) => crypto.createHash("sha256").update(code.replace(/[\s-]/g, "").toUpperCase()).digest("hex")

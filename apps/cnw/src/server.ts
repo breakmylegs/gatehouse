@@ -4,6 +4,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify"
 import websocket from "@fastify/websocket"
 import fastifyStatic from "@fastify/static"
 import fs from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { z } from "zod"
@@ -17,6 +18,7 @@ import { JsonStore } from "./store.js"
 import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passkeys.js"
 import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
 import { bareHost } from "./tls.js"
+import { BackupError, makeBackup, openBackup, restoreFiles } from "./backup.js"
 import { base32, hashRecovery, newSecret, otpauthUri, recoveryCodes, Sealer, verifyCode } from "./totp.js"
 import { commandAllowed, httpAllowed, roleMay, roleOf, ROLES, seesComputer, type Role } from "./roles.js"
 
@@ -40,6 +42,8 @@ export interface CnwOptions {
   caddyConfigDir?: string
   /** Reads the certificate caddy serves for a host, as SHA-256 hex; for tests. */
   certificateOf?: (host: string) => Promise<string | undefined>
+  /** Ends the process after a restore, so it starts again from the restored files; for tests. */
+  exit?: (code: number) => void
   /** Asks the updater to apply the Server page's settings; for tests. */
   applySettings?: (s: { host: string; tls: string; port: string }) => Promise<{ ok: boolean; message: string }>
   now?: () => number
@@ -65,6 +69,8 @@ interface Users {
 }
 interface Settings {
   allowlist: string[]
+  /** Uplift phase 5: whether CNW updates by itself, and at which hour. */
+  updates?: { auto: boolean; hour: number }
 }
 /** What changed CNW's own settings, and who: kept for the audit log viewer (uplift phase 5), the newest 1000. */
 interface Audit {
@@ -641,6 +647,157 @@ export async function createCnw(o: CnwOptions) {
     sessions.endUser(name)
     record(a.user, "person-removed", name)
     return { people: peopleView() }
+  })
+
+  // Uplift phase 5: backup and restore, for an owner who signed in within the last five minutes. A restore writes the
+  // backup's files, is audited, and CNW starts again so that nothing it kept in memory is left from before.
+  const recentOwner = (a: Access | undefined, reply: FastifyReply): boolean => {
+    if (!a || a.kind !== "user") return false
+    if (!roleMay(roleFor(a), "owners")) return void reply.code(403).send({ error: "Only an owner makes or restores a backup." }), false
+    if ((o.now ?? Date.now)() - a.confirmedAt > FRESH_MS) return void reply.code(428).send({ error: "Sign in again first: a backup holds everything.", reauth: true }), false
+    return true
+  }
+  app.post("/api/backup", async (req, reply) => {
+    const a = need(req, reply, "server")
+    if (!recentOwner(a, reply)) return
+    const passphrase = String((req.body as { passphrase?: unknown })?.passphrase ?? "")
+    if (passphrase.length < 12 || passphrase.length > 500) return reply.code(422).send({ error: "A passphrase of 12 characters or more: the backup cannot be opened without it." })
+    const text = makeBackup(o.dataDir, passphrase, (o.now ?? Date.now)())
+    record((a as { user: string }).user, "backup", "a backup was made")
+    const day = new Date((o.now ?? Date.now)()).toISOString().slice(0, 10)
+    return reply.header("content-disposition", `attachment; filename="neighbourhood-watch-${day}.cnwbackup"`).type("application/octet-stream").send(text)
+  })
+  app.post("/api/restore", { bodyLimit: 50 * 1024 * 1024 }, async (req, reply) => {
+    const a = need(req, reply, "server")
+    if (!recentOwner(a, reply)) return
+    const b = (req.body ?? {}) as { backup?: unknown; passphrase?: unknown }
+    let opened: ReturnType<typeof openBackup>
+    try {
+      opened = openBackup(String(b.backup ?? ""), String(b.passphrase ?? ""))
+    } catch (e) {
+      if (e instanceof BackupError) return reply.code(422).send({ error: e.message })
+      throw e
+    }
+    restoreFiles(o.dataDir, opened.files)
+    const by = (a as { user: string }).user
+    // Recorded into the restored audit (read afresh: the one in memory is from before), so the restore is in it.
+    const restoredAudit = new JsonStore<Audit>(o.dataDir, "audit", () => ({ entries: [] }))
+    restoredAudit.update((x) => ({ entries: [...x.entries, { at: new Date((o.now ?? Date.now)()).toISOString(), user: by, action: "restore", detail: `restored a backup made ${opened.at}` }].slice(-1000) }))
+    log(`Backup from ${opened.at} restored by ${by}; starting again`)
+    setTimeout(() => (o.exit ?? ((code: number) => process.exit(code)))(0), 500)
+    return { ok: true, message: `Restored the backup made ${opened.at}. Neighbourhood Watch starts again now; sign in with the people in the backup.` }
+  })
+
+  // Uplift phase 5: Server, Updates. This version, the newest signed one with its notes, the one to go back to, and
+  // updating by itself at an hour you choose. Going back wants an owner or admin who signed in in the last five minutes.
+  const updater = async (method: string, route: string): Promise<{ ok: boolean; status: number; text: string }> => {
+    if (!env.CNW_UPDATER) return { ok: false, status: 501, text: "There is no updater in this setup." }
+    try {
+      const r = await fetch(new URL(route, env.CNW_UPDATER), { method, signal: AbortSignal.timeout(30_000) })
+      return { ok: r.ok, status: r.status, text: await r.text() }
+    } catch (e) {
+      return { ok: false, status: 502, text: `The updater could not be reached: ${(e as Error).message}` }
+    }
+  }
+  app.get("/api/updates", async (req, reply) => {
+    if (!need(req, reply, "update")) return
+    const r = await updater("GET", "/info")
+    let info: unknown = undefined
+    try {
+      info = r.ok ? JSON.parse(r.text) : undefined
+    } catch {
+      info = undefined
+    }
+    return { ...(info && typeof info === "object" ? info : { current: env.CNW_VERSION ?? "0.0.0", newer: false }), auto: settings.read().updates ?? { auto: false, hour: 3 }, ...(r.ok ? {} : { note: r.text }) }
+  })
+  const Auto = z.object({ auto: z.boolean(), hour: z.number().int().min(0).max(23) })
+  app.put("/api/updates", async (req, reply) => {
+    const a = need(req, reply, "update")
+    if (!a) return
+    const b = Auto.safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "On or off, and an hour from 0 to 23." })
+    settings.update((s) => ({ ...s, updates: b.data }))
+    record(a.kind === "user" ? a.user : "?", "updates-setting", b.data.auto ? `updates by itself at ${b.data.hour}:00` : "updates only when asked")
+    return { auto: b.data }
+  })
+  app.post("/api/update/rollback", async (req, reply) => {
+    const a = need(req, reply, "update")
+    if (!a || a.kind !== "user") return
+    if ((o.now ?? Date.now)() - a.confirmedAt > FRESH_MS) return reply.code(428).send({ error: "Sign in again first.", reauth: true })
+    const r = await updater("POST", "/rollback")
+    record(a.user, "rollback", r.ok ? "went back to the previous version" : `going back was refused: ${r.text}`)
+    return reply.code(r.ok ? 200 : r.status).send(r.ok ? { ok: true, message: r.text } : { error: r.text })
+  })
+  // Updating by itself: once a day, at the hour chosen, if a newer signed release is out. Each one is audited.
+  let lastAuto = ""
+  const autoTimer = setInterval(() => {
+    const u = settings.read().updates
+    const t = new Date((o.now ?? Date.now)())
+    const day = t.toISOString().slice(0, 10)
+    if (!u?.auto || t.getHours() !== u.hour || lastAuto === day) return
+    lastAuto = day
+    void updater("POST", "/update").then((r) => record("CNW", "auto-update", r.text.slice(0, 200)))
+  }, 5 * 60_000)
+  autoTimer.unref()
+  app.addHook("onClose", async () => clearInterval(autoTimer))
+
+  // Uplift phase 5: Server, Health. The data volume's free space, memory, how long CNW has run, whether the updater
+  // and caddy answer, and each computer's connections and drops.
+  const updaterUp = async (): Promise<boolean | undefined> => {
+    if (!env.CNW_UPDATER) return undefined
+    try {
+      const r = await fetch(new URL("/health", env.CNW_UPDATER), { signal: AbortSignal.timeout(3000) })
+      return r.ok
+    } catch {
+      return false
+    }
+  }
+  app.get("/api/health", async (req, reply) => {
+    if (!need(req, reply, "server")) return
+    let disk: { free: number; total: number } | undefined
+    try {
+      const st = await fs.promises.statfs(o.dataDir)
+      disk = { free: st.bavail * st.bsize, total: st.blocks * st.bsize }
+    } catch {
+      disk = undefined
+    }
+    const e = effective(env, server.read())
+    const [updater, certificate] = await Promise.all([updaterUp(), ownProxy ? Promise.resolve(undefined) : certificateOf(e.host).catch(() => undefined)])
+    return {
+      ...(disk ? { disk } : {}),
+      memory: { free: os.freemem(), total: os.totalmem() },
+      uptimeSeconds: Math.round(process.uptime()),
+      version: env.CNW_VERSION ?? "0.0.0",
+      ...(updater !== undefined ? { updater } : {}),
+      ...(ownProxy ? {} : { caddy: certificate !== undefined }),
+      computers: hub.status().map((c) => ({ id: c.id, label: c.label, online: c.online, history: hub.history(c.id) })),
+    }
+  })
+
+  // The audit log of CNW's own changes and answers, newest first, a page at a time.
+  app.get("/api/audit", async (req, reply) => {
+    if (!need(req, reply, "server")) return
+    const q = req.query as { before?: string; limit?: string }
+    const limit = Math.max(1, Math.min(200, Number(q.limit) || 50))
+    const all = [...audit.read().entries].reverse()
+    const from = q.before ? all.findIndex((x) => x.at < String(q.before)) : 0
+    const page = from < 0 ? [] : all.slice(from, from + limit)
+    return { entries: page, total: all.length, ...(from >= 0 && from + limit < all.length ? { more: page.at(-1)?.at } : {}) }
+  })
+
+  // Renaming a computer, and its tags (groups on the board).
+  const Rename = z.object({ label: z.string().trim().min(1).max(60).optional(), tags: z.array(z.string().trim().min(1).max(30)).max(10).optional() })
+  app.patch("/api/computers/:id", async (req, reply) => {
+    const a = need(req, reply, "pair")
+    if (!a) return
+    const id = (req.params as { id: string }).id
+    const b = Rename.safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "A name of up to 60 characters, and tags of up to 30." })
+    const c = paired.read().computers.find((x) => x.id === id)
+    if (!c) return reply.code(404).send({ error: "There is no such computer." })
+    paired.update((p) => ({ ...p, computers: p.computers.map((x) => (x.id === id ? { ...x, ...(b.data.label ? { label: b.data.label } : {}), ...(b.data.tags ? { tags: b.data.tags } : {}) } : x)) }))
+    record(a.kind === "user" ? a.user : "allowed network", "computer-renamed", `${c.label}${b.data.label ? ` to ${b.data.label}` : ""}${b.data.tags ? `, tags ${b.data.tags.join(", ") || "none"}` : ""}`)
+    return { ok: true }
   })
 
   app.get("/api/computers", async (req, reply) => {
