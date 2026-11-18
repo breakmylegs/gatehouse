@@ -49,7 +49,7 @@ describe("split view", () => {
     render(<Workspace />)
     expect(panes()).toHaveLength(1)
     fireEvent.click(menuOf(panes()[0]!))
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Open .* beacon beside$/ }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Open beacon beside" }))
     expect(panes().map((p) => p.getAttribute("aria-label"))).toEqual([
       "Session atlas",
       "Session beacon",
@@ -78,7 +78,7 @@ describe("split view", () => {
     useStore.setState({ panes: ["s1", "s2"] })
     render(<Workspace />)
     fireEvent.click(menuOf(panes()[0]!))
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Show .* beacon here$/ }))
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show beacon here" }))
     expect(useStore.getState().panes).toEqual(["s2", "s1"])
   })
 

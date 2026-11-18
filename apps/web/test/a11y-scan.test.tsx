@@ -117,8 +117,8 @@ describe("the accessibility scan", () => {
   for (const [name, draw] of SCREENS)
     it(`finds nothing wrong on ${name}`, async () => {
       render(draw())
-      // Let the first loads settle.
-      await screen.findAllByRole("button")
+      // Let the first loads settle. Home is a picture with no buttons (owner, 17 Nov).
+      await (name === "Home" ? screen.findByRole("img") : screen.findAllByRole("button"))
       expect(await problems()).toEqual([])
     })
 
