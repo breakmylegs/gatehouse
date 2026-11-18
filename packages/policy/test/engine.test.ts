@@ -394,6 +394,25 @@ describe("analyse edge cases", () => {
     expect(f.targets.map((t) => path.basename(t.abs))).toContain(".env")
   })
 
+  // 18 Nov: picomatch 4.0.7 takes exponential time on repeated extglobs (GHSA-fc5q-39xc-vjpf), and the floor runs in
+  // the Host. A word with many of them is taken to match every file in its folder: quick, and never less strict.
+  it("takes a glob word with many extglobs to match every file in its folder, without working it out", async () => {
+    const slow = path.join(fx.ws, "a".repeat(36))
+    fs.writeFileSync(slow, "")
+    try {
+      // Escaped, so the shell's parser keeps the brackets in the word. About 4 s before the change; minutes with a
+      // longer name.
+      const cmd = bash(`cat ${"+\\(a\\)".repeat(12)}b*`)
+      const t = Date.now()
+      const f = await analyse(cmd, ctx())
+      expect(Date.now() - t).toBeLessThan(1000)
+      expect(f.targets.map((x) => path.basename(x.abs))).toEqual(expect.arrayContaining([".env", "a".repeat(36)]))
+      expect(await engine.evaluate(cmd, ctx())).toMatchObject({ outcome: "deny", ruleId: "secrets-files" })
+    } finally {
+      fs.rmSync(slow)
+    }
+  })
+
   it("does not expand a glob in a folder that cannot be read", async () => {
     const f = await analyse(bash("cat nope-dir/*.txt"), ctx())
     expect(f.targets.every((t) => !t.abs.endsWith(".txt") || t.abs.includes("*"))).toBe(true)
