@@ -7,7 +7,9 @@ import { Doctor, summary } from "../src/surfaces/Doctor"
 
 let calls = 0
 vi.mock("../src/lib/api", () => ({
-  api: vi.fn(async () => {
+  // The Doctor report only; the parts beside it (safe mode, the health score, the crash bundle) find nothing.
+  api: vi.fn(async (_method: string, url: string) => {
+    if (url !== "/api/doctor") return { ok: false, status: 404 }
     calls++
     return {
       ok: true,

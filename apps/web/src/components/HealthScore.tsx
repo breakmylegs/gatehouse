@@ -43,7 +43,8 @@ export function HealthScore({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     let gone = false
     void api<Score>("GET", "/api/health-score").then((r) => {
-      if (!gone && r.ok && r.data) setScore(r.data)
+      // An older Host, or a reply without its factors, shows nothing rather than failing.
+      if (!gone && r.ok && Array.isArray(r.data?.factors)) setScore(r.data)
     })
     return () => {
       gone = true
