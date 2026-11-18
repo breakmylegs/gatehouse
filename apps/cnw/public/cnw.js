@@ -135,6 +135,24 @@ async function render() {
       ),
     )
   }
+  const invite = /^#invite=([A-Za-z0-9_-]{10,100})$/.exec(location.hash)
+  if (invite && me.access !== "user") {
+    signedOutShell()
+    return main.append(
+      form(
+        "Join Neighbourhood Watch",
+        [["password", "Choose a password of 12 characters or more", "password", { autocomplete: "new-password", minlength: "12" }]],
+        "Join",
+        async (v) => {
+          const r = await call("POST", "/api/invite/accept", { token: invite[1], password: v.password })
+          if (!r.ok) return r.json.error ?? "That did not work."
+          history.replaceState(null, "", "#board")
+          render()
+        },
+        "You were invited to Codehouse Neighbourhood Watch. You sign in with the email the invite was sent for.",
+      ),
+    )
+  }
   if (me.access === "none") {
     signedOutShell()
     if (canPasskey() && !passkeysOff) {
@@ -161,6 +179,7 @@ async function render() {
         async (v) => {
           const r = await call("POST", "/api/login", v)
           if (!r.ok) return r.json.error ?? "That did not work."
+          if (r.json.totp) return void codeStep(r.json.ticket)
           render()
         },
         "Signed in with a name before? Use your name once: CNW then asks for your email, and keeps your password.",
@@ -235,7 +254,7 @@ function show() {
   main.replaceChildren()
   if (tab === "inbox") return inboxView()
   if (tab === "server") return void serverView()
-  if (tab === "you") return youView()
+  if (tab === "you") return void youView()
   return boardView()
 }
 addEventListener("hashchange", () => (tabs.hidden ? undefined : show()))
@@ -365,13 +384,14 @@ function inboxRow(w) {
 function reauth(pass, say, then) {
   say.textContent = "This is Severe: enter your password to allow it."
   const pw = el("input", { type: "password", autocomplete: "current-password", "aria-label": "Your password" })
-  const box = el("div", { class: "row-actions" }, pw)
+  const otp = me.totp ? el("input", { inputmode: "numeric", autocomplete: "one-time-code", "aria-label": "A code from your app", placeholder: "123456" }) : null
+  const box = el("div", { class: "row-actions" }, pw, otp)
   box.append(
     el("button", {
       class: "btn strong",
       text: "Confirm and allow",
       onclick: async () => {
-        const r = await call("POST", "/api/reauth", { password: pw.value })
+        const r = await call("POST", "/api/reauth", { password: pw.value, ...(otp ? { code: otp.value } : {}) })
         if (!r.ok) return void (say.textContent = r.json.error ?? "That did not work.")
         box.remove()
         then()
@@ -385,7 +405,8 @@ function reauth(pass, say, then) {
 async function serverView() {
   main.append(el("h1", { text: "Server" }))
   if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "Sign in to see and change the server's settings, even on an allowed network." }))
-  main.append(await serverPanel(), await allowPanel(), await updatesPanel())
+  if (me.role !== "owner" && me.role !== "admin") return main.append(el("p", { class: "panel muted", text: "Your role looks and answers; an owner or an admin runs the server." }))
+  main.append(await serverPanel(), await peoplePanel(), await allowPanel(), await updatesPanel())
 }
 
 async function allowPanel() {
@@ -492,7 +513,7 @@ async function serverPanel() {
   return panel
 }
 
-function youView() {
+async function youView() {
   main.append(el("h1", { text: "You" }))
   if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "This page is open from an allowed network, without signing in. Sign in to see your account." }))
   // Notifications while this page is open; asked for only when you choose, never on opening the page.
@@ -532,7 +553,7 @@ function youView() {
         ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) })
         : el("p", { class: "muted", text: "This browser cannot make passkeys." }),
   )
-  main.append(acct, note, keys, computersPanel())
+  main.append(acct, note, keys, totpPanel(), await devicesPanel(), computersPanel())
 }
 
 /** Removing a computer: on You, away from the board, with what it means said first. */
@@ -559,6 +580,179 @@ function computersPanel() {
       ),
     )
   if (!board.board.length) panel.append(el("p", { class: "muted", text: "None yet." }))
+  return panel
+}
+
+/** After the password, with a second factor: a code from the app, or a recovery code. */
+function codeStep(ticket) {
+  main.replaceChildren(
+    form(
+      "A code from your app",
+      [["code", "The six-digit code, or a recovery code", "text", { inputmode: "numeric", autocomplete: "one-time-code", autocapitalize: "none", spellcheck: "false" }]],
+      "Sign in",
+      async (v) => {
+        const r = await call("POST", "/api/login/totp", { ticket, code: v.code })
+        if (!r.ok) return r.json.error ?? "That did not work."
+        render()
+      },
+      "Open your authenticator app and type the code shown for Neighbourhood Watch. Lost your phone? A recovery code works once.",
+    ),
+  )
+}
+
+/** You: a second factor, set up from your authenticator app; on, it can be turned off with your password and a code. */
+function totpPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Second factor" }))
+  const say = el("p", { class: "muted", role: "status" })
+  if (me.totp) {
+    const pw = el("input", { type: "password", autocomplete: "current-password", "aria-label": "Your password" })
+    const code = el("input", { inputmode: "numeric", autocomplete: "one-time-code", "aria-label": "A code from your app" })
+    panel.append(
+      el("p", { text: "On: signing in wants a code from your app after your password." }),
+      el("label", {}, el("span", { text: "To turn it off: your password" }), pw),
+      el("label", {}, el("span", { text: "and a code from your app" }), code),
+      el("button", {
+        class: "btn danger",
+        text: "Turn it off",
+        onclick: async () => {
+          const r = await call("DELETE", "/api/totp", { password: pw.value, code: code.value })
+          if (!r.ok) return void (say.textContent = r.json.error ?? "Not turned off.")
+          await render()
+          location.hash = "#you"
+        },
+      }),
+      say,
+    )
+    return panel
+  }
+  panel.append(el("p", { class: "muted", text: "A six-digit code from an authenticator app (such as the one in your phone's passwords) after your password. It works at an IP address, where passkeys cannot." }))
+  const setUp = el("button", {
+    class: "btn",
+    text: "Set up a second factor",
+    onclick: async () => {
+      const r = await call("POST", "/api/totp/start")
+      if (!r.ok) return void (say.textContent = r.json.error ?? "Not available.")
+      setUp.remove()
+      const code = el("input", { inputmode: "numeric", autocomplete: "one-time-code", "aria-label": "The code your app shows" })
+      panel.append(
+        el("p", { text: "In your authenticator app, add an account with this key (or open the link on this phone):" }),
+        el("p", { class: "code fp", text: r.json.key }),
+        el("p", {}, el("a", { href: r.json.uri, text: "Add to an authenticator app on this device" })),
+        el("label", {}, el("span", { text: "Then type the code it shows" }), code),
+        el("button", {
+          class: "btn primary",
+          text: "Turn it on",
+          onclick: async () => {
+            const c = await call("POST", "/api/totp/confirm", { code: code.value })
+            if (!c.ok) return void (say.textContent = c.json.error ?? "Not turned on.")
+            me.totp = true
+            panel.replaceChildren(
+              el("h2", { text: "Second factor" }),
+              el("p", { text: "On. Keep these recovery codes somewhere safe: each signs you in once if you lose your phone, and they are not shown again." }),
+              el("p", { class: "code fp", text: c.json.recovery.join("  ") }),
+            )
+          },
+        }),
+      )
+    },
+  })
+  panel.append(setUp, say)
+  return panel
+}
+
+/** You: where you are signed in, each with Sign out. */
+async function devicesPanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "Signed-in devices" }))
+  const r = await call("GET", "/api/devices")
+  for (const d of r.json.devices ?? [])
+    panel.append(
+      el(
+        "div",
+        { class: "row-actions", style: "align-items:center" },
+        el("span", { style: "flex:1", text: `${d.ua || "A browser"}${d.ip ? ` from ${d.ip}` : ""}, since ${new Date(d.created).toLocaleString()}${d.current ? " (this one)" : ""}` }),
+        d.current
+          ? null
+          : el("button", {
+              class: "btn",
+              text: "Sign out",
+              onclick: async () => {
+                await call("DELETE", `/api/devices/${encodeURIComponent(d.id)}`)
+                show()
+              },
+            }),
+      ),
+    )
+  return panel
+}
+
+/** Server: people, for an owner or an admin. An invite is a link to copy and send; it works once, for seven days. */
+async function peoplePanel() {
+  const panel = el("section", { class: "panel" }, el("h2", { text: "People" }))
+  const r = await call("GET", "/api/people")
+  if (!r.ok) return panel.append(el("p", { class: "muted", text: r.json.error ?? "Not available." })), panel
+  const roles = [
+    ["owner", "Owner: everything"],
+    ["admin", "Admin: the server and people, not owners"],
+    ["approver", "Approver: answers what waits"],
+    ["viewer", "Viewer: looks only"],
+  ]
+  const say = el("p", { class: "muted", role: "status" })
+  for (const p of r.json.people) {
+    const sel = el("select", { "aria-label": `Role for ${p.email ?? p.name}` })
+    for (const [v, t] of roles) {
+      const o = el("option", { value: v, text: t })
+      if (v === p.role) o.selected = true
+      sel.append(o)
+    }
+    sel.addEventListener("change", async () => {
+      const c = await call("PATCH", `/api/people/${encodeURIComponent(p.name)}`, { role: sel.value })
+      say.textContent = c.ok ? `${p.email ?? p.name} is now ${sel.value}.` : (c.json.error ?? "Not changed.")
+      if (!c.ok) sel.value = p.role
+    })
+    panel.append(
+      el(
+        "div",
+        { class: "row-actions", style: "align-items:center" },
+        el("span", { style: "flex:1", text: `${p.email ?? p.name}${p.computers ? `, ${p.computers.length} computer(s)` : ""}${p.totp ? ", second factor on" : ""}` }),
+        sel,
+        p.name === me.user
+          ? null
+          : el("button", {
+              class: "btn danger",
+              text: "Remove",
+              onclick: async () => {
+                if (!confirm(`Remove ${p.email ?? p.name}? They are signed out at once.`)) return
+                const d = await call("DELETE", `/api/people/${encodeURIComponent(p.name)}`)
+                if (!d.ok) return void (say.textContent = d.json.error ?? "Not removed.")
+                show()
+              },
+            }),
+      ),
+    )
+  }
+  const email = el("input", { type: "email", inputmode: "email", autocomplete: "off", "aria-label": "Their email" })
+  const role = el("select", { "aria-label": "Their role" })
+  for (const [v, t] of roles.slice(1)) role.append(el("option", { value: v, text: t }))
+  if (me.role === "owner") role.prepend(el("option", { value: "owner", text: roles[0][1] }))
+  role.value = "approver"
+  const link = el("p", { class: "mono" })
+  panel.append(
+    el("h2", { text: "Invite someone" }),
+    el("label", {}, el("span", { text: "Their email" }), email),
+    el("label", {}, el("span", { text: "Their role" }), role),
+    el("button", {
+      class: "btn primary",
+      text: "Make an invite link",
+      onclick: async () => {
+        const c = await call("POST", "/api/people/invite", { email: email.value, role: role.value })
+        if (!c.ok) return void (say.textContent = c.json.error ?? "No invite was made.")
+        link.textContent = c.json.link
+        say.textContent = "Send them this link. It works once, until " + new Date(c.json.expires).toLocaleDateString() + "."
+      },
+    }),
+    link,
+    say,
+  )
   return panel
 }
 
