@@ -294,7 +294,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
       return
     }
     remember("[update] switching versions: Codehouse quits and opens again")
-    NSApp.terminate(nil)
+    // Not from here: this runs in a block on the main queue, and quitting waits for the Host to stop, whose news comes
+    // back on that same queue. Asked from the run loop instead, as the Quit menu asks it.
+    NSApp.perform(#selector(NSApplication.terminate(_:)), with: nil, afterDelay: 0)
   }
 
   private func remember(_ line: String) {
