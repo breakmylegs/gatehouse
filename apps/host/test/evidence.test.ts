@@ -135,6 +135,70 @@ describe("the change evidence pack (D-003)", () => {
     expect(ps(stage)).toBe(false)
   })
 
+  // D-047: a change report names the business capabilities it touches, from the project's capability map.
+  it("names the business capabilities a change touches, and says when the project has no map", async () => {
+    const cwd = path.join(root, "caps")
+    fs.mkdirSync(path.join(cwd, ".codehouse"), { recursive: true })
+    fs.writeFileSync(path.join(cwd, ".codehouse", "capabilities.yml"), "capabilities:\n  - name: Billing\n    owner: Finance\n    paths: [src/billing/**]\n  - name: Customer sign-in\n    paths: [src/auth/**]\n")
+    const files = [
+      { path: "src/billing/invoice.ts", change: "modified", added: 2, removed: 1, binary: false, diff: "" },
+      { path: "docs/readme.md", change: "modified", added: 1, removed: 0, binary: false, diff: "" },
+    ]
+    const service = (store: string) =>
+      new EvidenceService({
+        store: new EvidenceStore({ dir: path.join(root, store), redact: (t) => t }),
+        auditDir,
+        checkpoints: { changes: async () => ({ since: SINCE, files }), versions: async () => ({ after: "" }) },
+        audit: { record: async () => true },
+        version: () => "2.0.0",
+        retentionDays: () => 90,
+        log: () => undefined,
+      })
+    const got = await service("caps-packs").build({ id: "s1", cwd, project: "shop" })
+    expect(got?.pack.capabilities).toEqual([{ name: "Billing", owner: "Finance", files: ["src/billing/invoice.ts"] }])
+    const none = await service("caps-none").build({ id: "s1", cwd: root, project: "shop" })
+    expect(none?.pack.capabilities).toBeUndefined()
+    expect(none?.pack.notes.join(" ")).toMatch(/No capability map/)
+  })
+
+  // D-049: a change that touches a hot path's budget runs the benchmarks, and a seeded slowdown fails its budget.
+  it("checks the performance budgets a change touches, and a seeded slowdown fails its budget", async () => {
+    const cwd = path.join(root, "bench")
+    fs.mkdirSync(path.join(cwd, ".codehouse"), { recursive: true })
+    fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({ devDependencies: { vitest: "4.0.0" } }))
+    fs.writeFileSync(path.join(cwd, ".codehouse", "budgets.yml"), "budgets:\n  - name: parse a large file\n    paths: [src/parser/**]\n    maxMeanMs: 2\n")
+    let meanMs = 1.2
+    const ran: string[] = []
+    const make = (store: string, files: Array<{ path: string }>) =>
+      new EvidenceService({
+        store: new EvidenceStore({ dir: path.join(root, store), redact: (t) => t }),
+        auditDir,
+        checkpoints: { changes: async () => ({ since: SINCE, files: files.map((f) => ({ ...f, change: "modified", added: 1, removed: 1, binary: false, diff: "" })) }), versions: async () => ({ after: "" }) },
+        audit: { record: async () => true },
+        version: () => "2.0.0",
+        retentionDays: () => 90,
+        log: () => undefined,
+        // The project's benchmarks, as Vitest's bench writes its JSON.
+        benchExec: () => async (command, dir) => {
+          ran.push(command)
+          fs.writeFileSync(path.join(dir, ".codehouse", "bench-results.json"), JSON.stringify({ files: [{ groups: [{ benchmarks: [{ name: "parse a large file", mean: meanMs }] }] }] }))
+          return { exitCode: 0, output: "", timedOut: false }
+        },
+      })
+    const fast = await make("bench-1", [{ path: "src/parser/read.ts" }]).build({ id: "s1", cwd, project: "shop" })
+    expect(ran[0]).toMatch(/^npx vitest bench --run --outputJson/)
+    expect(fast?.pack.budgets).toEqual([expect.objectContaining({ name: "parse a large file", ok: true, meanMs: 1.2 })])
+    // The seeded slowdown.
+    meanMs = 3.4
+    const slow = await make("bench-2", [{ path: "src/parser/read.ts" }]).build({ id: "s1", cwd, project: "shop" })
+    expect(slow?.pack.budgets?.[0]).toMatchObject({ ok: false, meanMs: 3.4, detail: expect.stringMatching(/over its 2 ms budget/) })
+    expect(slow?.pack.notes.join(" ")).toMatch(/1 performance budget is not met: parse a large file/)
+    // A change away from the hot path runs nothing.
+    ran.length = 0
+    await make("bench-3", [{ path: "docs/readme.md" }]).build({ id: "s1", cwd, project: "shop" })
+    expect(ran).toEqual([])
+  })
+
   it("makes a 50-file pack in under 5 seconds", async () => {
     const text = (i: number) => `export function f${i}(x: number) {\n  return x + ${i}\n}\n`
     const files = Array.from({ length: 50 }, (_, i) => ({

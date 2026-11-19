@@ -849,7 +849,7 @@ export function createHost(opts: HostOptions = {}): Host {
     })
   // Section 6: what Codehouse runs itself is judged, run without credentials in a job at the session's level, and
   // stopped by the kill switch.
-  const actionFor = (sessionId: string): HeldOutExec => async (command, cwd, timeoutMs) => {
+  const actionFor = (sessionId: string, why = "this project's held-out checks"): HeldOutExec => async (command, cwd, timeoutMs) => {
     const s = manager.get(sessionId)
     const r = await runCodehouseAction(
       {
@@ -857,7 +857,7 @@ export function createHost(opts: HostOptions = {}): Host {
         cwd,
         project: s?.project ?? "",
         command,
-        why: "this project's held-out checks",
+        why,
         level: s?.info().resources ?? "high",
         timeoutMs,
       },
@@ -1349,6 +1349,8 @@ export function createHost(opts: HostOptions = {}): Host {
     version: () => updates.status().current,
     retentionDays: () => config.evidence?.retentionDays ?? 90,
     log,
+    // D-049: the project's benchmarks, as a Codehouse action, for the performance budgets a change touches.
+    benchExec: (id) => actionFor(id, "this project's performance budgets"),
   })
   evidence.prune()
   deps.evidence = evidence

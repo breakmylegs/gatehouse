@@ -20,6 +20,10 @@ interface Pack {
   dependencies: { added: number; changed: number; removed: number; sbom?: string }
   findings: Array<{ file: string; line: number; severity: string; title: string }>
   files: Array<{ path: string; change: string; added: number; removed: number }>
+  /** D-049: the performance budgets the change touches. */
+  budgets?: Array<{ name: string; ok: boolean; detail: string }>
+  /** D-047: the business capabilities the change touches (absent from an older pack). */
+  capabilities?: Array<{ name: string; owner?: string; files: string[] }>
   notes: string[]
 }
 
@@ -152,6 +156,25 @@ function PackView({ pack, sha }: { pack: Pack; sha: string }) {
           </li>
         ))}
       </Part>
+      {pack.budgets?.length ? (
+        <Part title={`Performance budgets (${pack.budgets.filter((b) => !b.ok).length} not met)`}>
+          {pack.budgets.map((b) => (
+            <li key={b.name}>
+              <span className={b.ok ? "font-semibold text-ok" : "font-semibold text-sev"}>{b.ok ? "Met" : "Not met"}</span> {b.name}: {b.detail}
+            </li>
+          ))}
+        </Part>
+      ) : null}
+      {pack.capabilities ? (
+        <Part title={pack.capabilities.length ? `Capabilities it touches (${pack.capabilities.length})` : "Capabilities it touches: none"}>
+          {pack.capabilities.map((c) => (
+            <li key={c.name}>
+              <span className="font-semibold">{c.name}</span>
+              {c.owner ? `, owned by ${c.owner}` : ""}: {c.files.length} file{c.files.length === 1 ? "" : "s"}
+            </li>
+          ))}
+        </Part>
+      ) : null}
       <Part title={`Files (${pack.files.length})`}>
         {pack.files.map((f) => (
           <li key={f.path}>

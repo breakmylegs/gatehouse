@@ -11,6 +11,9 @@
  * session's signed timeline export (C-011) with the pack in it, signed the same way, so changing one byte fails both
  * verifiers.
  */
+import { checkBudgets, detectTool, loadBudgets, meansOf, RESULTS_FILE, type BudgetResult } from "./budgets.js"
+import { affected, loadCapabilities } from "./capabilities.js"
+import type { HeldOutExec } from "./heldout.js"
 import { fitnessCheck, hasFitness, type FitnessResult } from "./fitness.js"
 import { listFiles } from "./mutation.js"
 import { createHash } from "node:crypto"
@@ -47,6 +50,10 @@ export interface EvidencePack {
   files: Array<{ path: string; change: string; added: number; removed: number }>
   /** D-045: the project's fitness checks as the change leaves it. */
   fitness?: FitnessResult
+  /** D-049: the performance budgets the change touches, and whether each held. */
+  budgets?: BudgetResult[]
+  /** D-047: the business capabilities the change touches, from .codehouse/capabilities.yml. */
+  capabilities?: Array<{ name: string; owner?: string; files: string[] }>
   /** D-037: the assumptions Claude declared that you have not verified yet. */
   assumptions?: Array<{ id: string; text: string; check?: string; at: string }>
   /** What this pack does not hold, said plainly. */
@@ -270,6 +277,20 @@ export interface EvidenceDeps {
   version: () => string
   retentionDays: () => number
   log: (line: string) => void
+  /** D-049: runs the project's benchmarks for a session, as a Codehouse action (the rules, a job, the kill switch). */
+  benchExec?: (sessionId: string) => HeldOutExec
+}
+
+/** BenchmarkDotNet's newest full JSON report, under BenchmarkDotNet.Artifacts/results. */
+function newestBdnReport(root: string): string {
+  const dir = path.join(root, "BenchmarkDotNet.Artifacts", "results")
+  const reports = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith("-report-full.json") || f.endsWith("-report.json"))
+    .map((f) => ({ f: path.join(dir, f), t: fs.statSync(path.join(dir, f)).mtimeMs }))
+    .sort((a, b) => b.t - a.t)
+  if (!reports[0]) throw new Error("no report")
+  return reports[0].f
 }
 
 /** The chain's head, from head.json. */
@@ -342,6 +363,42 @@ export class EvidenceService {
       pack.fitness = fit
       if (fit.failed) pack.notes.push(`${fit.failed} fitness check${fit.failed === 1 ? "" : "s"} fail, so this change does not pass the project's gate.`)
     }
+    // D-049: the performance budgets the change touches, run with the project's benchmark tool.
+    const budgets = loadBudgets(s.cwd)
+    if (typeof budgets === "string") pack.notes.push(budgets)
+    else if (budgets?.length) {
+      const changed = files.map((f) => f.path)
+      const touched = budgets.filter((b) => changed.some((p) => b.touched(p.replace(/\\/g, "/").toLowerCase())))
+      const tool = detectTool(s.cwd)
+      // A change that touches no budget's paths runs nothing.
+      if (!touched.length) pack.budgets = []
+      else if (!tool) pack.notes.push("The change touches performance budgets, but no benchmark tool (tinybench or BenchmarkDotNet) was found to check them.")
+      else if (!this.#o.benchExec) pack.notes.push("The change touches performance budgets; they are checked only when Codehouse may run commands for the session.")
+      else {
+        fs.rmSync(path.join(s.cwd, RESULTS_FILE), { force: true })
+        const run = await this.#o.benchExec(s.id)(tool.command, s.cwd, 15 * 60_000)
+        if (run.refused) pack.notes.push(`The benchmarks were not run: ${run.refused}`)
+        else {
+          let json: unknown
+          try {
+            json = JSON.parse(fs.readFileSync(tool.tool === "tinybench" ? path.join(s.cwd, RESULTS_FILE) : newestBdnReport(s.cwd), "utf8"))
+          } catch {
+            json = undefined
+          }
+          if (json === undefined) pack.notes.push(`The benchmarks ran${run.timedOut ? " out of time" : ""} but left no results to read, so the budgets were not checked.`)
+          else {
+            pack.budgets = checkBudgets(touched, changed, meansOf(tool.tool, json))
+            const over = pack.budgets.filter((b) => !b.ok)
+            if (over.length) pack.notes.push(`${over.length} performance budget${over.length === 1 ? " is" : "s are"} not met: ${over.map((b) => b.name).join(", ")}.`)
+          }
+        }
+      }
+    }
+    // D-047: the capabilities it touches, when the project has a map; and why not, when it cannot be read.
+    const map = loadCapabilities(s.cwd)
+    if (typeof map === "string") pack.notes.push(map)
+    else if (map) pack.capabilities = affected(map, files.map((f) => f.path))
+    else pack.notes.push("No capability map: add .codehouse/capabilities.yml to name the business capabilities a change touches.")
     const sha = await this.store.put(pack)
     await this.#o.audit.record({
       session: s.id,
