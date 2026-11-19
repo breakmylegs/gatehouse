@@ -1,4 +1,8 @@
 import { RememberFor } from "@gatehouse/shared/ws-protocol"
+import { failureTaxonomy } from "./failure-taxonomy.js"
+import { hotspots } from "./hotspots.js"
+import { listFiles } from "./mutation.js"
+import { legalDraft, personalDataMap } from "./personal-data.js"
 import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
@@ -94,7 +98,7 @@ import {
 import type { HostAudit } from "./hostaudit.js"
 import { localDay, type UsageStore } from "./usage.js"
 import type { PlanUsage } from "./plan-usage.js"
-import { ArtifactError, artifactHeaders, EXT, type ArtifactStore } from "./artifacts.js"
+import { ArtifactError, artifactHeaders, EXT, mermaidPage, readMermaidLib, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import type { RoutineDrafts } from "./routine-drafts.js"
@@ -1477,7 +1481,8 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
     if (!found) return bad(reply, 404, "This artifact has ended.")
     const origin = `http://${String(req.headers.host ?? "127.0.0.1")}`
     for (const [k, v] of Object.entries(artifactHeaders(origin, found.kind))) reply.header(k, v)
-    return reply.send(found.content)
+    // C-057: a diagram is drawn by a page made around its source.
+    return reply.send(found.kind === "mermaid" ? mermaidPage(found.content, readMermaidLib()) : found.content)
   })
 }
 
@@ -1946,6 +1951,31 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     )
     const to = Date.now()
     return computeAnalytics(recordsSince(ctx.auditDir, to - days * DAY), to - days * DAY, to)
+  })
+
+  // D-072: what went wrong in agent work over the last days, by kind, project and model, from the audit alone.
+  app.get("/api/insights/failures", async (req) => {
+    const days = Math.min(90, Math.max(1, Number((req.query as { days?: string }).days ?? 30) || 30))
+    const to = Date.now()
+    return { days, ...failureTaxonomy(recordsSince(ctx.auditDir, to - days * DAY)) }
+  })
+
+  // D-069: the hotspot map of a session's project: churn from git, complexity, and agent failures from the audit.
+  app.get("/api/insights/hotspots", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    const root = ctx.sessionCwd?.(id)
+    if (!root) return reply.code(404).send({ error: "That session is not running." })
+    const to = Date.now()
+    return { root: path.basename(root), hotspots: await hotspots(root, recordsSince(ctx.auditDir, to - 90 * DAY)) }
+  })
+
+  // D-051: the personal data flow map of a session's project, a draft, with its legal-review Markdown.
+  app.get("/api/insights/personal-data", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    const root = ctx.sessionCwd?.(id)
+    if (!root) return reply.code(404).send({ error: "That session is not running." })
+    const map = personalDataMap(root, await listFiles(root).catch(() => [] as string[]))
+    return { ...map, markdown: legalDraft(map) }
   })
 
   app.get("/api/digest", async () => {

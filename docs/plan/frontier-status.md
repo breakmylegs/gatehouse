@@ -66,7 +66,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-016 | Verified data-boundary card per model | Wave 2 | built | slice/C-016-boundary-cards | BUILD_REPORT "Frontier C-016" | Per model as well as per provider; stale after 180 days by default; no card is not refused (owner to confirm) |
 | C-031 | Tree-sitter outline and navigation (WASM) | Wave 2 | built | (commit 6d2eb89) | apps/host/test/outline.test.ts | Outline and go to symbol for TS, JS, Python, C#, PowerShell, JSON; 5,000 lines under 50 ms; row was out of date |
 | C-032 | TypeScript language service worker | Wave 3 | built | feat/c032 | apps/host/test/ts-service.test.ts | Diagnostics, what a name is (as text, never a tooltip), definition (F12) and references in the file view; a worker with a memory cap that ends and starts again; typescript 5.9.3 pinned in the Host's dependencies |
-| C-057 | Mermaid and Markdown artifacts | Wave 3 | todo | | | Mermaid left out in G6 for want of a dependency; now asked for |
+| C-057 | Mermaid and Markdown artifacts | Wave 3 | built | feat/c057 | apps/host/test/mermaid-artifact.test.ts | Markdown artifacts were there; Mermaid diagrams drawn offline in the artifact sandbox, its file inlined, strict and locked against directives; mermaid a development dependency, one file ships |
 | C-015 | Adaptive autonomy that only lowers | Wave 4 | todo | | | |
 | C-008 | Pin a newer Claude Code through conformance | Wave 5 | todo | | | |
 | C-036 | Local codebase index | Wave 5 | todo | | | |
@@ -167,13 +167,13 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
-| D-072 | Failure taxonomy | todo | | | |
-| D-069 | Hotspot map | todo | | | |
-| D-032 | Agent-aware build provenance | todo | | | |
-| D-047 | Capability map | todo | | | |
-| D-049 | NFR budgets | todo | | | |
-| D-051 | Personal data flow map | todo | | | |
-| D-063 | Package provenance verification | todo | | | Safe variant |
+| D-072 | Failure taxonomy | built | feat/c057 | apps/host/test/failure-taxonomy.test.ts | Loops, tool errors, failing tests, undos, contradicted claims and denials from the audit, per project and per model (learnt per session); a new tool_failed record (tool, test or not, model; never the error); on Insights |
+| D-069 | Hotspot map | built | feat/c057 | apps/host/test/hotspots.test.ts | Files ranked by git churn (90 days), decision points and agent failures per file (tool_failed now names the file; edits put back); on Insights, by project |
+| D-032 | Agent-aware build provenance | built | feat/c057 | apps/host/test/slsa.test.ts | provenance.intoto.json with each release: in-toto Statement v1, SLSA provenance v1; subjects by SHA-256, the commit, and the sessions since the last release from their git notes (audit link, evidence) |
+| D-047 | Capability map | built | feat/c057 | apps/host/test/evidence.test.ts | .codehouse/capabilities.yml names capabilities by paths (and an owner); each evidence pack names the capabilities its change touches, or says there is no map |
+| D-049 | NFR budgets | built | feat/c057 | apps/host/test/evidence.test.ts | .codehouse/budgets.yml (paths, maxMeanMs); tinybench (Vitest bench) or BenchmarkDotNet found and run as a Codehouse action when a change touches a budget; results in the evidence pack |
+| D-051 | Personal data flow map | built | feat/c057 | apps/host/test/personal-data.test.ts | A draft: fields by name pattern followed to logs, storage and network calls on the same statement; scope and fields as Markdown for legal review; on Insights |
+| D-063 | Package provenance verification | built safe variant | feat/c057 | packages/policy/test/nuget-signature.test.ts | A new NuGet package whose .nupkg here has no .signature.p7s escalates as nuget-unsigned (risk 76), offline; validity by dotnet nuget verify and npm provenance listed |
 | D-065 | Test impact analysis | todo | | | |
 | D-068 | Dead code with evidence | todo | | | |
 | D-073 | Undo-learning loop | todo | | | |

@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import { nugetSignatureFindings } from "./nuget-signature.js"
 import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
@@ -250,7 +251,8 @@ export class PolicyEngine {
     if (found.some((d) => d.outcome === "deny")) return found
     const fresh = added.filter((d) => !known.has(dependencyKey(d)))
     const allowed = policy.managedLicences ?? this.#licences() ?? DEFAULT_LICENCES
-    const lic = licenceFindings(fresh, [...new Set(dirs)], allowed)
+    // D-063: a new NuGet package whose .nupkg here has no signature asks too, beside its licence.
+    const lic = [...licenceFindings(fresh, [...new Set(dirs)], allowed), ...nugetSignatureFindings(fresh)]
     if (!lic.length) return found
     const also = (xs: Array<{ reason: string }>) => xs.map((d) => d.reason).join(" ")
     return [
