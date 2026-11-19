@@ -177,12 +177,12 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-065 | Test impact analysis | built | feat/d065 | apps/companion/test/test-impact.test.ts | affected_tests in coding sessions (rule test-impact-tools): imports plus shared history, a subset; release runs the invariant tests per owner 13 Nov (deviation recorded) |
 | D-068 | Dead code with evidence | built | feat/d068 | apps/host/test/dead-code.test.ts | Insights, Dead code: unreferenced and tests-only exports, unimported files, coverage evidence; removal in slices of a file or five names |
 | D-073 | Undo-learning loop | built | feat/d068 | apps/host/test/lessons.test.ts | Three similar undos or person's denials propose a CLAUDE.md line with its records; added through D-059 (recorded, refused over outside change, repinned); T157 |
-| D-074 | Behaviour regression for Claude Code upgrades | todo | | | |
-| D-076 | Cost per outcome | todo | | | |
-| D-100 | Estimates from history | todo | | | |
+| D-074 | Behaviour regression for Claude Code upgrades | todo | | | Needs C-008 (todo); built after C-008 in queue section 7 |
+| D-076 | Cost per outcome | built | feat/d068 | apps/host/test/outcomes.test.ts | Insights, Cost per change: all project spend over noted commits, so undos, failed test runs and changeless sessions are in it |
+| D-100 | Estimates from history | built | feat/d068 | apps/host/test/outcomes.test.ts, apps/web/test/outcomes.test.ts | 10th to 90th percentile and median per change, with the sample size; under 5 sessions says not enough history |
 | D-077 | Context efficiency report | todo | | | |
 | D-078 | Claim calibration score | todo | | | |
-| D-079 | Codebase tours | todo | | | |
+| D-079 | Codebase tours | todo | | | Needs C-036 (todo); built after C-036 in queue section 7 |
 | D-081 | Why is this code like this | todo | | | |
 | D-082 | Stale instruction detector | todo | | | |
 | D-083 | Ubiquitous language glossary | todo | | | |

@@ -4,6 +4,7 @@ import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
 import { deadCode } from "./dead-code.js"
+import { outcomes } from "./outcomes.js"
 import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
@@ -1959,6 +1960,15 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const days = Math.min(90, Math.max(1, Number((req.query as { days?: string }).days ?? 30) || 30))
     const to = Date.now()
     return { days, ...failureTaxonomy(recordsSince(ctx.auditDir, to - days * DAY)) }
+  })
+
+  // D-076 and D-100: cost per accepted change, rework included, and estimates from that history.
+  app.get("/api/insights/outcomes", async (req, reply) => {
+    if (!ctx.usage) return bad(reply, 501, "Usage is not available here.")
+    const days = Math.min(90, Math.max(1, Number((req.query as { days?: string }).days ?? 30) || 30))
+    const to = Date.now()
+    const report = applyPricing(ctx.usage.report(localDay(new Date(to - (days - 1) * DAY)), localDay(new Date(to))), ctx.config().modelPricing)
+    return { days, ...outcomes(report, recordsSince(ctx.auditDir, to - days * DAY)) }
   })
 
   // D-069: the hotspot map of a session's project: churn from git, complexity, and agent failures from the audit.
