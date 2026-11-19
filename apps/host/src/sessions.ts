@@ -1,4 +1,5 @@
 import { noteCommit } from "./lineage.js"
+import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
 import { checkLastCommit, readRules } from "./writing-rules.js"
 import type { IntentCheck } from "./intent-drift.js"
 import { adrContext, readAdrs } from "./adr.js"
@@ -1262,6 +1263,21 @@ export class Session extends EventEmitter<SessionEvents> {
         const command = (input as { command?: unknown } | undefined)?.command
         if ((tool === "Bash" || tool === "PowerShell") && typeof command === "string")
           this.#turnCommands.push(command.slice(0, 2000))
+        // D-072: each failed call is recorded by its tool, whether it ran tests, and the model, never what it said.
+        if (error !== undefined)
+          void this.#auditLimit(
+            "tool_failed",
+            "tool-failed",
+            {
+              tool,
+              test: (tool === "Bash" || tool === "PowerShell") && typeof command === "string" && TEST_COMMAND.test(command),
+              ...(this.#model ? { model: this.#model } : {}),
+              // D-069: the file a call was about, from the session's folder, for the hotspot map.
+              ...fileOf(input, this.cwd),
+            },
+            `A ${tool} call failed.`,
+            "rules",
+          ).catch(() => undefined)
         const r = error === undefined ? this.#loop.succeeded(tool, input) : this.#loop.failed(tool, input, error)
         if (!r) return undefined
         if (r.act === "stop") {
@@ -1271,7 +1287,7 @@ export class Session extends EventEmitter<SessionEvents> {
         void this.#auditLimit(
           "thrash_warned",
           "loop-guard",
-          { tool, what: r.what },
+          { tool, what: r.what, ...(this.#model ? { model: this.#model } : {}) },
           `Claude did the same thing again with the same result (${r.what}), so Codehouse told it to try something else.`,
           "rules",
         ).catch(() => undefined)
@@ -2091,7 +2107,7 @@ export class Session extends EventEmitter<SessionEvents> {
     await this.#auditLimit(
       "thrash_paused",
       "loop-guard",
-      { tool, what, repeats: LOOP_REPEATS },
+      { tool, what, repeats: LOOP_REPEATS, ...(this.#model ? { model: this.#model } : {}) },
       `Claude was told it was repeating itself (${what}) and did it again, so Codehouse stopped the turn.`,
       "rules",
     ).catch(() => undefined)

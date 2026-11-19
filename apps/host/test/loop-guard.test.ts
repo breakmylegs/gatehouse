@@ -76,6 +76,11 @@ describe("a session going round in circles", () => {
     expect(events).toContain("thrash_warned")
     expect(events).toContain("thrash_paused")
     expect(told.map((e) => e.type)).toEqual(expect.arrayContaining(["thrash_warned", "thrash_paused"]))
+    // D-072: each failed call is recorded by its tool and that it ran tests, never by what it said.
+    const failed = s.records().filter((r) => r.session === session.id && r.event === "tool_failed")
+    expect(failed.length).toBe(results.length)
+    expect(JSON.parse(failed[0]!.inputJson)).toMatchObject({ tool: "Bash", test: true })
+    expect(JSON.stringify(failed)).not.toContain("parser")
     await session.close()
   })
 })
