@@ -1,4 +1,5 @@
 import clsx from "clsx"
+import { readDraft, saveDraft, useOnline } from "./drafts"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { splitByHighlights } from "@gatehouse/shared/highlight"
 import {
@@ -1040,7 +1041,13 @@ function SessionView({
   onPauseProject: () => void
   onRequests: () => void
 }) {
-  const [message, setMessage] = useState("")
+  // T-101: the message is kept as a draft for this session, and signed only when sent online.
+  const [message, setMessageState] = useState(() => readDraft(s.id))
+  const setMessage = (text: string) => {
+    setMessageState(text)
+    saveDraft(s.id, text)
+  }
+  const online = useOnline()
   const end = useRef<HTMLDivElement>(null)
   const steps = s.recent ?? []
   const last = steps.at(-1)
@@ -1086,7 +1093,7 @@ function SessionView({
         className="action-bar glass grid gap-2" // Mac fork: in glass
         onSubmit={(e) => {
           e.preventDefault()
-          if (!message.trim()) return
+          if (!message.trim() || !online) return
           void onSend(message).then((ok) => ok && setMessage(""))
         }}
       >
@@ -1102,8 +1109,8 @@ function SessionView({
         </label>
         {/* Mac fork: Send takes the room it needs on one line. */}
         <div className="grid grid-cols-[1fr_auto] gap-3">
-          <button type="submit" className="btn btn-primary" disabled={busy || !message.trim()}>
-            {busy ? "Waiting for Face ID…" : "Send with Face ID"}
+          <button type="submit" className="btn btn-primary" disabled={busy || !message.trim() || !online}>
+            {busy ? "Waiting for Face ID…" : online ? "Send with Face ID" : "Offline: kept as a draft"}
           </button>
           {s.state === "running" || s.state === "waiting" ? (
             <button type="button" className="btn" disabled={busy} onClick={onInterrupt}>
@@ -1115,6 +1122,11 @@ function SessionView({
             Pause all in {s.project}…
           </button>
         </div>
+        {!online ? (
+          <p role="status" className="m-0 text-[15px] text-mut">
+            You are offline. Your message is kept here, and signed with Face ID only when you send it online.
+          </p>
+        ) : null}
         {said ? (
           <p role="status" className="m-0 text-[15px]">
             {said}

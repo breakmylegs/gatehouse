@@ -42,6 +42,27 @@ escalate:
   - { id: it-ask-npm-publish, commands: ["npm publish*"], risk: 80 }
 ```
 
+## The organisation's settings (T-067)
+
+The same signed `policy.yaml` can hold a `settings` section that sets what every session on this computer may do. Each one only narrows; leave one out and Codehouse's own limits apply.
+
+```yaml
+version: 1
+settings:
+  managedBy: Accenture IT          # shown as "Managed by Accenture IT" wherever a limit applies
+  maxMode: default                 # the broadest permission mode: plan, default, acceptEdits or auto
+  extremeApproval: false           # no Extreme approval
+  providers: [claude]              # the AI providers allowed: claude, local (a runtime on this computer), gateway
+  phone: false                     # no phone, Relay or push channel (ntfy, Slack)
+  locked: [expectedOrg, theme]     # settings (by their key in the settings file) that cannot be changed here
+```
+
+A session that would be broader than this does not start, and one running cannot be changed to it; the reason names who manages it. Settings shows the same at the top. A key Codehouse does not know (a setting a newer version enforces) is refused like a bad signature: no session starts until the policy is one this version can enforce in full, so nothing is ever half applied. A project's own overlay cannot set these.
+
+To check a policy before you roll it out, on any computer with Codehouse's source: `npm run policy -- check --managed-dir <folder>` says whether it is signed, checked and in force (exit code 1 when it is not), and `npm run policy -- show --managed-dir <folder>` lists what it allows, in words. Without `--managed-dir` they read this computer's managed folder.
+
+Updates from a mirror are not a setting yet: a policy that names one is refused until a version that can use it, so the in-app update always works.
+
 ## The models this computer may run (B19)
 
 IT can also say which models on this computer (or through your organisation's gateway) Codehouse may use. Put `models.json` in the same folder, signed with the same key, as `models.json.sig`:

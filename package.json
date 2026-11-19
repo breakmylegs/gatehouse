@@ -18,6 +18,7 @@
     "test:coverage": "vitest run --coverage",
     "test:shards": "node scripts/test-shards.mjs",
     "policy:replay": "npm run replay -w @gatehouse/policy --",
+    "policy": "tsx apps/host/src/policy-cli.ts",
     "audit:verify": "tsx packages/shared/src/audit/verify-cli.ts",
     "start": "node scripts/start.mjs",
     "approver": "npm run start -w @gatehouse/approver",

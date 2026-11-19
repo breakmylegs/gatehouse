@@ -14,6 +14,7 @@ import {
   type LocalRuntimeConfig,
 } from "./local-runtime.js"
 import { judgeRuntime } from "../claim-judge.js"
+import { managedRefusal, providerAllowed, type ManagedSettings } from "@gatehouse/policy"
 
 type Providers = NonNullable<GatehouseConfig["providers"]>
 
@@ -31,6 +32,8 @@ export function registerProviderRoutes(
     fetchFn?: typeof fetch
     /** B19: IT's signed list of the models this computer may run. */
     itModels?: () => ItModels
+    /** T-067: the organisation's managed settings, for the providers it allows. */
+    managed?: () => ManagedSettings | undefined
   },
 ): void {
   const view = async () => {
@@ -191,6 +194,10 @@ export function registerProviderRoutes(
     const next = candidate.data as Providers
     const where = next.local ? addressProblem(next.local.url) : undefined
     if (where) return reply.code(422).send({ error: where })
+    // T-067: a runtime only of a kind the organisation allows; turning them off is always allowed.
+    const managed = ctx.managed?.()
+    if (next.local && !providerAllowed(managed, next.local.kind === "gateway" ? "gateway" : "local"))
+      return reply.code(403).send({ error: managedRefusal(managed, next.local.kind === "gateway" ? "a gateway to hosted models is not allowed" : "models on this computer are not allowed") })
     // D-086: the claims judge sees a change's diff, so only a model listed on a runtime on this computer, never a gateway.
     if (next.claimJudge && !judgeRuntime(next.local as LocalRuntimeConfig | undefined, next.claimJudge.model))
       return reply.code(422).send({ error: "The claims judge must be one of the models you list, on a runtime on this computer (not a gateway)." })

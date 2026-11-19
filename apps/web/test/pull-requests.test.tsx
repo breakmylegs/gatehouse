@@ -1,35 +1,28 @@
 // @vitest-environment jsdom
-// T-061 (t3code review): the Git pane's Pull requests tab lists open pull requests and shows one's checks, as text;
-// while the connection is off it says so.
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
-import { afterEach, describe, expect, it, vi } from "vitest"
+// T-075: the Pull requests page reads a description's task boxes and says what happened to each change in words.
+import { describe, expect, it } from "vitest"
+import { actText, tasksOf } from "../src/components/PullRequests"
 
-let off = false
-vi.mock("../src/lib/api", () => ({
-  api: vi.fn(async (_m: string, url: string) => {
-    if (off) return { ok: false, status: 403, error: "The GitHub connection is off. Switch it on in Settings, Connectors." }
-    if (url.startsWith("/api/forge/prs"))
-      return { ok: true, status: 200, data: { prs: [{ number: 12, title: "<img src=x onerror=alert(1)>", state: "OPEN", url: "https://github.com/a/b/pull/12", branch: "fix/x", draft: false }] } }
-    return { ok: true, status: 200, data: { pr: { number: 12, title: "Fix", state: "OPEN", url: "https://github.com/a/b/pull/12", branch: "fix/x", draft: false, base: "main", checks: [{ name: "build", state: "FAILURE" }] } } }
-  }),
-}))
-const { PullRequests } = await import("../src/components/PullRequests")
-
-afterEach(cleanup)
-
-describe("the Pull requests tab (T-061)", () => {
-  it("lists them as text and shows one's checks", async () => {
-    off = false
-    const { container } = render(<PullRequests q="session=s1" />)
-    fireEvent.click(await screen.findByRole("button", { name: /#12/ }))
-    expect(container.querySelector("img")).toBeNull()
-    expect(await screen.findByRole("list", { name: "Checks" })).toBeTruthy()
-    expect(screen.getByText("failure")).toBeTruthy()
+describe("the Pull requests page (T-075)", () => {
+  it("finds the description's task boxes, ticked or not", () => {
+    expect(tasksOf("Intro\n- [ ] tests pass\n  - [x] docs\n* [X] notes\nnot - [ ] this")).toEqual([
+      { text: "tests pass", done: false },
+      { text: "docs", done: true },
+      { text: "notes", done: true },
+    ])
   })
 
-  it("says the connection is off", async () => {
-    off = true
-    render(<PullRequests q="session=s1" />)
-    expect((await screen.findByRole("alert")).textContent).toContain("Switch it on in Settings")
+  it("says whether a change happened, was refused, or failed", () => {
+    expect(actText({ ran: true, exitCode: 0, output: "" }, "Merging")).toBe("Merging: done.")
+    expect(actText({ ran: false, refused: "you said no on the approval card", exitCode: null, output: "" }, "Merging")).toBe("Merging did not happen: you said no on the approval card.")
+    expect(actText({ ran: true, exitCode: 1, output: "x\nPull request is not mergeable\n" }, "Merging")).toBe("Merging failed (exit 1): Pull request is not mergeable")
+  })
+})
+
+describe("stacks in words (T-081)", () => {
+  it("says it all went through, or how far it got and why it stopped", async () => {
+    const { stackText } = await import("../src/components/PullRequests")
+    expect(stackText({ stack: [10, 11], steps: [{ number: 10, ran: true, exitCode: 0 }, { number: 11, ran: true, exitCode: 0 }], done: true }, "Merging the stack")).toBe("Merging the stack: all 2 done, bottom up.")
+    expect(stackText({ stack: [10, 11, 12], steps: [{ number: 10, ran: true, exitCode: 0 }, { number: 11, ran: false, exitCode: null, refused: "you said no" }], done: false }, "Merging the stack")).toBe("Merging the stack stopped: #10 done, then #11 did not happen: you said no.")
   })
 })

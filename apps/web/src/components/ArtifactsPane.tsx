@@ -8,6 +8,7 @@ import Markdown from "react-markdown"
 import { LINK_PARTS } from "../lib/links"
 import remarkGfm from "remark-gfm"
 import { CodeView } from "./CodeViews"
+import { useStore } from "../store"
 
 interface Version {
   version: number
@@ -28,10 +29,24 @@ interface Artifact {
 /** A document or code: shown as text with the app's own views, so nothing in it runs (CH-03). */
 const asText = (kind: Artifact["kind"] | undefined) => kind === "markdown" || kind === "code"
 
+/** T-058: the zoom steps, and one step in or out. */
+export const ZOOMS = [0.5, 0.67, 0.8, 1, 1.25, 1.5, 2] as const
+export function stepZoom(z: number, by: -1 | 1): number {
+  const i = ZOOMS.findIndex((x) => Math.abs(x - z) < 0.001)
+  const at = i < 0 ? ZOOMS.indexOf(1) : i
+  return ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, at + by))]!
+}
+
+/** T-058: an HTML artifact's address with the theme it is shown in. */
+export const themedPath = (path: string, theme: string) => `${path}${path.includes("?") ? "&" : "?"}theme=${theme === "dark" ? "dark" : "light"}`
+
 export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refresh: number }) {
   const [list, setList] = useState<Artifact[]>()
   const [chosen, setChosen] = useState<{ id: string; version: number }>()
   const [path, setPath] = useState<string>()
+  // T-058: a page follows the theme, and can be zoomed (50% to 200%).
+  const theme = useStore((s) => s.theme)
+  const [zoom, setZoom] = useState(1)
   const [body, setBody] = useState<string>()
   const [compare, setCompare] =
     useState<Array<{ value: string; added?: boolean; removed?: boolean }>>()
@@ -224,14 +239,35 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
               <CodeView text={body} label={`${artifact.title}, version ${chosen.version}`} />
             )
           ) : path ? (
-            // A sandbox: its own scripts and nothing else. The address carries the same rule in its headers.
-            <iframe
-              title={`Artifact: ${artifact.title}, version ${chosen.version}`}
-              src={path}
-              sandbox="allow-scripts"
-              referrerPolicy="no-referrer"
-              className="h-[60vh] w-full rounded-md border border-line bg-white"
-            />
+            <>
+              <span className="flex items-center gap-1 text-[13px]" role="group" aria-label="Zoom">
+                <button type="button" className="btn !min-h-7" aria-label="Zoom out" disabled={zoom <= ZOOMS[0]!} onClick={() => setZoom((z) => stepZoom(z, -1))}>
+                  -
+                </button>
+                <span className="w-12 text-center tabular-nums" aria-live="polite">
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button type="button" className="btn !min-h-7" aria-label="Zoom in" disabled={zoom >= ZOOMS.at(-1)!} onClick={() => setZoom((z) => stepZoom(z, 1))}>
+                  +
+                </button>
+                {zoom !== 1 ? (
+                  <button type="button" className="btn !min-h-7" onClick={() => setZoom(1)}>
+                    Actual size
+                  </button>
+                ) : null}
+              </span>
+              {/* A sandbox: its own scripts and nothing else. The address carries the same rule in its headers. */}
+              <div className="h-[60vh] w-full overflow-auto rounded-md border border-line">
+                <iframe
+                  title={`Artifact: ${artifact.title}, version ${chosen.version}`}
+                  src={artifact.kind === "html" ? themedPath(path, theme) : path}
+                  sandbox="allow-scripts"
+                  referrerPolicy="no-referrer"
+                  className={artifact.kind === "html" ? "block border-0" : "block border-0 bg-white"}
+                  style={{ width: `${100 / zoom}%`, height: `${100 / zoom}%`, transform: `scale(${zoom})`, transformOrigin: "0 0" }}
+                />
+              </div>
+            </>
           ) : null}
           <p className="m-0 text-xs text-mut">
             {asText(artifact.kind)

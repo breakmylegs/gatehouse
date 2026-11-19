@@ -1,5 +1,5 @@
 import { useAppearance } from "./components/SettingsPanels"
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { Toaster } from "sonner"
 import { Announcer } from "./components/Announcer"
 import { CommandDeck } from "./components/CommandDeck"
@@ -17,6 +17,8 @@ import { ShortcutSheet } from "./components/ShortcutSheet"
 import { railOrder, readHideEnded } from "./lib/rail"
 import { RAIL_EVENT } from "./lib/layouts"
 import { copyLatest } from "./lib/sessionActions"
+import { commandFor } from "./lib/shortcuts"
+import { useShortcuts } from "./lib/useShortcuts"
 import { startShell } from "./lib/quickKey"
 import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
 import { Guide } from "./surfaces/Guide"
@@ -58,6 +60,10 @@ export function App() {
   const setHelpOpen = useStore((s) => s.setHelpOpen)
   const pendingCount = usePendingCount()
   const [railHidden, setRailHidden] = useState(() => localStorage.getItem(RAIL_HIDDEN) === "1")
+  // T-071: the keys in force, yours or the defaults, read by the key handler below.
+  const shortcuts = useShortcuts()
+  const keysRef = useRef(shortcuts.keys)
+  keysRef.current = shortcuts.keys
   const [railWidth, setRailWidth] = useState(savedRailWidth)
   const hideRail = (hidden: boolean) => {
     localStorage.setItem(RAIL_HIDDEN, hidden ? "1" : "")
@@ -73,9 +79,20 @@ export function App() {
         return !h
       })
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "F1") {
+      // T-071: the commands you can give your own keys to.
+      const cmd = commandFor(e, keysRef.current)
+      if (cmd === "help") {
         e.preventDefault()
         setHelpOpen(!useStore.getState().helpOpen)
+      } else if (cmd === "copy-reply") {
+        e.preventDefault()
+        void copyLatest("reply")
+      } else if (cmd === "copy-code") {
+        e.preventDefault()
+        void copyLatest("code")
+      } else if (cmd === "sidebar") {
+        e.preventDefault()
+        flipRail()
       } else if (e.metaKey && !e.shiftKey && !e.altKey && e.key === "," && isMac()) {
         // Mac fork: Command-comma opens Settings, as in every Mac app.
         e.preventDefault()
@@ -84,15 +101,6 @@ export function App() {
         // The kill switch asks first; this only opens the question.
         e.preventDefault()
         window.dispatchEvent(new Event("codeh:kill"))
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyC") {
-        e.preventDefault()
-        void copyLatest("reply")
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "Semicolon") {
-        e.preventDefault()
-        void copyLatest("code")
-      } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "b") {
-        e.preventDefault()
-        flipRail()
       } else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key)) {
         const st = useStore.getState()
         const shown = new Set(

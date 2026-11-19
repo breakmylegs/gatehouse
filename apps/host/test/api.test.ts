@@ -338,6 +338,41 @@ describe("remember rules", () => {
   })
 })
 
+describe("project actions (T-091)", () => {
+  it("lists yours and the repository's, saves yours by project, and runs the repository's only as a Codehouse action", async () => {
+    const proj = path.join(root, "shop")
+    fs.mkdirSync(path.join(proj, ".git"), { recursive: true })
+    fs.mkdirSync(path.join(proj, ".codehouse"), { recursive: true })
+    fs.writeFileSync(path.join(proj, ".codehouse", "actions.json"), JSON.stringify({ actions: [{ name: "Seed", command: "npm run seed" }] }))
+    const ran: Array<{ command: string; why: string }> = []
+    ctx.sessionCwd = (id) => (id === "s1" ? proj : undefined)
+    ctx.forgeAct = async (_s, _c, command, why) => {
+      ran.push({ command, why })
+      return { ran: true, exitCode: 0, output: "seeded 3 rows for Acme", timedOut: false, killed: false, ms: 1 }
+    }
+    try {
+      const get = async () => (await app.inject({ method: "GET", url: "/api/project-actions?session=s1" })).json()
+      expect(await get()).toEqual({ project: "shop", own: [], repo: [{ name: "Seed", command: "npm run seed", kind: "run" }] })
+      const put = await app.inject({ method: "PUT", url: "/api/project-actions", payload: { session: "s1", actions: [{ name: "Dev", command: "npm run dev", preview: "http://localhost:5173" }] } })
+      expect(put.statusCode).toBe(200)
+      expect((await get()).own).toEqual([{ name: "Dev", command: "npm run dev", kind: "run", preview: "http://localhost:5173" }])
+      expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).projectActions).toEqual({ shop: [{ name: "Dev", command: "npm run dev", kind: "run", preview: "http://localhost:5173" }] })
+      expect((await app.inject({ method: "PUT", url: "/api/project-actions", payload: { session: "s1", actions: [{ name: "Bad", command: "a\nb" }] } })).statusCode).toBe(422)
+      // Yours are never run by the Host: only the repository's, through the card.
+      const r = await app.inject({ method: "POST", url: "/api/project-actions/run", payload: { session: "s1", index: 0 } })
+      expect(r.json()).toMatchObject({ ran: true, exitCode: 0 })
+      expect(ran).toEqual([{ command: "npm run seed", why: 'the repository\'s action "Seed"' }])
+      expect((await app.inject({ method: "POST", url: "/api/project-actions/run", payload: { session: "s1", index: 5 } })).statusCode).toBe(404)
+      expect((await app.inject({ method: "GET", url: "/api/project-actions?session=s9" })).statusCode).toBe(404)
+    } finally {
+      delete (ctx as { sessionCwd?: unknown }).sessionCwd
+      delete (ctx as { forgeAct?: unknown }).forgeAct
+      fs.rmSync(path.join(root, "config.json"), { force: true })
+      fs.rmSync(proj, { recursive: true, force: true })
+    }
+  })
+})
+
 describe("settings endpoints", () => {
   it("rejects unknown keys and bad values", async () => {
     const put = (body: unknown) =>
@@ -363,6 +398,31 @@ describe("settings endpoints", () => {
     expect(r.json().errors).toEqual(["fromNewer: not a setting Codehouse knows"])
     expect((await put({ fromNewer: { a: 1 }, typo: true })).statusCode).toBe(422)
     fs.rmSync(path.join(root, "config.json"))
+  })
+
+  it("refuses a change to what the organisation locked, and a push channel with the phone turned off (T-067)", async () => {
+    const put = (body: unknown) => app.inject({ method: "PUT", url: "/api/settings", payload: body as object })
+    const policy = ctx.store.current!
+    Object.defineProperty(ctx.store, "current", { configurable: true, get: () => ({ ...policy, managedSettings: { managedBy: "Accenture IT", locked: ["expectedOrg"], phone: false } }) })
+    try {
+      fs.writeFileSync(path.join(root, "config.json"), JSON.stringify({ expectedOrg: "ACN - Premium" }))
+      const locked = await put({ expectedOrg: "Another Org" })
+      expect(locked.statusCode).toBe(403)
+      expect(locked.json().error).toBe("Managed by Accenture IT: expectedOrg cannot be changed here.")
+      expect(JSON.parse(fs.readFileSync(path.join(root, "config.json"), "utf8")).expectedOrg).toBe("ACN - Premium")
+      // What is not locked still saves, the locked value kept as it is.
+      expect((await put({ expectedOrg: "ACN - Premium", hardTimeoutMs: 60_000 })).statusCode).toBe(200)
+      const ntfy = { enabled: true, server: "https://ntfy.example", topic: "abcdefgh12", replyTopic: "abcdefgh34", maxRisk: 40 }
+      const push = await put({ expectedOrg: "ACN - Premium", push: { ntfy } })
+      expect(push.statusCode).toBe(403)
+      expect(push.json().error).toMatch(/the phone and push channels are turned off/)
+      expect((await app.inject({ method: "GET", url: "/api/managed" })).json()).toMatchObject({ managed: true, label: "Managed by Accenture IT", locked: ["expectedOrg"] })
+    } finally {
+      // The store's own getter again.
+      delete (ctx.store as unknown as Record<string, unknown>).current
+      fs.rmSync(path.join(root, "config.json"), { force: true })
+    }
+    expect((await app.inject({ method: "GET", url: "/api/managed" })).json()).toEqual({ managed: false })
   })
 
   it("saves valid settings, says a restart is needed, and records names but not values", async () => {
@@ -1297,6 +1357,13 @@ describe("artifact endpoints (owner's plan, W1-09, ADR 0003)", () => {
     expect(page.headers["x-content-type-options"]).toBe("nosniff")
     expect(page.headers["cache-control"]).toBe("no-store")
     expect(String(page.headers["content-type"])).toContain("text/html")
+    // T-058: in the theme asked for, before the page's own content, under the same sandbox; any other value is ignored.
+    const dark = await call("GET", `${where}?theme=dark`, undefined, { host: "127.0.0.1:5199" })
+    expect(dark.body).toMatch(/^<style data-codehouse-theme="dark">:root\{color-scheme:dark;--codehouse-bg:#0e1217;/)
+    expect(dark.body.endsWith(`${MARKED}<h1>hello</h1><script>1+1</script>`)).toBe(true)
+    expect(String(dark.headers["content-security-policy"])).toContain("sandbox allow-scripts;")
+    const odd = await call("GET", `${where}?theme=</style><script>x()</script>`, undefined, { host: "127.0.0.1:5199" })
+    expect(odd.body).toBe(`${MARKED}<h1>hello</h1><script>1+1</script>`)
   })
 
   it("has no address for what was not saved, or for a session that is not one", async () => {

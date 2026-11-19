@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process"
+import type { ManagedSettings } from "@gatehouse/policy"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -35,6 +36,8 @@ export interface StackOptions {
   /** D-009: stands in for Codehouse's own actions. */
   codehouseAction?: SessionDeps["codehouseAction"]
   judgeClaim?: SessionDeps["judgeClaim"]
+  /** T-067: the organisation's managed settings the sessions see, read each time. */
+  managed?: () => ManagedSettings | undefined
   /** D-025: a shorter dead-man minute and look, for tests. */
   deadman?: { minuteMs: number; lookMs: number }
 }
@@ -192,7 +195,10 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     defaultResources: () => hooks.defaultResources?.(),
     queryFn: sdk.queryFn,
     config: () => config,
-    policy: () => store.current,
+    policy: () => {
+      const m = opts.managed?.()
+      return m && store.current ? { ...store.current, managedSettings: m } : store.current
+    },
     engine,
     pwsh: undefined,
     audit,

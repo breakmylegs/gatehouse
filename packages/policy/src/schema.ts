@@ -100,6 +100,20 @@ export const overlaySchema = {
     escalate: { type: "array", items: ruleSchema },
     removeAllow: { type: "array", items: { type: "string" } },
     licences: { type: "array", items: { type: "string" } },
+    // T-067: the organisation's settings, in IT's managed policy only. Any key not listed here is refused, so a
+    // policy this version cannot enforce stops sessions instead of being half applied.
+    settings: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        managedBy: { type: "string", minLength: 1, maxLength: 80 },
+        maxMode: { enum: ["plan", "default", "acceptEdits", "auto"] },
+        extremeApproval: { type: "boolean" },
+        providers: { type: "array", items: { enum: ["claude", "local", "gateway"] }, uniqueItems: true },
+        phone: { type: "boolean" },
+        locked: { type: "array", items: { type: "string", pattern: "^[A-Za-z][A-Za-z0-9]{0,60}$" }, uniqueItems: true, maxItems: 200 },
+      },
+    },
   },
 } as const
 

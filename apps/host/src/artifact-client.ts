@@ -35,7 +35,7 @@ export function chatArtifactClient(d: ArtifactClientDeps): ArtifactClient {
           verdict: {
             outcome: "allow",
             ruleId: "artifact-saved",
-            reason: "A chat saved an artifact to show in a sandbox.",
+            reason: "A session saved an artifact to show in a sandbox.",
             risk: 0,
             decidedBy: "rules",
             policyHash: d.policyHash(),

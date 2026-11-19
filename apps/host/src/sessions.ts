@@ -29,7 +29,11 @@ import fs from "node:fs"
 import path from "node:path"
 import type { Options, Query, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
 import {
+  extremeAllowed,
   findProjectRoot,
+  managedRefusal,
+  modeAllowed,
+  providerAllowed,
   redactString,
   type Policy,
   type PwshWorker,
@@ -115,6 +119,9 @@ export class ManagedPolicyError extends Error {
     )
   }
 }
+
+/** T-067: what the organisation's managed settings do not allow, said with who manages it. */
+export class ManagedSettingError extends Error {}
 
 /** B09: as many sessions are open as Settings allows; another waits until one is closed. */
 export class SessionLimitError extends Error {
@@ -2242,6 +2249,32 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit("state", this.info())
   }
 
+  /**
+   * T-063: stops one background task of this session (a dev server, a watcher), recorded first. False when it is not
+   * one of this session's tasks or the stop could not be recorded.
+   */
+  async stopBackgroundTask(taskId: string): Promise<boolean> {
+    const task = this.#background.get(taskId)
+    if (!task) return false
+    const written = await this.#deps.audit
+      .record({
+        session: this.id,
+        event: "task_stopped",
+        channel: "desktop",
+        tool: "task",
+        cwd: this.cwd,
+        project: this.project,
+        input: { taskId },
+        verdict: { outcome: "allow", ruleId: "task-stop", reason: "You stopped a background task from the desktop.", risk: 0, decidedBy: "human-desktop", policyHash: this.#deps.policy()?.hash ?? "" },
+        latencyMs: 0,
+      })
+      .catch(() => false)
+    if (!written) return false
+    const q = this.#q as unknown as { stopTask?: (id: string) => Promise<void> } | undefined
+    await q?.stopTask?.(taskId)
+    return true
+  }
+
   /** Stops everything now: the running turn and every background task. */
   async stop(by: "you" | "kill-switch" | "plan-limit" | "loop" = "you"): Promise<void> {
     await this.interrupt(by)
@@ -2525,6 +2558,9 @@ export class Session extends EventEmitter<SessionEvents> {
         3,
         `permission mode "${String(mode)}" is not allowed, only default, plan, acceptEdits and auto`,
       )
+    // T-067: never broader than the organisation allows.
+    const managed = this.#deps.policy()?.managedSettings
+    if (!modeAllowed(managed, mode)) throw new ManagedSettingError(managedRefusal(managed, `the broadest mode allowed is ${managed?.maxMode}`))
     await this.#q?.setPermissionMode(mode)
     this.#mode = mode
     this.emit("state", this.info())
@@ -2611,6 +2647,8 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Extreme approval for this session only. Written to the audit log, because it changes what gets asked. */
   async setExtreme(on: boolean, max = false): Promise<void> {
     if (this.#opts.kind === "chat" && on) throw new ChatModeError()
+    const managed = this.#deps.policy()?.managedSettings
+    if (on && !extremeAllowed(managed)) throw new ManagedSettingError(managedRefusal(managed, "Extreme approval is turned off"))
     this.#extreme = on
     this.#extremeMax = on && max
     await this.#deps.audit.record({
@@ -2803,6 +2841,12 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
         ...opts,
       }
     }
+    // T-067: a session starts (or carries on after a resume) only within the organisation's settings.
+    const ms = this.#deps.policy?.()?.managedSettings
+    if (!modeAllowed(ms, opts.mode ?? "default")) throw new ManagedSettingError(managedRefusal(ms, `the broadest mode allowed is ${ms?.maxMode}`))
+    if (opts.extreme === true && !extremeAllowed(ms)) throw new ManagedSettingError(managedRefusal(ms, "Extreme approval is turned off"))
+    if (opts.localModel !== undefined && !providerAllowed(ms, "local") && !providerAllowed(ms, "gateway")) throw new ManagedSettingError(managedRefusal(ms, "models other than Claude are not allowed"))
+    if (opts.localModel === undefined && !providerAllowed(ms, "claude")) throw new ManagedSettingError(managedRefusal(ms, "Claude is not one of the providers allowed"))
     // C-004: nothing new starts while memory is committed over the point in Settings; one coming back after a restart
     // or a force stop was open before and takes back what it had.
     if (!opts.restore || opts.restore.wake)

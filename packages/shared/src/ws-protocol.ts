@@ -372,6 +372,7 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("search_history"), query: z.string().min(2).max(200) }),
   /** How full a session's context is. */
   z.object({ type: z.literal("context_usage"), sessionId: Id }),
+  z.object({ type: z.literal("stop_task"), sessionId: Id, taskId: z.string().min(1).max(200) }),
   /** O21: the computer, repository and branch, and the connectors of a session, for its details panel. */
   z.object({ type: z.literal("session_details"), sessionId: Id }),
   /** Summarise the older conversation: now between turns, or straight after the running one. */

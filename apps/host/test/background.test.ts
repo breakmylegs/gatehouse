@@ -88,6 +88,15 @@ describe("work in the background", () => {
     await vi.waitFor(() => expect(session.info().background).toBeUndefined())
   })
 
+  it("stops one background task from its details, recorded first, and refuses one that is not the session's (T-063)", async () => {
+    const session = await turnWithBackground()
+    expect(await session.stopBackgroundTask("nope")).toBe(false)
+    expect(await session.stopBackgroundTask("t2")).toBe(true)
+    expect(s.sdk.queries.at(-1)?.stopped).toEqual(["t2"])
+    expect(s.records().filter((r) => r.session === session.id && r.event === "task_stopped").map((r) => JSON.parse(r.inputJson))).toEqual([{ taskId: "t2" }])
+    await vi.waitFor(() => expect(session.info().background).toEqual(["Sweep the auth module"]))
+  })
+
   it("stops background tasks with the kill switch too", async () => {
     await turnWithBackground()
     const handle = s.sdk.queries.at(-1)

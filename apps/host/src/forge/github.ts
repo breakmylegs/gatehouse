@@ -38,6 +38,8 @@ export interface PullRequest {
   url: string
   branch: string
   draft: boolean
+  /** T-081: the branch it merges into, for stacks. */
+  base?: string
 }
 
 export interface PullRequestDetail extends PullRequest {
@@ -47,8 +49,8 @@ export interface PullRequestDetail extends PullRequest {
   checks: Array<{ name: string; state: string }>
 }
 
-const LIST_FIELDS = "number,title,state,url,headRefName,isDraft"
-const VIEW_FIELDS = `${LIST_FIELDS},baseRefName,reviewDecision,mergeable,statusCheckRollup`
+const LIST_FIELDS = "number,title,state,url,headRefName,isDraft,baseRefName"
+const VIEW_FIELDS = `${LIST_FIELDS},reviewDecision,mergeable,statusCheckRollup`
 
 const str = (v: unknown, max = 300) => (typeof v === "string" ? v.slice(0, max) : "")
 const parse = (out: string): unknown => {
@@ -67,13 +69,81 @@ function asPr(o: Record<string, unknown>): PullRequest {
     url: /^https:\/\/github\.com\//.test(str(o.url)) ? str(o.url) : "",
     branch: str(o.headRefName, 200),
     draft: o.isDraft === true,
+    ...(str(o.baseRefName, 200) ? { base: str(o.baseRefName, 200) } : {}),
   }
+}
+
+/**
+ * T-081: the stack a pull request is in: the open ones it is built on (each based on the branch of the one below) and
+ * those built on it, bottom first. Just itself when it stands alone. A loop or a fork ends the walk there.
+ */
+export function stackOf(prs: readonly PullRequest[], number: number): PullRequest[] {
+  const me = prs.find((p) => p.number === number)
+  if (!me) return []
+  const out = [me]
+  const seen = new Set([me.number])
+  for (let cur = me; ; ) {
+    const below = prs.filter((p) => p.branch === cur.base && !seen.has(p.number))
+    if (below.length !== 1) break
+    cur = below[0]!
+    seen.add(cur.number)
+    out.unshift(cur)
+  }
+  for (let cur = me; ; ) {
+    const above = prs.filter((p) => p.base === cur.branch && !seen.has(p.number))
+    if (above.length !== 1) break
+    cur = above[0]!
+    seen.add(cur.number)
+    out.push(cur)
+  }
+  return out
 }
 
 /** The repository's open pull requests, newest first, at most 30. */
 export async function listPullRequests(cwd: string, run: Gh = gh): Promise<PullRequest[]> {
   const v = parse(await run(cwd, ["pr", "list", "--state", "open", "--limit", "30", "--json", LIST_FIELDS]))
   return Array.isArray(v) ? v.map((o) => asPr((o ?? {}) as Record<string, unknown>)).filter((p) => p.number > 0) : []
+}
+
+/**
+ * T-075: what the Pull requests page shows of one: its description (with its task boxes), comments and reviews (others'
+ * words, each scanned and flagged when it reads like an instruction to an AI: shown as text, never given to Claude), who
+ * is asked to review, and whether it will merge by itself.
+ */
+export interface PullRequestThread {
+  body: string
+  flaggedBody: boolean
+  comments: Array<{ author: string; at: string; body: string; flagged: boolean }>
+  reviews: Array<{ author: string; at: string; state: string; body: string; flagged: boolean }>
+  reviewRequests: string[]
+  autoMerge: boolean
+}
+
+const THREAD_FIELDS = "body,comments,reviews,reviewRequests,autoMergeRequest"
+const who = (v: unknown) => str((v as { login?: unknown } | undefined)?.login, 60) || "someone"
+
+export async function viewThread(cwd: string, number: unknown, flag: (text: string) => boolean, run: Gh = gh): Promise<PullRequestThread> {
+  if (typeof number !== "number" || !Number.isInteger(number) || number < 1 || number > 10_000_000)
+    throw new ForgeError("That is not a pull request number.")
+  const o = (parse(await run(cwd, ["pr", "view", String(number), "--json", THREAD_FIELDS])) ?? {}) as Record<string, unknown>
+  const body = str(o.body, 60_000)
+  const list = (v: unknown) => (Array.isArray(v) ? (v as Array<Record<string, unknown>>).slice(-200) : [])
+  return {
+    body,
+    flaggedBody: flag(body),
+    comments: list(o.comments).map((c) => {
+      const b = str(c.body, 20_000)
+      return { author: who(c.author), at: str(c.createdAt, 40), body: b, flagged: flag(b) }
+    }),
+    reviews: list(o.reviews).map((r) => {
+      const b = str(r.body, 20_000)
+      return { author: who(r.author), at: str(r.submittedAt, 40), state: str(r.state, 40), body: b, flagged: flag(b) }
+    }),
+    reviewRequests: list(o.reviewRequests)
+      .map((r) => str(r.login ?? r.name ?? r.slug, 100))
+      .filter(Boolean),
+    autoMerge: o.autoMergeRequest !== null && o.autoMergeRequest !== undefined,
+  }
 }
 
 /** One pull request with its checks. Only a number is accepted, so nothing else reaches gh's arguments. */

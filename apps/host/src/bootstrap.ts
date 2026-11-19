@@ -93,6 +93,8 @@ import {
   redact,
   redactString,
   MANAGED_ERROR,
+  managedRefusal,
+  phoneAllowed,
 } from "@gatehouse/policy"
 import { sanitiseEnv, type Health } from "@gatehouse/shared"
 import { AuditWriter } from "@gatehouse/shared/audit"
@@ -592,18 +594,14 @@ export function createHost(opts: HostOptions = {}): Host {
       companion: createCompanionSdkServer({
         sessionId,
         cwd,
-        // A chat can show artifacts; a coding session cannot.
-        ...(kind === "chat"
-          ? {
-              artifacts: chatArtifactClient({
-                store: artifacts,
-                audit,
-                sessionId,
-                cwd,
-                policyHash: () => store.current?.hash ?? "",
-              }),
-            }
-          : {}),
+        // T-058: any session can show artifacts (a chart, a table, a diagram), in a sandbox with no network.
+        artifacts: chatArtifactClient({
+          store: artifacts,
+          audit,
+          sessionId,
+          cwd,
+          policyHash: () => store.current?.hash ?? "",
+        }),
         // A chat can remember, recall and forget; a coding session has no memory tools.
         ...(kind === "chat"
           ? {
@@ -1010,6 +1008,8 @@ export function createHost(opts: HostOptions = {}): Host {
     store: phoneStore,
     // Mac fork: Settings, Phone and notifications can keep the phone to decisions only (live, read each time).
     notifyAllowed: () => config.phoneAlerts !== "decisions",
+    // T-067: the organisation can turn the phone off; read each time.
+    allowed: () => (phoneAllowed(store.current?.managedSettings) ? undefined : managedRefusal(store.current?.managedSettings, "the phone is turned off")),
     broker,
     kill,
     // D-025: anything signed on the phone starts the dead-man timers again.
@@ -1066,7 +1066,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const ntfySecrets = new NtfySecretStore(path.join(gatehouseDataDir(env), "ntfy.sealed"), sealer())
   const ntfy = new NtfyChannel({
     broker,
-    settings: () => config.push?.ntfy,
+    // T-067: no push channel when the organisation turned the phone off.
+    settings: () => (phoneAllowed(store.current?.managedSettings) ? config.push?.ntfy : undefined),
     secret: () => ntfySecrets.load(),
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
@@ -1097,7 +1098,7 @@ export function createHost(opts: HostOptions = {}): Host {
   )
   const slack = new SlackChannel({
     broker,
-    settings: () => config.push?.slack,
+    settings: () => (phoneAllowed(store.current?.managedSettings) ? config.push?.slack : undefined),
     secrets: () => slackSecrets.load(),
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
@@ -1607,6 +1608,12 @@ export function createHost(opts: HostOptions = {}): Host {
       ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
       prWatcher,
+      // T-075: a change to a pull request from its page, judged like the same gh command from the session.
+      forgeAct: (id, cwd, command, why) =>
+        runCodehouseAction(
+          { sessionId: id, cwd, project: manager.get(id)?.project ?? "", command, why, level: manager.get(id)?.info().resources ?? "high", timeoutMs: 120_000 },
+          { approver: deps.approver, broker, audit, kill, extreme: () => manager.get(id)?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+        ),
       // T-083: a fast-forward pull as a Codehouse action, judged like the same command from the session.
       pullFastForward: (id, cwd) =>
         runCodehouseAction(

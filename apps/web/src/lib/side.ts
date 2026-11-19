@@ -35,6 +35,12 @@ function write(all: Record<string, string>): void {
 /** The session a side session came from, if it is one. */
 export const sideOf = (sessionId: string): string | undefined => read()[sessionId]
 
+/** T-063: the side sessions started from a session. */
+export const sidesOf = (fromId: string): string[] =>
+  Object.entries(read())
+    .filter(([, from]) => from === fromId)
+    .map(([side]) => side)
+
 export async function startSide(fromId: string, question: string): Promise<string | undefined> {
   const st = useStore.getState()
   const s = st.sessions[fromId]

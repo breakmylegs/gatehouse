@@ -73,6 +73,11 @@ export interface PhoneServiceDeps {
    */
   notifyAllowed?: () => boolean
   /**
+   * T-067: false when the organisation turned the phone off. Read each time: no pairing, no request and no message
+   * goes to a phone then; a decision still waits on the desktop.
+   */
+  allowed?: () => string | undefined
+  /**
    * G32: the open sessions a signed phone message or Interrupt may reach. Absent: the phone can only decide. A session
    * not open, or not shown to the phone (an evaluation), is refused.
    */
@@ -229,6 +234,8 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
   }
 
   async startPairing(): Promise<PairingView> {
+    const off = this.#d.allowed?.()
+    if (off) throw new Error(off)
     const link = this.#d.store.relay()
     if (!link) throw new Error("Set up the Relay first")
     const host = await this.#d.store.hostKey()
@@ -380,6 +387,8 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
   // ---- requests out ----
 
   async deliver(request: EscalationRequest): Promise<void> {
+    const off = this.#d.allowed?.()
+    if (off) throw new Error(off)
     const phones = this.#d.store.phones()
     if (!this.#d.store.relay() || phones.length === 0) throw new Error("No phone is paired")
     const client = await this.#authed()
@@ -457,6 +466,7 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     o: { withDecisions?: boolean } = {},
   ): Promise<void> {
     if (!o.withDecisions && this.#d.notifyAllowed && !this.#d.notifyAllowed()) return // Mac fork: decisions only
+    if (this.#d.allowed?.()) return // T-067: the organisation turned the phone off
     const phones = this.#d.store.phones()
     if (!this.#d.store.relay() || phones.length === 0) return
     const client = await this.#authed()

@@ -20,6 +20,7 @@ import { type Route, send, usePendingCount, useSessionList, useStore } from "../
 import { askAbout } from "../lib/askAbout"
 import { dropToShell } from "../lib/shell"
 import { applyOrder, dropChange, moveBefore, moveBy, readOrder, saveOrder } from "../lib/rail-order"
+import { arrangeSections, hueOf, isProjectSection, monogram, readSections, saveSections, setSection, type SectionPrefs } from "../lib/project-marks"
 import { openExport } from "./ExportDialog"
 import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
@@ -127,6 +128,15 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const [pinned, setPinned] = useState<Route[]>(readRailPages)
   // T-023: your own order of the sessions, by dragging, and the one being dragged.
   const [order, setOrder] = useState<string[]>(readOrder)
+  // T-092: projects pinned to the top or archived, and whether archived ones are shown.
+  const [sections, setSections] = useState<SectionPrefs>(readSections)
+  const [showArchived, setShowArchived] = useState(false)
+  const changeSection = (folder: string, what: "pin" | "unpin" | "archive" | "unarchive") =>
+    setSections((p) => {
+      const next = setSection(p, folder, what)
+      saveSections(next)
+      return next
+    })
   const [dragging, setDragging] = useState<string>()
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
@@ -181,7 +191,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
     mode === "chat"
       ? groupChats(listed, { ended: hideEnded, keep: shown })
       : groupByFolder(listed, { ended: hideEnded, keep: shown, working: true })
-  const groups = applyOrder(rawGroups, order)
+  const arranged = arrangeSections(applyOrder(rawGroups, order), sections, showArchived)
+  const groups = arranged.groups
   const hiddenEnded = hideEnded ? listed.filter((s) => isHiddenEnded(s, shown)).length : 0
   const endedAll = listed.filter((s) => isHiddenEnded(s)).length
   const placeOrder = (next: string[]) => {
@@ -471,9 +482,34 @@ export function Rail({ onHide }: { onHide: () => void }) {
                 {g.folder.startsWith("project:") ? (
                   <Icon name="projects" size={13} className="mr-1 inline align-[-2px]" />
                 ) : null}
+                {/* T-092: its monogram, in a colour of its own. */}
+                {isProjectSection(g.folder) ? (
+                  <span aria-hidden="true" className="project-mark" style={{ ["--mark-hue" as string]: String(hueOf(g.label)) }}>
+                    {monogram(g.label)}
+                  </span>
+                ) : null}
                 {g.label} <Disclosure open={!isFolded(g.folder)} />
               </button>
-              <span className="text-[12px] text-shell-mut">{g.sessions.length}</span>
+              <span className="flex items-center gap-1">
+                <span className="text-[12px] text-shell-mut">{g.sessions.length}</span>
+                {isProjectSection(g.folder) ? (
+                  <Menu
+                    label={`Actions for ${g.label}`}
+                    className="rail-icon"
+                    placement="right"
+                    tone="shell"
+                    button={<Icon name="more" />}
+                    items={[
+                      sections.pinned.includes(g.folder.toLowerCase())
+                        ? { label: "Unpin project", onSelect: () => changeSection(g.folder, "unpin") }
+                        : { label: "Pin project to the top", onSelect: () => changeSection(g.folder, "pin") },
+                      sections.archived.includes(g.folder.toLowerCase())
+                        ? { label: "Bring back from the archive", onSelect: () => changeSection(g.folder, "unarchive") }
+                        : { label: "Archive project", onSelect: () => changeSection(g.folder, "archive") },
+                    ]}
+                  />
+                ) : null}
+              </span>
             </div>
             {isFolded(g.folder) ? null : (
               <ul className="m-0 grid list-none grid-cols-[minmax(0,1fr)] gap-0.5 p-0">
@@ -680,6 +716,19 @@ export function Rail({ onHide }: { onHide: () => void }) {
               onClick={() => chooseHide(false)}
             >
               Show
+            </button>
+          </p>
+        ) : null}
+        {/* T-092: archived projects, out of the way until you ask. */}
+        {arranged.archived > 0 || showArchived ? (
+          <p className="m-0 px-2 text-[13px] text-shell-mut">
+            {showArchived ? "Archived projects are shown." : arranged.archived === 1 ? "1 project is archived." : `${arranged.archived} projects are archived.`}{" "}
+            <button
+              type="button"
+              className="cursor-pointer border-0 bg-transparent p-0 text-[13px] text-shell-tx underline"
+              onClick={() => setShowArchived((v) => !v)}
+            >
+              {showArchived ? "Hide" : "Show"}
             </button>
           </p>
         ) : null}

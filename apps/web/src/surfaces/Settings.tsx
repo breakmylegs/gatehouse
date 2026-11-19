@@ -1,4 +1,6 @@
 import { ClaudeImport } from "../components/ClaudeImport"
+import { ManagedNote } from "../components/ManagedNote"
+import { ShortcutSettings } from "../components/ShortcutSettings"
 import { NeighbourhoodWatchPanel } from "../components/NeighbourhoodWatchPanel"
 import { SECTION_KEY } from "../lib/settingsSection"
 import { createContext, useContext, useEffect, useRef, useState } from "react"
@@ -907,6 +909,8 @@ export function Settings() {
   return (
     <div className="sheet mx-auto grid max-w-[1040px] gap-0 p-6" aria-label="Settings">
       <h1 className="m-0">Settings</h1>
+      {/* T-067: what your organisation manages, before any setting. */}
+      <ManagedNote />
       <p className="m-0 text-mut">
         Changes save as you make them. A typed setting saves when you leave the box or press Enter.
       </p>
@@ -1366,6 +1370,11 @@ export function Settings() {
 
             <Group section="sessions" title="Viewer" gap="gap-2">
               <ViewerSetting />
+            </Group>
+
+            {/* T-071: your own keys for Codehouse's commands. */}
+            <Group section="sessions" title="Keyboard shortcuts" gap="gap-2">
+              <ShortcutSettings />
             </Group>
 
             <Group section="sessions" title="Browser tools" gap="gap-2" changed={browserChanged}>

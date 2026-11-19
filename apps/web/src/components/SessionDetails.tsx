@@ -1,9 +1,12 @@
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import { useEffect, useState } from "react"
 import { clock, money } from "../lib/format"
-import { send, useStore } from "../store"
+import { toast } from "sonner"
+import { sidesOf } from "../lib/side"
+import { MAIN_ACCOUNT, send, useStore } from "../store"
 import { HeldOutPanel } from "./HeldOutPanel"
 import { LocksPanel } from "./LocksPanel"
+import { PlanMeter } from "./PlanMeter"
 
 /**
  * O21 (owner, 9 Nov, with two screenshots): a session's details beside it. Where it runs (computer, folder,
@@ -23,6 +26,47 @@ interface Context {
   totalTokens: number
   maxTokens: number
   categories: Array<{ name: string; tokens: number; kind?: string }>
+  /** T-063: where Claude Code compacts the conversation by itself, in tokens, when it does. */
+  autoCompactThreshold?: number
+  isAutoCompactEnabled?: boolean
+}
+
+/** T-063: the rows the details show, chosen by you, kept on this computer. */
+export const DETAIL_ROWS = [
+  { id: "environment", label: "Environment" },
+  { id: "context", label: "Context" },
+  { id: "limits", label: "Usage limits" },
+  { id: "connectors", label: "Connectors" },
+  { id: "changes", label: "Changes" },
+  { id: "checks", label: "Held-out checks and locked tests" },
+  { id: "background", label: "Working in the background" },
+  { id: "sides", label: "Side chats" },
+] as const
+export type DetailRow = (typeof DETAIL_ROWS)[number]["id"]
+const ROWS_KEY = "gatehouse.details.rows"
+
+export function readRows(): Set<DetailRow> {
+  try {
+    const v = JSON.parse(localStorage.getItem(ROWS_KEY) ?? "null") as unknown
+    if (Array.isArray(v)) return new Set(v.filter((x): x is DetailRow => DETAIL_ROWS.some((r) => r.id === x)))
+  } catch {
+    // storage blocked or unreadable: every row
+  }
+  return new Set(DETAIL_ROWS.map((r) => r.id))
+}
+
+function saveRows(rows: Set<DetailRow>): void {
+  try {
+    localStorage.setItem(ROWS_KEY, JSON.stringify([...rows]))
+  } catch {
+    // storage blocked: the choice lasts until the window closes
+  }
+}
+
+/** Where on the context meter auto-compact happens, as a share of the window; undefined when it does not. */
+export function compactMark(c: Pick<Context, "autoCompactThreshold" | "isAutoCompactEnabled" | "maxTokens">): number | undefined {
+  if (!c.isAutoCompactEnabled || !c.autoCompactThreshold || !c.maxTokens) return undefined
+  return Math.max(0, Math.min(100, (100 * c.autoCompactThreshold) / c.maxTokens))
 }
 
 interface Changes {
@@ -81,6 +125,23 @@ export function SessionDetails({
   const cost = useStore((s) => s.usage?.bySession?.[session.id]?.costUsd)
   const tasks = session.backgroundTasks ?? []
   const now = useNow(tasks.length > 0)
+  const [rows, setRows] = useState<Set<DetailRow>>(readRows)
+  const [choosing, setChoosing] = useState(false)
+  const shows = (r: DetailRow) => rows.has(r)
+  const toggleRow = (r: DetailRow) =>
+    setRows((cur) => {
+      const next = new Set(cur)
+      if (next.has(r)) next.delete(r)
+      else next.add(r)
+      saveRows(next)
+      return next
+    })
+  const sessions = useStore((st) => st.sessions)
+  const sides = sidesOf(session.id).filter((id) => sessions[id])
+  const stopTask = async (taskId: string) => {
+    const r = await send({ type: "stop_task", sessionId: session.id, taskId })
+    if (!r.ok) toast.error(r.error?.message ?? "It could not be stopped", { id: "task" })
+  }
 
   // Read when the panel opens and again after each turn.
   useEffect(() => {
@@ -104,9 +165,27 @@ export function SessionDetails({
   const removed = (changes?.files ?? []).reduce((n, f) => n + f.removed, 0)
   const pct = context ? Math.max(0, Math.round(context.percentage)) : undefined
   const parts = (context?.categories ?? []).filter((c) => c.tokens > 0)
+  const mark = context ? compactMark(context) : undefined
 
   return (
     <div className="grid gap-5 text-[14px]" aria-label="Session details">
+      <div className="flex justify-end">
+        <button type="button" className="btn !min-h-7 !text-[13px]" aria-expanded={choosing} onClick={() => setChoosing((v) => !v)}>
+          Choose rows
+        </button>
+      </div>
+      {choosing ? (
+        <fieldset className="m-0 grid gap-1 rounded-md border border-line p-2 text-[13px]">
+          <legend className="px-1">Show in Details</legend>
+          {DETAIL_ROWS.filter((r) => !(chat && (r.id === "changes" || r.id === "checks"))).map((r) => (
+            <label key={r.id} className="flex items-center gap-2">
+              <input type="checkbox" checked={shows(r.id)} onChange={() => toggleRow(r.id)} />
+              {r.label}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
+      {shows("environment") ? (
       <section aria-labelledby={`env-${session.id}`}>
         <h3 id={`env-${session.id}`} className="m-0 mb-1.5 text-[14px]">
           Environment
@@ -187,7 +266,9 @@ export function SessionDetails({
           ) : null}
         </dl>
       </section>
+      ) : null}
 
+      {shows("context") ? (
       <section aria-labelledby={`ctx-${session.id}`}>
         <button
           type="button"
@@ -216,6 +297,18 @@ export function SessionDetails({
             <div className="h-full bg-acc" style={{ width: `${Math.min(100, pct)}%` }} />
           </div>
         ) : null}
+        {mark !== undefined && context ? (
+          <div className="relative h-0" aria-hidden="true">
+            <span className="absolute -top-2 h-2.5 w-0.5 bg-warn" style={{ left: `${mark}%` }} />
+          </div>
+        ) : null}
+        {context ? (
+          <p className="m-0 mt-1 text-[13px] text-mut">
+            {mark !== undefined && context.autoCompactThreshold
+              ? `Claude Code compacts the conversation by itself at ${tokens(context.autoCompactThreshold)} (${Math.round(mark)}%), the mark on the bar.`
+              : "Claude Code does not compact this conversation by itself."}
+          </p>
+        ) : null}
         {showContext && parts.length ? (
           <table className="mt-2 w-full border-collapse text-[13px]">
             <tbody>
@@ -239,7 +332,16 @@ export function SessionDetails({
           </table>
         ) : null}
       </section>
+      ) : null}
 
+      {shows("limits") ? (
+        <section aria-label="Usage limits">
+          <h3 className="m-0 mb-1.5 text-[14px]">Usage limits</h3>
+          <PlanMeter account={session.account ?? MAIN_ACCOUNT} idle={session.state === "idle"} />
+        </section>
+      ) : null}
+
+      {shows("connectors") ? (
       <section aria-labelledby={`con-${session.id}`}>
         <button
           type="button"
@@ -271,8 +373,9 @@ export function SessionDetails({
           )
         ) : null}
       </section>
+      ) : null}
 
-      {chat ? null : (
+      {chat || !shows("changes") ? null : (
         <section aria-labelledby={`chg-${session.id}`}>
           <div className="flex items-center justify-between">
             <h3 id={`chg-${session.id}`} className="m-0 text-[14px]">
@@ -304,10 +407,11 @@ export function SessionDetails({
         </section>
       )}
 
-      {chat ? null : <HeldOutPanel session={session} />}
+      {chat || !shows("checks") ? null : <HeldOutPanel session={session} />}
 
-      {chat ? null : <LocksPanel session={session} />}
+      {chat || !shows("checks") ? null : <LocksPanel session={session} />}
 
+      {shows("background") ? (
       <section aria-labelledby={`bg-${session.id}`}>
         <h3 id={`bg-${session.id}`} className="m-0 mb-1.5 text-[14px]">
           Working in the background
@@ -317,8 +421,11 @@ export function SessionDetails({
             {tasks.map((t) => (
               <li key={t.id} className="flex justify-between gap-2" style={{ listStyle: "none" }}>
                 <span className="min-w-0 break-words">{t.description || "A task"}</span>
-                <span className="shrink-0 tabular-nums text-mut">
+                <span className="flex shrink-0 items-center gap-2 tabular-nums text-mut">
                   {ranFor(now - Date.parse(t.startedAt))}
+                  <button type="button" className="btn !min-h-6 !px-2 !text-[12.5px]" aria-label={`Stop ${t.description || "this task"}`} onClick={() => void stopTask(t.id)}>
+                    Stop
+                  </button>
                 </span>
               </li>
             ))}
@@ -327,6 +434,35 @@ export function SessionDetails({
           <p className="m-0 text-[13px] text-mut">Nothing is running in the background.</p>
         )}
       </section>
+      ) : null}
+
+      {shows("sides") ? (
+        <section aria-label="Side chats">
+          <h3 className="m-0 mb-1.5 text-[14px]">Side chats</h3>
+          {sides.length ? (
+            <ul className="m-0 grid gap-1 p-0 text-[13px]">
+              {sides.map((id) => (
+                <li key={id} className="flex items-center justify-between gap-2" style={{ listStyle: "none" }}>
+                  <span className="min-w-0 truncate">{sessions[id]?.title ?? sessions[id]?.project ?? id}</span>
+                  <button
+                    type="button"
+                    className="btn !min-h-6 !px-2 !text-[12.5px]"
+                    onClick={() => {
+                      const st = useStore.getState()
+                      st.openBeside(id)
+                      st.setRoute("workspace")
+                    }}
+                  >
+                    Open
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 text-[13px] text-mut">No side chat started from this session is open.</p>
+          )}
+        </section>
+      ) : null}
     </div>
   )
 }

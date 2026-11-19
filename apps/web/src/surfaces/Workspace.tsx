@@ -820,7 +820,8 @@ function SessionPane({
           </span>
         ) : (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
-            {(["plan", "files", "search", "changes", "git", "terminal"] as const).map((t) => (
+            {/* T-058: a coding session shows what it made to show you too. */}
+            {(["plan", "files", "search", "changes", "git", "terminal", "artifacts"] as const).map((t) => (
               <button
                 key={t}
                 ref={(el) => {

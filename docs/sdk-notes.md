@@ -282,7 +282,7 @@ A real session on the real SDK, started by the Host's own `createHost()` against
 
 ## No live tool output (checked 4 Nov, B33)
 
-While a tool runs the SDK sends `tool_progress` (`tool_use_id`, `tool_name`, `elapsed_time_seconds`) and nothing of its output; the output comes in the tool result when it finishes. A background task's `task_started` and `task_progress` carry no output path; `task_notification` names `output_file` when the task ends. So a live read-only view of a running command waits for an SDK that streams it.
+While a tool runs the SDK sends `tool_progress` (`tool_use_id`, `tool_name`, `elapsed_time_seconds`) and nothing of its output; the output comes in the tool result when it finishes. A background task's `task_started` and `task_progress` carry no output path; `task_notification` names `output_file` when the task ends. So a live read-only view of a running command waits for an SDK that streams it. Checked again 19 Nov (T-055): the bundled sdk.d.ts now types a `get_task_output` control request (the last 8 KiB a background shell or Monitor task wrote, read-only, polled by the host), and sdk.mjs has `Query.getTaskOutput(taskId)`, but the `Query` interface in sdk.d.ts does not declare the method, so, as with `askSideQuestion`, Codehouse does not use it yet. A foreground command still has no output until it ends. Once `getTaskOutput` is declared, a background command can show its live tail.
 
 ## /btw side questions (6 Nov, sdk.d.ts 0.3.310)
 

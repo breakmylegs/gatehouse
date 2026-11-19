@@ -66,18 +66,18 @@ Slices, in order:
 | T-052 | LaTeX maths rendered in messages. | Build, S | built | feat/t004 | KaTeX in replies: $$ and ```math, \( \), \[ \] and plain single-dollar maths; prices stay text; trust off; source shown when unreadable |
 | T-053 | Send shortcut choice (Enter, or mod+Enter for multiline, or always mod+Enter). | Build, S | built | feat/send-key | Settings, General, Sending a prompt: Enter (default) or Ctrl+Enter |
 | T-054 | Tool calls grouped into an expandable summary, with Open diff. | Have | built (Codehouse had it) | | |
-| T-055 | Live output of a running command. | Partly | todo | | |
+| T-055 | Live output of a running command. | Partly | waits for the SDK | | getTaskOutput is in sdk.mjs and its request type in sdk.d.ts, but not declared on Query; used once declared (docs/sdk-notes.md, No live tool output) |
 | T-056 | Hide successful tool calls, hide all, or Zen (only your message and the final reply); approvals and errors always show. | Partly | built | slice/T1-sidebar | Failures only, a fourth level beside Summary, Normal and Verbose |
 | T-057 | Screen reader announcement levels, and the session's status at the start of the window title. | Partly | built | slice/T1-a11y | Settings, Appearance: announcement level, title status off by default |
-| T-058 | Visual replies: an HTML page (chart, table, diagram) in any thread, following the theme, sandboxed, with zoom. | Partly | todo | | |
+| T-058 | Visual replies: an HTML page (chart, table, diagram) in any thread, following the theme, sandboxed, with zoom. | Partly | built | feat/t055 | Artifacts in coding sessions too; an HTML page gets the theme as CSS variables (light or dark only); zoom 50% to 200%; same sandbox |
 | T-059 | MCP Apps: interactive apps returned by MCP tools, which can call tools and post to the thread. | Conflicts | listed for decision | | |
 | T-060 | Find in the thread, including older messages and plans. | Have | built (Codehouse had it) | | |
 | T-062 | Find across every file of a diff, folded files included. | Build, S | built | slice/T1-find | Find in every file, in the Changes pane |
-| T-063 | A thread details card with chosen rows: context window with the autocompact mark, usage limits, local servers with Stop, side chats. | Partly | todo | | |
+| T-063 | A thread details card with chosen rows: context window with the autocompact mark, usage limits, local servers with Stop, side chats. | Partly | built | feat/t055 | Details: Choose rows (kept on this computer); context meter with the auto-compact mark; usage limits; Stop on each background task (stop_task, recorded); side chats with Open |
 | T-064 | Permission modes per thread: Supervised, Auto-accept edits, Auto. | Have | built (Codehouse had it) | | |
 | T-065 | Full access: commands and edits with no approval. | Conflicts | listed for decision | | |
 | T-066 | A default mode for new threads, overridable per project. | Partly | built | feat/model-choices | by T-017: a new session takes your last mode, or the folder's own; never an Extreme approval mode |
-| T-067 | Managed policy: cap the broadest mode, lock settings with a "Managed by" label, allow-list providers, limit clients, turn off remote access and webhooks, update from a mirror; refuse to start on a policy it cannot enforce; `policy check` and `policy show`. | Partly | todo | | |
+| T-067 | Managed policy: cap the broadest mode, lock settings with a "Managed by" label, allow-list providers, limit clients, turn off remote access and webhooks, update from a mirror; refuse to start on a policy it cannot enforce; `policy check` and `policy show`. | Partly | built (no mirror yet) | feat/t055 | Signed settings: mode cap, Extreme off, provider list, phone and push off (the only clients beside this desktop), locked settings with Managed by; unknown keys refuse; npm run policy -- check|show. Update mirror listed: it needs the update end-to-end check |
 | T-068 | Subagents' approval requests shown in the parent with the subagent's name; a typed reply declines with feedback. | Have | built (Codehouse had it) | | |
 | T-069 | Remembered approvals ("Allow all edits this session"). | Have | built (Codehouse had it) | | |
 | T-061 | Forge connections: GitHub, GitLab, Forgejo and Gitea, Bitbucket, Azure DevOps, others, using the forge's CLI or a saved token. | Build (safe variant), M | partly built | slice/T4-forge | GitHub, read only, through gh, off until switched on; other forges and the Doctor line not built |
@@ -85,12 +85,12 @@ Slices, in order:
 | T-072 | A Commits picker in the diff pane, and commit links opening there. | Partly | partly built | slice/T3-commits | Look at a commit in Changes; commit links in Claude's words not built |
 | T-073 | New project with a first commit and optional private GitHub repository; clone from a URL with progress, in host folders. | Build (safe variant), S | built (safe variant) | slice/T3-clone | /clone and /publish as requests Claude runs through the Approver |
 | T-074 | Commit, push and open a pull request with one button; commit messages and PR text written from the changes and the repository's conventions. | Build (safe variant), S | built (safe variant) | slice/T3-ship | requests in the prompt box; Claude runs each command through the Approver |
-| T-075 | A Pull requests page: review, comments, request reviewers, check out, merge, auto-merge, revert, tick description checkboxes, link previews. | Build (safe variant), L | todo | | |
+| T-075 | A Pull requests page: review, comments, request reviewers, check out, merge, auto-merge, revert, tick description checkboxes, link previews. | Build (safe variant), L | built (safe variant) | feat/t055 | Description with tickable boxes, comments and reviews (flagged when they read like instructions), and comment, reviewers, check out, merge, merge when checks pass, revert, each a gh command as a Codehouse action on the approval card; link previews not fetched (links open outside) |
 | T-076 | Review guides: a tour of a change in reading order, Look closely stops, Ask about this stop, Finish review. | Partly | built | slice/T3-guide | a side session in Plan mode writes it; local changes, PRs after T-061 |
 | T-077 | Mark files as viewed, with a count; a file changed since comes back marked. | Build, S | built | slice/T1-changes | a changed file comes back unmarked |
 | T-078 | Several linked PRs per thread, linked automatically when the agent runs `gh pr create`, with badges. | Build, M | partly built | slice/T3-prlinks | linked from gh pr create in the transcript; badges wait for T-061 |
 | T-080 | Watch a pull request: wake the agent when a check fails, someone comments or the branch conflicts. | Build (safe variant), M | built (safe variant) | slice/T4-watch | checks and conflicts only, never comments; trigger caps; recorded |
-| T-081 | GitHub stacks: Merge stack, Rebase stack. | Build (safe variant), L | todo | | |
+| T-081 | GitHub stacks: Merge stack, Rebase stack. | Build (safe variant), L | built (safe variant) | feat/t055 | Stacks found from bases; Merge stack and Rebase stack (gh pr update-branch --rebase, no force push from here), bottom up, one approval card each, stopping at the first that does not go through |
 | T-082 | Remove agent credits when merging. | Conflicts | listed for decision | | |
 | T-083 | Keep the default branch current by fast-forward pulls when the checkout is clean. | Build (safe variant), S | partly built | slice/T3-pull | Pull (fast-forward only) in the Git pane, through the policy; pulling by itself is not built |
 | T-084 | Pull request access shared between machines. | Conflicts | listed for decision | | |
@@ -99,8 +99,8 @@ Slices, in order:
 | T-088 | Worktree location. | Have | built (Codehouse had it) | | |
 | T-089 | Automatic worktree cleanup by inactivity, after a merge, or when unchanged; Delete now with results; unused folders listed with sizes. | Partly | built | slice/T3-cleanup | rules off by default, never a dirty, untracked or ignored worktree, recorded first |
 | T-090 | Fast worktree checkout by copy-on-write on macOS; submodule depth. | Build, S | todo | | |
-| T-091 | Project actions: setup scripts on a new worktree, run or stop on settle, shortcuts, preview addresses, declared in a repository file (`t3.json`). | Build (safe variant), M | todo | | |
-| T-092 | Project icons and monograms; pin and archive projects; settings per project with an inheritance chain. | Partly | todo | | |
+| T-091 | Project actions: setup scripts on a new worktree, run or stop on settle, shortcuts, preview addresses, declared in a repository file (`t3.json`). | Build (safe variant), M | built (safe variant) | feat/t055 | Your actions in Settings by project, run on your click in the terminal pane, with a preview on this computer; a repository's .codehouse/actions.json shown and run only as a Codehouse action on the card; never automatic (no run on worktree or settle); no shortcuts yet (T-071) |
+| T-092 | Project icons and monograms; pin and archive projects; settings per project with an inheritance chain. | Partly | built in part | feat/t055 | Monograms in a colour of their own, Pin project to the top and Archive project (shown again on asking), kept on this computer; the inheritance view (M, low priority in the review) not yet |
 | T-093 | T3 Connect: a cloud account and a tunnel to the machine, up to three machines. | Conflicts | listed for decision | | |
 | T-094 | LAN and Tailscale pairing, Tailscale HTTPS, a hosted web client. | Conflicts | listed for decision | | |
 | T-095 | SSH-managed remote environments started by the desktop. | Conflicts | listed for decision | | |
@@ -109,14 +109,14 @@ Slices, in order:
 | T-098 | A phone app with threads, approvals, prompts and Interrupt. | Have | built (Codehouse had it) | | |
 | T-099 | Phone notifications when work finishes, fails, needs approval or asks for input. | Have | built (Codehouse had it) | | |
 | T-100 | Live Activities, Android live updates and home-screen widgets (agent activity, subscription usage). | Conflicts | listed for decision | | |
-| T-101 | Drafts and messages queued on the phone while offline, sent on reconnect. | Build (safe variant), S | todo | | |
+| T-101 | Drafts and messages queued on the phone while offline, sent on reconnect. | Build (safe variant), S | built (safe variant) | feat/t055 | Drafts kept on the phone by session; offline, Send is off and says why; signed with Face ID only when sent online (invariant 8: fresh nonce, short life) |
 | T-102 | Phone access to PRs, scheduled tasks, settings, providers and updates. | Conflicts | listed for decision | | |
 | T-103 | Guest links: a teammate follows a thread in a browser and suggests messages. | Conflicts | listed for decision | | |
 | T-087 | Prompt links that open a draft (prompt, repository, model, PR), stripping invisible characters. | Build (safe variant), S | todo | | |
 | T-104 | Light, dark and system appearance; a theme picker. | Have | built (Codehouse had it) | | |
 | T-105 | Custom themes, VS Code theme import, custom CSS, server-published themes, and an agent that restyles the app. | Conflicts | listed for decision | | |
 | T-106 | Panel animation duration, 0 ms by default. | Build, S | built | | the side panels open at once, with no animation (checked 17 Nov), so no setting is needed |
-| T-071 | Customisable shortcuts (a settings file with conditions and precedence, new defaults added later). | Build, M | todo | | |
+| T-071 | Customisable shortcuts (a settings file with conditions and precedence, new defaults added later). | Build, M | built | feat/t055 | Registry with your keys in settings (shortcuts), read tolerantly; yours first, a default yields; allow gestures and the kill switch locked; a key used once; Settings, Keyboard shortcuts; the sheet shows the keys in force |
 | T-107 | Keyboard pickers for model, effort, mode, workspace and branch; effort up and down; mod+1 to 9 for the first threads. | Partly | todo | | |
 | T-108 | F6 to move between areas; arrow keys, F2 rename and Shift+F10 in the thread list. | Partly | built in part | slice/t4 | F6 and Shift+F6; the list keys not yet |
 | T-109 | Back and forward through pages; reopen the last closed tab. | Build, S | built in part | slice/t4 | back and forward (Alt+Left, Alt+Right, mouse buttons); reopen a closed pane not yet |

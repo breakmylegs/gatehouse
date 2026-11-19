@@ -1548,6 +1548,12 @@ export class HostServer {
           : await this.#history().messages(cmd.sdkSessionId, cmd.cwd)
       case "search_history":
         return await this.#history().search(cmd.query)
+      case "stop_task": {
+        // T-063: one background task of this session stopped from its details, recorded first.
+        if (!(await this.#session(cmd.sessionId).stopBackgroundTask(cmd.taskId)))
+          throw new CommandError("not-found", "That task is not running in this session, or the stop could not be recorded.")
+        return { stopped: true }
+      }
       case "context_usage":
         return await this.#session(cmd.sessionId).contextUsage()
       case "session_details": {

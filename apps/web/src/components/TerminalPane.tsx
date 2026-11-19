@@ -2,6 +2,7 @@ import clsx from "clsx"
 import { useEffect, useId, useRef, useState } from "react"
 import { composeIn, quoteOutput } from "../lib/compose"
 import { send, useStore } from "../store"
+import { ProjectActions } from "./ProjectActions"
 
 /**
  * Mac fork: the shell the Host runs your commands in: zsh on a Mac, PowerShell on Windows. The page is always on the same
@@ -63,7 +64,11 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
 
   async function run(e: React.FormEvent) {
     e.preventDefault()
-    const text = command.trim()
+    await runText(command.trim())
+  }
+
+  /** T-091: a command as if you typed it: your own project actions use this too. */
+  async function runText(text: string) {
     if (!text || running || busy) return
     setBusy(true)
     termAppend(sessionId, {
@@ -97,7 +102,14 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] gap-2">
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto] gap-2">
+      {/* T-091: your actions run as if typed; the repository's own only through the approval card. */}
+      <ProjectActions
+        sessionId={sessionId}
+        busy={running || busy}
+        onRun={(c) => void runText(c)}
+        onOutput={(text, err) => termAppend(sessionId, { stream: err ? "err" : "out", text })}
+      />
       <pre ref={out} className="term-out" tabIndex={0} aria-label="Terminal output" aria-live="off">
         {chunks.length === 0 ? (
           <span className="text-mut">

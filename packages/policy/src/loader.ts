@@ -243,6 +243,8 @@ export function loadPolicy(opts: LoadOptions): Policy {
           continue
         }
         const overlay = checked.value
+        // T-067: a project's overlay cannot set the organisation's settings; only IT's signed policy can.
+        if (overlay.settings !== undefined) errors.push(`overlay ${file}: settings are set only by IT's managed policy`)
         if (overlay.project !== undefined && overlay.project.toLowerCase() !== name) {
           errors.push(`overlay ${file}: project "${overlay.project}" does not match the file name`)
         }
@@ -290,7 +292,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
   }
 
   const workspaceRootKeys = roots.map((r) => resolvePath(r, process.cwd()).key)
-  const hash = sha256Hex(canonicalize({ rules, overlays, remember, ...(approvedDependencies.length ? { approvedDependencies } : {}), ...(managed?.licences ? { managedLicences: managed.licences } : {}) }))
+  const hash = sha256Hex(canonicalize({ rules, overlays, remember, ...(approvedDependencies.length ? { approvedDependencies } : {}), ...(managed?.licences ? { managedLicences: managed.licences } : {}), ...(managed?.settings ? { managedSettings: managed.settings } : {}) }))
   return {
     rules,
     sources: merged.sources,
@@ -299,6 +301,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
     remember,
     ...(approvedDependencies.length ? { approvedDependencies } : {}),
     ...(managed?.licences ? { managedLicences: managed.licences } : {}),
+    ...(managed?.settings ? { managedSettings: managed.settings } : {}),
     hash,
     workspaceRootKeys: workspaceRootKeys.map(toKey),
   }

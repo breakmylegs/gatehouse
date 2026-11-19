@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { BINDINGS } from "../lib/commands"
+import { commandFor, SHORTCUTS } from "../lib/shortcuts"
+import { useShortcuts } from "../lib/useShortcuts"
 import { isMac, keyLabel } from "../lib/platform-mac" // Mac fork
 
 // Mac fork: Command-comma opens Settings, as in every Mac app (App.tsx).
@@ -13,6 +15,10 @@ export function ShortcutSheet() {
   const [open, setOpen] = useState(false)
   const back = useRef<HTMLElement | null>(null)
   const close = useRef<HTMLButtonElement>(null)
+  // T-071: the keys in force, yours or the defaults.
+  const { keys } = useShortcuts()
+  const keysRef = useRef(keys)
+  keysRef.current = keys
 
   useEffect(() => {
     const show = () => {
@@ -20,7 +26,7 @@ export function ShortcutSheet() {
       setOpen(true)
     }
     const onKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+      if (commandFor(e, keysRef.current) === "shortcuts") {
         e.preventDefault()
         if (open) setOpen(false)
         else show()
@@ -62,7 +68,12 @@ export function ShortcutSheet() {
       >
         <h2 className="m-0 text-[17px]">Keyboard shortcuts</h2>
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-          {[...BINDINGS, ...MAC_BINDINGS].map((b) => (
+          {[
+            // Those you can give your own keys to, as they are now; then the fixed ones.
+            ...SHORTCUTS.map((s) => ({ keys: keys[s.id]?.replace(/\+/g, " ") ?? "none", label: s.label })),
+            ...BINDINGS.filter((b) => !SHORTCUTS.some((s) => s.label === b.label)),
+            ...MAC_BINDINGS,
+          ].map((b) => (
             <div key={b.keys} className="contents">
               <dt>
                 <kbd>{keyLabel(b.keys)}</kbd>

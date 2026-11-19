@@ -1,4 +1,6 @@
 import { Command } from "cmdk"
+import { commandFor } from "../lib/shortcuts"
+import { useShortcuts } from "../lib/useShortcuts"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../lib/api"
 import { type AppCommand, buildCommands, rankCommands } from "../lib/commands"
@@ -37,10 +39,13 @@ export function CommandPalette() {
   // T-030: what was said in the sessions open here, and each session's title, branch and pull requests.
   const transcripts = useStore((s) => s.transcripts)
 
+  const keys = useShortcuts().keys
+  const keysRef = useRef(keys)
+  keysRef.current = keys
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // Ctrl+Shift+K is the kill switch's question, not the palette.
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "k") {
+      // T-071: Ctrl+K unless you gave it another key; Ctrl+Shift+K is the kill switch's question, never the palette.
+      if (commandFor(e, keysRef.current) === "palette") {
         e.preventDefault()
         back.current = document.activeElement as HTMLElement | null
         setOpen((o) => !o)

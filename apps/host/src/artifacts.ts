@@ -142,6 +142,26 @@ export function readMermaidLib(file = MERMAID_LIB()): string | undefined {
   }
 }
 
+/**
+ * T-058: an HTML artifact follows Codehouse's theme. Before its own content the page gets the theme's colours as CSS
+ * variables (--codehouse-bg, --codehouse-fg, --codehouse-muted, --codehouse-line, --codehouse-accent) and a quiet
+ * default for the page itself, which anything the artifact sets overrides. Only these fixed values are written:
+ * nothing from the request but the name of one of the two themes.
+ */
+export const ARTIFACT_THEMES = {
+  light: { bg: "#f8fafc", surface: "#ffffff", fg: "#0f172a", muted: "#475569", line: "#d9e0ea", accent: "#1d4ed8" },
+  dark: { bg: "#0e1217", surface: "#161c24", fg: "#e0e2ea", muted: "#a3aab8", line: "#2a3647", accent: "#a9c7ff" },
+} as const
+export type ArtifactTheme = keyof typeof ARTIFACT_THEMES
+
+export function themePrelude(theme: ArtifactTheme): string {
+  const t = ARTIFACT_THEMES[theme]
+  return `<style data-codehouse-theme="${theme}">:root{color-scheme:${theme};--codehouse-bg:${t.bg};--codehouse-surface:${t.surface};--codehouse-fg:${t.fg};--codehouse-muted:${t.muted};--codehouse-line:${t.line};--codehouse-accent:${t.accent}}html{background:var(--codehouse-bg);color:var(--codehouse-fg);font-family:system-ui,sans-serif}a{color:var(--codehouse-accent)}</style>`
+}
+
+/** An HTML artifact with the theme first, so the artifact's own styles still win. */
+export const themedHtml = (html: string, theme: ArtifactTheme | undefined) => (theme ? `${themePrelude(theme)}${html}` : html)
+
 export function artifactHeaders(frameAncestor: string, kind: ArtifactKind): Record<string, string> {
   return {
     // Machine-readable for anything that fetches it (B38).

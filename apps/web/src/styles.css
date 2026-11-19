@@ -1178,6 +1178,21 @@ mark.hidden-char {
 .rail-session {
   position: relative;
 }
+/* T-092: a project's monogram in the sidebar, in a colour of its own from its name. */
+.project-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  margin-right: 6px;
+  border-radius: 5px;
+  background: hsl(var(--mark-hue, 210) 55% 42%);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  vertical-align: -3px;
+}
 /* T-023: the row being dragged, faded so the place it goes is plain. */
 .rail-session[data-dragging] {
   opacity: 0.45;

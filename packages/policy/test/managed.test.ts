@@ -6,6 +6,7 @@ import path from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { PolicyEngine } from "../src/engine.js"
 import { loadPolicy, MANAGED_ERROR, PolicyLoadError, PolicyStore } from "../src/loader.js"
+import { describeManaged, extremeAllowed, lockedChanges, managedRefusal, modeAllowed, phoneAllowed, providerAllowed } from "../src/managed.js"
 import { fwd, makeFixture, SEED_RULES, type Fixture } from "./helpers.js"
 
 let fx: Fixture
@@ -108,5 +109,76 @@ describe("IT's signed policy", () => {
     expect(store.load()).toBe(false)
     expect(store.current?.managed).toBe(true)
     expect(store.status().errors[0]).toMatch(new RegExp(`^${MANAGED_ERROR}`))
+  })
+})
+
+describe("the organisation's settings in IT's policy (T-067)", () => {
+  const SETTINGS = [
+    IT.trimEnd(),
+    "settings:",
+    "  managedBy: Accenture IT",
+    "  maxMode: default",
+    "  extremeApproval: false",
+    "  providers: [claude]",
+    "  phone: false",
+    "  locked: [theme, extremeRiskLimit]",
+    "",
+  ].join("\n")
+
+  it("are read from the signed policy, hashed with it, and said in words", () => {
+    place(SETTINGS)
+    const p = load()
+    expect(p.managedSettings).toEqual({ managedBy: "Accenture IT", maxMode: "default", extremeApproval: false, providers: ["claude"], phone: false, locked: ["theme", "extremeRiskLimit"] })
+    place(IT)
+    expect(load().hash).not.toBe(p.hash)
+    expect(describeManaged(p.managedSettings)).toEqual([
+      "Managed by Accenture IT",
+      "The broadest permission mode allowed is default.",
+      "Extreme approval is turned off.",
+      "AI providers allowed: claude.",
+      "The phone, the Relay and push channels are turned off.",
+      "Settings you cannot change here: theme, extremeRiskLimit.",
+    ])
+  })
+
+  it("refuse a setting this version does not know, so a policy it cannot enforce stops sessions", () => {
+    place(`${SETTINGS}  updates: { mirror: "https://mirror.example/codehouse" }\n`)
+    expect(errorsOf().some((e) => e.startsWith(MANAGED_ERROR))).toBe(true)
+    place(`${IT.trimEnd()}\nsettings:\n  maxMode: bypassPermissions\n`)
+    expect(errorsOf().some((e) => e.startsWith(MANAGED_ERROR))).toBe(true)
+  })
+
+  it("narrow only, and only as far as they say", () => {
+    const m = { maxMode: "acceptEdits" as const, extremeApproval: false, providers: ["claude" as const, "local" as const], phone: false, locked: ["theme"] }
+    expect(["plan", "default", "acceptEdits"].map((x) => modeAllowed(m, x))).toEqual([true, true, true])
+    expect(modeAllowed(m, "auto")).toBe(false)
+    expect(modeAllowed(m, "bypassPermissions")).toBe(false)
+    expect(modeAllowed(undefined, "auto")).toBe(true)
+    expect([extremeAllowed(m), extremeAllowed(undefined), extremeAllowed({})]).toEqual([false, true, true])
+    expect([providerAllowed(m, "local"), providerAllowed(m, "gateway"), providerAllowed(undefined, "gateway")]).toEqual([true, false, true])
+    expect([phoneAllowed(m), phoneAllowed(undefined)]).toEqual([false, true])
+    expect(lockedChanges(m, { theme: "dark", x: 1 }, { theme: "light", x: 2 })).toEqual(["theme"])
+    expect(lockedChanges(m, { theme: "dark" }, { theme: "dark", x: 2 })).toEqual([])
+    expect(lockedChanges(m, {}, { theme: "dark" })).toEqual(["theme"])
+    expect(managedRefusal(undefined, "Extreme approval is turned off")).toBe("Managed by your organisation: Extreme approval is turned off.")
+    expect(describeManaged(undefined)).toEqual(["No settings are managed by your organisation."])
+  })
+})
+
+describe("a project's overlay (T-067)", () => {
+  it("cannot set the organisation's settings", () => {
+    const overlays = fs.mkdtempSync(path.join(os.tmpdir(), "gh-overlay-"))
+    try {
+      fs.writeFileSync(path.join(overlays, "shop.yaml"), "version: 1\nsettings:\n  maxMode: auto\n")
+      let errors: string[] = []
+      try {
+        loadPolicy({ rulesPath: SEED_RULES, workspaceRootsOverride: [fwd(fx.ws)], overlayDir: overlays })
+      } catch (e) {
+        errors = (e as PolicyLoadError).errors
+      }
+      expect(errors).toContain("overlay shop.yaml: settings are set only by IT's managed policy")
+    } finally {
+      fs.rmSync(overlays, { recursive: true, force: true })
+    }
   })
 })

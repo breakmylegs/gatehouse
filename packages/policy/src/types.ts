@@ -79,6 +79,24 @@ export interface Overlay {
   removeAllow?: string[]
   /** D-055: the licences allowed without asking. Read from the managed policy only. */
   licences?: string[]
+  /** T-067: the organisation's settings. Read from the managed policy only. */
+  settings?: ManagedSettings
+}
+
+/** T-067: what IT's signed policy sets for every session on this computer. Each only narrows what may be done. */
+export interface ManagedSettings {
+  /** Shown beside what it sets: "Managed by ...". */
+  managedBy?: string
+  /** The broadest permission mode a session may use (plan < default < acceptEdits < auto). */
+  maxMode?: "plan" | "default" | "acceptEdits" | "auto"
+  /** False: Extreme approval is not offered. */
+  extremeApproval?: boolean
+  /** The AI providers allowed; absent means all Codehouse offers. */
+  providers?: Array<"claude" | "local" | "gateway">
+  /** False: no phone, Relay or push channel. */
+  phone?: boolean
+  /** Settings (by their key in the settings file) you cannot change here. */
+  locked?: string[]
 }
 
 export interface RememberEntry {
@@ -149,6 +167,8 @@ export interface Policy {
   approvedDependencies?: string[]
   /** D-055: the organisation's licence list, from the managed policy; when set, it is the list. */
   managedLicences?: string[]
+  /** T-067: the organisation's settings, from the managed policy. */
+  managedSettings?: ManagedSettings
   hash: string
   /** Real, lower-case, forward-slash keys of the workspace roots. */
   workspaceRootKeys: string[]

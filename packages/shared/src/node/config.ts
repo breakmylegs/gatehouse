@@ -357,6 +357,30 @@ function build(loose: boolean) {
       .regex(/^[A-Za-z0-9][\w .-]{0,59}$/)
       .optional(),
     /**
+     * T-071: your own keys for Codehouse's commands, by command id ("sidebar": "Ctrl+Alt+B"; empty for none). Read
+     * tolerantly by the window: an id it does not know is kept and left alone. Older versions keep them unused.
+     */
+    shortcuts: z.record(z.string().min(1).max(40), z.string().max(40)).optional(),
+    /**
+     * T-091: your project actions, by project name: run by your click in the terminal pane, as if you typed them.
+     * Older versions keep them unused.
+     */
+    projectActions: z
+      .record(
+        z.string().min(1).max(120),
+        z
+          .array(
+            obj({
+              name: z.string().min(1).max(60),
+              command: z.string().min(1).max(2000).regex(/^[^\r\n]*$/),
+              kind: z.enum(["setup", "run"]).optional(),
+              preview: z.string().regex(/^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?(\/\S*)?$/i).optional(),
+            }),
+          )
+          .max(30),
+      )
+      .optional(),
+    /**
      * Owner's Settings overhaul (6 Nov): where new worktrees go. Absent: beside the project. A folder must be inside a
      * workspace root (checked when a worktree is made). Older versions keep it unused and put them beside.
      */

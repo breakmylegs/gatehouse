@@ -1,4 +1,5 @@
 import { RememberFor } from "@gatehouse/shared/ws-protocol"
+import type { ActionResult } from "./codehouse-action.js"
 import { claimCalibration, failureTaxonomy } from "./failure-taxonomy.js"
 import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
@@ -8,6 +9,7 @@ import { measuredTime, outcomes } from "./outcomes.js"
 import { stakeholderSummary } from "./stakeholder-summary.js"
 import { findAgents, findRuntimes } from "./welcome.js"
 import { listDistros } from "./wsl-projects.js"
+import { checkActions, repoActions } from "./project-actions.js"
 import { contextReport, projectBlocks } from "./context-efficiency.js"
 import { staleInstructions } from "./stale-instructions.js"
 import { glossary } from "./glossary.js"
@@ -71,7 +73,12 @@ import type { FastifyInstance, FastifyReply } from "fastify"
 import {
   appendRemember,
   checkRemember,
+  describeManaged,
   loadPolicy,
+  lockedChanges,
+  managedLabel,
+  managedRefusal,
+  phoneAllowed,
   PolicyEngine,
   PolicyLoadError,
   readRememberEntries,
@@ -107,7 +114,7 @@ import {
 import type { HostAudit } from "./hostaudit.js"
 import { localDay, type UsageStore } from "./usage.js"
 import type { PlanUsage } from "./plan-usage.js"
-import { ArtifactError, artifactHeaders, EXT, mermaidPage, readMermaidLib, type ArtifactStore } from "./artifacts.js"
+import { ArtifactError, artifactHeaders, EXT, mermaidPage, readMermaidLib, themedHtml, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import type { RoutineDrafts } from "./routine-drafts.js"
@@ -190,6 +197,8 @@ export interface AdminContext {
   prWatcher?: PrWatcher
   /** T-083: a fast-forward pull as a Codehouse action. */
   pullFastForward?: GitPanelContext["pullFastForward"]
+  /** T-075: a gh command for a pull request, as a Codehouse action for a session. */
+  forgeAct?: (sessionId: string, cwd: string, command: string, why: string) => Promise<ActionResult>
   /** Whether a running session wrote or edited the file at this full path. */
   sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** An account's plan limits, read on one of its open sessions. */
@@ -674,6 +683,94 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   // T-008: the WSL distros on this computer, each with its home folder, for the start form (Windows only).
   app.get("/api/wsl/distros", async () => ({ distros: process.platform === "win32" ? await listDistros() : [] }))
 
+  // T-091: a session's project actions: yours, from Settings, and the repository's own (run only through the card).
+  app.get("/api/project-actions", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    const cwd = ctx.sessionCwd?.(id)
+    if (!cwd) return reply.code(404).send({ error: "That session is not running." })
+    const project = path.basename(TestLocks.rootOf(cwd))
+    return { project, own: checkActions(ctx.config().projectActions?.[project]), repo: repoActions(TestLocks.rootOf(cwd)) }
+  })
+
+  // T-091: your actions for a project, saved by adding to the settings file (what else is there is kept), recorded.
+  app.put("/api/project-actions", async (req, reply) => {
+    const b = (req.body ?? {}) as { session?: unknown; actions?: unknown }
+    const cwd = typeof b.session === "string" ? ctx.sessionCwd?.(b.session) : undefined
+    if (!cwd) return reply.code(404).send({ error: "That session is not running." })
+    const project = path.basename(TestLocks.rootOf(cwd))
+    const actions = checkActions(b.actions)
+    if (Array.isArray(b.actions) && actions.length !== b.actions.length) return bad(reply, 422, "Each action needs a name (at most 60 characters) and a one-line command; a preview is an address on this computer.")
+    const file = configPath(ctx.env)
+    let onDisk: Record<string, unknown> = {}
+    try {
+      onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+    } catch {
+      // no settings file yet
+    }
+    const all = { ...((onDisk.projectActions as Record<string, unknown> | undefined) ?? {}) }
+    if (actions.length) all[project] = actions
+    else delete all[project]
+    const recorded = await ctx.audit.record({
+      session: "desktop",
+      event: "settings_changed",
+      channel: "desktop",
+      tool: "settings",
+      input: { changed: ["projectActions"], project, actions: actions.map((a) => a.name) },
+      verdict: { outcome: "allow", ruleId: "settings-changed", reason: "Your project actions were changed from the desktop.", risk: 0, decidedBy: "human-desktop", policyHash: ctx.store.current?.hash ?? "" },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so it was not saved.")
+    const merged = { ...onDisk, projectActions: all }
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(merged, null, 2) + "\n")
+    ;(ctx.config() as { projectActions?: unknown }).projectActions = all
+    return { project, own: actions }
+  })
+
+  // T-071: your own keys for Codehouse's commands, saved by adding to the settings file (what else is there is kept).
+  app.put("/api/shortcuts", async (req, reply) => {
+    const raw = (req.body as { shortcuts?: unknown } | undefined)?.shortcuts
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return bad(reply, 422, "Give the keys by command.")
+    const entries = Object.entries(raw as Record<string, unknown>).filter(([k, v]) => /^[a-z][a-z0-9-]{0,39}$/.test(k) && typeof v === "string" && v.length <= 40)
+    if (entries.length !== Object.keys(raw).length || entries.length > 60) return bad(reply, 422, "Each command needs keys of at most 40 characters, or nothing.")
+    const shortcuts = Object.fromEntries(entries) as Record<string, string>
+    const file = configPath(ctx.env)
+    let onDisk: Record<string, unknown> = {}
+    try {
+      onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+    } catch {
+      // no settings file yet
+    }
+    const recorded = await ctx.audit.record({
+      session: "desktop",
+      event: "settings_changed",
+      channel: "desktop",
+      tool: "settings",
+      input: { changed: ["shortcuts"], commands: Object.keys(shortcuts) },
+      verdict: { outcome: "allow", ruleId: "settings-changed", reason: "Your keyboard shortcuts were changed from the desktop.", risk: 0, decidedBy: "human-desktop", policyHash: ctx.store.current?.hash ?? "" },
+      latencyMs: 0,
+    })
+    if (!recorded) return bad(reply, 503, "It could not be recorded, so it was not saved.")
+    const merged = { ...onDisk, shortcuts }
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    await writeFileAtomic(file, JSON.stringify(merged, null, 2) + "\n")
+    ;(ctx.config() as { shortcuts?: unknown }).shortcuts = shortcuts
+    return { shortcuts }
+  })
+
+  // T-091: one of the repository's own actions, run only as a Codehouse action: judged by the rules, on the card.
+  app.post("/api/project-actions/run", async (req, reply) => {
+    const b = (req.body ?? {}) as { session?: unknown; index?: unknown }
+    const session = typeof b.session === "string" ? b.session : ""
+    const cwd = ctx.sessionCwd?.(session)
+    if (!cwd) return reply.code(404).send({ error: "That session is not running." })
+    if (!ctx.forgeAct) return reply.code(501).send({ error: "Running a repository's actions is not available here." })
+    const action = repoActions(TestLocks.rootOf(cwd))[Number(b.index)]
+    if (!action) return reply.code(404).send({ error: "The repository has no such action (it may have changed)." })
+    const r = await ctx.forgeAct(session, cwd, action.command, `the repository's action "${action.name}"`)
+    return { ran: r.ran, ...(r.refused ? { refused: r.refused } : {}), exitCode: r.exitCode, output: redactString(r.output, { terms: ctx.config().redactTerms }).slice(-8000) }
+  })
+
   // T-004: the coding agents on the PATH and the model runtimes answering on this computer, for the welcome.
   app.get("/api/welcome/found", async () => ({ agents: findAgents(process.env), runtimes: await findRuntimes() }))
 
@@ -996,6 +1093,9 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       sessionCwd: (id) => cwdOf(id),
       audit: ctx.audit,
       ...(ctx.prWatcher ? { watcher: ctx.prWatcher } : {}),
+      // T-075: a change to a pull request, as a Codehouse action on the approval card.
+      ...(ctx.forgeAct ? { act: ctx.forgeAct } : {}),
+      redact: (x) => redactString(x, { terms: ctx.config().redactTerms }),
     })
   }
   if (ctx.cnw) registerCnwRoutes(app, ctx.cnw)
@@ -1024,6 +1124,8 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     config: ctx.config,
     configFile: configPath(ctx.env),
     itModels: () => readItModels(managedPolicyDir(ctx.env)),
+    // T-067: the providers the organisation allows.
+    managed: () => ctx.store.current?.managedSettings,
   })
 
   app.get("/api/approver", async () => {
@@ -1381,6 +1483,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     }
   })
 
+  // T-067: what the organisation's managed settings allow, for the Settings page's Managed by note.
+  app.get("/api/managed", async () => {
+    const m = ctx.store.current?.managedSettings
+    return { managed: m !== undefined, ...(m ? { label: managedLabel(m), locked: m.locked ?? [], lines: describeManaged(m).slice(1), settings: m } : {}) }
+  })
+
   app.put("/api/settings", async (req, reply) => {
     const parsed = GatehouseConfig.safeParse(req.body)
     if (!parsed.success)
@@ -1405,6 +1513,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       return bad(reply, 422, "Those settings are not valid.", {
         errors: strangers.map((k) => `${k}: not a setting Codehouse knows`),
       })
+    // T-067: what the organisation locked is not changed here, and no push channel is turned on with the phone off.
+    const managed = ctx.store.current?.managedSettings
+    const locked = lockedChanges(managed, (onDisk ?? {}) as Record<string, unknown>, parsed.data as Record<string, unknown>)
+    if (locked.length) return bad(reply, 403, managedRefusal(managed, `${locked.join(", ")} cannot be changed here`))
+    if (!phoneAllowed(managed) && (parsed.data.push?.ntfy?.enabled || parsed.data.push?.slack?.enabled))
+      return bad(reply, 403, managedRefusal(managed, "the phone and push channels are turned off"))
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const before = ctx.config()
     await writeFileAtomic(file, JSON.stringify(parsed.data, null, 2) + "\n")
@@ -1506,8 +1620,10 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
     if (!found) return bad(reply, 404, "This artifact has ended.")
     const origin = `http://${String(req.headers.host ?? "127.0.0.1")}`
     for (const [k, v] of Object.entries(artifactHeaders(origin, found.kind))) reply.header(k, v)
-    // C-057: a diagram is drawn by a page made around its source.
-    return reply.send(found.kind === "mermaid" ? mermaidPage(found.content, readMermaidLib()) : found.content)
+    // C-057: a diagram is drawn by a page made around its source. T-058: an HTML page follows the theme asked for.
+    const q = (req.query as { theme?: string }).theme
+    const theme = q === "dark" || q === "light" ? q : undefined
+    return reply.send(found.kind === "mermaid" ? mermaidPage(found.content, readMermaidLib()) : found.kind === "html" ? themedHtml(found.content, theme) : found.content)
   })
 }
 
