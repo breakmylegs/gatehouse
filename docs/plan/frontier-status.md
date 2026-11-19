@@ -181,7 +181,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-076 | Cost per outcome | built | feat/d068 | apps/host/test/outcomes.test.ts | Insights, Cost per change: all project spend over noted commits, so undos, failed test runs and changeless sessions are in it |
 | D-100 | Estimates from history | built | feat/d068 | apps/host/test/outcomes.test.ts, apps/web/test/outcomes.test.ts | 10th to 90th percentile and median per change, with the sample size; under 5 sessions says not enough history |
 | D-077 | Context efficiency report | built | feat/d068 | apps/host/test/context-efficiency.test.ts | Insights: CLAUDE.md and AGENTS.md blocks a session's tool calls never named, with tokens and recent sessions' use |
-| D-078 | Claim calibration score | todo | | | |
+| D-078 | Claim calibration score | built | feat/d068 | apps/host/test/failure-taxonomy.test.ts, apps/web/test/calibration.test.ts | Per model: Verified over Verified and Contradicted; unchecked and flaky counted apart; under 5 marked too few |
 | D-079 | Codebase tours | todo | | | Needs C-036 (todo); built after C-036 in queue section 7 |
 | D-081 | Why is this code like this | todo | | | |
 | D-082 | Stale instruction detector | todo | | | |

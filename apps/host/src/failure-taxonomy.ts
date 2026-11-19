@@ -95,6 +95,49 @@ export function failureTaxonomy(records: Rec[]): Taxonomy {
   }
 }
 
+/**
+ * D-078: how often each model's done-claims held when Codehouse checked them (D-009): Verified over Verified and
+ * Contradicted. A claim that could not be checked, or one whose tests turned out flaky (the tests, not the claim, were
+ * at fault), is counted but left out of the score. Under five checked claims the score is marked as resting on few.
+ */
+export interface Calibration {
+  model: string
+  verified: number
+  contradicted: number
+  unverified: number
+  flaky: number
+  /** Verified / (Verified + Contradicted), 0 to 1; absent with nothing checked. */
+  score?: number
+  few: boolean
+}
+
+export function claimCalibration(records: Rec[]): Calibration[] {
+  const modelOf = new Map<string, string>()
+  for (const r of records) {
+    const m = inputOf(r).model
+    if (typeof m === "string" && m && r.session) modelOf.set(r.session, m.slice(0, 80))
+  }
+  const by = new Map<string, Omit<Calibration, "score" | "few">>()
+  for (const r of records) {
+    if (r.event !== "claim_verified") continue
+    const input = inputOf(r)
+    const own = typeof input.model === "string" && input.model ? input.model.slice(0, 80) : undefined
+    const model = own ?? modelOf.get(r.session) ?? "unknown"
+    const c = by.get(model) ?? { model, verified: 0, contradicted: 0, unverified: 0, flaky: 0 }
+    if (input.flaky === true) c.flaky++
+    else if (input.outcome === "verified") c.verified++
+    else if (input.outcome === "contradicted") c.contradicted++
+    else c.unverified++
+    by.set(model, c)
+  }
+  return [...by.values()]
+    .map((c) => {
+      const checked = c.verified + c.contradicted
+      return { ...c, ...(checked ? { score: Math.round((c.verified / checked) * 1000) / 1000 } : {}), few: checked < 5 }
+    })
+    .sort((a, b) => b.verified + b.contradicted - (a.verified + a.contradicted) || a.model.localeCompare(b.model))
+}
+
 /** The file a tool call was about, from the session's folder, when it names one inside it (D-069). */
 export function fileOf(input: unknown, cwd: string): { file?: string } {
   const o = input && typeof input === "object" ? (input as Record<string, unknown>) : {}

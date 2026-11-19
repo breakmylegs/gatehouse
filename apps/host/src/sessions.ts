@@ -1954,7 +1954,8 @@ export class Session extends EventEmitter<SessionEvents> {
           tool: "claims",
           cwd: this.cwd,
           project: this.project,
-          input: entry,
+          // D-078: the model, so the claim counts for the model that made it.
+          input: { ...entry, ...(this.#model ? { model: this.#model } : {}) },
           verdict: {
             outcome: outcome === "contradicted" ? "deny" : "allow",
             ruleId: "done-claim",

@@ -3,7 +3,8 @@ import { api } from "../lib/api"
 
 /**
  * D-072: what went wrong in agent work over the period, from the audit alone: each kind with its count, then by
- * project and by model, so you can see where sessions struggle and on which model. Words with every number.
+ * project and by model, so you can see where sessions struggle and on which model. Words with every number. D-078:
+ * how often each model's done-claims held when they were checked.
  */
 const KINDS = ["loop", "tool-error", "failing-test", "undo", "contradicted-claim", "denial"] as const
 type Kind = (typeof KINDS)[number]
@@ -24,6 +25,24 @@ interface Taxonomy {
   byKind: Record<Kind, number>
   byProject: Array<Row & { project: string }>
   byModel: Array<Row & { model: string }>
+  calibration?: Calibration[]
+}
+interface Calibration {
+  model: string
+  verified: number
+  contradicted: number
+  unverified: number
+  flaky: number
+  score?: number
+  few: boolean
+}
+
+/** D-078: a model's claim calibration in words. */
+export function calibrationText(c: Calibration): string {
+  const checked = c.verified + c.contradicted
+  if (c.score === undefined) return `No claim of ${c.model}'s could be checked yet (${c.unverified} unchecked).`
+  const extra = [c.unverified ? `${c.unverified} could not be checked` : "", c.flaky ? `${c.flaky} met flaky tests` : ""].filter(Boolean).join(", ")
+  return `${Math.round(c.score * 100)}% of ${c.model}'s checked claims held (${c.verified} of ${checked})${extra ? `; ${extra}` : ""}${c.few ? ". Too few to go on yet" : ""}.`
 }
 
 function Table({ label, rows }: { label: string; rows: Array<Row & { name: string }> }) {
@@ -88,6 +107,16 @@ export function FailureTaxonomy({ days }: { days: number }) {
           <Table label="By model" rows={t.byModel.map((m) => ({ ...m, name: m.model }))} />
         </>
       )}
+      {t.calibration?.length ? (
+        <div className="grid gap-1">
+          <h3 className="m-0 text-[15px]">How often each model's "done" held</h3>
+          <ul className="m-0 grid list-none gap-0.5 p-0 text-[13px]">
+            {t.calibration.map((c) => (
+              <li key={c.model}>{calibrationText(c)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   )
 }

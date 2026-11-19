@@ -1,5 +1,5 @@
 import { RememberFor } from "@gatehouse/shared/ws-protocol"
-import { failureTaxonomy } from "./failure-taxonomy.js"
+import { claimCalibration, failureTaxonomy } from "./failure-taxonomy.js"
 import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
@@ -1961,7 +1961,9 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
   app.get("/api/insights/failures", async (req) => {
     const days = Math.min(90, Math.max(1, Number((req.query as { days?: string }).days ?? 30) || 30))
     const to = Date.now()
-    return { days, ...failureTaxonomy(recordsSince(ctx.auditDir, to - days * DAY)) }
+    const records = recordsSince(ctx.auditDir, to - days * DAY)
+    // D-078: with each model's claim calibration.
+    return { days, ...failureTaxonomy(records), calibration: claimCalibration(records) }
   })
 
   // D-077: the instruction blocks a session never used, with the project's recent sessions for comparison.
