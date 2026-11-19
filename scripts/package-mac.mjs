@@ -43,6 +43,16 @@ const run = (cmd, a, opts = {}) => {
   if (r.status !== 0) throw new Error(`${cmd} ${a.join(" ")} failed (${r.status})`)
 }
 
+/**
+ * A copy of the app, its links as links and its executable bits kept, without extended attributes, then its seal checked.
+ * Owner, 19 Nov: cp, not ditto. Digital Guardian stops ditto writing a file it has tagged (mermaid.min.js) into
+ * Applications, and lets cp; the app's signature is inside the bundle and needs no extended attribute.
+ */
+const copyApp = (from, to) => {
+  run("/bin/cp", ["-R", "-X", from, to])
+  run("/usr/bin/codesign", ["--verify", "--strict", to])
+}
+
 if (process.platform !== "darwin") throw new Error("Codehouse.app is built on a Mac.")
 const arch = process.arch === "arm64" ? "arm64" : process.arch === "x64" ? "x64" : undefined
 if (!arch) throw new Error(`There is no Mac build for ${process.arch}.`)
@@ -95,17 +105,23 @@ if (!has("--swift-only")) {
   // The application folder, staged by upstream's packager so the two packages hold the same files.
   const stage = path.join(out, ".mac-stage")
   fs.rmSync(stage, { recursive: true, force: true })
-  run(
-    process.execPath,
-    [
-      path.join(root, "scripts", "package.mjs"),
-      "--stage-only",
-      "--out",
-      stage,
-      ...(has("--skip-build") ? ["--skip-build"] : []),
-    ],
-    { cwd: root },
-  )
+  const stageArgs = (skip) => [
+    path.join(root, "scripts", "package.mjs"),
+    "--stage-only",
+    "--out",
+    stage,
+    ...(skip ? ["--skip-build"] : []),
+  ]
+  try {
+    run(process.execPath, stageArgs(has("--skip-build")), { cwd: root })
+  } catch {
+    // A file the web build has just written can be held for a moment by endpoint security software tagging it
+    // (Digital Guardian, 19 Nov: EPERM copying mermaid.min.js). The build is done, so it is staged once more after a pause.
+    say("staging failed; trying once more in 15 seconds, with the build already done")
+    spawnSync("/bin/sleep", ["15"])
+    fs.rmSync(stage, { recursive: true, force: true })
+    run(process.execPath, stageArgs(true), { cwd: root })
+  }
   fs.rmSync(appBundle, { recursive: true, force: true })
   fs.mkdirSync(path.join(contents, "MacOS"), { recursive: true })
   fs.mkdirSync(resources, { recursive: true })
@@ -206,7 +222,7 @@ if (has("--check")) {
 if (has("--dmg")) {
   const dmg = path.join(out, `Codehouse-${version}.dmg`)
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "gh-dmg-"))
-  run("/usr/bin/ditto", [appBundle, path.join(folder, "Codehouse.app")])
+  copyApp(appBundle, path.join(folder, "Codehouse.app"))
   fs.symlinkSync("/Applications", path.join(folder, "Applications"))
   fs.writeFileSync(
     path.join(folder, "Read me.txt"),
@@ -382,7 +398,7 @@ function install() {
   const staging = path.join(dir, ".codehouse-installing")
   fs.rmSync(staging, { recursive: true, force: true })
   fs.mkdirSync(staging)
-  run("/usr/bin/ditto", [appBundle, path.join(staging, "Codehouse.app")])
+  copyApp(appBundle, path.join(staging, "Codehouse.app"))
   if (running) return installWhenQuit(program, staging, dest)
   fs.rmSync(dest, { recursive: true, force: true })
   fs.renameSync(path.join(staging, "Codehouse.app"), dest)

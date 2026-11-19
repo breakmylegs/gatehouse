@@ -56,11 +56,12 @@ async function main(): Promise<void> {
   say(`installing ${v} in ${place}`)
   fs.rmSync(place, { recursive: true, force: true })
   fs.mkdirSync(place, { recursive: true })
-  execFileSync("/usr/bin/ditto", [built, app])
+  execFileSync("/bin/cp", ["-R", "-X", built, app])
 
   say(`making ${next}${broken ? ", which cannot start its Host," : ""} and signing it as a Mac release`)
   const nextApp = path.join(work, "build", "Codehouse.app")
-  execFileSync("/usr/bin/ditto", [built, nextApp])
+  fs.mkdirSync(path.dirname(nextApp), { recursive: true })
+  execFileSync("/bin/cp", ["-R", "-X", built, nextApp])
   execFileSync("/usr/bin/plutil", ["-replace", "CodehouseVersion", "-string", next, path.join(nextApp, "Contents", "Info.plist")])
   if (broken) {
     const main = path.join(nextApp, "Contents", "Resources", "app", "apps", "host", "dist", "main.mjs")
