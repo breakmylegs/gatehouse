@@ -3,6 +3,7 @@ import { failureTaxonomy } from "./failure-taxonomy.js"
 import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
+import { deadCode } from "./dead-code.js"
 import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
@@ -1976,6 +1977,14 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     if (!root) return reply.code(404).send({ error: "That session is not running." })
     const map = personalDataMap(root, await listFiles(root).catch(() => [] as string[]))
     return { ...map, markdown: legalDraft(map) }
+  })
+
+  // D-068: dead code in a session's project, with static and coverage evidence and removal in small slices.
+  app.get("/api/insights/dead-code", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    const root = ctx.sessionCwd?.(id)
+    if (!root) return reply.code(404).send({ error: "That session is not running." })
+    return deadCode(root, await listFiles(root).catch(() => [] as string[]))
   })
 
   app.get("/api/digest", async () => {

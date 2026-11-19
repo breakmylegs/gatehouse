@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { FailureTaxonomy } from "../components/FailureTaxonomy"
 import { Hotspots } from "../components/Hotspots"
 import { PersonalData } from "../components/PersonalData"
+import { DeadCode } from "../components/DeadCode"
 import {
   Bar,
   BarChart,
@@ -259,6 +260,7 @@ export function Insights() {
       <FailureTaxonomy days={days} />
       <Hotspots />
       <PersonalData />
+      <DeadCode />
 
       <section aria-label="Suggested rules" className="grid gap-2">
         <h2 className="m-0 text-[18px]">Suggested rules</h2>

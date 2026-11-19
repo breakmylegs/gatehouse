@@ -175,7 +175,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-051 | Personal data flow map | built | feat/c057 | apps/host/test/personal-data.test.ts | A draft: fields by name pattern followed to logs, storage and network calls on the same statement; scope and fields as Markdown for legal review; on Insights |
 | D-063 | Package provenance verification | built safe variant | feat/c057 | packages/policy/test/nuget-signature.test.ts | A new NuGet package whose .nupkg here has no .signature.p7s escalates as nuget-unsigned (risk 76), offline; validity by dotnet nuget verify and npm provenance listed |
 | D-065 | Test impact analysis | built | feat/d065 | apps/companion/test/test-impact.test.ts | affected_tests in coding sessions (rule test-impact-tools): imports plus shared history, a subset; release runs the invariant tests per owner 13 Nov (deviation recorded) |
-| D-068 | Dead code with evidence | todo | | | |
+| D-068 | Dead code with evidence | built | feat/d068 | apps/host/test/dead-code.test.ts | Insights, Dead code: unreferenced and tests-only exports, unimported files, coverage evidence; removal in slices of a file or five names |
 | D-073 | Undo-learning loop | todo | | | |
 | D-074 | Behaviour regression for Claude Code upgrades | todo | | | |
 | D-076 | Cost per outcome | todo | | | |
