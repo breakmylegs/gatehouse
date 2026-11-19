@@ -4,7 +4,7 @@ import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
 import { deadCode } from "./dead-code.js"
-import { outcomes } from "./outcomes.js"
+import { measuredTime, outcomes } from "./outcomes.js"
 import { contextReport, projectBlocks } from "./context-efficiency.js"
 import { staleInstructions } from "./stale-instructions.js"
 import { glossary } from "./glossary.js"
@@ -1975,6 +1975,24 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     if (!cwd) return reply.code(404).send({ error: "That session is not running." })
     const root = TestLocks.rootOf(cwd)
     return glossary(root, await listFiles(root).catch(() => [] as string[]))
+  })
+
+  // D-090: Claude's measured time per change in this period, against your own baseline, the period before it.
+  app.get("/api/insights/time", async (req, reply) => {
+    if (!ctx.usage) return bad(reply, 501, "Usage is not available here.")
+    const days = Math.min(90, Math.max(7, Number((req.query as { days?: string }).days ?? 30) || 30))
+    const to = Date.now()
+    const split = to - days * DAY
+    const records = recordsSince(ctx.auditDir, to - 2 * days * DAY)
+    const window = (from: number, until: number) =>
+      outcomes(
+        applyPricing(ctx.usage!.report(localDay(new Date(from + DAY)), localDay(new Date(until))), ctx.config().modelPricing),
+        records.filter((r) => {
+          const t = Date.parse(r.ts)
+          return t > from && t <= until
+        }),
+      )
+    return measuredTime(window(split, to), window(to - 2 * days * DAY, split), days)
   })
 
   // D-077: the instruction blocks a session never used, with the project's recent sessions for comparison.

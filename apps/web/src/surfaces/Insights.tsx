@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { FailureTaxonomy } from "../components/FailureTaxonomy"
 import { Outcomes } from "../components/Outcomes"
+import { MeasuredTime } from "../components/MeasuredTime"
 import { Hotspots } from "../components/Hotspots"
 import { PersonalData } from "../components/PersonalData"
 import { DeadCode } from "../components/DeadCode"
@@ -263,6 +264,7 @@ export function Insights() {
 
       <FailureTaxonomy days={days} />
       <Outcomes days={days} />
+      <MeasuredTime days={days} />
       <Hotspots />
       <PersonalData />
       <DeadCode />

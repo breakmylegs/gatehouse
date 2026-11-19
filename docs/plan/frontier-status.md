@@ -188,7 +188,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-083 | Ubiquitous language glossary | built | feat/d068 | apps/host/test/glossary.test.ts, apps/web/test/glossary.test.tsx | Insights, The project's words: name vocabulary and synonym clashes (built-in groups plus .codehouse/glossary.yml) |
 | D-084 | Adversarial pair | todo | | | Needs C-043 and C-044 (todo); built after them in queue section 7 |
 | D-086 | Local judge for claims | built | feat/d068 | apps/host/test/claim-judge.test.ts | Built-in hard-coded-answer check, optional model on this computer (never a gateway); flag or escalate only, lowers Verified to Unverified; T158 |
-| D-090 | Measured time panel | todo | | | |
+| D-090 | Measured time panel | built | feat/d068 | apps/host/test/outcomes.test.ts, apps/web/test/measured-time.test.ts | Insights: Claude's measured minutes per change as an interval against the period before; faster or slower only with enough of both |
 | D-099 | Evidence-backed stakeholder summary | todo | | | |
 
 ## Wave 6: enterprise and large items

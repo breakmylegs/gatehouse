@@ -1,7 +1,7 @@
 // D-076 and D-100: the cost of an accepted change includes its rework (spend on undone work, failed test runs and
 // sessions that changed nothing), and an estimate gives a range with its sample size, or says there is too little.
 import { describe, expect, it } from "vitest"
-import { estimateFrom, MIN_SAMPLES, outcomes } from "../src/outcomes.js"
+import { estimateFrom, measuredTime, MIN_SAMPLES, outcomes } from "../src/outcomes.js"
 import type { UsageReport, UsageTotals } from "../src/usage.js"
 
 const totals = (costUsd: number, durationMs = 0): UsageTotals => ({ costUsd, durationMs, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, turns: 1, results: 1 })
@@ -34,7 +34,7 @@ describe("cost per outcome (D-076)", () => {
     expect(o.projects).toEqual([
       expect.objectContaining({ project: "shop", costUsd: 4, changes: 2, costPerChange: 2, undos: 2, failedTestRuns: 2, sessions: 3, sessionsWithoutChange: 1, costWithoutChange: 1 }),
     ])
-    expect(o.total).toEqual({ costUsd: 4, changes: 2, costPerChange: 2, undos: 2, failedTestRuns: 2 })
+    expect(o.total).toEqual({ costUsd: 4, changes: 2, costPerChange: 2, undos: 2, failedTestRuns: 2, estimate: { samples: 2, enough: false } })
   })
 
   it("gives no cost per change when nothing was committed", () => {
@@ -61,5 +61,30 @@ describe("estimates from history (D-100)", () => {
     const records = [1, 2, 3, 4, 5].flatMap((n) => [rec(`s${n}`, "commit_lineage_noted"), rec(`s${n}`, "commit_lineage_noted")])
     const e = outcomes({ from: "a", to: "b", days, daysWithoutCells: {} }, records).projects[0]!.estimate
     expect(e).toEqual({ samples: 5, enough: true, costUsd: { low: 1, median: 3, high: 5 }, minutes: { low: 1, median: 3, high: 5 } })
+  })
+})
+
+describe("measured time against your baseline (D-090)", () => {
+  const period = (minutes: number[], project = "api") => {
+    const days = { d: Object.fromEntries(minutes.map((m, i) => [`${project}${m}-${i}`, cell(project, 1, m * 60_000)])) }
+    const records = minutes.map((m, i) => rec(`${project}${m}-${i}`, "commit_lineage_noted"))
+    return outcomes({ from: "a", to: "b", days, daysWithoutCells: {} }, records)
+  }
+
+  it("shows this period's interval against the period before, and says faster or slower only with enough of both", () => {
+    const t = measuredTime(period([4, 5, 6, 7, 8]), period([10, 12, 14, 16, 18]), 30)
+    expect(t.overall).toMatchObject({ now: { samples: 5, minutes: { low: 4, median: 6, high: 8 } }, baseline: { samples: 5, minutes: { median: 14 } }, trend: "faster" })
+    expect(t.projects.map((p) => [p.project, p.trend])).toEqual([["api", "faster"]])
+    expect(measuredTime(period([10, 12, 14, 16, 18]), period([4, 5, 6, 7, 8]), 30).overall.trend).toBe("slower")
+    expect(measuredTime(period([10, 11, 12, 13, 14]), period([10, 11, 13, 13, 14]), 30).overall.trend).toBe("about the same")
+    expect(measuredTime(period([4, 5, 6, 7, 8]), period([10, 12]), 30).overall).toMatchObject({ baseline: { samples: 2, enough: false }, trend: "not enough history" })
+  })
+
+  it("lists a project that worked only in one of the two periods", () => {
+    const t = measuredTime(period([4, 5, 6, 7, 8], "api"), period([9, 9, 9, 9, 9], "site"), 30)
+    expect(t.projects.map((p) => [p.project, p.now.samples, p.baseline.samples])).toEqual([
+      ["api", 5, 0],
+      ["site", 0, 5],
+    ])
   })
 })

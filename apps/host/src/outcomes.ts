@@ -40,7 +40,7 @@ export interface ProjectOutcomes {
 export interface Outcomes {
   from: string
   to: string
-  total: { costUsd: number; changes: number; costPerChange?: number; undos: number; failedTestRuns: number }
+  total: { costUsd: number; changes: number; costPerChange?: number; undos: number; failedTestRuns: number; estimate: Estimate }
   projects: ProjectOutcomes[]
 }
 
@@ -77,6 +77,48 @@ export function estimateFrom(costs: number[], minutes: number[]): Estimate {
   return { samples: n, enough: true, costUsd: band(costs), ...(minutes.length === n ? { minutes: band(minutes) } : {}) }
 }
 
+/**
+ * D-090: Claude's measured time per change (the usage data's own durations, nothing estimated) in this period, as an
+ * interval, against your own baseline: the same measure over the period just before. It is worked out here from data
+ * on this computer and goes nowhere else. "faster" or "slower" only when both have enough samples and the medians
+ * differ by a fifth or more; otherwise "about the same", or "not enough history".
+ */
+export interface TimeRow {
+  project: string
+  now: Estimate
+  baseline: Estimate
+  trend: "faster" | "slower" | "about the same" | "not enough history"
+}
+export interface MeasuredTime {
+  days: number
+  overall: TimeRow
+  projects: TimeRow[]
+}
+
+export function trendOf(now: Estimate, baseline: Estimate): TimeRow["trend"] {
+  const a = now.minutes?.median
+  const b = baseline.minutes?.median
+  // An estimate has an interval only with enough samples.
+  if (a === undefined || b === undefined) return "not enough history"
+  if (b === 0) return a === 0 ? "about the same" : "slower"
+  const r = a / b
+  return r <= 0.8 ? "faster" : r >= 1.25 ? "slower" : "about the same"
+}
+
+export function measuredTime(now: Outcomes, before: Outcomes, days: number): MeasuredTime {
+  const none: Estimate = { samples: 0, enough: false }
+  const names = [...new Set([...now.projects.map((p) => p.project), ...before.projects.map((p) => p.project)])]
+  const row = (project: string, a: Estimate, b: Estimate): TimeRow => ({ project, now: a, baseline: b, trend: trendOf(a, b) })
+  return {
+    days,
+    overall: row("All projects", now.total.estimate, before.total.estimate),
+    projects: names
+      .map((n) => row(n, now.projects.find((p) => p.project === n)?.estimate ?? none, before.projects.find((p) => p.project === n)?.estimate ?? none))
+      .filter((r) => r.now.samples || r.baseline.samples)
+      .sort((a, b) => b.now.samples - a.now.samples || a.project.localeCompare(b.project)),
+  }
+}
+
 /** Outcomes over a usage report's days and the audit records of the same days. */
 export function outcomes(report: UsageReport, records: Rec[]): Outcomes {
   const sessions = new Map<string, SessionTally>()
@@ -101,15 +143,21 @@ export function outcomes(report: UsageReport, records: Rec[]): Outcomes {
     else if (UNDO.has(r.event)) s.undos++
     else if (r.event === "tool_failed" && isTest(r)) s.failed++
   }
+  const round = (n: number) => Math.round(n * 10000) / 10000
+  const sampleOf = (list: SessionTally[]) => {
+    const withChange = list.filter((s) => s.changes > 0)
+    return estimateFrom(
+      withChange.map((s) => round(s.costUsd / s.changes)),
+      withChange.filter((s) => s.durationMs > 0).map((s) => Math.round(s.durationMs / s.changes / 60_000)),
+    )
+  }
   const byProject = new Map<string, SessionTally[]>()
   for (const s of sessions.values()) byProject.set(s.project, [...(byProject.get(s.project) ?? []), s])
-  const round = (n: number) => Math.round(n * 10000) / 10000
   const projects: ProjectOutcomes[] = []
   for (const [project, list] of byProject) {
     const costUsd = list.reduce((a, s) => a + s.costUsd, 0)
     const changes = list.reduce((a, s) => a + s.changes, 0)
     const without = list.filter((s) => !s.changes)
-    const withChange = list.filter((s) => s.changes > 0)
     projects.push({
       project,
       costUsd: round(costUsd),
@@ -120,10 +168,7 @@ export function outcomes(report: UsageReport, records: Rec[]): Outcomes {
       sessions: list.length,
       sessionsWithoutChange: without.length,
       costWithoutChange: round(without.reduce((a, s) => a + s.costUsd, 0)),
-      estimate: estimateFrom(
-        withChange.map((s) => round(s.costUsd / s.changes)),
-        withChange.filter((s) => s.durationMs > 0).map((s) => Math.round(s.durationMs / s.changes / 60_000)),
-      ),
+      estimate: sampleOf(list),
     })
   }
   projects.sort((a, b) => b.costUsd - a.costUsd || a.project.localeCompare(b.project))
@@ -138,6 +183,7 @@ export function outcomes(report: UsageReport, records: Rec[]): Outcomes {
       ...(changes ? { costPerChange: round(costUsd / changes) } : {}),
       undos: projects.reduce((a, p) => a + p.undos, 0),
       failedTestRuns: projects.reduce((a, p) => a + p.failedTestRuns, 0),
+      estimate: sampleOf([...sessions.values()]),
     },
     projects,
   }
