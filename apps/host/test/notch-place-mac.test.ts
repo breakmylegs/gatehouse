@@ -14,6 +14,7 @@ let dir: string
 let exe: string
 const SCREEN = ["-664", "0", "-1512", "0", "52"]
 const wingX = (...windows: string[]) => Number(execFileSync(exe, [...SCREEN, ...windows]).toString().trim())
+const startOn = (screen: string[], ...windows: string[]) => execFileSync(exe, ["start", ...screen, ...windows]).toString().trim()
 
 beforeAll(() => {
   if (!can) return
@@ -45,3 +46,24 @@ describe.skipIf(!can)("where the wing beside the notch goes", () => {
     expect(wingX("-700,0,700,26,0")).toBe(-52)
   })
 })
+
+// 19 Nov: on an external display Vorssaint draws its shape in the middle of the menu bar, and the wing went under the menu
+// bar instead of beside it. The numbers are David's two displays: 0 to 1920 and 1920 to 3840, both with their top at 0.
+describe.skipIf(!can)("where the wing goes on a screen without a notch", () => {
+  const menuBar = ["0,0,1920,30,24", "0,0,1920,35,24", "1612,0,33,30,25", "1780,0,140,30,25"].map((w) => `${w},0`)
+  it("beside another app's shape at the top, stepping right of it", () => {
+    expect(startOn(["0", "0", "1920"], "825,0,269,26,0", ...menuBar)).toBe("825")
+    const x = Number(execFileSync(exe, ["825", "0", "0", "1920", "52", "825,0,269,26,0", ...menuBar]).toString().trim())
+    expect(x).toBe(1098)
+    // The other display: only the shape on that screen counts.
+    expect(startOn(["0", "1920", "3840"], "825,0,269,26,0", "2746,0,268,26,0", ...menuBar)).toBe("2746")
+  })
+
+  it("under the menu bar when nothing but the menu bar is there, or only its own window", () => {
+    expect(startOn(["0", "0", "1920"], ...menuBar)).toBe("none")
+    expect(startOn(["0", "0", "1920"], "900,0,60,26,1", ...menuBar)).toBe("none")
+    // A shape lower down the screen is not at the top.
+    expect(startOn(["0", "0", "1920"], "825,400,269,26,0")).toBe("none")
+  })
+})
+

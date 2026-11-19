@@ -49,22 +49,28 @@
 .notch[data-free] .notch-list {
   border-radius: 0 16px 16px 16px;
 }
-/* The highest risk waiting, as a colour; the button's label says it in words, and the count says how many. */
+/* The fighter's face (owner, 19 Nov), ringed with the highest risk waiting as a colour; the button's label says it in
+   words, and the count says how many. */
 .notch-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #34c759;
+  --ring: #34c759;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 4px;
+  background-repeat: no-repeat;
+  image-rendering: pixelated;
+  transform: scaleX(-1);
+  box-shadow: 0 0 0 1.5px var(--ring);
 }
 .notch[data-risk="moderate"] .notch-dot {
-  background: #ffb347;
+  --ring: #ffb347;
 }
 .notch[data-risk="high"] .notch-dot,
 .notch[data-risk="severe"] .notch-dot {
-  background: #ff6961;
+  --ring: #ff6961;
 }
 .notch[data-risk="severe"] .notch-dot {
-  box-shadow: 0 0 0 2px #000, 0 0 0 3.5px #ff6961;
+  box-shadow: 0 0 0 1.5px var(--ring), 0 0 0 3px #000, 0 0 0 4.5px var(--ring);
 }
 .notch-list {
   display: grid;
