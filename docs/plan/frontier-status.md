@@ -186,8 +186,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-081 | Why is this code like this | built | feat/d068 | apps/host/test/why.test.ts | File view: Why is line N like this? cites the blamed commit, its Codehouse note and evidence, and ADRs (same session, naming the commit, covering the file) |
 | D-082 | Stale instruction detector | built | feat/d068 | apps/host/test/stale-instructions.test.ts | Insights, Instructions: backticked code names no code file has, missing paths and npm scripts, with the commit that removed a name |
 | D-083 | Ubiquitous language glossary | built | feat/d068 | apps/host/test/glossary.test.ts, apps/web/test/glossary.test.tsx | Insights, The project's words: name vocabulary and synonym clashes (built-in groups plus .codehouse/glossary.yml) |
-| D-084 | Adversarial pair | todo | | | |
-| D-086 | Local judge for claims | todo | | | |
+| D-084 | Adversarial pair | todo | | | Needs C-043 and C-044 (todo); built after them in queue section 7 |
+| D-086 | Local judge for claims | built | feat/d068 | apps/host/test/claim-judge.test.ts | Built-in hard-coded-answer check, optional model on this computer (never a gateway); flag or escalate only, lowers Verified to Unverified; T158 |
 | D-090 | Measured time panel | todo | | | |
 | D-099 | Evidence-backed stakeholder summary | todo | | | |
 

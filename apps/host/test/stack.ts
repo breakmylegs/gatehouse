@@ -34,6 +34,7 @@ export interface StackOptions {
   instructions?: SessionDeps["instructions"]
   /** D-009: stands in for Codehouse's own actions. */
   codehouseAction?: SessionDeps["codehouseAction"]
+  judgeClaim?: SessionDeps["judgeClaim"]
   /** D-025: a shorter dead-man minute and look, for tests. */
   deadman?: { minuteMs: number; lookMs: number }
 }
@@ -178,6 +179,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
     ...(opts.locks ? { locks: opts.locks } : {}),
     ...(opts.instructions ? { instructions: opts.instructions } : {}),
     ...(opts.codehouseAction ? { codehouseAction: opts.codehouseAction } : {}),
+    ...(opts.judgeClaim ? { judgeClaim: opts.judgeClaim } : {}),
     ...(opts.deadman ? { deadmanMinuteMs: opts.deadman.minuteMs, deadmanLookMs: opts.deadman.lookMs } : {}),
     limitCheck: async () => {
       await hooks.limitCheck?.()

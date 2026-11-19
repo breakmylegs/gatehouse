@@ -13,6 +13,7 @@ import {
   RUNTIME_FIELDS,
   type LocalRuntimeConfig,
 } from "./local-runtime.js"
+import { judgeRuntime } from "../claim-judge.js"
 
 type Providers = NonNullable<GatehouseConfig["providers"]>
 
@@ -39,6 +40,7 @@ export function registerProviderRoutes(
     return {
       enabled,
       ...(p?.boundaries ? { boundaries: p.boundaries } : {}),
+      ...(p?.claimJudge ? { claimJudge: p.claimJudge.model } : {}),
       ...(local ? { local, label: runtimeLabel(local) } : {}),
       ...(enabled && local
         ? { check: await checkRuntime(local, ctx.fetchFn, ctx.itModels?.()) }
@@ -163,7 +165,7 @@ export function registerProviderRoutes(
   app.put("/api/providers", async (req, reply) => {
     const file = ctx.configFile
     if (!file) return reply.code(404).send({ error: "Settings cannot be saved here." })
-    const b = (req.body ?? {}) as { enabled?: unknown; local?: unknown }
+    const b = (req.body ?? {}) as { enabled?: unknown; local?: unknown; claimJudge?: unknown }
     if (typeof b.enabled !== "boolean")
       return reply.code(400).send({ error: "Say whether other providers are on." })
     // A runtime's settings carry no key, token or password: a gateway holds those itself (ADR 0010, invariant 6).
@@ -179,6 +181,7 @@ export function registerProviderRoutes(
     const candidate = GatehouseConfig.shape.providers.safeParse({
       multi: { enabled: b.enabled },
       ...(b.local ? { local: b.local } : {}),
+      ...(typeof b.claimJudge === "string" && b.claimJudge ? { claimJudge: { model: b.claimJudge } } : {}),
     })
     if (!candidate.success)
       return reply.code(422).send({
@@ -188,6 +191,9 @@ export function registerProviderRoutes(
     const next = candidate.data as Providers
     const where = next.local ? addressProblem(next.local.url) : undefined
     if (where) return reply.code(422).send({ error: where })
+    // D-086: the claims judge sees a change's diff, so only a model listed on a runtime on this computer, never a gateway.
+    if (next.claimJudge && !judgeRuntime(next.local as LocalRuntimeConfig | undefined, next.claimJudge.model))
+      return reply.code(422).send({ error: "The claims judge must be one of the models you list, on a runtime on this computer (not a gateway)." })
     const recorded = await ctx.audit.record({
       session: "desktop",
       event: "providers_changed",
@@ -199,6 +205,7 @@ export function registerProviderRoutes(
         ...(next.local
           ? { kind: next.local.kind, models: next.local.models.map((m) => m.name) }
           : {}),
+        ...(next.claimJudge ? { claimJudge: next.claimJudge.model } : {}),
       },
       verdict: {
         outcome: "allow",
@@ -221,8 +228,10 @@ export function registerProviderRoutes(
     }
     const merged = {
       ...onDisk,
-      providers: { ...((onDisk.providers as object | undefined) ?? {}), ...next },
+      providers: { ...((onDisk.providers as object | undefined) ?? {}), ...next } as Record<string, unknown>,
     }
+    // D-086: turned off when the page sends none; an older page that does not know it leaves it as it was.
+    if (!next.claimJudge && (b.claimJudge === "" || b.claimJudge === null)) delete merged.providers.claimJudge
     fs.mkdirSync(path.dirname(file), { recursive: true })
     await writeFileAtomic(file, JSON.stringify(merged, null, 2) + "\n")
     ;(ctx.config() as { providers?: Providers }).providers = merged.providers as Providers

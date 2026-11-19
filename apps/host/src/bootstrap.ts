@@ -6,6 +6,7 @@ import { EvidenceService, EvidenceStore } from "./evidence.js"
 import { AnchorService } from "./anchors.js"
 import { SastCommitGuard } from "./sast.js"
 import { InstructionPins } from "./instruction-pins.js"
+import { makeClaimJudge } from "./claim-judge-run.js"
 import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
@@ -849,6 +850,8 @@ export function createHost(opts: HostOptions = {}): Host {
       extreme: () => manager.get(r.sessionId)?.info().extreme === true,
       ...(limitsExe ? { limitsExe } : {}),
     })
+  // D-086: a passing claim is judged for reward hacks, with a model on this computer when you chose one.
+  deps.judgeClaim = makeClaimJudge({ config: () => config, redact: (t) => redactString(t, { terms: config.redactTerms }) })
   // Section 6: what Codehouse runs itself is judged, run without credentials in a job at the session's level, and
   // stopped by the kill switch.
   const actionFor = (sessionId: string, why = "this project's held-out checks"): HeldOutExec => async (command, cwd, timeoutMs) => {

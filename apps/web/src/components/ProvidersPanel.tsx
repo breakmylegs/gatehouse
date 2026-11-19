@@ -18,6 +18,8 @@ interface ProvidersView {
   local?: LocalRuntime
   check?: Check
   boundaries?: Boundaries
+  /** D-086: the model that also judges Claude's done-claims. */
+  claimJudge?: string
 }
 
 /** The providers block as the settings file holds it, for the settings page's next save. */
@@ -25,6 +27,7 @@ const blockOf = (v: ProvidersView) => ({
   multi: { enabled: v.enabled },
   ...(v.local ? { local: v.local } : {}),
   ...(v.boundaries ? { boundaries: v.boundaries } : {}),
+  ...(v.claimJudge ? { claimJudge: { model: v.claimJudge } } : {}),
 })
 
 /** "name" or "name sha256:digest", one a line. */
@@ -53,11 +56,13 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
   const [forwardsTo, setForwardsTo] = useState("")
   const [keeps, setKeeps] = useState<NonNullable<LocalRuntime["keeps"]>>("unknown")
   const gateway = kind === "gateway"
+  const [claimJudge, setClaimJudge] = useState("")
   const [busy, setBusy] = useState(false)
 
   const show = (v: ProvidersView) => {
     setView(v)
     setEnabled(v.enabled)
+    setClaimJudge(v.claimJudge ?? "")
     if (v.local) {
       setKind(v.local.kind)
       setUrl(v.local.url)
@@ -85,6 +90,8 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
             },
           }
         : {}),
+      // D-086: none turns it off.
+      claimJudge: !gateway && list.some((m) => m.name === claimJudge) ? claimJudge : "",
     })
     setBusy(false)
     if (!r.ok || !r.data) {
@@ -198,6 +205,22 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
           onChange={(e) => setModels(e.target.value)}
         />
       </label>
+      {!gateway ? (
+        <label className="grid gap-1 text-sm">
+          <span>Also check Claude&apos;s &quot;done&quot; for reward hacks with</span>
+          <select className="field w-fit" value={claimJudge} onChange={(e) => setClaimJudge(e.target.value)}>
+            <option value="">No model (the built-in check still runs)</option>
+            {parseModels(models).map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-mut">
+            It reads the change&apos;s diff on this computer and can only lower a claim to Unverified, never pass one.
+          </span>
+        </label>
+      ) : null}
       <div>
         <button type="button" className="btn" disabled={busy} onClick={() => void save()}>
           {busy ? "Checking…" : "Save and check"}

@@ -281,6 +281,11 @@ function build(loose: boolean) {
           .max(20),
       }).optional(),
       /**
+       * D-086: a model on the runtime above that also judges Claude's done-claims for reward hacks. Only a runtime on
+       * this computer (never a gateway), only a model listed there; it can only lower a claim, never raise one.
+       */
+      claimJudge: obj({ model: z.string().regex(/^[\w.:/-]{1,100}$/) }).optional(),
+      /**
        * Where your words go, for each provider (B17): what it keeps, whether it trains on them, where, whether it has
        * zero data retention, and when and where you checked. Codehouse cannot see these itself; you record them.
        */

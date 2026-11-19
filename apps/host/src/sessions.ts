@@ -15,6 +15,7 @@ import { freshSeed, seedEnv, seededCommand } from "./seeds.js"
 import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
 import { InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
+import { afterJudge, type JudgeResult } from "./claim-judge.js"
 import type { InjectionFinding } from "./injection-scan.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
@@ -523,6 +524,8 @@ export interface SessionDeps {
   deadmanLookMs?: number
   /** Section 6: runs a command as Codehouse's own action (D-009's claim checks). */
   codehouseAction?: (r: ActionRequest) => Promise<ActionResult>
+  /** D-086: judges a passing done-claim for reward hacks; it can only flag or escalate. */
+  judgeClaim?: (o: { cwd: string; claim: string }) => Promise<JudgeResult>
   account: AccountMonitor
   /** Owner, 9 Nov: one look at the limits now, so a bypass that has run out pauses the session at once. */
   limitCheck?: () => Promise<void>
@@ -1935,6 +1938,16 @@ export class Session extends EventEmitter<SessionEvents> {
       }
       const flaky = tries !== undefined && tries.some((t) => t.passed)
       if (flaky) why = `${why}; it passed ${tries!.filter((t) => t.passed).length} of ${tries!.length} runs, so the tests are flaky`
+      // D-086: a passing check is judged for reward hacks; a flag or an escalation can only lower it to Unverified.
+      let judged: JudgeResult | undefined
+      if (outcome === "verified" && (c.kind === "tests" || c.kind === "fixed") && this.#deps.judgeClaim) {
+        const j = await this.#deps.judgeClaim({ cwd: this.cwd, claim: c.quote }).catch((): JudgeResult => ({ outcome: "escalate", reasons: ["the claims judge failed"] }))
+        if (j.outcome !== "none") {
+          outcome = afterJudge(outcome, j)
+          why = `${why}, but the claims judge ${j.outcome === "flag" ? "flagged it" : "could not decide"}: ${j.reasons.join("; ")}`
+          judged = j
+        }
+      }
       const entry = {
         kind: c.kind,
         quote: c.quote,
@@ -1944,6 +1957,7 @@ export class Session extends EventEmitter<SessionEvents> {
         ...(seeded ? { seed } : {}),
         ...(tries ? { runs: tries } : {}),
         ...(flaky ? { flaky: true } : {}),
+        ...(judged ? { judge: judged } : {}),
       }
       this.#claims = [...this.#claims, entry].slice(-10)
       await this.#deps.audit
