@@ -189,7 +189,15 @@ fs.writeFileSync(path.join(contents, "PkgInfo"), "APPL????")
 // Code keep their makers' own signatures (no --deep); the helper beside the program is signed first, as nested code.
 say("signing for this Mac (ad hoc)")
 run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", limitsHelper])
-run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", appBundle])
+try {
+  run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", appBundle])
+} catch {
+  // As staging (19 Nov): Digital Guardian can hold a file it is still tagging, and codesign is then refused
+  // (Operation not permitted, the first Mac release). Signed once more after a pause.
+  say("signing was refused; trying once more in 15 seconds")
+  spawnSync("/bin/sleep", ["15"])
+  run("/usr/bin/codesign", ["--force", "--sign", "-", "--timestamp=none", appBundle])
+}
 run("/usr/bin/codesign", ["--verify", "--strict", appBundle])
 
 const mb = Math.round(
