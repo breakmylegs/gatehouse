@@ -174,7 +174,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-049 | NFR budgets | built | feat/c057 | apps/host/test/evidence.test.ts | .codehouse/budgets.yml (paths, maxMeanMs); tinybench (Vitest bench) or BenchmarkDotNet found and run as a Codehouse action when a change touches a budget; results in the evidence pack |
 | D-051 | Personal data flow map | built | feat/c057 | apps/host/test/personal-data.test.ts | A draft: fields by name pattern followed to logs, storage and network calls on the same statement; scope and fields as Markdown for legal review; on Insights |
 | D-063 | Package provenance verification | built safe variant | feat/c057 | packages/policy/test/nuget-signature.test.ts | A new NuGet package whose .nupkg here has no .signature.p7s escalates as nuget-unsigned (risk 76), offline; validity by dotnet nuget verify and npm provenance listed |
-| D-065 | Test impact analysis | todo | | | |
+| D-065 | Test impact analysis | built | feat/d065 | apps/companion/test/test-impact.test.ts | affected_tests in coding sessions (rule test-impact-tools): imports plus shared history, a subset; release runs the invariant tests per owner 13 Nov (deviation recorded) |
 | D-068 | Dead code with evidence | todo | | | |
 | D-073 | Undo-learning loop | todo | | | |
 | D-074 | Behaviour regression for Claude Code upgrades | todo | | | |

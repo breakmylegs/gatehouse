@@ -619,6 +619,8 @@ export function createHost(opts: HostOptions = {}): Host {
         // D-037: a coding session's assumptions, kept by its session.
         ...(kind !== "chat"
           ? {
+              // D-065: the tests a change affects, for the inner loop.
+              testImpact: true,
               assumptions: {
                 declare: async (text: string, check?: string) => {
                   const s = manager.get(sessionId)

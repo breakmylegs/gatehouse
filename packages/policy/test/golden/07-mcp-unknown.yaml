@@ -23,6 +23,9 @@
 - { t: mcp__companion__wait_for_session, in: { session: "s2" }, src: sdk, sk: code, o: allow, r: session-wait-tools }
 - { t: mcp__companion__wait_for_session, in: { session: "s2" }, src: sdk, sk: chat, o: escalate, r: no-rule, note: "a chat starts and waits for no sessions" }
 - { t: mcp__companion__declare_assumption, in: { text: "Dates are UTC" }, src: sdk, sk: chat, o: escalate, r: no-rule, note: "D-037: assumptions are for coding sessions" }
+- { t: mcp__companion__affected_tests, in: { files: ["src/a.ts"] }, src: sdk, sk: code, o: allow, r: test-impact-tools }
+- { t: mcp__companion__affected_tests, in: {}, src: sdk, sk: chat, o: escalate, r: no-rule, note: "D-065: a chat has no project tests" }
+- { t: mcp__companion__affected_tests, in: {}, src: user, sk: code, o: escalate, r: no-rule, note: "a server of the same name from your settings is not the Companion" }
 - { t: mcp__companion__read_linked_session, in: { session: "s2" }, src: user, o: escalate, r: no-rule, note: "a server of the same name from your settings is not the Companion" }
 - { t: mcp__companion__read_session, in: {}, src: sdk, sk: code, o: escalate, r: no-rule, note: "only a chat about a code session reads one" }
 - { t: mcp__companion__remember, in: { topic: "Units", text: "metric" }, src: user, o: escalate, r: no-rule, note: "a server of the same name from your settings is not the Companion" }

@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { execFileSync } from "node:child_process"
+import { affectedTests } from "./test-impact.js"
 import { createCheckpoint as defaultCheckpoint } from "@gatehouse/shared/node"
 import type { Policy } from "@gatehouse/policy"
 import type { HostClient } from "./host-client.js"
@@ -96,6 +98,8 @@ export interface CompanionDeps {
   linked?: LinkedReadClient
   /** D-037: a coding session's assumptions. Absent: declare_assumption is not offered. */
   assumptions?: AssumptionClient
+  /** D-065: a coding session's test impact analysis. Absent: affected_tests is not offered. */
+  testImpact?: boolean
   now?: () => number
   checkpoint?: typeof defaultCheckpoint
 }
@@ -152,6 +156,32 @@ export class CompanionHandlers {
       return { text: "Not sent: the Codehouse host could not be reached." }
     }
     return { text: "Sent." }
+  }
+
+  /**
+   * D-065: the tests a change affects, for the inner loop: by imports and by history, from the files given or, when
+   * none are, the changes in the working tree since the last commit. The whole suite still runs before work is done.
+   */
+  async affectedTests(files: string[] | undefined): Promise<ToolText> {
+    const cwd = this.#deps.cwd
+    let changed = (files ?? []).map((f) => f.replace(/\\/g, "/")).filter(Boolean).slice(0, 500)
+    if (!changed.length)
+      try {
+        const git = (...a: string[]) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] })
+        changed = [...git("diff", "--name-only", "HEAD").split(/\r?\n/), ...git("ls-files", "--others", "--exclude-standard").split(/\r?\n/)].map((l) => l.trim()).filter(Boolean)
+      } catch {
+        return { text: "No files were given and this folder is not a git repository, so the changes cannot be read. Name the files you changed." }
+      }
+    if (!changed.length) return { text: "Nothing has changed since the last commit, so no test is affected." }
+    const r = affectedTests(cwd, changed)
+    if (!r.tests.length) return { text: `No test reaches the ${changed.length} changed file(s) through imports or shared history. Of ${r.all} tests, run the ones you judge closest, and the whole suite before you say the work is done.` }
+    return {
+      text: [
+        `${r.tests.length} of the project's ${r.all} tests are affected (${r.byImports} by imports, ${r.byHistory} by shared history):`,
+        ...r.tests.map((t) => `- ${t}`),
+        "Run these while you work. Run the whole suite once before you say the work is done.",
+      ].join("\n"),
+    }
   }
 
   async createCheckpoint(label: string): Promise<ToolText> {
@@ -268,6 +298,7 @@ export interface CompanionToolDef {
     | "start_session"
     | "wait_for_session"
     | "declare_assumption"
+    | "affected_tests"
   description: string
   shape: z.ZodRawShape
   /**
@@ -544,5 +575,22 @@ export const ASSUMPTION_TOOLS: readonly CompanionToolDef[] = [
       openWorldHint: false,
     },
     run: (h, a) => h.declareAssumption(String(a.text ?? ""), typeof a.how_to_check === "string" ? a.how_to_check : undefined),
+  },
+]
+
+/** D-065: test impact analysis, offered to a coding session (CompanionDeps.testImpact). Reads files and git log only. */
+export const TEST_IMPACT_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "affected_tests",
+    description:
+      "List the tests your change affects (by imports and by which tests changed together with these files before), so you can run just those while you iterate. Give the changed files, or none for the working tree's changes since the last commit. Run the whole suite once before you say the work is done.",
+    shape: { files: z.array(z.string().min(1).max(500)).max(500).optional() },
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+    run: (h, a) => h.affectedTests(Array.isArray(a.files) ? a.files.map(String) : undefined),
   },
 ]

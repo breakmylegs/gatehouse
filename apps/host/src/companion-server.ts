@@ -11,6 +11,7 @@ import {
   ROUTINE_DRAFT_TOOLS,
   ORCHESTRATE_TOOLS,
   ASSUMPTION_TOOLS,
+  TEST_IMPACT_TOOLS,
   type CompanionDeps,
 } from "@gatehouse/companion"
 
@@ -36,6 +37,7 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
       ...(deps.routineDrafts ? ROUTINE_DRAFT_TOOLS : []),
       ...(deps.orchestrate ? ORCHESTRATE_TOOLS : []),
       ...(deps.assumptions ? ASSUMPTION_TOOLS : []),
+      ...(deps.testImpact ? TEST_IMPACT_TOOLS : []),
     ].map((def) =>
       tool(
         def.name,
