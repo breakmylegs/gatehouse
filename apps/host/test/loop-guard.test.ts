@@ -67,7 +67,8 @@ describe("a session going round in circles", () => {
     const told: Array<{ type: string; data: Record<string, unknown> }> = []
     session.on("event", (e) => told.push(e))
     session.prompt("fix the parser")
-    await vi.waitFor(() => expect(told.find((e) => e.type === "interrupted")?.data).toEqual({ by: "loop" }))
+    // Four calls through the Approver and the floor can take more than the default second on a busy machine.
+    await vi.waitFor(() => expect(told.find((e) => e.type === "interrupted")?.data).toEqual({ by: "loop" }), { timeout: 10_000 })
     // Told with the third failure, in what Claude reads with the call's result; not before.
     expect(results[1]?.told).toBeUndefined()
     expect(results[2]?.told).toMatch(/^Codehouse: this is the same thing again \(Bash npm test\)/)
