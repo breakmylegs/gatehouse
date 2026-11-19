@@ -19,9 +19,13 @@ interface Routine {
   lastRun?: string
   /** Absent: on a schedule. */
   trigger?: { kind: "commit" | "files" }
+  /** T-119: once, at this local time, instead of on days. */
+  once?: string
+  /** T-119: where each run goes. */
+  into?: "new" | "continue"
 }
 
-type Starts = "schedule" | "commit" | "files"
+type Starts = "schedule" | "once" | "commit" | "files"
 
 /** T-122: a routine a session drafted, for you to read and save, or dismiss. */
 interface Draft {
@@ -34,9 +38,11 @@ interface Draft {
 }
 
 /** When a routine starts, in words. */
-export function startsText(x: Pick<Routine, "time" | "days" | "trigger">): string {
+export function startsText(x: Pick<Routine, "time" | "days" | "trigger"> & { once?: string; into?: string }): string {
   if (x.trigger?.kind === "commit") return "on a new commit"
   if (x.trigger?.kind === "files") return "when files change"
+  if (x.once) return `once, ${new Date(x.once).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
+  if (x.into === "continue") return `${x.time}, ${x.days.join(" ")}, carrying on its last conversation`
   return `${x.time}, ${x.days.join(" ")}`
 }
 
@@ -162,6 +168,8 @@ export function RoutinesPanel() {
     worktree: false,
     phone: false,
     starts: "schedule" as Starts,
+    once: "",
+    into: "new" as "new" | "continue",
   })
   const [drafts, setDrafts] = useState<Draft[]>([])
   const load = async () => {
@@ -185,11 +193,13 @@ export function RoutinesPanel() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault()
-    const { starts, ...rest } = draft
+    const { starts, once, into, ...rest } = draft
     const r = await api("PUT", "/api/routines", {
       ...rest,
       enabled: true,
-      ...(starts === "schedule" ? {} : { trigger: { kind: starts } }),
+      ...(starts === "commit" || starts === "files" ? { trigger: { kind: starts } } : {}),
+      ...(starts === "once" ? { once } : {}),
+      ...(into === "continue" ? { into } : {}),
     })
     if (!r.ok) return toast.error(r.error ?? "The routine was not saved", { id: "routines" })
     setDraft({ ...draft, name: "", prompt: "" })
@@ -199,6 +209,13 @@ export function RoutinesPanel() {
   async function toggle(x: Routine) {
     const r = await api("PUT", "/api/routines", { ...x, enabled: !x.enabled })
     if (!r.ok) return toast.error(r.error ?? "Not saved", { id: "routines" })
+    void load()
+  }
+  /** T-119: one run now, whatever its schedule, recorded as yours. */
+  async function runNow(x: Routine) {
+    const r = await api<{ sessionId: string }>("POST", `/api/routines/${encodeURIComponent(x.id)}/run`)
+    if (!r.ok) return toast.error(r.error ?? "It did not start", { id: "routines" })
+    toast.success(`${x.name} started`, { id: "routines" })
     void load()
   }
   async function remove(x: Routine) {
@@ -265,6 +282,9 @@ export function RoutinesPanel() {
                 <input type="checkbox" checked={x.enabled} onChange={() => void toggle(x)} />
                 On
               </label>
+              <button type="button" className="btn !min-h-7 !text-[13px]" onClick={() => void runNow(x)}>
+                Run now
+              </button>
               <button
                 type="button"
                 className="btn !min-h-7 !text-[13px]"
@@ -320,8 +340,22 @@ export function RoutinesPanel() {
               onChange={(e) => setDraft({ ...draft, starts: e.target.value as Starts })}
             >
               <option value="schedule">On a schedule</option>
+              <option value="once">Once</option>
               <option value="commit">On a new commit</option>
               <option value="files">When files change</option>
+            </select>
+          </label>
+          {draft.starts === "once" ? (
+            <label className="grid gap-1 text-sm">
+              <span>When</span>
+              <input className="field" type="datetime-local" value={draft.once} onChange={(e) => setDraft({ ...draft, once: e.target.value })} />
+            </label>
+          ) : null}
+          <label className="grid gap-1 text-sm">
+            <span>Each run</span>
+            <select className="field" value={draft.into} onChange={(e) => setDraft({ ...draft, into: e.target.value as "new" | "continue" })}>
+              <option value="new">In a new conversation</option>
+              <option value="continue">Carries on the last one, while it is open</option>
             </select>
           </label>
           {draft.starts === "schedule" ? (

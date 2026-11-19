@@ -1444,6 +1444,10 @@ export class Session extends EventEmitter<SessionEvents> {
                     totalMb: Math.round(os.totalmem() / 1024 / 1024),
                   },
                 }),
+              // T-113: the root of the session's processes, for the ports they hold.
+              (pid) => {
+                this.#rootPid = pid
+              },
             ),
           }
         : {}),
@@ -1761,6 +1765,12 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit("state", this.info())
     this.prompt(`The tests are approved and locked (${locked.join(", ")}). Now implement so they pass, without changing them.`)
     return locked
+  }
+
+  /** T-113: the process everything the session runs comes from, when Codehouse started it in a job. */
+  #rootPid: number | undefined
+  get rootPid(): number | undefined {
+    return this.#rootPid
   }
 
   /** D-037: the assumptions Claude declared in this session. */

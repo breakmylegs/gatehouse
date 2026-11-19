@@ -35,6 +35,10 @@ export interface Routine {
   phone?: boolean
   /** The local day ("YYYY-MM-DD") it last ran, so it runs once a day at most. */
   lastRun?: string
+  /** T-119: once only, at this local time ("YYYY-MM-DDTHH:MM"), instead of on days. */
+  once?: string
+  /** T-119: where each run goes: a new conversation (the default), or the last run's, carried on while it is open. */
+  into?: "new" | "continue"
 }
 
 /** G23: one time a routine ran, for the review inbox in Settings. */
@@ -81,6 +85,26 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
       enabled: r.enabled !== false,
       trigger: { kind },
     }
+  const into = r.into === "continue" ? { into: "continue" as const } : {}
+  // T-119: once, at a date and time, instead of on days.
+  if (r.once !== undefined) {
+    const once = String(r.once)
+    if (!ONCE.test(once) || Number.isNaN(new Date(once).getTime()))
+      throw new RoutineError("A one-off routine needs a date and time, such as 2026-12-01T09:00.")
+    return {
+      name,
+      folder,
+      prompt,
+      time: once.slice(11),
+      days: [],
+      once,
+      ...into,
+      ...(r.extreme ? { extreme: true } : {}),
+      ...(r.worktree === true ? { worktree: true } : {}),
+      ...(r.phone === true ? { phone: true } : {}),
+      enabled: r.enabled !== false,
+    }
+  }
   if (!TIME.test(String(r.time ?? "")))
     throw new RoutineError("A routine needs a time, such as 07:30.")
   const days = [
@@ -93,6 +117,7 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
     prompt,
     time: String(r.time),
     days,
+    ...into,
     ...(r.extreme ? { extreme: true } : {}),
     ...(r.worktree === true ? { worktree: true } : {}),
     ...(r.phone === true ? { phone: true } : {}),
@@ -119,9 +144,17 @@ export function routineSessionOptions(r: Routine): {
 const localDay = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 
+const ONCE = /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/
+
 /** Whether a routine is due now: on one of its days, at or after its time today, and not run today. */
 export function isDue(r: Routine, now: Date): boolean {
   if (!r.enabled || r.trigger) return false
+  // T-119: a one-off runs once, within the hour after its time, and never again.
+  if (r.once) {
+    if (r.lastRun) return false
+    const at = new Date(r.once).getTime()
+    return now.getTime() >= at && now.getTime() - at < 3_600_000
+  }
   if (!r.days.includes(DAYS[now.getDay()]!)) return false
   if (r.lastRun === localDay(now)) return false
   // Within the hour after its time: a laptop asleep at 07:30 and woken at 07:40 still runs it, one woken at noon does not.

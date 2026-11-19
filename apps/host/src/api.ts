@@ -1,4 +1,6 @@
 import { RememberFor } from "@gatehouse/shared/ws-protocol"
+import { listDevices, screenshot } from "./devices-panel.js"
+import type { Listening } from "./session-ports.js"
 import type { ActionResult } from "./codehouse-action.js"
 import { claimCalibration, failureTaxonomy } from "./failure-taxonomy.js"
 import { hotspots } from "./hotspots.js"
@@ -152,6 +154,8 @@ export interface AdminContext {
   memory?: MemoryStore
   /** B34: routines, sessions that start themselves on a schedule. */
   routines?: RoutineStore
+  /** T-119: a routine run now from the desktop. */
+  runRoutine?: (id: string) => Promise<string>
   /** T-122: routines a session drafted, for you to save. */
   routineDrafts?: RoutineDrafts
   /** G24: the task board, and how a card's session starts. */
@@ -193,6 +197,8 @@ export interface AdminContext {
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** T-113: the ports a running session's processes listen on. */
+  sessionPorts?: (sessionId: string) => Promise<Listening[]>
   /** T-080: pull requests watched for sessions. */
   prWatcher?: PrWatcher
   /** T-083: a fast-forward pull as a Codehouse action. */
@@ -769,6 +775,24 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (!action) return reply.code(404).send({ error: "The repository has no such action (it may have changed)." })
     const r = await ctx.forgeAct(session, cwd, action.command, `the repository's action "${action.name}"`)
     return { ran: r.ran, ...(r.refused ? { refused: r.refused } : {}), exitCode: r.exitCode, output: redactString(r.output, { terms: ctx.config().redactTerms }).slice(-8000) }
+  })
+
+  // T-118: the emulators and simulators running here, and a picture of one, taken when asked (only a listed device).
+  app.get("/api/device-panel/list", async () => ({ devices: await listDevices() }))
+  app.get("/api/device-panel/shot", async (req, reply) => {
+    const q = req.query as { kind?: string; id?: string }
+    const device = (await listDevices()).find((d) => d.kind === q.kind && d.id === q.id)
+    if (!device) return reply.code(404).send({ error: "That device is not running here." })
+    const png = await screenshot(device)
+    if (!png) return reply.code(409).send({ error: "The device's screen could not be taken." })
+    return reply.header("content-type", "image/png").header("cache-control", "no-store").send(png)
+  })
+
+  // T-113: the ports a session's processes listen on, for its browser panel.
+  app.get("/api/session/ports", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    if (!ctx.sessionCwd?.(id)) return reply.code(404).send({ error: "That session is not running." })
+    return { ports: ctx.sessionPorts ? await ctx.sessionPorts(id) : [] }
   })
 
   // T-004: the coding agents on the PATH and the model runtimes answering on this computer, for the welcome.
@@ -1663,6 +1687,8 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
         worktree: r.worktree === true,
         phone: r.phone === true,
         enabled: r.enabled,
+        ...(r.once ? { once: r.once } : {}),
+        ...(r.into ? { into: r.into } : {}),
       })
       return { routine: r }
     } catch (e) {
@@ -1677,6 +1703,17 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
     if (!ctx.routineDrafts?.remove(id)) return bad(reply, 404, "There is no such draft.")
     await record("routine_draft_dismissed", { id })
     return { ok: true }
+  })
+  // T-119: Run now, recorded as yours.
+  app.post("/api/routines/:id/run", async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    if (!routines.list().some((r) => r.id === id)) return bad(reply, 404, "There is no such routine.")
+    if (!ctx.runRoutine) return bad(reply, 501, "Running a routine now is not available here.")
+    try {
+      return { sessionId: await ctx.runRoutine(id) }
+    } catch (e) {
+      return bad(reply, 409, `It did not start: ${(e as Error).message}`)
+    }
   })
   app.delete("/api/routines/:id", async (req, reply) => {
     const id = (req.params as { id: string }).id

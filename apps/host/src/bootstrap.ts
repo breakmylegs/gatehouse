@@ -1,4 +1,5 @@
 import { TestLocks } from "./test-locks.js"
+import { sessionPorts } from "./session-ports.js"
 import { checkIntent } from "./intent-drift.js"
 import type { MutationExec } from "./mutation.js"
 import { VulnCommitGuard, VulnSnapshot } from "./vuln-snapshot.js"
@@ -1530,6 +1531,8 @@ export function createHost(opts: HostOptions = {}): Host {
     log,
   })
 
+  // T-119: the routine runner, set once routines start, for Run now.
+  const routineRunner: { run?: (id: string) => Promise<string> } = {}
   const app: HostApp = {
     updates,
     manager,
@@ -1559,6 +1562,8 @@ export function createHost(opts: HostOptions = {}): Host {
     admin: {
       engine,
       store,
+      // T-119: Run now, once the routines are running (filled in below).
+      runRoutine: (id: string) => (routineRunner.run ? routineRunner.run(id) : Promise.reject(new Error("Routines are not running yet."))),
       pwsh,
       // O41: Settings, Connectors, Neighbourhood Watch (GET /api/cnw, pairing, on and off).
       cnw,
@@ -1607,6 +1612,7 @@ export function createHost(opts: HostOptions = {}): Host {
       ntfy,
       ntfySecrets,
       sessionCwd: (id) => manager.get(id)?.cwd,
+      sessionPorts: (id) => sessionPorts(manager.get(id)?.rootPid),
       prWatcher,
       // T-075: a change to a pull request from its page, judged like the same gh command from the session.
       forgeAct: (id, cwd, command, why) =>
@@ -1932,9 +1938,10 @@ export function createHost(opts: HostOptions = {}): Host {
           .catch(() => undefined)
       limitPauser.start()
       // B34: each routine through the same path as any session: kill switch, sign-in, organisation, limits.
-      const runRoutine = async (r: Routine): Promise<string> => {
-        const why =
-          r.trigger?.kind === "commit"
+      const runRoutine = async (r: Routine, byYou = false): Promise<string> => {
+        const why = byYou
+          ? "your request from the desktop"
+          : r.trigger?.kind === "commit"
             ? "a new commit in its folder"
             : r.trigger?.kind === "files"
               ? "files in its folder changing"
@@ -1957,6 +1964,14 @@ export function createHost(opts: HostOptions = {}): Host {
           latencyMs: 0,
         })
         if (!recorded) throw new Error("it could not be recorded, so it did not start")
+        // T-119: carried on in the last run's conversation when you chose that and it is open and idle; else a new one.
+        const lastRun = r.into === "continue" ? routines.runs().filter((x) => x.routineId === r.id).at(-1) : undefined
+        const open = lastRun ? manager.get(lastRun.sessionId) : undefined
+        if (open && open.info().state === "idle") {
+          open.prompt(r.prompt)
+          await routines.noteRun({ routineId: r.id, name: r.name, sessionId: open.id, at: new Date().toISOString() }).catch((e: Error) => log(`routine run not noted: ${e.message}`))
+          return open.id
+        }
         const session = await manager.start(routineSessionOptions(r))
         session.prompt(r.prompt)
         // G23: kept for the review inbox in Settings; a run that cannot be noted still runs.
@@ -1971,6 +1986,12 @@ export function createHost(opts: HostOptions = {}): Host {
           })
           .catch((e: Error) => log(`routine run not noted: ${e.message}`))
         return session.id
+      }
+      // T-119: Run now from the desktop: the same run, recorded as yours, whatever its schedule.
+      routineRunner.run = async (id: string) => {
+        const r = routines.list().find((x) => x.id === id)
+        if (!r) throw new Error("There is no such routine.")
+        return await runRoutine(r, true)
       }
       // E-089: on battery a routine that is due waits, one of each, and runs when mains power is back.
       const heavyRoutine = async (r: Routine): Promise<void> => {

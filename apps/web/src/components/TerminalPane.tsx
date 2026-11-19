@@ -34,11 +34,33 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
   const running = Boolean(term?.runId)
   const chunks = term?.chunks ?? []
 
-  // Follow the output as it arrives.
+  // T-112: what the Host kept of this terminal, when this window has none (a reload, a reconnect).
+  useEffect(() => {
+    if (useStore.getState().term[sessionId]?.chunks.length) return
+    void send({ type: "term_history", sessionId }).then((r) => {
+      const kept = (r.data as { chunks?: Array<{ stream: "cmd" | "out" | "err" | "note"; text: string }> } | undefined)?.chunks
+      if (!r.ok || !kept?.length || useStore.getState().term[sessionId]?.chunks.length) return
+      for (const c of kept) termAppend(sessionId, c)
+    })
+  }, [sessionId, termAppend])
+
+  // Follow the output as it arrives, unless you scrolled up to read; Jump to latest brings it back.
+  const [atEnd, setAtEnd] = useState(true)
   useEffect(() => {
     const el = out.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [chunks.length])
+    if (el && atEnd) el.scrollTop = el.scrollHeight
+  }, [chunks.length, atEnd])
+  const selectAll = () => {
+    const el = out.current
+    const sel = window.getSelection()
+    if (!el || !sel) return
+    // Focus first: focusing afterwards can collapse the selection.
+    el.focus()
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    sel.removeAllRanges()
+    sel.addRange(range)
+  }
 
   /**
    * Ask Claude about this (backlog F22): what you selected in the output, or else the last command and what it printed,
@@ -110,7 +132,17 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
         onRun={(c) => void runText(c)}
         onOutput={(text, err) => termAppend(sessionId, { stream: err ? "err" : "out", text })}
       />
-      <pre ref={out} className="term-out" tabIndex={0} aria-label="Terminal output" aria-live="off">
+      <pre
+        ref={out}
+        className="term-out"
+        tabIndex={0}
+        aria-label="Terminal output"
+        aria-live="off"
+        onScroll={(e) => {
+          const el = e.currentTarget
+          setAtEnd(el.scrollHeight - el.scrollTop - el.clientHeight < 24)
+        }}
+      >
         {chunks.length === 0 ? (
           <span className="text-mut">
             Commands run with {shell.name} in {cwd}. Output appears here.
@@ -150,9 +182,32 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
             Run
           </button>
         )}
-        <button type="button" className="btn !min-h-8" onClick={() => termClear(sessionId)}>
+        <button
+          type="button"
+          className="btn !min-h-8"
+          onClick={() => {
+            termClear(sessionId)
+            void send({ type: "term_clear", sessionId })
+          }}
+        >
           Clear
         </button>
+        <button type="button" className="btn !min-h-8" disabled={chunks.length === 0} onClick={selectAll}>
+          Select all
+        </button>
+        {!atEnd ? (
+          <button
+            type="button"
+            className="btn !min-h-8"
+            onClick={() => {
+              const el = out.current
+              if (el) el.scrollTop = el.scrollHeight
+              setAtEnd(true)
+            }}
+          >
+            Jump to latest
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn !min-h-8"

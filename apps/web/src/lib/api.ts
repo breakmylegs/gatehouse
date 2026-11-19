@@ -66,6 +66,21 @@ export async function api<T = unknown>(
   return { ok: true, status: res.status, data: json as T }
 }
 
+/** T-118: a picture from the Host, as an address for an img (revoke it when done), or the Host's reason it has none. */
+export async function fetchImage(url: string): Promise<{ src: string } | { error: string }> {
+  const to = where(url)
+  try {
+    const res = await fetch(to.url, { headers: to.headers })
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { error?: string }
+      return { error: j.error ?? `The Host answered ${res.status}.` }
+    }
+    return { src: URL.createObjectURL(await res.blob()) }
+  } catch {
+    return { error: "Could not reach the Host. Is Codehouse still running?" }
+  }
+}
+
 export async function download(url: string, filename: string): Promise<string | undefined> {
   const to = where(url)
   const res = await fetch(to.url, { headers: to.headers })

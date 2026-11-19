@@ -215,6 +215,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     command: z.string().min(1).max(8000),
   }),
   z.object({ type: z.literal("term_stop"), sessionId: Id }),
+  z.object({ type: z.literal("term_history"), sessionId: Id }),
+  z.object({ type: z.literal("term_clear"), sessionId: Id }),
   /** Restart Codehouse, after a setting that needs it. The window app does it; elsewhere the reply says it cannot. */
   z.object({ type: z.literal("restart") }),
   z.object({ type: z.literal("kill") }),

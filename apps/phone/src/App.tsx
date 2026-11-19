@@ -1071,6 +1071,7 @@ function SessionView({
             {steps.map((e, i) => (
               <li
                 key={i}
+                dir="auto"
                 className={clsx(
                   "[overflow-wrap:anywhere] whitespace-pre-wrap",
                   e.who === "you" && "ml-8 justify-self-end rounded-lg bg-s2 px-3 py-2",

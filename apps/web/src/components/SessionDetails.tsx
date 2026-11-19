@@ -7,6 +7,7 @@ import { MAIN_ACCOUNT, send, useStore } from "../store"
 import { HeldOutPanel } from "./HeldOutPanel"
 import { LocksPanel } from "./LocksPanel"
 import { PlanMeter } from "./PlanMeter"
+import { DevicePanel } from "./DevicePanel"
 
 /**
  * O21 (owner, 9 Nov, with two screenshots): a session's details beside it. Where it runs (computer, folder,
@@ -41,6 +42,8 @@ export const DETAIL_ROWS = [
   { id: "checks", label: "Held-out checks and locked tests" },
   { id: "background", label: "Working in the background" },
   { id: "sides", label: "Side chats" },
+  // T-118: an emulator or simulator beside the session.
+  { id: "device", label: "A device" },
 ] as const
 export type DetailRow = (typeof DETAIL_ROWS)[number]["id"]
 const ROWS_KEY = "gatehouse.details.rows"
@@ -434,6 +437,13 @@ export function SessionDetails({
           <p className="m-0 text-[13px] text-mut">Nothing is running in the background.</p>
         )}
       </section>
+      ) : null}
+
+      {shows("device") && !chat ? (
+        <section aria-label="A device">
+          <h3 className="m-0 mb-1.5 text-[14px]">A device</h3>
+          <DevicePanel />
+        </section>
       ) : null}
 
       {shows("sides") ? (

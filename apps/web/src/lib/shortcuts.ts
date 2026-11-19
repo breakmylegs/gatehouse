@@ -20,6 +20,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "copy-reply", label: "A conversation: copy Claude's last reply", keys: "Ctrl+Shift+C" },
   { id: "copy-code", label: "A conversation: copy the last code block", keys: "Ctrl+Shift+;" },
   { id: "help", label: "Help for this page", keys: "F1" },
+  // T-107: the pickers of the session in front, and its effort a step up or down.
+  { id: "pick-model", label: "Choose the model", keys: "Alt+M" },
+  { id: "pick-effort", label: "Choose the effort", keys: "Alt+E" },
+  { id: "pick-mode", label: "Choose the mode", keys: "Alt+O" },
+  { id: "effort-up", label: "Effort one step up", keys: "Ctrl+Alt+ArrowUp" },
+  { id: "effort-down", label: "Effort one step down", keys: "Ctrl+Alt+ArrowDown" },
 ]
 
 /** Never given to a command: they decide requests, or stop everything. */

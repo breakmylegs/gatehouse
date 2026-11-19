@@ -110,6 +110,8 @@ export interface Limiter {
     onStderr: (text: string) => void,
     /** What the job uses, every few seconds. */
     onUsage?: (u: JobUsage) => void,
+    /** T-113: the helper's process id, the root of everything the session runs. */
+    onPid?: (pid: number) => void,
   ): (o: SpawnOptions) => SpawnedProcess
   /** Changes the level of a running session's job. */
   set(job: string, level: ResourceLevel): Promise<void>
@@ -118,7 +120,7 @@ export interface Limiter {
 /** The helper at `exe`. The SDK reads only stdin and stdout from a custom spawn, so stderr is passed on here. */
 export function limiter(exe: string): Limiter {
   return {
-    spawn: (job, level, onStderr, onUsage) => (o) => {
+    spawn: (job, level, onStderr, onUsage, onPid) => (o) => {
       const args = ["--name", job, ...levelArgs(level()), "--report", String(REPORT_SECONDS)]
       const child = spawn(exe, [...args, "--", o.command, ...o.args], {
         cwd: o.cwd,
@@ -127,6 +129,7 @@ export function limiter(exe: string): Limiter {
         windowsHide: true,
         signal: o.signal,
       })
+      if (child.pid !== undefined) onPid?.(child.pid)
       const pass = splitStderr(onStderr, onUsage)
       child.stderr.on("data", (d: Buffer) => pass(d.toString("utf8")))
       return child as unknown as SpawnedProcess

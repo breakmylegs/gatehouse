@@ -3,6 +3,7 @@ import { CodeEditor, CodeView } from "./CodeViews"
 import { Outline } from "./Outline"
 import { TS_FILE, TypeScriptHelp } from "./TypeScriptHelp"
 import { WhyThisLine } from "./WhyThisLine"
+import { BrowserBar } from "./BrowserBar"
 import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
 import { LINK_PARTS } from "../lib/links"
@@ -421,13 +422,25 @@ export function Viewer({
           </p>
         ) : opened.kind === "browser" ? (
           LOCAL.test(opened.url) ? (
-            <iframe
-              key={frameKey}
-              title="Local page"
-              src={opened.url}
-              sandbox="allow-scripts allow-same-origin allow-forms"
-              className="h-full min-h-[480px] w-full border-0 bg-white"
-            />
+            <>
+              {/* T-113: its tabs, and the ports the session's processes listen on. */}
+              <BrowserBar
+                sessionId={sessionId}
+                url={opened.url}
+                onOpen={(u) => {
+                  setAddress(u)
+                  onNavigate({ kind: "browser", url: u })
+                  setFrameKey((k) => k + 1)
+                }}
+              />
+              <iframe
+                key={frameKey}
+                title="Local page"
+                src={opened.url}
+                sandbox="allow-scripts allow-same-origin allow-forms"
+                className="h-full min-h-[480px] w-full border-0 bg-white"
+              />
+            </>
           ) : null
         ) : IMAGE.test(rel) ? (
           previewUrl ? (

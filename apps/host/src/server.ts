@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks"
+import { TerminalScrollback } from "./terminal-scrollback.js"
 import { RubberStamp } from "./rubber-stamp.js"
 import { NEVER_AUTO_APPROVED } from "./canuse.js"
 import { arc42, deploymentFiles } from "./arc42.js"
@@ -181,6 +182,8 @@ export class HostServer {
   readonly #opts: HostServerOptions
   readonly #fastify: FastifyInstance
   readonly #clients = new Set<WebSocket>()
+  /** T-112: each session's terminal, kept in memory for a window that reconnects. */
+  readonly #scrollback = new TerminalScrollback()
   readonly #rawSockets = new Set<net.Socket>()
   /** D-021: approvals given faster than they could be read, and when each friction was shown. */
   readonly #rubberStamp = new RubberStamp()
@@ -330,8 +333,11 @@ export class HostServer {
     a.updates?.on("status", (update) => this.#broadcast({ type: "update", update }))
     a.terminal?.on(
       "output",
-      (e: { sessionId: string; runId: string; stream: "out" | "err"; text: string }) =>
-        this.#broadcast({ type: "term_output", ...e }),
+      (e: { sessionId: string; runId: string; stream: "out" | "err"; text: string }) => {
+        // T-112: kept, so a window that reconnects shows it again.
+        this.#scrollback.add(e.sessionId, { stream: e.stream, text: e.text })
+        this.#broadcast({ type: "term_output", ...e })
+      },
     )
     a.terminal?.on(
       "exit",
@@ -756,7 +762,9 @@ export class HostServer {
         if (!t) throw new CommandError("unavailable", "The terminal is not available here")
         const s = this.#session(cmd.sessionId)
         try {
-          return await t.run(s.id, s.cwd, cmd.command)
+          const started = await t.run(s.id, s.cwd, cmd.command)
+          this.#scrollback.add(s.id, { stream: "cmd", text: `> ${cmd.command}\n` })
+          return started
         } catch (e) {
           if (e instanceof TerminalError) throw new CommandError("terminal", e.message)
           throw e
@@ -764,6 +772,13 @@ export class HostServer {
       }
       case "term_stop":
         return { stopped: a.terminal?.stop(cmd.sessionId) ?? false }
+      case "term_history":
+        // T-112: the session's terminal as the Host kept it.
+        this.#session(cmd.sessionId)
+        return { chunks: this.#scrollback.get(cmd.sessionId) }
+      case "term_clear":
+        this.#scrollback.clear(cmd.sessionId)
+        return { cleared: true }
       case "prompt": {
         const s = this.#session(cmd.sessionId)
         // D-059: no turn starts on instructions changed outside Codehouse until you approve the change.

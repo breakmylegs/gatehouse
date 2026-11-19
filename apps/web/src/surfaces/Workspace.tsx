@@ -1211,6 +1211,8 @@ function SessionPane({
               <span className="sr-only">Model</span>
               <select
                 className="composer-select"
+                data-picker="model"
+                data-session={session.id}
                 value={
                   models.some((m) => m.id === (session.model ?? "")) ? (session.model ?? "") : ""
                 }
@@ -1236,6 +1238,8 @@ function SessionPane({
                 <span className="sr-only">Effort</span>
                 <select
                   className="composer-select"
+                  data-picker="effort"
+                  data-session={session.id}
                   value={session.effort ?? ""}
                   disabled={ended}
                   onChange={(e) =>
@@ -1275,6 +1279,8 @@ function SessionPane({
                 <span className="sr-only">Mode</span>
                 <select
                   className="composer-select"
+                  data-picker="mode"
+                  data-session={session.id}
                   value={uiModeOf(session)}
                   disabled={ended}
                   onChange={(e) => void changeMode(session, e.target.value as UiMode)}
@@ -2687,7 +2693,7 @@ function Composer({
           disabled={disabled}
         />
         <div className="composer-field">
-        <div aria-hidden="true" className="composer-backdrop" ref={backdrop}>
+        <div aria-hidden="true" dir="auto" className="composer-backdrop" ref={backdrop}>
           {marks(text).map((m, i) => (
             <span key={i} className={`md-${m.kind}`}>
               {m.text}
@@ -2697,6 +2703,7 @@ function Composer({
         </div>
         <textarea
           id={composerId}
+          dir="auto"
           ref={area}
           className="composer-input composer-md"
           onScroll={(e) => {
@@ -3097,7 +3104,7 @@ function UserMessage({
           </span>
         </form>
       ) : words ? (
-        <div className="whitespace-pre-wrap rounded-md border border-line bg-s2 px-3 py-2 [overflow-wrap:anywhere]">
+        <div dir="auto" className="whitespace-pre-wrap rounded-md border border-line bg-s2 px-3 py-2 [overflow-wrap:anywhere]">
           <span className="sr-only">You: </span>
           {words}
         </div>
@@ -3212,6 +3219,7 @@ function ClaudeText({ text, at, subagent }: { text: string; at?: number; subagen
   const body = useRef<HTMLDivElement>(null)
   return (
     <div
+      dir="auto"
       className={clsx(
         "reply [overflow-wrap:anywhere] [&_code]:font-[var(--font-code)] [&_pre]:overflow-auto [&_pre]:rounded-md [&_pre]:bg-s2 [&_pre]:p-3 [&_table]:border-collapse [&_td]:border [&_td]:border-line [&_td]:px-2 [&_th]:border [&_th]:border-line [&_th]:px-2",
         subagent && "ml-5 border-l-2 border-line pl-3",

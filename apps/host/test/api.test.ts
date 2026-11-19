@@ -373,6 +373,39 @@ describe("project actions (T-091)", () => {
   })
 })
 
+describe("Run now (T-119)", () => {
+  it("runs a routine at once, recorded as yours by the runner, and says when there is none or it did not start", async () => {
+    const { RoutineStore } = await import("../src/routines.js")
+    const routines = new RoutineStore(path.join(root, "routines-t119.json"))
+    const r = await routines.put({ name: "Tidy", folder: "C:\\dev\\shop", prompt: "Tidy the docs", time: "07:30", days: ["mon"] })
+    const asked: string[] = []
+    let fail = false
+    const app2 = Fastify()
+    registerApi(app2, {
+      ...ctx,
+      routines,
+      runRoutine: async (id) => {
+        asked.push(id)
+        if (fail) throw new Error("the kill switch is on")
+        return "s-run-1"
+      },
+    })
+    try {
+      const ok = await app2.inject({ method: "POST", url: `/api/routines/${r.id}/run` })
+      expect(ok.json()).toEqual({ sessionId: "s-run-1" })
+      expect(asked).toEqual([r.id])
+      expect((await app2.inject({ method: "POST", url: "/api/routines/nope/run" })).statusCode).toBe(404)
+      fail = true
+      const no = await app2.inject({ method: "POST", url: `/api/routines/${r.id}/run` })
+      expect(no.statusCode).toBe(409)
+      expect(no.json().error).toBe("It did not start: the kill switch is on")
+    } finally {
+      await app2.close()
+      fs.rmSync(path.join(root, "routines-t119.json"), { force: true })
+    }
+  })
+})
+
 describe("settings endpoints", () => {
   it("rejects unknown keys and bad values", async () => {
     const put = (body: unknown) =>

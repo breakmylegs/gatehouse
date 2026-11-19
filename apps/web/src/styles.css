@@ -1071,6 +1071,18 @@ mark.hidden-char {
 .reply ol {
   list-style: decimal;
 }
+/* T-110: each paragraph, item and heading of a reply finds its own direction, so Arabic or Hebrew reads right to left
+   beside English; code is always left to right. */
+.reply :where(p, li, h1, h2, h3, h4, blockquote, td, th),
+.composer-input,
+.composer-backdrop {
+  unicode-bidi: plaintext;
+  text-align: start;
+}
+.reply :where(pre, code) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
 .reply li + li,
 .reply li > :where(ul, ol) {
   margin-top: 0.3em;

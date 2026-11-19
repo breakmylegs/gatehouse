@@ -18,12 +18,14 @@ import { railOrder, readHideEnded } from "./lib/rail"
 import { RAIL_EVENT } from "./lib/layouts"
 import { copyLatest } from "./lib/sessionActions"
 import { commandFor } from "./lib/shortcuts"
+import { openPicker, stepEffort, type Picker } from "./lib/pickers"
+import type { EffortId } from "./lib/modes"
 import { useShortcuts } from "./lib/useShortcuts"
 import { startShell } from "./lib/quickKey"
 import { UpdateNotice, UpdateResult } from "./components/UpdateNotice"
 import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
-import { START_ROUTE, usePendingCount, useStore } from "./store"
+import { send, START_ROUTE, usePendingCount, useStore } from "./store"
 import { SafeModeBanner } from "./components/SafeModeBanner"
 
 const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
@@ -93,6 +95,18 @@ export function App() {
       } else if (cmd === "sidebar") {
         e.preventDefault()
         flipRail()
+      } else if (cmd === "pick-model" || cmd === "pick-effort" || cmd === "pick-mode") {
+        // T-107: the picker of the session in front.
+        const id = useStore.getState().selectedSession
+        if (id && openPicker(id, cmd.slice(5) as Picker)) e.preventDefault()
+      } else if (cmd === "effort-up" || cmd === "effort-down") {
+        const st = useStore.getState()
+        const s = st.selectedSession ? st.sessions[st.selectedSession] : undefined
+        const next = s && !s.local && s.kind !== "chat" ? stepEffort(s.effort as EffortId | undefined, cmd === "effort-up" ? 1 : -1, s.effortCap as EffortId | undefined) : undefined
+        if (s && next) {
+          e.preventDefault()
+          void send({ type: "set_effort", sessionId: s.id, effort: next })
+        }
       } else if (e.metaKey && !e.shiftKey && !e.altKey && e.key === "," && isMac()) {
         // Mac fork: Command-comma opens Settings, as in every Mac app.
         e.preventDefault()
