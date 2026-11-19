@@ -72,7 +72,7 @@ describe("NuGet package provenance (D-063)", () => {
     expect(nupkgSigned(path.join(home, ".nuget", "packages", "signedlib", "1.2.0", "signedlib.1.2.0.nupkg"))).toBe(true)
     expect(nupkgSigned(path.join(home, ".nuget", "packages", "loosepkg", "0.1.0", "loosepkg.0.1.0.nupkg"))).toBe(false)
     expect(nupkgSigned(path.join(home, "nothing.nupkg"))).toBeUndefined()
-    const nuget = (name: string) => ({ ecosystem: "nuget" as const, name })
+    const nuget = (name: string) => ({ ecosystem: "nuget" as const, name, via: "the command" })
     expect(nugetSignatureFindings([nuget("SignedLib"), nuget("LoosePkg"), nuget("NotDownloaded")], home).map((f) => [f.ruleId, f.dependency])).toEqual([[NUGET_UNSIGNED, "nuget:LoosePkg"]])
   })
 
