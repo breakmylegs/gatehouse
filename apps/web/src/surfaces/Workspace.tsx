@@ -2909,7 +2909,7 @@ export const ToolGroup = memo(function ToolGroup({
         <ArtifactCard
           key={t.id}
           title={typeof t.input.title === "string" ? t.input.title : "Artifact"}
-          kind={t.input.kind === "svg" ? "svg" : "html"}
+          kind={t.input.kind === "svg" ? "svg" : t.input.kind === "mermaid" ? "mermaid" : "html"}
           onOpen={onOpenArtifact}
         />
       ))}
@@ -3448,7 +3448,7 @@ function ArtifactCard({
   onOpen,
 }: {
   title: string
-  kind: "svg" | "html"
+  kind: "svg" | "html" | "mermaid"
   onOpen?: () => void
 }) {
   return (
@@ -3459,7 +3459,7 @@ function ArtifactCard({
       <span className="grid min-w-0">
         <span className="truncate font-semibold">{title}</span>
         <span className="text-[12px] text-mut">
-          {kind === "svg" ? "A picture (SVG)" : "A page (HTML)"}, shown in a sandbox
+          {kind === "svg" ? "A picture (SVG)" : kind === "mermaid" ? "A diagram (Mermaid)" : "A page (HTML)"}, shown in a sandbox
         </span>
       </span>
       {onOpen ? (

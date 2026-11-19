@@ -53,7 +53,8 @@ if (!has("--skip-build") && !has("--exe-only")) {
   run("npm", ["run", "build", "-w", "@gatehouse/web"], { cwd: root })
   run("npm", ["run", "build", "-w", "@gatehouse/phone"], { cwd: root })
 }
-for (const d of ["apps/web/dist/index.html", "apps/phone/dist/index.html"])
+// C-057: Mermaid's one file, which the Host inlines into a diagram's page, comes with the interface.
+for (const d of ["apps/web/dist/index.html", "apps/phone/dist/index.html", "apps/web/dist/artifact-lib/mermaid.min.js"])
   if (!fs.existsSync(path.join(root, d)))
     throw new Error(`${d} is missing. Run without --skip-build.`)
 

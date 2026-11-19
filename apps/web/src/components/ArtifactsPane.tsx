@@ -17,7 +17,7 @@ interface Version {
 interface Artifact {
   id: string
   title: string
-  kind: "html" | "svg" | "markdown" | "code"
+  kind: "html" | "svg" | "markdown" | "code" | "mermaid"
   versions: Version[]
 }
 
@@ -159,11 +159,12 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
                 const got = await text(artifact.id, chosen.version)
                 if (!got) return toast.error("It could not be exported", { id: "artifact" })
                 // B45: one file that works offline, under the same rules as here (no network).
-                if (asText(artifact.kind))
+                // C-057: a diagram is kept as its Mermaid source; a page that draws it offline would need Mermaid inside it.
+                if (asText(artifact.kind) || artifact.kind === "mermaid")
                   return download(
                     got.name,
                     got.content,
-                    artifact.kind === "markdown" ? "text/markdown" : "text/plain",
+                    artifact.kind === "markdown" ? "text/markdown" : artifact.kind === "mermaid" ? "text/vnd.mermaid" : "text/plain",
                   )
                 download(
                   got.name,
@@ -172,7 +173,7 @@ export function ArtifactsPane({ sessionId, refresh }: { sessionId: string; refre
                 )
               }}
             >
-              {asText(artifact.kind) ? "Download" : "Export for offline use"}
+              {asText(artifact.kind) || artifact.kind === "mermaid" ? "Download" : "Export for offline use"}
             </button>
             {asText(artifact.kind) && body !== undefined ? (
               <button

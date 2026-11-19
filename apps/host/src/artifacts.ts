@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 
 /**
@@ -9,7 +10,7 @@ import { writeFileAtomic } from "@gatehouse/shared/node"
  */
 export const MAX_ARTIFACT_BYTES = 500_000
 export const MAX_VERSIONS = 50
-export const ARTIFACT_KINDS = ["html", "svg", "markdown", "code"] as const
+export const ARTIFACT_KINDS = ["html", "svg", "markdown", "code", "mermaid"] as const
 
 /** Kinds shown as text, never run in a frame (CH-03): a document, and code to read or copy. */
 export const TEXT_KINDS: readonly ArtifactKind[] = ["markdown", "code"]
@@ -43,12 +44,15 @@ export const EXT: Record<ArtifactKind, string> = {
   svg: "svg",
   markdown: "md",
   code: "txt",
+  mermaid: "mmd",
 }
 const TYPE: Record<ArtifactKind, string> = {
   html: "text/html; charset=utf-8",
   svg: "image/svg+xml; charset=utf-8",
   markdown: "text/markdown; charset=utf-8",
   code: "text/plain; charset=utf-8",
+  // C-057: a diagram is shown as a page that draws it, in the same sandbox as a page.
+  mermaid: "text/html; charset=utf-8",
 }
 
 const slug = (title: string) =>
@@ -78,6 +82,8 @@ export function labelArtifact(kind: ArtifactKind, content: string): string {
   // there would depend on its language.
   if (kind === "markdown") return `${content.replace(/\s+$/, "")}\n\n<!-- ${AI_MARK} -->\n`
   if (kind === "code") return content
+  // C-057: a Mermaid comment, which the diagram does not show.
+  if (kind === "mermaid") return `${content.replace(/\s+$/, "")}\n%% ${AI_MARK}\n`
   if (kind === "svg") {
     const comment = `<!-- ${AI_MARK} -->`
     const at = content.search(/<svg[\s>]/i)
@@ -96,6 +102,44 @@ export function labelArtifact(kind: ArtifactKind, content: string): string {
   const doctype = /^\s*<!doctype[^>]*>/i.exec(content)
   if (doctype) return content.replace(doctype[0], `${doctype[0]}\n${meta}`)
   return `${meta}\n${content}`
+}
+
+/**
+ * C-057: Mermaid diagrams, drawn offline in the artifact sandbox. The page carries the diagram's source as text and
+ * Mermaid's own single file, inlined (the sandbox fetches nothing, so nothing is loaded from anywhere). Mermaid runs at
+ * its strict security level, which a %%{init}%% directive in the diagram cannot loosen (its "secure" keys), so a
+ * diagram's labels are text, its links cannot run script, and the page's own sandbox and policy (artifactHeaders)
+ * still hold whatever Mermaid does.
+ */
+export const MERMAID_LIB = (): string =>
+  path.join(process.env.GATEHOUSE_UI_DIR ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../web/dist"), "artifact-lib", "mermaid.min.js")
+
+const escapeHtml = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+
+export function mermaidPage(source: string, lib: string | undefined): string {
+  const body = lib
+    ? `<pre class="mermaid">${escapeHtml(source)}</pre>
+<script>${lib.replace(/<\/script/gi, "<\\/script")}</script>
+<script>
+mermaid.initialize({ startOnLoad: false, securityLevel: "strict", secure: ["securityLevel", "startOnLoad", "maxTextSize", "secure", "htmlLabels", "flowchart"], htmlLabels: false, flowchart: { htmlLabels: false }, maxTextSize: 100000 })
+mermaid.run({ querySelector: ".mermaid" }).catch(function (e) {
+  var p = document.createElement("p"); p.textContent = "This diagram could not be drawn: " + String(e && e.message || e); document.body.appendChild(p)
+})
+</script>`
+    : `<p>Mermaid is not in this build of Codehouse, so the diagram is shown as its source.</p><pre>${escapeHtml(source)}</pre>`
+  return `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"><meta name="generator" content="${AI_MARK}"><style>body{margin:0;padding:12px;font:14px system-ui,sans-serif;background:#fff;color:#111}pre{white-space:pre-wrap}</style></head><body>${body}</body></html>`
+}
+
+let mermaidLib: { at: string; text: string } | undefined
+/** Mermaid's file from the built interface, read once; undefined when this build has none. */
+export function readMermaidLib(file = MERMAID_LIB()): string | undefined {
+  if (mermaidLib?.at === file) return mermaidLib.text
+  try {
+    mermaidLib = { at: file, text: fs.readFileSync(file, "utf8") }
+    return mermaidLib.text
+  } catch {
+    return undefined
+  }
 }
 
 export function artifactHeaders(frameAncestor: string, kind: ArtifactKind): Record<string, string> {

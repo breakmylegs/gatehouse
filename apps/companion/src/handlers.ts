@@ -393,10 +393,10 @@ export const ARTIFACT_TOOLS: readonly CompanionToolDef[] = [
   {
     name: "save_artifact",
     description:
-      "Show the person something beside the chat that they may want to keep, copy or change. kind is 'html' (one self-contained page, with its own style and script inline), 'svg' (a picture), 'markdown' (a document: a letter, a plan, notes) or 'code' (code to read or copy, shown as text and never run). A page or a picture runs in a sandbox: it cannot load anything from the internet, read files or send anything anywhere, so put everything it needs inside it. Saving again with the same title makes a new version of the same artifact; use that to change it. Up to 500 KB.",
+      "Show the person something beside the chat that they may want to keep, copy or change. kind is 'html' (one self-contained page, with its own style and script inline), 'svg' (a picture), 'markdown' (a document: a letter, a plan, notes) 'code' (code to read or copy, shown as text and never run) or 'mermaid' (a diagram in Mermaid's own syntax: a flowchart, a sequence, a C4 or class diagram; drawn offline, its labels shown as text). A page or a picture runs in a sandbox: it cannot load anything from the internet, read files or send anything anywhere, so put everything it needs inside it. Saving again with the same title makes a new version of the same artifact; use that to change it. Up to 500 KB.",
     shape: {
       title: z.string().min(1).max(80),
-      kind: z.enum(["html", "svg", "markdown", "code"]),
+      kind: z.enum(["html", "svg", "markdown", "code", "mermaid"]),
       content: z.string().min(1).max(600_000),
     },
     annotations: {
