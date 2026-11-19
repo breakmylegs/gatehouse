@@ -6,6 +6,7 @@ import { legalDraft, personalDataMap } from "./personal-data.js"
 import { deadCode } from "./dead-code.js"
 import { outcomes } from "./outcomes.js"
 import { contextReport, projectBlocks } from "./context-efficiency.js"
+import { staleInstructions } from "./stale-instructions.js"
 import { TestLocks } from "./test-locks.js"
 import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
@@ -1977,7 +1978,9 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const recent = new Map<string, AuditRecord[]>()
     for (const r of recordsSince(ctx.auditDir, Date.now() - 30 * DAY))
       if (r.session !== id && r.session !== "desktop" && inside(r.cwd)) recent.set(r.session, [...(recent.get(r.session) ?? []), r])
-    return { root: path.basename(root), ...contextReport(projectBlocks(root), sessionRecords(ctx.auditDir, id), recent) }
+    // D-082: and what the instructions name that the project no longer has.
+    const stale = await staleInstructions(root, await listFiles(root).catch(() => [] as string[]))
+    return { root: path.basename(root), ...contextReport(projectBlocks(root), sessionRecords(ctx.auditDir, id), recent), stale }
   })
 
   // D-076 and D-100: cost per accepted change, rework included, and estimates from that history.

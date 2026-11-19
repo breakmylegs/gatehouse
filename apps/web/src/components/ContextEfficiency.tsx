@@ -6,6 +6,7 @@ import { useSessionList } from "../store"
 /**
  * D-077: the parts of a project's instructions (CLAUDE.md, AGENTS.md) a session never used, with their size, and how
  * many of the project's recent sessions used each, so you can see what fills every session's context for nothing.
+ * D-082: and what they name that the project no longer has (a removed name, a missing path, an npm script gone).
  */
 interface BlockUse {
   file: string
@@ -22,6 +23,7 @@ interface Report {
   blocks: BlockUse[]
   unusedTokens: number
   totalTokens: number
+  stale?: Array<{ file: string; line: number; term: string; kind: "symbol" | "path" | "script"; why: string; changedIn?: string }>
 }
 
 export function ContextEfficiency() {
@@ -79,6 +81,21 @@ export function ContextEfficiency() {
                 </li>
               ))}
             </ul>
+          ) : null}
+          {r.stale?.length ? (
+            <div className="grid gap-1">
+              <h3 className="m-0 text-[15px]">Out of date: what the instructions name that the project no longer has</h3>
+              <ul className="m-0 grid list-none gap-0.5 p-0 text-[13px]">
+                {r.stale.map((s) => (
+                  <li key={`${s.file}:${s.line}:${s.term}`}>
+                    <span className="mono">{s.term}</span> (<span className="mono">{s.file}</span> line {s.line}): {s.why}
+                    {s.changedIn ? ` Last changed in ${s.changedIn}.` : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : r.stale ? (
+            <p className="m-0 text-[13px] text-mut">Nothing the instructions name is missing from the project.</p>
           ) : null}
           {unchecked.length ? (
             <p className="m-0 text-[13px] text-mut">
