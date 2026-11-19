@@ -188,7 +188,7 @@ describe("the Artifacts panel", () => {
 })
 
 describe("in a chat", () => {
-  it("has an Artifacts button that opens the panel, and a coding session does not", async () => {
+  it("has an Artifacts button that opens the panel, and a coding session has one too (T-058)", async () => {
     const base = {
       mode: "plan" as const,
       state: "idle" as const,
@@ -219,7 +219,8 @@ describe("in a chat", () => {
       selectedSession: "s2",
     })
     render(<Workspace />)
-    expect(screen.queryByRole("button", { name: "Artifacts" })).toBeNull()
+    // T-058: a coding session shows what it made to show you too.
+    expect(within(screen.getByRole("group", { name: "Side panels" })).getByRole("button", { name: "Artifacts" })).toBeTruthy()
   })
 
   it("shows what a chat saved as a card in the reply, and Open shows it beside the chat (Stitch, R8)", async () => {
