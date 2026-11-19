@@ -119,6 +119,9 @@ import type { PlanUsage } from "./plan-usage.js"
 import { ArtifactError, artifactHeaders, EXT, mermaidPage, readMermaidLib, themedHtml, type ArtifactStore } from "./artifacts.js"
 import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
+import { extractToken, secretsEqual } from "./server-guard.js"
+import { CliAccess, registerCliRoutes, type CliDeps } from "./cli-access.js"
+import { deliveryKey, hashHookToken, HookDeliveries, MAX_BODY, passes } from "./webhooks.js"
 import type { RoutineDrafts } from "./routine-drafts.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
 import type { PhoneService } from "./relay/service.js"
@@ -156,6 +159,12 @@ export interface AdminContext {
   routines?: RoutineStore
   /** T-119: a routine run now from the desktop. */
   runRoutine?: (id: string) => Promise<string>
+  /** T-132: the Host's stalls and slow requests, for Doctor. */
+  stalls?: import("./host-stalls.js").HostStalls
+  /** T-124: the command line for scripts on this computer, its token and what it may do. */
+  cli?: { access: CliAccess; deps: CliDeps }
+  /** T-120: a call to a routine's address, past its token, filters and repeats: started, held, or over the day's number. */
+  fireHook?: (id: string, payload: unknown) => "starting" | "held" | "capped"
   /** T-122: routines a session drafted, for you to save. */
   routineDrafts?: RoutineDrafts
   /** G24: the task board, and how a card's session starts. */
@@ -1034,6 +1043,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerProjectRoutes(app, ctx)
   registerMemoryRoutes(app, ctx)
   registerRoutineRoutes(app, ctx)
+  registerCliAccessRoutes(app, ctx)
   registerArtifactRoutes(app, ctx)
   registerLibraryRoutes(app, ctx)
   registerFilesRoutes(app, ctx)
@@ -1651,10 +1661,44 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
   })
 }
 
+/**
+ * T-124: the command line. Switched on and off from the desktop only; on, its own routes take its own token (cli-access.ts).
+ * It stays on across restarts while its sealed token is there.
+ */
+function registerCliAccessRoutes(app: FastifyInstance, ctx: AdminContext): void {
+  const cli = ctx.cli
+  if (!cli) return
+  registerCliRoutes(app, cli.access, cli.deps)
+  app.addHook("onListen", async () => {
+    const port = (app.server.address() as { port?: number } | null)?.port
+    if (port) await cli.access.resumeIfOn(port).catch(() => undefined)
+  })
+  const record = (on: boolean) =>
+    ctx.audit.record({
+      session: "desktop",
+      event: "cli_access",
+      channel: "desktop",
+      tool: "settings",
+      input: { on },
+      verdict: { outcome: "allow", ruleId: "cli-access", reason: on ? "The command line was switched on from the desktop." : "The command line was switched off from the desktop.", risk: 0, decidedBy: "human-desktop", policyHash: ctx.store.current?.hash ?? "" },
+      latencyMs: 0,
+    })
+  app.get("/api/cli-access", async () => ({ on: cli.access.enabled }))
+  app.put("/api/cli-access", async (req, reply) => {
+    const on = (req.body as { on?: unknown } | undefined)?.on
+    if (typeof on !== "boolean") return bad(reply, 400, "Say on or off.")
+    if (on) await cli.access.enable(req.socket.localPort ?? 0)
+    else cli.access.disable()
+    await record(on)
+    return { on: cli.access.enabled }
+  })
+}
+
 /** B34: routines. Desktop only; each change is recorded by id, name and when, never by the prompt. */
 function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
   const routines = ctx.routines
   if (!routines) return
+  const deliveries = new HookDeliveries()
   const record = (event: string, input: Record<string, unknown>) =>
     ctx.audit.record({
       session: "desktop",
@@ -1672,12 +1716,20 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
-  app.get("/api/routines", async () => ({ routines: routines.list() }))
+  // T-120: the token's hash stays on the Host; the screen is told only that there is one.
+  app.get("/api/routines", async () => ({
+    routines: routines.list().map((r) =>
+      r.trigger?.kind === "webhook" ? { ...r, trigger: { kind: "webhook", hasToken: !!r.trigger.tokenHash, ...(r.trigger.filters ? { filters: r.trigger.filters } : {}) } } : r,
+    ),
+  }))
   // G23: the review inbox: each run's session, newest first. The screen adds its state, changes and cost.
   app.get("/api/routines/runs", async () => ({ runs: routines.runs() }))
   app.put("/api/routines", async (req, reply) => {
     try {
+      const before = routines.list().find((x) => x.id === (req.body as { id?: unknown } | undefined)?.id)
       const r = await routines.put((req.body ?? {}) as Partial<Routine>)
+      // T-120: a new routine started by a call gets its token now, shown this once.
+      const token = r.trigger?.kind === "webhook" && !r.trigger.tokenHash ? await routines.newHookToken(r.id) : undefined
       await record("routine_saved", {
         id: r.id,
         name: r.name,
@@ -1689,8 +1741,15 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
         enabled: r.enabled,
         ...(r.once ? { once: r.once } : {}),
         ...(r.into ? { into: r.into } : {}),
+        ...(r.trigger ? { trigger: r.trigger.kind } : {}),
+        ...(r.trigger?.kind === "webhook" && r.trigger.filters ? { filters: r.trigger.filters.length } : {}),
+        ...(token ? { token: before ? "replaced" : "made" } : {}),
       })
-      return { routine: r }
+      const { trigger, ...shown } = r
+      return {
+        routine: trigger?.kind === "webhook" ? { ...shown, trigger: { kind: "webhook", hasToken: true, ...(trigger.filters ? { filters: trigger.filters } : {}) } } : r,
+        ...(token ? { token } : {}),
+      }
     } catch (e) {
       if (e instanceof RoutineError) return bad(reply, 422, e.message)
       throw e
@@ -1714,6 +1773,61 @@ function registerRoutineRoutes(app: FastifyInstance, ctx: AdminContext): void {
     } catch (e) {
       return bad(reply, 409, `It did not start: ${(e as Error).message}`)
     }
+  })
+  // T-120: a new token for a routine started by a call; the old one stops working.
+  app.post("/api/routines/:id/hook-token", async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const token = await routines.newHookToken(id)
+    if (!token) return bad(reply, 404, "That routine is not started by a call.")
+    await record("routine_hook_token", { id })
+    return { token }
+  })
+  /**
+   * T-120: a program on this computer starts a routine. Not under /api, so the per-launch token is not needed, but the
+   * Host and Origin checks apply as to every request (invariant 7) and the routine's own token is. Every call naming a
+   * routine started this way is recorded, refused or not; one naming nothing gets the same answer as a wrong token.
+   */
+  app.post("/hook/:id", { bodyLimit: MAX_BODY }, async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const r = routines.list().find((x) => x.id === id && x.trigger?.kind === "webhook")
+    const presented = extractToken(req.headers)
+    const trigger = r?.trigger?.kind === "webhook" ? r.trigger : undefined
+    const hook = (outcome: "allow" | "deny", why: string, extra: Record<string, unknown> = {}) =>
+      ctx.audit.record({
+        session: "desktop",
+        event: "routine_hook",
+        channel: "host",
+        tool: "routines",
+        input: { id, via: "webhook", ...extra },
+        verdict: { outcome, ruleId: "routine-hook", reason: why, risk: 0, decidedBy: "rules", policyHash: ctx.store.current?.hash ?? "" },
+        latencyMs: 0,
+      })
+    if (!r || !trigger) return bad(reply, 401, "unauthorized")
+    if (!trigger.tokenHash || presented === undefined || !secretsEqual(hashHookToken(presented), trigger.tokenHash)) {
+      await hook("deny", "A call to a routine's address without its token was refused.")
+      return bad(reply, 401, "unauthorized")
+    }
+    const body = req.body ?? {}
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      await hook("deny", "A call to a routine's address was refused: its body was not a JSON object.")
+      return bad(reply, 400, "The body must be a JSON object.")
+    }
+    if (!r.enabled) {
+      await hook("deny", `A call to ${r.name} was refused: the routine is off.`)
+      return reply.code(202).send({ started: false, reason: "off" })
+    }
+    if (!passes(body, trigger.filters ?? [])) {
+      await hook("allow", `A call to ${r.name} did not pass its filters, so nothing started.`, { result: "filtered" })
+      return reply.code(202).send({ started: false, reason: "filtered" })
+    }
+    if (!deliveries.first(id, deliveryKey(req.headers as Record<string, unknown>, JSON.stringify(body)))) {
+      await hook("allow", `A call to ${r.name} repeated one from the last day, so nothing started again.`, { result: "duplicate" })
+      return reply.code(200).send({ started: false, reason: "duplicate" })
+    }
+    if (!ctx.fireHook) return bad(reply, 503, "Routines are not running yet.")
+    const result = ctx.fireHook(id, body)
+    await hook(result === "capped" ? "deny" : "allow", `A call to ${r.name}: ${result === "starting" ? "it starts" : result === "held" ? "held until the gap between runs is over" : "refused, it already ran its number of times today"}.`, { result })
+    return reply.code(result === "capped" ? 429 : 202).send({ started: result === "starting", reason: result })
   })
   app.delete("/api/routines/:id", async (req, reply) => {
     const id = (req.params as { id: string }).id

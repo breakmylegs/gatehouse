@@ -22,6 +22,9 @@ import { routineSessionOptions, RoutineScheduler, RoutineStore, type Routine } f
 import { RoutineDrafts } from "./routine-drafts.js"
 import { START_RULE, startChild, waitForSession } from "./orchestrate.js"
 import { TriggerWatcher } from "./routine-triggers.js"
+import { fillPrompt } from "./webhooks.js"
+import { CliAccess, cliSession, settledSession } from "./cli-access.js"
+import { HostStalls } from "./host-stalls.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
@@ -1563,7 +1566,44 @@ export function createHost(opts: HostOptions = {}): Host {
       engine,
       store,
       // T-119: Run now, once the routines are running (filled in below).
+      // T-132: stalls and slow requests, for Doctor.
+      stalls: (() => {
+        const s = new HostStalls()
+        s.start()
+        return s
+      })(),
+      // T-124: the command line for scripts on this computer: sessions in Manual mode, prompts and reading; nothing else.
+      cli: {
+        access: new CliAccess(gatehouseDataDir(env), sealer),
+        deps: {
+          list: () => manager.liveSessions().map((x) => cliSession(x.info())),
+          start: async (cwd: string) => (await manager.start({ cwd, mode: "default" })).id,
+          send: (id: string, prompt: string) => {
+            const x = manager.get(id)
+            if (!x) return false
+            x.prompt(prompt)
+            return true
+          },
+          read: (id: string) => {
+            const x = manager.get(id)
+            return x ? { session: cliSession(x.info()), lastAnswer: x.lastResult() } : undefined
+          },
+          settled: (id: string, ms: number) => settledSession(() => manager.get(id)?.info().state, ms),
+          record: (action: string, input: Record<string, unknown>, ok: boolean, why: string) =>
+            audit.record({
+              session: typeof input.id === "string" ? input.id : "desktop",
+              event: "cli_call",
+              channel: "host",
+              tool: "cli",
+              input: { action, via: "cli", ...input },
+              verdict: { outcome: ok ? "allow" : "deny", ruleId: "cli-call", reason: why, risk: 0, decidedBy: "rules", policyHash: store.current?.hash ?? "" },
+              latencyMs: 0,
+            }),
+        },
+      },
       runRoutine: (id: string) => (routineRunner.run ? routineRunner.run(id) : Promise.reject(new Error("Routines are not running yet."))),
+      // T-120: a call to a routine's address, past its token, filters and repeats, held to the trigger caps.
+      fireHook: (id: string, payload: unknown) => (routineTriggers && plan.routines ? routineTriggers.fire(id, payload) : "capped"),
       pwsh,
       // O41: Settings, Connectors, Neighbourhood Watch (GET /api/cnw, pairing, on and off).
       cnw,
@@ -1938,9 +1978,11 @@ export function createHost(opts: HostOptions = {}): Host {
           .catch(() => undefined)
       limitPauser.start()
       // B34: each routine through the same path as any session: kill switch, sign-in, organisation, limits.
-      const runRoutine = async (r: Routine, byYou = false): Promise<string> => {
+      const runRoutine = async (r: Routine, byYou = false, payload?: unknown): Promise<string> => {
         const why = byYou
           ? "your request from the desktop"
+          : payload !== undefined
+            ? "a call to its address from a program on this computer"
           : r.trigger?.kind === "commit"
             ? "a new commit in its folder"
             : r.trigger?.kind === "files"
@@ -1952,7 +1994,7 @@ export function createHost(opts: HostOptions = {}): Host {
           channel: "host",
           tool: "routines",
           cwd: r.folder,
-          input: { id: r.id, name: r.name, ...(r.trigger ? { trigger: r.trigger.kind } : {}) },
+          input: { id: r.id, name: r.name, ...(r.trigger ? { trigger: r.trigger.kind } : {}), ...(payload !== undefined ? { via: "webhook" } : {}) },
           verdict: {
             outcome: "allow",
             ruleId: "routine-run",
@@ -1964,16 +2006,21 @@ export function createHost(opts: HostOptions = {}): Host {
           latencyMs: 0,
         })
         if (!recorded) throw new Error("it could not be recorded, so it did not start")
+        // T-120: the request's values go in below the prompt, marked as untrusted, and count as read from outside.
+        const filled = payload !== undefined ? fillPrompt(r.prompt, payload) : { text: r.prompt, untrusted: "", injection: false }
+        const outside = "the request that started this routine"
         // T-119: carried on in the last run's conversation when you chose that and it is open and idle; else a new one.
         const lastRun = r.into === "continue" ? routines.runs().filter((x) => x.routineId === r.id).at(-1) : undefined
         const open = lastRun ? manager.get(lastRun.sessionId) : undefined
         if (open && open.info().state === "idle") {
-          open.prompt(r.prompt)
+          open.readFromOutside(filled.untrusted, outside, filled.injection)
+          open.prompt(filled.text)
           await routines.noteRun({ routineId: r.id, name: r.name, sessionId: open.id, at: new Date().toISOString() }).catch((e: Error) => log(`routine run not noted: ${e.message}`))
           return open.id
         }
         const session = await manager.start(routineSessionOptions(r))
-        session.prompt(r.prompt)
+        session.readFromOutside(filled.untrusted, outside, filled.injection)
+        session.prompt(filled.text)
         // G23: kept for the review inbox in Settings; a run that cannot be noted still runs.
         const branch = session.info().worktree?.branch
         await routines
@@ -1994,8 +2041,8 @@ export function createHost(opts: HostOptions = {}): Host {
         return await runRoutine(r, true)
       }
       // E-089: on battery a routine that is due waits, one of each, and runs when mains power is back.
-      const heavyRoutine = async (r: Routine): Promise<void> => {
-        const run = () => void runRoutine(r).catch((e: Error) => log(`routine ${r.name} did not start: ${e.message}`))
+      const heavyRoutine = async (r: Routine, payload?: unknown): Promise<void> => {
+        const run = () => void runRoutine(r, false, payload).catch((e: Error) => log(`routine ${r.name} did not start: ${e.message}`))
         if (power.heavy(`routine ${r.id}`, run) === "deferred") log(`routine ${r.name} waits for mains power`)
       }
       // E-096: no routines, and none started by triggers, in safe mode.

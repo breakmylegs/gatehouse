@@ -1,5 +1,6 @@
 import fs from "node:fs"
 import path from "node:path"
+import type { HookFilter } from "./webhooks.js"
 
 /**
  * B34, the later part: routines started by a new commit in their folder, or by files in it changing, as well as by the
@@ -13,7 +14,11 @@ import path from "node:path"
  * - the first look at a folder only notes where it is: a routine never starts because Codehouse opened.
  * Changes in .git, node_modules and .codehouse do not count. Git is read from its files; no program is run.
  */
-export type Trigger = { kind: "commit" } | { kind: "files" }
+export type Trigger =
+  | { kind: "commit" }
+  | { kind: "files" }
+  /** T-120: started by a program on this computer calling its address (webhooks.ts). */
+  | { kind: "webhook"; tokenHash?: string; filters?: HookFilter[] }
 
 export const TRIGGER_GAP_MS = 15 * 60_000
 export const TRIGGER_DAY_CAP = 12
@@ -93,8 +98,8 @@ export interface Triggered {
 
 export interface TriggerDeps<R extends Triggered> {
   list: () => R[]
-  /** Starts the routine's session; its id, or nothing. Throws when it cannot start. */
-  start: (r: R) => Promise<string | void>
+  /** Starts the routine's session; its id, or nothing. Throws when it cannot start. T-120: with a request's body. */
+  start: (r: R, payload?: unknown) => Promise<string | void>
   /** Whether that session is working (a turn running, or waiting on you). */
   working: (sessionId: string) => boolean
   log: (line: string) => void
@@ -115,6 +120,8 @@ export class TriggerWatcher<R extends Triggered> {
   /** Until when changes are its own session's: while it works, and QUIET_MS after the last look that saw it working. */
   readonly #quietUntil = new Map<string, number>()
   readonly #count = new Map<string, { day: string; n: number }>()
+  /** T-120: the newest request to each routine's address that has not started a run yet. */
+  readonly #payload = new Map<string, unknown>()
   #timer: NodeJS.Timeout | undefined
   #busy = false
 
@@ -146,6 +153,21 @@ export class TriggerWatcher<R extends Triggered> {
       return true
     }
     return at < (this.#quietUntil.get(id) ?? 0)
+  }
+
+  /**
+   * T-120: a request to a routine's address. It starts at once within the caps; else it is held, the newest request
+   * kept, and starts when the gap is over or its own session has finished. Refused when it ran its day's number.
+   */
+  fire(id: string, payload: unknown): "starting" | "held" | "capped" {
+    const at = this.#at()
+    const c = this.#count.get(id)
+    if (c?.day === day(new Date(at)) && c.n >= TRIGGER_DAY_CAP) return "capped"
+    this.#payload.set(id, payload)
+    this.#pending.add(id)
+    const held = this.#own(id, at) || at - (this.#last.get(id) ?? 0) < TRIGGER_GAP_MS
+    void this.check()
+    return held ? "held" : "starting"
   }
 
   async check(): Promise<void> {
@@ -187,6 +209,8 @@ export class TriggerWatcher<R extends Triggered> {
         const c = this.#count.get(r.id)
         const today = c?.day === day(now) ? c.n : 0
         this.#pending.delete(r.id)
+        const payload = this.#payload.get(r.id)
+        this.#payload.delete(r.id)
         if (today >= TRIGGER_DAY_CAP) {
           this.#d.log(`routine ${r.name} was not started: it already ran ${today} times today`)
           continue
@@ -194,7 +218,7 @@ export class TriggerWatcher<R extends Triggered> {
         this.#last.set(r.id, now.getTime())
         this.#count.set(r.id, { day: day(now), n: today + 1 })
         try {
-          const s = await this.#d.start(r)
+          const s = await (payload === undefined ? this.#d.start(r) : this.#d.start(r, payload))
           if (s) this.#session.set(r.id, s)
         } catch (e) {
           this.#d.log(`routine ${r.name} did not start: ${(e as Error).message}`)

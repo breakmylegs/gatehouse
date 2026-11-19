@@ -406,6 +406,62 @@ describe("Run now (T-119)", () => {
   })
 })
 
+describe("a routine's address (T-120)", () => {
+  it("starts only with its own token, keeps to its filters and repeats, records every call, and never shows the token again", async () => {
+    const { RoutineStore } = await import("../src/routines.js")
+    const file = path.join(root, "routines-t120.json")
+    const routines = new RoutineStore(file)
+    const fired: Array<{ id: string; payload: unknown }> = []
+    const recorded: Array<{ event: string; input: Record<string, unknown>; verdict: { outcome: string } }> = []
+    const app2 = Fastify()
+    registerApi(app2, {
+      ...ctx,
+      routines,
+      audit: { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never,
+      fireHook: (id, payload) => (fired.push({ id, payload }), "starting"),
+    })
+    try {
+      const made = await app2.inject({
+        method: "PUT",
+        url: "/api/routines",
+        payload: { name: "Triage", folder: "C:\\dev\\shop", prompt: "Triage {{title}}", trigger: { kind: "webhook", filters: [{ field: "action", equals: "opened" }] } },
+      })
+      const { routine, token } = made.json() as { routine: { id: string; trigger: unknown }; token: string }
+      expect(routine.trigger).toEqual({ kind: "webhook", hasToken: true, filters: [{ field: "action", equals: "opened" }] })
+      expect(JSON.stringify((await app2.inject({ method: "GET", url: "/api/routines" })).json())).not.toMatch(/tokenHash|[0-9a-f]{64}/)
+      const call = (headers: Record<string, string>, payload: object = { action: "opened", title: "Login fails" }) =>
+        app2.inject({ method: "POST", url: `/hook/${routine.id}`, headers, payload })
+      expect((await call({})).statusCode).toBe(401)
+      expect((await call({ authorization: "Bearer wrong" })).statusCode).toBe(401)
+      expect((await app2.inject({ method: "POST", url: "/hook/nope", headers: { authorization: `Bearer ${token}` }, payload: {} })).statusCode).toBe(401)
+      expect(fired).toEqual([])
+      const auth = { authorization: `Bearer ${token}` }
+      expect((await call(auth, { action: "closed" })).json()).toEqual({ started: false, reason: "filtered" })
+      const ok = await call({ ...auth, "x-github-delivery": "d1" })
+      expect(ok.statusCode).toBe(202)
+      expect(ok.json()).toEqual({ started: true, reason: "starting" })
+      expect(fired).toEqual([{ id: routine.id, payload: { action: "opened", title: "Login fails" } }])
+      expect((await call({ ...auth, "x-github-delivery": "d1" })).json()).toEqual({ started: false, reason: "duplicate" })
+      expect(fired).toHaveLength(1)
+      const hooks = recorded.filter((e) => e.event === "routine_hook")
+      expect(hooks.map((e) => [e.verdict.outcome, e.input.result ?? ""])).toEqual([
+        ["deny", ""],
+        ["deny", ""],
+        ["allow", "filtered"],
+        ["allow", "starting"],
+        ["allow", "duplicate"],
+      ])
+      expect(JSON.stringify(recorded)).not.toContain(token)
+      const fresh = (await app2.inject({ method: "POST", url: `/api/routines/${routine.id}/hook-token` })).json() as { token: string }
+      expect((await call({ ...auth, "x-github-delivery": "d2" })).statusCode).toBe(401)
+      expect((await call({ authorization: `Bearer ${fresh.token}`, "x-github-delivery": "d2" })).statusCode).toBe(202)
+    } finally {
+      await app2.close()
+      fs.rmSync(file, { force: true })
+    }
+  })
+})
+
 describe("settings endpoints", () => {
   it("rejects unknown keys and bad values", async () => {
     const put = (body: unknown) =>

@@ -758,6 +758,16 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#lastResult
   }
 
+  /**
+   * T-120: text from outside that reaches the session in its prompt (a request that started a routine): counted as
+   * read from outside, so a network call carrying one of its values asks (D-016), and after injection every one does.
+   */
+  readFromOutside(text: string, source: string, injection: boolean): void {
+    if (!text) return
+    this.#provenance.add(text, source)
+    if (injection) this.#provenance.raise(source)
+  }
+
   /** E-052: what this session read from outside, for a result it hands back. */
   taint(): "injection" | "untrusted" | "none" {
     return this.#provenance.sessionTaint()

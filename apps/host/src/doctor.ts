@@ -15,6 +15,7 @@ import { redactString } from "@gatehouse/policy"
 import { checkRuntime, type LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { inClaudeRange, rangeText } from "./claude-range.js"
 import { CANARY_FIX, type CanaryRun } from "./canaries.js"
+import type { HostStalls } from "./host-stalls.js"
 
 export type DoctorState = "ok" | "warn" | "fail"
 
@@ -45,6 +46,8 @@ export interface DoctorFacts {
   cnw?: { paired: boolean; on: boolean; state: "off" | "connecting" | "connected" | "refused" }
   /** E-100: the last run of the invariant canaries (undefined until the first, a few seconds after start). */
   canaries?: CanaryRun
+  /** T-132: whether the Host has stalled or been slow to answer in the last hour. */
+  responsiveness?: DoctorCheck
 }
 
 /** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
@@ -126,6 +129,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
   )
   // E-100: a failing safety check stops every session, so it comes straight after Claude Code itself.
   if ("canaries" in f) add(canaryCheck(f.canaries))
+  if (f.responsiveness) add(f.responsiveness)
 
   const s = h.signin
   add(
@@ -415,10 +419,14 @@ export function registerDoctorRoutes(
     cnwStatus?: () => NonNullable<DoctorFacts["cnw"]>
     /** E-100: the last canary run. */
     canaries?: () => CanaryRun | undefined
+    /** T-132: stalls and slow requests. */
+    stalls?: HostStalls
   },
 ): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
   let claude: { at: number; value: DoctorFacts["claude"] } | undefined
+  const stalls = ctx.stalls
+  if (stalls) app.addHook("onResponse", async (req, reply) => stalls.request(req.method, req.routeOptions.url, reply.elapsedTime))
   app.get("/api/doctor", async (req, reply) => {
     if (!ctx.health) return reply.code(404).send({ error: "The checks are not available here." })
     return await run(req.server.server.address())
@@ -440,6 +448,7 @@ export function registerDoctorRoutes(
       ...(ctx.vulnSnapshot ? { vulnSnapshot: ctx.vulnSnapshot() } : {}),
       ...(ctx.cnwStatus ? { cnw: ctx.cnwStatus() } : {}),
       ...(ctx.canaries ? { canaries: ctx.canaries() } : {}),
+      ...(stalls ? { responsiveness: stalls.check() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

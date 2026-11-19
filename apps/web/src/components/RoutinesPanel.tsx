@@ -18,14 +18,17 @@ interface Routine {
   enabled: boolean
   lastRun?: string
   /** Absent: on a schedule. */
-  trigger?: { kind: "commit" | "files" }
+  trigger?: { kind: "commit" | "files" } | { kind: "webhook"; hasToken?: boolean; filters?: Array<{ field: string; equals: string }> }
   /** T-119: once, at this local time, instead of on days. */
   once?: string
   /** T-119: where each run goes. */
   into?: "new" | "continue"
 }
 
-type Starts = "schedule" | "once" | "commit" | "files"
+type Starts = "schedule" | "once" | "commit" | "files" | "webhook"
+
+/** T-120: the address a program on this computer calls to start a routine. */
+export const hookAddress = (id: string, origin = window.location.origin) => `${origin}/hook/${encodeURIComponent(id)}`
 
 /** T-122: a routine a session drafted, for you to read and save, or dismiss. */
 interface Draft {
@@ -41,6 +44,7 @@ interface Draft {
 export function startsText(x: Pick<Routine, "time" | "days" | "trigger"> & { once?: string; into?: string }): string {
   if (x.trigger?.kind === "commit") return "on a new commit"
   if (x.trigger?.kind === "files") return "when files change"
+  if (x.trigger?.kind === "webhook") return `when a program on this computer calls it${x.trigger.filters?.length ? `, if ${x.trigger.filters.map((f) => `${f.field} is ${f.equals}`).join(" and ")}` : ""}`
   if (x.once) return `once, ${new Date(x.once).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}`
   if (x.into === "continue") return `${x.time}, ${x.days.join(" ")}, carrying on its last conversation`
   return `${x.time}, ${x.days.join(" ")}`
@@ -170,7 +174,11 @@ export function RoutinesPanel() {
     starts: "schedule" as Starts,
     once: "",
     into: "new" as "new" | "continue",
+    filterField: "",
+    filterEquals: "",
   })
+  /** T-120: a routine's token, shown once when it is made or replaced. */
+  const [shown, setShown] = useState<{ id: string; name: string; token: string }>()
   const [drafts, setDrafts] = useState<Draft[]>([])
   const load = async () => {
     const r = await api<{ routines: Routine[] }>("GET", "/api/routines")
@@ -193,16 +201,20 @@ export function RoutinesPanel() {
 
   async function add(e: React.FormEvent) {
     e.preventDefault()
-    const { starts, once, into, ...rest } = draft
-    const r = await api("PUT", "/api/routines", {
+    const { starts, once, into, filterField, filterEquals, ...rest } = draft
+    const r = await api<{ routine: Routine; token?: string }>("PUT", "/api/routines", {
       ...rest,
       enabled: true,
       ...(starts === "commit" || starts === "files" ? { trigger: { kind: starts } } : {}),
+      ...(starts === "webhook"
+        ? { trigger: { kind: "webhook", ...(filterField.trim() ? { filters: [{ field: filterField.trim(), equals: filterEquals }] } : {}) } }
+        : {}),
       ...(starts === "once" ? { once } : {}),
       ...(into === "continue" ? { into } : {}),
     })
     if (!r.ok) return toast.error(r.error ?? "The routine was not saved", { id: "routines" })
     setDraft({ ...draft, name: "", prompt: "" })
+    if (r.data?.token) setShown({ id: r.data.routine.id, name: r.data.routine.name, token: r.data.token })
     toast("Routine saved", { id: "routines" })
     void load()
   }
@@ -218,6 +230,12 @@ export function RoutinesPanel() {
     toast.success(`${x.name} started`, { id: "routines" })
     void load()
   }
+  /** T-120: a new token; the old one stops working. */
+  async function newToken(x: Routine) {
+    const r = await api<{ token: string }>("POST", `/api/routines/${encodeURIComponent(x.id)}/hook-token`)
+    if (!r.ok || !r.data) return toast.error(r.error ?? "No new token", { id: "routines" })
+    setShown({ id: x.id, name: x.name, token: r.data.token })
+  }
   async function remove(x: Routine) {
     const r = await api("DELETE", `/api/routines/${encodeURIComponent(x.id)}`)
     if (!r.ok) return toast.error(r.error ?? "Not removed", { id: "routines" })
@@ -232,8 +250,9 @@ export function RoutinesPanel() {
         goes through every check a session you start does: the kill switch, your sign-in and
         organisation, the limit on sessions, and every rule. With Extreme approval it carries on by
         itself within your turn and spending limits; otherwise it asks you as usual. One can start
-        instead on a new commit in its folder, or when files in it change: never because of its own
-        session&apos;s work, at most once in 15 minutes and 12 times a day.
+        instead on a new commit in its folder, when files in it change, or when a program on this
+        computer calls its address with its own token: never because of its own session&apos;s work,
+        at most once in 15 minutes and 12 times a day.
       </p>
       {drafts.length ? (
         <section aria-label="Drafted by a session" className="grid gap-1.5">
@@ -285,6 +304,11 @@ export function RoutinesPanel() {
               <button type="button" className="btn !min-h-7 !text-[13px]" onClick={() => void runNow(x)}>
                 Run now
               </button>
+              {x.trigger?.kind === "webhook" ? (
+                <button type="button" className="btn !min-h-7 !text-[13px]" onClick={() => void newToken(x)}>
+                  New token
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="btn !min-h-7 !text-[13px]"
@@ -298,6 +322,26 @@ export function RoutinesPanel() {
         </ul>
       ) : list ? (
         <p className="m-0 text-mut">No routines yet.</p>
+      ) : null}
+      {shown ? (
+        <section aria-label="Its address and token" className="panel grid gap-1.5 p-2 text-[13px]">
+          <strong>{shown.name}: its address and token</strong>
+          <span>
+            A program on this computer starts it by sending a POST, with a JSON body if you like, to this address with
+            this token as a bearer token. The token is shown only now; Codehouse keeps only a hash of it. Values from the
+            body fill placeholders such as {"{{action}}"} in the prompt, and are given to Claude as untrusted data.
+          </span>
+          <code className="mono break-all">{hookAddress(shown.id)}</code>
+          <code className="mono break-all">{shown.token}</code>
+          <span className="flex gap-1">
+            <button type="button" className="btn !min-h-7 !text-[13px]" onClick={() => void navigator.clipboard?.writeText(`curl -X POST -H "Authorization: Bearer ${shown.token}" -H "Content-Type: application/json" -d "{}" ${hookAddress(shown.id)}`)}>
+              Copy as a curl command
+            </button>
+            <button type="button" className="btn !min-h-7 !text-[13px]" onClick={() => setShown(undefined)}>
+              Done
+            </button>
+          </span>
+        </section>
       ) : null}
       <RoutineRuns />
       <form className="grid gap-2" onSubmit={(e) => void add(e)} aria-label="Add a routine">
@@ -343,8 +387,21 @@ export function RoutinesPanel() {
               <option value="once">Once</option>
               <option value="commit">On a new commit</option>
               <option value="files">When files change</option>
+              <option value="webhook">When a program on this computer calls it</option>
             </select>
           </label>
+          {draft.starts === "webhook" ? (
+            <>
+              <label className="grid gap-1 text-sm">
+                <span>Only if the field</span>
+                <input className="field mono" placeholder="action" value={draft.filterField} onChange={(e) => setDraft({ ...draft, filterField: e.target.value })} />
+              </label>
+              <label className="grid gap-1 text-sm">
+                <span>is</span>
+                <input className="field mono" placeholder="opened" value={draft.filterEquals} onChange={(e) => setDraft({ ...draft, filterEquals: e.target.value })} />
+              </label>
+            </>
+          ) : null}
           {draft.starts === "once" ? (
             <label className="grid gap-1 text-sm">
               <span>When</span>

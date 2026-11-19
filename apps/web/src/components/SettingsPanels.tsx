@@ -13,6 +13,7 @@ import { useNow } from "../lib/useNow"
 import { useStore } from "../store"
 import { isMac, systemName } from "../lib/platform-mac" // Mac fork
 import { ago, money, PLAN_HIGH, readPlan, resets, type PlanUsage } from "./PlanMeter"
+import { PlanPool } from "./PlanPool"
 
 /**
  * Panels for the Settings sections added on 4 Nov, after Claude's desktop app (owner: "I want this level of UI and
@@ -259,6 +260,7 @@ export function useAppearance(): void {
 /** Settings, Usage: the plan's limits in full, as the ring beside the prompt box shows them. */
 export function UsageLimitsPanel() {
   const account = useStore((s) => s.activeAccount)
+  const signedIn = (useStore((s) => s.health?.accounts) ?? []).filter((a) => a.signedIn)
   const [u, setU] = useState<PlanUsage | null | undefined>()
   const now = useNow(30_000)
   const read = (fresh = false) => void readPlan(account, fresh).then(setU)
@@ -272,6 +274,7 @@ export function UsageLimitsPanel() {
     )
   return (
     <div className="grid gap-3">
+      <PlanPool accounts={signedIn.map((a) => ({ id: a.id, label: a.label }))} />
       {u.plan ? <p className="m-0 text-sm font-semibold">Plan: {u.plan}</p> : null}
       {u.limits.map((l) => (
         <div key={l.label} className="grid gap-1">

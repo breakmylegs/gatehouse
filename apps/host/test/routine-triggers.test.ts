@@ -176,7 +176,7 @@ describe("routines with a trigger", () => {
     expect(t).toMatchObject({ trigger: { kind: "commit" }, days: [] })
     expect(() =>
       checkRoutine({ name: "x", folder: F("C:\\x"), prompt: "p", trigger: { kind: "push" } as never }),
-    ).toThrow(/schedule, a new commit, or files changing/)
+    ).toThrow(/schedule, a new commit, files changing, or a call/)
     expect(
       isDue({ id: "1", ...t, days: ["wed"], time: "09:00" }, new Date(2026, 10, 4, 9, 5)),
     ).toBe(false)

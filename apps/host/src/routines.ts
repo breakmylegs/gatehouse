@@ -3,6 +3,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { folderExample, isFullFolder, writeFileAtomic } from "@gatehouse/shared/node" // Mac fork: folders
 import type { Trigger } from "./routine-triggers.js"
+import { checkFilters, hashHookToken, isTokenHash, newHookToken } from "./webhooks.js"
 
 /**
  * B34: local routines. A routine is a prompt for a folder, started as a normal session on the days and at the time you
@@ -70,8 +71,27 @@ export function checkRoutine(r: Partial<Routine>): Omit<Routine, "id" | "lastRun
   if (!prompt || prompt.length > 8000)
     throw new RoutineError("A routine needs a prompt of up to 8,000 characters.")
   const kind = (r.trigger as { kind?: unknown } | undefined)?.kind
-  if (r.trigger !== undefined && kind !== "commit" && kind !== "files")
-    throw new RoutineError("A routine starts on a schedule, a new commit, or files changing.")
+  if (r.trigger !== undefined && kind !== "commit" && kind !== "files" && kind !== "webhook")
+    throw new RoutineError("A routine starts on a schedule, a new commit, files changing, or a call from a program on this computer.")
+  // T-120: started by a program on this computer calling its address; its token is kept only as a hash.
+  if (kind === "webhook") {
+    const t = r.trigger as { tokenHash?: unknown; filters?: unknown }
+    const filters = checkFilters(t.filters)
+    if (typeof filters === "string") throw new RoutineError(filters)
+    return {
+      name,
+      folder,
+      prompt,
+      time: "00:00",
+      days: [],
+      ...(r.extreme ? { extreme: true } : {}),
+      ...(r.worktree === true ? { worktree: true } : {}),
+      ...(r.phone === true ? { phone: true } : {}),
+      ...(r.into === "continue" ? { into: "continue" as const } : {}),
+      enabled: r.enabled !== false,
+      trigger: { kind, ...(isTokenHash(t.tokenHash) ? { tokenHash: t.tokenHash } : {}), ...(filters.length ? { filters } : {}) },
+    }
+  }
   if (kind === "commit" || kind === "files")
     return {
       name,
@@ -234,6 +254,12 @@ export class RoutineStore {
     const at = this.#all.findIndex((x) => x.id === r.id)
     if (at < 0 && this.#all.length >= MAX_ROUTINES)
       throw new RoutineError(`Up to ${MAX_ROUTINES} routines.`)
+    // T-120: a routine's token is never set from outside; an edit keeps the one it has.
+    if (ok.trigger?.kind === "webhook") {
+      const had = at >= 0 ? this.#all[at]!.trigger : undefined
+      const { tokenHash: _given, ...rest } = ok.trigger
+      ok.trigger = { ...rest, ...(had?.kind === "webhook" && had.tokenHash ? { tokenHash: had.tokenHash } : {}) }
+    }
     const next: Routine = {
       id: at >= 0 ? this.#all[at]!.id : crypto.randomUUID(),
       ...ok,
@@ -243,6 +269,16 @@ export class RoutineStore {
     else this.#all.push(next)
     await this.#save()
     return next
+  }
+
+  /** T-120: a new token for a routine started by a call; the token once, for you to copy, and only its hash kept. */
+  async newHookToken(id: string): Promise<string | undefined> {
+    const r = this.#all.find((x) => x.id === id)
+    if (r?.trigger?.kind !== "webhook") return undefined
+    const token = newHookToken()
+    r.trigger = { ...r.trigger, tokenHash: hashHookToken(token) }
+    await this.#save()
+    return token
   }
 
   async remove(id: string): Promise<boolean> {
