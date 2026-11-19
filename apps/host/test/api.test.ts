@@ -462,6 +462,31 @@ describe("a routine's address (T-120)", () => {
   })
 })
 
+describe("secrets a session asks for (T-135)", () => {
+  it("are listed without values and answered on the desktop, recorded by name only", async () => {
+    const { SecretRequests } = await import("../src/secret-requests.js")
+    const { SecretTerms } = await import("../src/secret-providers.js")
+    const secretRequests = new SecretRequests(new SecretTerms())
+    const recorded: unknown[] = []
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, secretRequests, audit: { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never })
+    try {
+      const asked = secretRequests.ask("s1", "NPM_TOKEN", "to publish", "npm publish")
+      const list = (await app2.inject({ method: "GET", url: "/api/secret-requests" })).json() as { requests: Array<{ id: string; name: string }> }
+      expect(list.requests).toMatchObject([{ name: "NPM_TOKEN", sessionId: "s1", command: "npm publish" }])
+      const id = list.requests[0]!.id
+      expect((await app2.inject({ method: "POST", url: `/api/secret-requests/${id}`, payload: { value: "sk-ant-api03-zzzz" } })).statusCode).toBe(422)
+      expect((await app2.inject({ method: "POST", url: `/api/secret-requests/${id}`, payload: { value: "npm_value_123456" } })).json()).toEqual({ ok: true })
+      expect(await asked).toBe("given")
+      expect((await app2.inject({ method: "POST", url: `/api/secret-requests/${id}`, payload: { value: "again" } })).statusCode).toBe(404)
+      expect(JSON.stringify(recorded)).not.toMatch(/npm_value_123456|sk-ant/)
+      expect(recorded).toMatchObject([{ event: "secret_given", channel: "desktop", input: { name: "NPM_TOKEN" } }])
+    } finally {
+      await app2.close()
+    }
+  })
+})
+
 describe("settings endpoints", () => {
   it("rejects unknown keys and bad values", async () => {
     const put = (body: unknown) =>

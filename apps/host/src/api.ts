@@ -160,6 +160,8 @@ export interface AdminContext {
   routines?: RoutineStore
   /** T-119: a routine run now from the desktop. */
   runRoutine?: (id: string) => Promise<string>
+  /** T-135: secrets sessions asked you for, answered on the desktop only. */
+  secretRequests?: import("./secret-requests.js").SecretRequests
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */
@@ -1045,6 +1047,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerMemoryRoutes(app, ctx)
   registerRoutineRoutes(app, ctx)
   registerCliAccessRoutes(app, ctx)
+  registerSecretRequestRoutes(app, ctx)
   registerArtifactRoutes(app, ctx)
   registerLibraryRoutes(app, ctx)
   registerFilesRoutes(app, ctx)
@@ -1661,6 +1664,42 @@ function registerArtifactRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const q = (req.query as { theme?: string }).theme
     const theme = q === "dark" || q === "light" ? q : undefined
     return reply.send(found.kind === "mermaid" ? mermaidPage(found.content, readMermaidLib()) : found.kind === "html" ? themedHtml(found.content, theme) : found.content)
+  })
+}
+
+/**
+ * T-135: the secrets sessions ask you for. Under /api, so only the desktop (with the per-launch token) sees or answers
+ * them: never the phone or a push channel. Recorded by name, never by value.
+ */
+function registerSecretRequestRoutes(app: FastifyInstance, ctx: AdminContext): void {
+  const secrets = ctx.secretRequests
+  if (!secrets) return
+  app.get("/api/secret-requests", async () => ({ requests: secrets.pending() }))
+  app.post("/api/secret-requests/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id
+    const b = (req.body ?? {}) as { value?: unknown; decline?: unknown }
+    const asked = secrets.pending().find((x) => x.id === id)
+    if (!asked) return bad(reply, 404, "That request is no longer waiting.")
+    const value = b.decline === true ? undefined : typeof b.value === "string" ? b.value : ""
+    const why = secrets.answer(id, value)
+    if (why) return bad(reply, 422, why)
+    await ctx.audit.record({
+      session: asked.sessionId,
+      event: value === undefined ? "secret_declined" : "secret_given",
+      channel: "desktop",
+      tool: "secrets",
+      input: { name: asked.name },
+      verdict: {
+        outcome: value === undefined ? "deny" : "allow",
+        ruleId: "secret-answer",
+        reason: value === undefined ? `You declined to give ${asked.name}.` : `You gave ${asked.name} for one command.`,
+        risk: 0,
+        decidedBy: "human-desktop",
+        policyHash: ctx.store.current?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    return { ok: true }
   })
 }
 

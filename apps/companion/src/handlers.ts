@@ -98,10 +98,16 @@ export interface CompanionDeps {
   linked?: LinkedReadClient
   /** D-037: a coding session's assumptions. Absent: declare_assumption is not offered. */
   assumptions?: AssumptionClient
+  /** T-135: asking the person for a secret for one command. Absent: request_secret is not offered. */
+  secrets?: SecretClient
   /** D-065: a coding session's test impact analysis. Absent: affected_tests is not offered. */
   testImpact?: boolean
   now?: () => number
   checkpoint?: typeof defaultCheckpoint
+}
+
+export interface SecretClient {
+  ask(name: string, reason: string, command: string): Promise<ToolText>
 }
 
 export interface ToolText {
@@ -211,6 +217,12 @@ export class CompanionHandlers {
     return await this.#deps.artifacts.save(title, kind, content)
   }
 
+  /** T-135: a secret for one command, asked of the person on the desktop; its value never comes back here. */
+  async requestSecret(name: string, reason: string, command: string): Promise<ToolText> {
+    if (!this.#deps.secrets) return { text: "Secrets cannot be asked for in this session.", isError: true }
+    return this.#deps.secrets.ask(name.trim(), oneLine(reason).slice(0, 300), command.trim())
+  }
+
   /** D-037: an assumption Claude is working on, kept and shown until the person says it holds. */
   async declareAssumption(text: string, check?: string): Promise<ToolText> {
     const clean = text.trim()
@@ -299,6 +311,7 @@ export interface CompanionToolDef {
     | "wait_for_session"
     | "declare_assumption"
     | "affected_tests"
+    | "request_secret"
   description: string
   shape: z.ZodRawShape
   /**
@@ -575,6 +588,30 @@ export const ASSUMPTION_TOOLS: readonly CompanionToolDef[] = [
       openWorldHint: false,
     },
     run: (h, a) => h.declareAssumption(String(a.text ?? ""), typeof a.how_to_check === "string" ? a.how_to_check : undefined),
+  },
+]
+
+/**
+ * T-135: a secret for one command. The person types it on the desktop; it is set for that command alone when it runs,
+ * and never shown to Claude.
+ */
+export const SECRET_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "request_secret",
+    description:
+      "Ask the person for a secret a command needs (a registry token, say) instead of asking them to paste it. Give the environment variable's name, why, and the exact command it is for. They type it on their desktop; you never see it. If they give it, run exactly that command next, unchanged, and it runs with the variable set, once. Never put a secret in a file, a prompt or a command yourself.",
+    shape: {
+      name: z.string().min(2).max(64),
+      reason: z.string().min(1).max(500),
+      command: z.string().min(1).max(2000),
+    },
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+    run: (h, a) => h.requestSecret(String(a.name ?? ""), String(a.reason ?? ""), String(a.command ?? "")),
   },
 ]
 

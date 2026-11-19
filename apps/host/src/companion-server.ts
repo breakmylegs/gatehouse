@@ -12,6 +12,7 @@ import {
   ORCHESTRATE_TOOLS,
   ASSUMPTION_TOOLS,
   TEST_IMPACT_TOOLS,
+  SECRET_TOOLS,
   type CompanionDeps,
 } from "@gatehouse/companion"
 
@@ -38,6 +39,7 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
       ...(deps.orchestrate ? ORCHESTRATE_TOOLS : []),
       ...(deps.assumptions ? ASSUMPTION_TOOLS : []),
       ...(deps.testImpact ? TEST_IMPACT_TOOLS : []),
+      ...(deps.secrets ? SECRET_TOOLS : []),
     ].map((def) =>
       tool(
         def.name,

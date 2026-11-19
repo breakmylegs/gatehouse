@@ -26,6 +26,7 @@ import { fillPrompt } from "./webhooks.js"
 import { CliAccess, cliSession, settledSession } from "./cli-access.js"
 import { HostStalls } from "./host-stalls.js"
 import { resolveSecret, SecretTerms } from "./secret-providers.js"
+import { refuseRequest, SecretRequests } from "./secret-requests.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
@@ -216,6 +217,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const secretTerms = new SecretTerms()
   const teamTerms = withTeamTerms(config, redactionLists, () => secretTerms.terms())
   const secretDeps = { enabled: () => config.onePassword === true, terms: secretTerms }
+  // T-135: secrets you give a session for one command, desktop only; their values are redacted like the above.
+  const secretRequests = new SecretRequests(secretTerms, () => opts.onHealthChanged?.())
   const rulesPath =
     opts.rulesPath ??
     env.GATEHOUSE_RULES_PATH ??
@@ -593,6 +596,7 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     checkpoints,
     grants,
+    secrets: secretRequests,
     account,
     // Owner, 9 Nov: a bypass that ran out pauses its session at once, not at the next look.
     limitCheck: () => limitPauser.check(),
@@ -628,6 +632,27 @@ export function createHost(opts: HostOptions = {}): Host {
           ? {
               // D-065: the tests a change affects, for the inner loop.
               testImpact: true,
+              // T-135: a secret for one command, asked of you on the desktop only.
+              secrets: {
+                ask: async (name: string, reason: string, command: string) => {
+                  const why = refuseRequest(name, command)
+                  if (why) return { text: `Not asked: ${why}`, isError: true }
+                  await audit.record({
+                    session: sessionId,
+                    event: "secret_requested",
+                    channel: "host",
+                    tool: "secrets",
+                    cwd,
+                    input: { name },
+                    verdict: { outcome: "allow", ruleId: "secret-requested", reason: `The session asked you for ${name} for one command.`, risk: 0, decidedBy: "rules", policyHash: store.current?.hash ?? "" },
+                    latencyMs: 0,
+                  })
+                  const r = await secretRequests.ask(sessionId, name, reason, command)
+                  return r === "given"
+                    ? { text: `The person gave ${name}. Run exactly this command next, unchanged, and it runs with ${name} set, once: ${command}` }
+                    : { text: r === "declined" ? `The person declined to give ${name}.` : `Nobody answered the request for ${name} in 10 minutes.`, isError: true }
+                },
+              },
               assumptions: {
                 declare: async (text: string, check?: string) => {
                   const s = manager.get(sessionId)
@@ -1401,6 +1426,8 @@ export function createHost(opts: HostOptions = {}): Host {
     minGapMs: 3_000,
   })
   manager.on("session", () => phoneSessions.poke())
+  // T-135: a session that has ended keeps none of the secrets you gave it, and its requests go.
+  manager.on("session", (info) => info.state === "ended" && secretRequests.forget(info.id))
   // E-051: worktree branches that would conflict, tried every five minutes while sessions work in worktrees. Each
   // session working there is told once, when a conflict first appears.
   const sameFolder = (a: string, b: string) => path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
@@ -1573,6 +1600,8 @@ export function createHost(opts: HostOptions = {}): Host {
       engine,
       store,
       // T-119: Run now, once the routines are running (filled in below).
+      // T-135: the requests waiting on the desktop, and your answers.
+      secretRequests,
       // T-132: stalls and slow requests, for Doctor.
       stalls: (() => {
         const s = new HostStalls()

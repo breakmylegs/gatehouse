@@ -14,6 +14,7 @@ import { isMac } from "./lib/platform-mac" // Mac fork
 import { Rail } from "./components/Rail"
 import { RailResizer, savedRailWidth } from "./components/RailResizer"
 import { ShortcutSheet } from "./components/ShortcutSheet"
+import { SecretRequests } from "./components/SecretRequests"
 import { railOrder, readHideEnded } from "./lib/rail"
 import { RAIL_EVENT } from "./lib/layouts"
 import { copyLatest } from "./lib/sessionActions"
@@ -279,6 +280,8 @@ export function App() {
       <Announcer />
       <ExportDialog />
       <ShortcutSheet />
+      {/* T-135: a secret a session asks for, desktop only. */}
+      <SecretRequests />
       <Toaster position="bottom-right" theme={theme} closeButton />
     </>
   )

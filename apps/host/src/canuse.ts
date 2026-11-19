@@ -802,7 +802,7 @@ async function escalate(
 }
 
 /** Floor first, then the full policy. Returns a denying verdict if the edited input must not run. */
-async function recheckEdited(
+export async function recheckEdited(
   deps: CanUseDeps,
   toolName: string,
   edited: Record<string, unknown>,

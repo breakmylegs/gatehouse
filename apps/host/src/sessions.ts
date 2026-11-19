@@ -45,7 +45,8 @@ import { folderExample } from "@gatehouse/shared/node" // Mac fork
 import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
-import { createCanUseTool, DEFAULT_EXTREME_LIMIT } from "./canuse.js"
+import { createCanUseTool, DEFAULT_EXTREME_LIMIT, recheckEdited, type CanUseDeps } from "./canuse.js"
+import { withSecrets, type SecretRequests } from "./secret-requests.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
 import {
@@ -513,6 +514,8 @@ export interface SessionDeps {
   checkpoints: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
+  /** T-135: secrets you gave a session for one command. */
+  secrets?: SecretRequests
   /** D-007: the locked tests. */
   locks?: TestLocks
   /** D-062: the local analysis of what a session's commit would add. */
@@ -1327,7 +1330,7 @@ export class Session extends EventEmitter<SessionEvents> {
     // What the person told every session, this project and this session, in that order (owner, 31 Oct).
     const instructions = await this.#instructionsText()
     // One permission path for tool calls and for a server's request to open a page (B06).
-    const canUse = createCanUseTool({
+    const canUseDeps: CanUseDeps = {
       // D-005: while a task writes a test for a surviving mutant, edits outside test files ask.
       mutantTask: () => this.#mutantTask,
       // D-036: and while it writes its tests first.
@@ -1372,7 +1375,28 @@ export class Session extends EventEmitter<SessionEvents> {
       onDecision: this.#tellDecision,
       provenance: this.#provenance,
       log: d.log,
-    })
+    }
+    // T-135: a secret you gave for one command is set for it after it is allowed as it stands, and checked again.
+    const secrets = d.secrets
+    const canUse = secrets
+      ? withSecrets(createCanUseTool(canUseDeps), {
+          sessionId: this.id,
+          secrets,
+          recheck: (toolName, input, o) => recheckEdited(canUseDeps, toolName, input, o),
+          record: (name, ok, why) =>
+            d.audit.record({
+              session: this.id,
+              event: "secret_used",
+              channel: "host",
+              tool: "secrets",
+              cwd: this.cwd,
+              project: this.project,
+              input: { name },
+              verdict: { outcome: ok ? "allow" : "deny", ruleId: "secret-used", reason: why, risk: 0, decidedBy: "rules", policyHash: d.policy()?.hash ?? "" },
+              latencyMs: 0,
+            }),
+        })
+      : createCanUseTool(canUseDeps)
     const options: Options = {
       cwd: this.cwd,
       ...(this.#model !== undefined ? { model: this.#model } : {}),
