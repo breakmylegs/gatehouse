@@ -38,6 +38,7 @@ import {
   type LegacyRoute,
 } from "../apps/host/src/update/publish.js"
 import { writeZip } from "../apps/host/src/update/zip.js"
+import { buildStatement, sessionNotes, verifyStatement } from "../apps/host/src/slsa.js"
 import { RELEASE_KEYS } from "../apps/host/src/update/manifest.js"
 import { redact } from "@gatehouse/policy"
 import { AuditWriter } from "@gatehouse/shared/audit"
@@ -257,10 +258,14 @@ if (cmd === "version") {
       "",
       "`update.json`, `update.sig`, the other `.json` and `.sig` files and the `codeh-*.zip` files are what Codehouse's updater downloads, for this version and for copies installed before a rename: only the parts that changed, checked against a signature. You do not need them.",
       "",
+      "`provenance.intoto.json` is this release's SLSA provenance: every file here with its SHA-256, the commit it was built from, and the Codehouse sessions whose commits went in, with the audit records and evidence packs they are tied to.",
+      "",
     ].join("\n"),
   )
   console.log(`[release] ${v.version}: ${made.files.length} files in ${path.resolve(b)}`)
 } else if (cmd === "ship") {
+  // D-032: when this release began, for its provenance.
+  const startedOn = new Date().toISOString()
   const key = releaseKey()
   const v = currentVersion()
   if (v.version.includes("-")) throw new Error(`${v.version}: commit your changes first.`)
@@ -372,6 +377,30 @@ if (cmd === "version") {
     ...fs.readFileSync(path.join(out, "routes.txt"), "utf8").split(/\r?\n/).filter(Boolean),
     ...fs.readdirSync(out).filter((f) => /^codeh-.*\.zip$/.test(f)),
   ].map((f) => path.join(out, f))
+  // D-032: the release's provenance (SLSA v1): its files and their hashes, the commit, and the agent sessions whose
+  // commits went in since the last release, from their git notes. Checked against the files before it is added; a
+  // failure here is said and never stops the release.
+  try {
+    let range = "HEAD~100..HEAD"
+    try {
+      execFileSync("git", ["fetch", "-q", "--tags", "origin"], { cwd: root, windowsHide: true, stdio: "ignore" })
+      const prev = publishedReleases()
+        .map((r) => r.version)
+        .find((x) => x !== v.version)
+      if (prev) range = `${git("rev-parse", `v${prev}^{commit}`)}..HEAD`
+    } catch {
+      // The last release's tag is not here: the last hundred commits stand in.
+    }
+    const statement = buildStatement({ files, repo: REPO, tag: `v${v.version}`, commit: git("rev-parse", "HEAD"), version: v.version, notes: sessionNotes(root, range), startedOn, finishedOn: new Date().toISOString() })
+    const check = verifyStatement(statement, out)
+    if (!check.ok) throw new Error(check.why)
+    const file = path.join(out, "provenance.intoto.json")
+    fs.writeFileSync(file, JSON.stringify(statement, null, 2))
+    files.push(file)
+    console.log(`[release] provenance: ${statement.subject.length} files, ${statement.predicate.runDetails.byproducts?.length ?? 0} agent sessions`)
+  } catch (e) {
+    console.log(`[release] provenance not made, the release goes on without it: ${(e as Error).message}`)
+  }
   // O28: one file at a time into a draft, each retried and checked, published only when all match.
   console.log("[release] publish")
   publishRelease({
