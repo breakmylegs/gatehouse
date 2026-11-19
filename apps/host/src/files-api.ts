@@ -8,6 +8,8 @@ import { createCheckpoint, writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
 import { languageOf, outline } from "./outline.js"
 import { TsService, type TsOp } from "./ts-service.js"
+import { TestLocks } from "./test-locks.js"
+import { whyLine } from "./why.js"
 import {
   applyReplace,
   previewReplace,
@@ -460,6 +462,20 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     } catch (e) {
       return bad(reply, 503, (e as Error).message)
     }
+  })
+
+  // D-081: why a line is like this: its last commit, that commit's Codehouse note, and the decisions that bear on it.
+  app.get("/api/files/why", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const where = locate(q, root)
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    if (await blocked(where.abs, root)) return bad(reply, 403, "The floor blocks that file.")
+    const line = Math.floor(Number(q.line))
+    if (!Number.isFinite(line) || line < 1 || line > 1_000_000) return bad(reply, 422, "Give a line number.")
+    const repo = TestLocks.rootOf(root)
+    return await whyLine(repo, path.relative(repo, where.abs).split(path.sep).join("/"), line)
   })
 
   // G33: your own edit to a file in the session's folder, saved only if the file is still as it was when you opened

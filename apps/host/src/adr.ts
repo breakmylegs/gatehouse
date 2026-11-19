@@ -137,6 +137,8 @@ export interface Adr {
   forbids: string[]
   paths?: (file: string) => boolean
   pathGlobs: string[]
+  /** D-081: the session a Codehouse draft was decided in. */
+  session?: string
 }
 
 /** The project's ADRs, read tolerantly: front matter if there is one, the title and the decision outcome. */
@@ -173,6 +175,7 @@ export function readAdrs(root: string): Adr[] {
       ...(/^Chosen option:\s*(.+)$/m.exec(text)?.[1] ? { outcome: /^Chosen option:\s*(.+)$/m.exec(text)![1]!.trim() } : {}),
       forbids: list(meta.forbids),
       pathGlobs,
+      ...(typeof meta.session === "string" && meta.session ? { session: meta.session } : {}),
       ...(pathGlobs.length ? { paths: compileGlobs(pathGlobs.map((g) => g.toLowerCase())) } : {}),
     })
   }

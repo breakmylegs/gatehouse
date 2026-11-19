@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { CodeEditor, CodeView } from "./CodeViews"
 import { Outline } from "./Outline"
 import { TS_FILE, TypeScriptHelp } from "./TypeScriptHelp"
+import { WhyThisLine } from "./WhyThisLine"
 import { CopyButton } from "./CopyButton"
 import Markdown from "react-markdown"
 import { LINK_PARTS } from "../lib/links"
@@ -472,8 +473,11 @@ export function Viewer({
                 text={read.text}
                 label={`${rel}, read only`}
                 {...(goTo ? { goTo } : {})}
-                {...(TS_FILE.test(rel) ? { onCursor: setCursorAt, onDefinition: () => setAskDefinition((n) => n + 1) } : {})}
+                onCursor={setCursorAt}
+                {...(TS_FILE.test(rel) ? { onDefinition: () => setAskDefinition((n) => n + 1) } : {})}
               />
+              {/* D-081: why the line at the cursor is like this. */}
+              <WhyThisLine sessionId={sessionId} rel={rel} line={read.text.slice(0, cursorAt).split("\n").length} />
               {TS_FILE.test(rel) ? (
                 <TypeScriptHelp
                   sessionId={sessionId}

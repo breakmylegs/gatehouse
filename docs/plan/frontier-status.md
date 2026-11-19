@@ -183,7 +183,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-077 | Context efficiency report | built | feat/d068 | apps/host/test/context-efficiency.test.ts | Insights: CLAUDE.md and AGENTS.md blocks a session's tool calls never named, with tokens and recent sessions' use |
 | D-078 | Claim calibration score | built | feat/d068 | apps/host/test/failure-taxonomy.test.ts, apps/web/test/calibration.test.ts | Per model: Verified over Verified and Contradicted; unchecked and flaky counted apart; under 5 marked too few |
 | D-079 | Codebase tours | todo | | | Needs C-036 (todo); built after C-036 in queue section 7 |
-| D-081 | Why is this code like this | todo | | | |
+| D-081 | Why is this code like this | built | feat/d068 | apps/host/test/why.test.ts | File view: Why is line N like this? cites the blamed commit, its Codehouse note and evidence, and ADRs (same session, naming the commit, covering the file) |
 | D-082 | Stale instruction detector | todo | | | |
 | D-083 | Ubiquitous language glossary | todo | | | |
 | D-084 | Adversarial pair | todo | | | |
