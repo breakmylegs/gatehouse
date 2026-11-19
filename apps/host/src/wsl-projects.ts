@@ -52,7 +52,7 @@ function run(args: string[], timeout = 15_000): Promise<Buffer> {
 /** wsl.exe --list writes UTF-16; anything else it writes is UTF-8. */
 export function decodeWslOutput(buf: Buffer): string {
   const utf16 = buf.length >= 2 && (buf[1] === 0 || (buf[0] === 0xff && buf[1] === 0xfe))
-  return (utf16 ? buf.toString("utf16le") : buf.toString("utf8")).replace(/^﻿/, "").replace(/\0/g, "")
+  return (utf16 ? buf.toString("utf16le") : buf.toString("utf8")).replace(/^\ufeff/, "").replace(/\0/g, "")
 }
 
 /** The distros' names from wsl.exe --list --quiet, without Docker's own. */

@@ -2692,7 +2692,7 @@ function Composer({
               {m.text}
             </span>
           ))}
-          {"​"}
+          {"\u200b"}
         </div>
         <textarea
           id={composerId}
