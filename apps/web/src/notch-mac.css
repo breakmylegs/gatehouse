@@ -21,7 +21,8 @@
   height: 32px;
   padding: 0 12px 0 10px;
   border: 0;
-  border-radius: 0 0 12px 0;
+  /* Rounded below on both sides, as the shape it sits beside is (19 Nov). */
+  border-radius: 0 0 12px 12px;
   background: #000;
   color: inherit;
   font-weight: 650;

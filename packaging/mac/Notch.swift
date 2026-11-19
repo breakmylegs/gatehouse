@@ -28,8 +28,9 @@ final class NotchWing: PageWindow {
       contentRect: NSRect(x: 0, y: 0, width: 60, height: 32), styleMask: [.borderless, .nonactivatingPanel],
       backing: .buffered, defer: false)
     panel.title = "Codehouse: waiting on you"
-    // Over the menu bar, as the notch is.
-    panel.level = .statusBar
+    // Over the menu bar, as the notch is, and at the level of another notch app's shape (Vorssaint's is 26), so nothing in
+    // the menu bar's band is over it and takes its clicks (19 Nov: at the top beside Vorssaint, it could not be clicked).
+    panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
     panel.isFloatingPanel = true
     panel.hidesOnDeactivate = false
     panel.hasShadow = false
@@ -37,6 +38,11 @@ final class NotchWing: PageWindow {
     panel.isOpaque = false
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
     super.init(window: panel, firstClick: true)
+    // PageWindow gives every window its dark ground; this one is clear, so the wing's own rounded shape shows (19 Nov:
+    // it sat on a black square). Clear, a window passes clicks through where it draws nothing, and a web view draws in
+    // another process, so it is told to take them all: it is only ever as big as the wing or the list.
+    panel.backgroundColor = .clear
+    panel.ignoresMouseEvents = false
     // A clear page, not white round the wing and the list (19 Nov). WKWebView's setter is _setDrawsBackground:, which
     // key-value coding finds for drawsBackground; the check had asked for setDrawsBackground:, so it was never set.
     if web.responds(to: Selector(("_setDrawsBackground:"))) || web.responds(to: Selector(("setDrawsBackground:"))) {
