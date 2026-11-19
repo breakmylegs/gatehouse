@@ -6,6 +6,7 @@ import { PersonalData } from "../components/PersonalData"
 import { DeadCode } from "../components/DeadCode"
 import { Lessons } from "../components/Lessons"
 import { ContextEfficiency } from "../components/ContextEfficiency"
+import { Glossary } from "../components/Glossary"
 import {
   Bar,
   BarChart,
@@ -267,6 +268,7 @@ export function Insights() {
       <DeadCode />
       <Lessons />
       <ContextEfficiency />
+      <Glossary />
 
       <section aria-label="Suggested rules" className="grid gap-2">
         <h2 className="m-0 text-[18px]">Suggested rules</h2>

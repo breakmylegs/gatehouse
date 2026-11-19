@@ -185,7 +185,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-079 | Codebase tours | todo | | | Needs C-036 (todo); built after C-036 in queue section 7 |
 | D-081 | Why is this code like this | built | feat/d068 | apps/host/test/why.test.ts | File view: Why is line N like this? cites the blamed commit, its Codehouse note and evidence, and ADRs (same session, naming the commit, covering the file) |
 | D-082 | Stale instruction detector | built | feat/d068 | apps/host/test/stale-instructions.test.ts | Insights, Instructions: backticked code names no code file has, missing paths and npm scripts, with the commit that removed a name |
-| D-083 | Ubiquitous language glossary | todo | | | |
+| D-083 | Ubiquitous language glossary | built | feat/d068 | apps/host/test/glossary.test.ts, apps/web/test/glossary.test.tsx | Insights, The project's words: name vocabulary and synonym clashes (built-in groups plus .codehouse/glossary.yml) |
 | D-084 | Adversarial pair | todo | | | |
 | D-086 | Local judge for claims | todo | | | |
 | D-090 | Measured time panel | todo | | | |

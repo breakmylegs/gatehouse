@@ -7,6 +7,7 @@ import { deadCode } from "./dead-code.js"
 import { outcomes } from "./outcomes.js"
 import { contextReport, projectBlocks } from "./context-efficiency.js"
 import { staleInstructions } from "./stale-instructions.js"
+import { glossary } from "./glossary.js"
 import { TestLocks } from "./test-locks.js"
 import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
@@ -1965,6 +1966,15 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const records = recordsSince(ctx.auditDir, to - days * DAY)
     // D-078: with each model's claim calibration.
     return { days, ...failureTaxonomy(records), calibration: claimCalibration(records) }
+  })
+
+  // D-083: the words a session's project names things with, and two words used for one thing.
+  app.get("/api/insights/glossary", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    const cwd = ctx.sessionCwd?.(id)
+    if (!cwd) return reply.code(404).send({ error: "That session is not running." })
+    const root = TestLocks.rootOf(cwd)
+    return glossary(root, await listFiles(root).catch(() => [] as string[]))
   })
 
   // D-077: the instruction blocks a session never used, with the project's recent sessions for comparison.
