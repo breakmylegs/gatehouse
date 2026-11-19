@@ -39,6 +39,9 @@ import Markdown from "react-markdown"
 import { outward } from "../lib/links"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
+import { mathCode, mathPre } from "../components/MathView"
+import { mathText } from "../lib/math-text"
 import { toast } from "sonner"
 import {
   addSystem,
@@ -3195,7 +3198,10 @@ function TranscriptLink({ href, children, ...rest }: ComponentProps<"a">) {
 }
 
 /** Exported for apps/web/test/links.test.tsx. */
-export const MARKDOWN_PARTS = { pre: CodeBlock, a: TranscriptLink }
+// T-052: maths in a reply is drawn with KaTeX; any other code is as before.
+export const MARKDOWN_PARTS = { pre: mathPre(CodeBlock), code: mathCode, a: TranscriptLink }
+/** remark-math with its single-dollar maths off, so a price stays a price (mathText turns plain maths into $). */
+export const REPLY_PLUGINS = [remarkGfm, [remarkMath, { singleDollarTextMath: false }]] as NonNullable<ComponentProps<typeof Markdown>["remarkPlugins"]>
 
 /**
  * What Claude said. Copy gives the Markdown to a plain editor and the formatted text to Word or Outlook, as the
@@ -3211,8 +3217,8 @@ function ClaudeText({ text, at, subagent }: { text: string; at?: number; subagen
       )}
     >
       <div ref={body}>
-        <Markdown remarkPlugins={[remarkGfm]} components={MARKDOWN_PARTS}>
-          {text}
+        <Markdown remarkPlugins={REPLY_PLUGINS} components={MARKDOWN_PARTS}>
+          {mathText(text)}
         </Markdown>
       </div>
       <div className="msg-actions justify-start">

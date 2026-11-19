@@ -63,7 +63,7 @@ Slices, in order:
 | T-049 | Another thread as context (`@` a thread, read on demand), a PR as `#123`, and `@model` to name a model. | Partly | partly built | slice/T2-linked | @session as context with read_linked_session; the PR chip waits for T-061 and @model is not built |
 | T-050 | Previews of attached files: highlighted code, CSV and TSV as a table, Markdown and HTML rendered, audio, a ZIP's file list, PDF. | Partly | partly built | slice/T1-previews | CSV and TSV as a table. PDF left out: previews are served with a sandbox policy, which stops the browser's PDF viewer, and loosening it is not worth it; pdf.js would be a new dependency. ZIP listing left for later |
 | T-051 | Files attached to answers of an agent's question. | Build, S | built | slice/T1-answers | desktop only, through Add files' route |
-| T-052 | LaTeX maths rendered in messages. | Build, S | todo | | |
+| T-052 | LaTeX maths rendered in messages. | Build, S | built | feat/t004 | KaTeX in replies: $$ and ```math, \( \), \[ \] and plain single-dollar maths; prices stay text; trust off; source shown when unreadable |
 | T-053 | Send shortcut choice (Enter, or mod+Enter for multiline, or always mod+Enter). | Build, S | built | feat/send-key | Settings, General, Sending a prompt: Enter (default) or Ctrl+Enter |
 | T-054 | Tool calls grouped into an expandable summary, with Open diff. | Have | built (Codehouse had it) | | |
 | T-055 | Live output of a running command. | Partly | todo | | |
