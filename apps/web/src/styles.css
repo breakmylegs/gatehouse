@@ -1836,6 +1836,13 @@ mark.hidden-char {
 .composer-backdrop .md-quote {
   color: var(--c-mut);
 }
+/* T-048: a context chip or an @file, drawn as a pill without changing the text's width. */
+.composer-backdrop .md-chip {
+  color: var(--c-acc);
+  background: color-mix(in srgb, var(--c-acc) 14%, transparent);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-acc) 35%, transparent);
+}
 .composer-backdrop .md-code,
 .composer-backdrop .md-fence {
   background: color-mix(in srgb, var(--c-mut) 16%, transparent);

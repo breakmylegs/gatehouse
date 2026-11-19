@@ -108,7 +108,7 @@ export function ReviewCard({ findings }: { findings: Finding[] }) {
   }
   const fix = (list: Finding[]) => {
     if (!sessionId) return
-    composeIn(sessionId, fixPrompt(list))
+    composeIn(sessionId, fixPrompt(list), { kind: "review", label: list.length === 1 ? `fix ${list[0]!.summary}` : `fix ${list.length} findings` })
     toast("It is in the prompt box. Read and send.")
   }
 

@@ -85,7 +85,7 @@ export function bringBack(sideId: string): boolean {
     toast("There is no answer to bring back yet.", { id: "side" })
     return false
   }
-  composeIn(from, `From a side session:\n\n${answer}\n\n`)
+  composeIn(from, `From a side session:\n\n${answer}\n\n`, { kind: "note", label: "a side session's answer" })
   st.selectSession(from)
   const all = read()
   delete all[sideId]

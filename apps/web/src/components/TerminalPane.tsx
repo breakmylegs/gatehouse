@@ -58,7 +58,7 @@ export function TerminalPane({ sessionId, cwd }: { sessionId: string; cwd: strin
         .join("")
     }
     if (!text.trim()) return
-    composeIn(sessionId, quoteOutput(text))
+    composeIn(sessionId, quoteOutput(text), { kind: "terminal", label: text })
   }
 
   async function run(e: React.FormEvent) {

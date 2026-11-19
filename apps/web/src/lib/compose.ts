@@ -1,3 +1,5 @@
+import type { ChipKind } from "./chips"
+
 /** What a session's prompt box listens for, to be given text to change and send (it never sends by itself). */
 export const COMPOSE_EVENT = "codeh:compose"
 
@@ -5,8 +7,9 @@ export const COMPOSE_EVENT = "codeh:compose"
  * Puts text in a session's prompt box, below anything already typed there: Edit on a message you sent, and Ask about
  * this output in the terminal (backlog F22). You read it, add to it and send it yourself.
  */
-export function composeIn(sessionId: string, text: string): void {
-  window.dispatchEvent(new CustomEvent(COMPOSE_EVENT, { detail: { sessionId, text } }))
+export function composeIn(sessionId: string, text: string, chip?: { kind: ChipKind; label: string }): void {
+  // T-048: with a chip, the box shows a short token for it and puts the text in its place when you send.
+  window.dispatchEvent(new CustomEvent(COMPOSE_EVENT, { detail: { sessionId, text, ...(chip ? { chip } : {}) } }))
 }
 
 /** Terminal output quoted for a question: the selection, or the last command and what it printed. */

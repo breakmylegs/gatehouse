@@ -532,7 +532,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                   type="button"
                   className="btn btn-primary"
                   onClick={() => {
-                    composeIn(sessionId, reviewMessage(said))
+                    composeIn(sessionId, reviewMessage(said), { kind: "diff", label: `${said.length} note${said.length === 1 ? "" : "s"} on the changes` })
                     setComments({})
                     toast(
                       `${said.length === 1 ? "Your comment is" : `Your ${said.length} comments are`} in the prompt box. Read and send.`,

@@ -59,7 +59,7 @@ Slices, in order:
 | T-045 | `/compact`, idle compaction before the prompt cache expires with a Compact or Keep choice, and more. | Partly | built in part | feat/palette-search | /compact and Compact were there; an idle session (50 min) worth compacting is offered Compact or Keep beside the context meter |
 | T-046 | `/clear`: a fresh agent session in the same thread, marked in the transcript. | Build, S | built | slice/T1-sidebar | |
 | T-047 | `/goal`, working until a stated goal is met. | Have | built (Codehouse had it) | | |
-| T-048 | Context chips inline in the text: a terminal excerpt, a review comment, a diff note, a file. | Partly | todo | | |
+| T-048 | Context chips inline in the text: a terminal excerpt, a review comment, a diff note, a file. | Partly | built | feat/t004 | Terminal excerpts, diff notes, review findings and side answers go in as tokens drawn as chips (and @files); expanded on send; a deleted token sends nothing |
 | T-049 | Another thread as context (`@` a thread, read on demand), a PR as `#123`, and `@model` to name a model. | Partly | partly built | slice/T2-linked | @session as context with read_linked_session; the PR chip waits for T-061 and @model is not built |
 | T-050 | Previews of attached files: highlighted code, CSV and TSV as a table, Markdown and HTML rendered, audio, a ZIP's file list, PDF. | Partly | partly built | slice/T1-previews | CSV and TSV as a table. PDF left out: previews are served with a sandbox policy, which stops the browser's PDF viewer, and loosening it is not worth it; pdf.js would be a new dependency. ZIP listing left for later |
 | T-051 | Files attached to answers of an agent's question. | Build, S | built | slice/T1-answers | desktop only, through Add files' route |

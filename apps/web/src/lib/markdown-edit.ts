@@ -73,7 +73,7 @@ export function indent(text: string, start: number, end: number, out: boolean): 
   return { text: `${text.slice(0, ls)}  ${text.slice(ls)}`, caret: start + 2 }
 }
 
-export type MarkKind = "plain" | "heading" | "fence" | "code" | "marker" | "quote" | "strong"
+export type MarkKind = "plain" | "heading" | "fence" | "code" | "marker" | "quote" | "strong" | "chip"
 export interface Mark {
   text: string
   kind: MarkKind
@@ -106,8 +106,9 @@ export function marks(text: string): Mark[] {
       push(head, "marker")
       rest = line.slice(head.length)
     }
-    // Inline code and strong text; anything not closed on the line stays plain.
-    for (const m of rest.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__)/)) push(m, m.startsWith("`") ? "code" : m.startsWith("**") || m.startsWith("__") ? "strong" : "plain")
+    // Inline code, strong text, and (T-048) a context chip or a file named with @; anything not closed stays plain.
+    for (const m of rest.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|__[^_\n]+__|⟦[^⟧\n]{1,80}⟧|(?<!\S)@[^\s@]+)/))
+      push(m, m.startsWith("`") ? "code" : m.startsWith("**") || m.startsWith("__") ? "strong" : m.startsWith("⟦") ? "chip" : m.startsWith("@") ? "chip" : "plain")
     push(nl, "plain")
   })
   return out

@@ -94,6 +94,26 @@ describe("@ for files in the prompt box (backlog F15)", () => {
   })
 })
 
+describe("context chips in the prompt box (T-048)", () => {
+  it("shows terminal output as a chip, sends what it stands for, and sends nothing of a chip you deleted", async () => {
+    const { act } = await import("@testing-library/react")
+    const { composeIn, quoteOutput } = await import("../src/lib/compose")
+    render(<Workspace />)
+    const box = screen.getByRole("textbox", { name: "Prompt" }) as HTMLTextAreaElement
+    act(() => composeIn("s1", quoteOutput("npm test\n1 failed: parser"), { kind: "terminal", label: "npm test" }))
+    await waitFor(() => expect(box.value).toBe("⟦terminal 1: npm test⟧ "))
+    fireEvent.change(box, { target: { value: `Why? ${box.value}`, selectionStart: 30 } })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await waitFor(() => expect(send).toHaveBeenCalledWith({ type: "prompt", sessionId: "s1", text: "Why?\n\nAbout this from my terminal:\n\n```text\nnpm test\n1 failed: parser\n```" }))
+    // A chip whose token you took out sends nothing of it.
+    act(() => composeIn("s1", quoteOutput("secret output"), { kind: "terminal", label: "ls" }))
+    await waitFor(() => expect(box.value).toBe("⟦terminal 2: ls⟧ "))
+    fireEvent.change(box, { target: { value: "Never mind", selectionStart: 10 } })
+    fireEvent.keyDown(box, { key: "Enter" })
+    await waitFor(() => expect(send).toHaveBeenCalledWith({ type: "prompt", sessionId: "s1", text: "Never mind" }))
+  })
+})
+
 describe("/tell another session (backlog G18)", () => {
   it("sends your message to the open session with that code, and refuses one that is not open", async () => {
     const { sessionCode } = await import("../src/lib/codes")

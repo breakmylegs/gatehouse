@@ -67,7 +67,8 @@ describe("side sessions (T-034)", () => {
     window.addEventListener(COMPOSE_EVENT, on)
     expect(bringBack("side1")).toBe(true)
     window.removeEventListener(COMPOSE_EVENT, on)
-    expect(composed).toEqual([{ sessionId: "s1", text: "From a side session:\n\nIt is cleared on every write.\n\n" }])
+    // T-048: as a chip in the prompt box.
+    expect(composed).toEqual([{ sessionId: "s1", text: "From a side session:\n\nIt is cleared on every write.\n\n", chip: { kind: "note", label: "a side session's answer" } }])
     expect(sent).toEqual([{ type: "close_session", sessionId: "side1" }])
     expect(sideOf("side1")).toBeUndefined()
   })

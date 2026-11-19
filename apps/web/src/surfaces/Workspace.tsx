@@ -141,6 +141,7 @@ import { GoalDialog } from "../components/GoalDialog"
 import { startReview } from "../lib/review"
 import { runTestsUntilPass } from "../lib/testLoop"
 import { indent as indentList, marks, newLine } from "../lib/markdown-edit"
+import { chipToken, expandChips, type Chip, type ChipKind } from "../lib/chips"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -2130,9 +2131,16 @@ function Composer({
   // Edit on a message you sent puts it here to change and send again; what you had typed is kept above it.
   useEffect(() => {
     const onCompose = (e: Event) => {
-      const d = (e as CustomEvent<{ sessionId: string; text: string }>).detail
+      const d = (e as CustomEvent<{ sessionId: string; text: string; chip?: { kind: ChipKind; label: string } }>).detail
       if (d?.sessionId !== sessionId) return
-      setText((t) => (t.trim() ? `${t}\n\n${d.text}` : d.text))
+      // T-048: context comes in as a chip: a short token here, its text kept aside until you send.
+      if (d.chip) {
+        const n = ++chipSeq.current
+        const chip = d.chip
+        setChips((c) => ({ ...c, [n]: { kind: chip.kind, label: chip.label, text: d.text } }))
+        const token = chipToken(chip.kind, n, chip.label)
+        setText((t) => (t.trim() ? `${t.replace(/\s+$/, "")} ${token} ` : `${token} `))
+      } else setText((t) => (t.trim() ? `${t}\n\n${d.text}` : d.text))
       requestAnimationFrame(() => {
         const a = area.current
         if (!a) return
@@ -2150,6 +2158,9 @@ function Composer({
   const [files, setFiles] = useState<AttachedFile[]>([])
   // A large paste: a card above the box, sent as a text file with the message (owner, 4 Nov).
   const [pasted, setPasted] = useState<Array<{ id: string; text: string }>>([])
+  // T-048: the context each chip in the box stands for, by its number.
+  const [chips, setChips] = useState<Record<number, Chip>>({})
+  const chipSeq = useRef(0)
   const addFiles = (rels: string[]) => {
     setFiles((f) => [
       ...f,
@@ -2270,7 +2281,8 @@ function Composer({
       : []
 
   async function submit(hold = false) {
-    const t = text.trim()
+    // T-048: each chip's token becomes what it stands for.
+    const t = expandChips(text.trim(), chips)
     if (!t && pictures.length === 0 && files.length === 0 && pasted.length === 0) return
     rememberSent(sessionId, t)
     setRecall(undefined)
@@ -2472,6 +2484,7 @@ function Composer({
       setPictures([])
       setFiles([])
       setPasted([])
+      setChips({})
       toast("Held: it is sent when this turn ends.", { id: "held" })
       return
     }
@@ -2485,6 +2498,7 @@ function Composer({
     setPictures([])
     setFiles([])
     setPasted([])
+    setChips({})
     const r = await send({ type: "prompt", sessionId, text: full })
     if (!r.ok) {
       // D-059: the change to the project's instructions is shown above the prompt box for you to read.
