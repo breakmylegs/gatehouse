@@ -19,6 +19,7 @@ import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { askAbout } from "../lib/askAbout"
 import { dropToShell } from "../lib/shell"
+import { applyOrder, dropChange, moveBefore, moveBy, readOrder, saveOrder } from "../lib/rail-order"
 import { openExport } from "./ExportDialog"
 import { Icon, type IconName } from "./Icon"
 import { Menu, type MenuItem } from "./Menu"
@@ -124,6 +125,9 @@ export function Rail({ onHide }: { onHide: () => void }) {
     return () => window.removeEventListener("codeh:hide-ended", flip)
   }, [])
   const [pinned, setPinned] = useState<Route[]>(readRailPages)
+  // T-023: your own order of the sessions, by dragging, and the one being dragged.
+  const [order, setOrder] = useState<string[]>(readOrder)
+  const [dragging, setDragging] = useState<string>()
   const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
   // T-027: Working gathers busy sessions; fold it to keep them out of the way, kept like any folder's fold. It starts
@@ -173,12 +177,27 @@ export function Rail({ onHide }: { onHide: () => void }) {
   const waiting = new Set(Object.values(pending).map((v) => v.request.sessionId))
   const snoozed = onSide.filter((s) => !shown.has(s.id) && isSnoozed(s.id, waiting.has(s.id) || s.state === "error"))
   const listed = onSide.filter((s) => !snoozed.includes(s))
-  const groups =
+  const rawGroups =
     mode === "chat"
       ? groupChats(listed, { ended: hideEnded, keep: shown })
       : groupByFolder(listed, { ended: hideEnded, keep: shown, working: true })
+  const groups = applyOrder(rawGroups, order)
   const hiddenEnded = hideEnded ? listed.filter((s) => isHiddenEnded(s, shown)).length : 0
   const endedAll = listed.filter((s) => isHiddenEnded(s)).length
+  const placeOrder = (next: string[]) => {
+    setOrder(next)
+    saveOrder(next)
+  }
+  // T-023: a session dropped on a section, before a row or at its end: moved there when it can be, then placed.
+  const dropOn = async (g: (typeof groups)[number], before?: string) => {
+    const s = listed.find((x) => x.id === dragging)
+    setDragging(undefined)
+    if (!s || s.id === before) return
+    const change = dropChange(s, g)
+    if (typeof change === "object" && "refused" in change) return void toast.error(change.refused, { id: "session" })
+    if (change !== "same" && !(await setSessionMeta(s, change, `Moved ${titleOf(s)} to ${g.label}.`))) return
+    placeOrder(moveBefore(groups.flatMap((x) => x.sessions.map((y) => y.id)), s.id, before, g.sessions.map((y) => y.id)))
+  }
   const chooseHide = (on: boolean) => {
     setHideEnded(on)
     saveHideEnded(on)
@@ -420,7 +439,18 @@ export function Rail({ onHide }: { onHide: () => void }) {
         ) : null}
         {groups.map((g) => (
           <section key={g.folder} aria-label={`Sessions in ${g.label}`} className="mb-2">
-            <div className="flex items-center justify-between px-2 py-1">
+            <div
+              className="flex items-center justify-between px-2 py-1"
+              onDragOver={(e) => {
+                if (dragging) e.preventDefault()
+              }}
+              onDrop={(e) => {
+                if (!dragging) return
+                e.preventDefault()
+                e.stopPropagation()
+                void dropOn(g)
+              }}
+            >
               <button
                 type="button"
                 className="sign cursor-pointer border-0 bg-transparent p-0 text-[13px] font-semibold text-shell-mut"
@@ -455,7 +485,28 @@ export function Rail({ onHide }: { onHide: () => void }) {
                       ? STATE_MARK.running
                       : STATE_MARK[s.state]
                   return (
-                    <li key={s.id} className="rail-session" data-state={s.state}>
+                    <li
+                      key={s.id}
+                      className="rail-session"
+                      data-state={s.state}
+                      data-dragging={dragging === s.id ? "" : undefined}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("application/x-codehouse-session", s.id)
+                        e.dataTransfer.effectAllowed = "move"
+                        setDragging(s.id)
+                      }}
+                      onDragEnd={() => setDragging(undefined)}
+                      onDragOver={(e) => {
+                        if (dragging) e.preventDefault()
+                      }}
+                      onDrop={(e) => {
+                        if (!dragging) return
+                        e.preventDefault()
+                        e.stopPropagation()
+                        void dropOn(g, s.id)
+                      }}
+                    >
                       <button
                         className="rail-item !pr-9"
                         aria-current={shown.has(s.id) ? "page" : undefined}
@@ -524,6 +575,17 @@ export function Rail({ onHide }: { onHide: () => void }) {
                             { kind: "separator" },
                             { label: "Rename...", onSelect: () => setRenaming(s) },
                             { label: "Move to a project...", onSelect: () => setMoving(s) },
+                            // T-023: the keyboard's way to reorder, as dragging does.
+                            {
+                              label: "Move up",
+                              disabled: g.sessions[0]?.id === s.id,
+                              onSelect: () => placeOrder(moveBy(groups.flatMap((x) => x.sessions.map((y) => y.id)), g.sessions.map((y) => y.id), s.id, -1)),
+                            },
+                            {
+                              label: "Move down",
+                              disabled: g.sessions.at(-1)?.id === s.id,
+                              onSelect: () => placeOrder(moveBy(groups.flatMap((x) => x.sessions.map((y) => y.id)), g.sessions.map((y) => y.id), s.id, 1)),
+                            },
                             {
                               label: s.pinned ? "Unpin" : "Pin to the top",
                               onSelect: () =>

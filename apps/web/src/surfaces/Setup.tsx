@@ -3,6 +3,7 @@ import { OrgForm, SignInPanel } from "../components/SetupParts"
 import { send, useStore } from "../store"
 import { Devices } from "./Devices"
 import { Check } from "./FirstRun"
+import { WelcomeFound } from "../components/WelcomeFound"
 
 const STEPS = [
   "Welcome",
@@ -198,6 +199,8 @@ export function Setup() {
               Tip: start your first session in a scratch folder, not a real project, to see how
               approvals feel.
             </p>
+            {/* T-004: the agents and runtimes found here, and your recent projects to open or carry on. */}
+            <WelcomeFound onLeave={() => setSetupDone(true)} />
           </div>
         )}
 

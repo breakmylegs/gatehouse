@@ -16,6 +16,7 @@ import { CounterexamplePins } from "./counterexample-pins.js"
 import type { TestLocks } from "./test-locks.js"
 import { InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
 import { afterJudge, type JudgeResult } from "./claim-judge.js"
+import { wslNote } from "./wsl-projects.js"
 import type { InjectionFinding } from "./injection-scan.js"
 import type { HeavyJob } from "./memory-governor.js"
 import { BYPASS_MAX_MINUTES, BYPASS_MAX_USD, type LimitBypass } from "./limit-pause.js"
@@ -1155,7 +1156,8 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(agentsMd ? { agentsMd } : {}),
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
       // D-044: the project's accepted architecture decisions, after what you told this session.
-      session: [this.#opts.instructions, this.#opts.kind !== "chat" ? adrContext(readAdrs(this.cwd), []) : ""].filter((x) => x?.trim()).join("\n\n") || undefined,
+      // T-008: a project inside WSL is told to run its commands inside the distro.
+      session: [this.#opts.instructions, this.#opts.kind !== "chat" ? adrContext(readAdrs(this.cwd), []) : "", this.#opts.kind !== "chat" ? wslNote(this.cwd) : ""].filter((x) => x?.trim()).join("\n\n") || undefined,
       ...(memory ? { memory } : {}),
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",

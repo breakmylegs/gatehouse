@@ -6,6 +6,8 @@ import { legalDraft, personalDataMap } from "./personal-data.js"
 import { deadCode } from "./dead-code.js"
 import { measuredTime, outcomes } from "./outcomes.js"
 import { stakeholderSummary } from "./stakeholder-summary.js"
+import { findAgents, findRuntimes } from "./welcome.js"
+import { listDistros } from "./wsl-projects.js"
 import { contextReport, projectBlocks } from "./context-efficiency.js"
 import { staleInstructions } from "./stale-instructions.js"
 import { glossary } from "./glossary.js"
@@ -668,6 +670,12 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
     return { packs: (ctx.evidence?.packs(session) ?? []).slice(0, 20) }
   })
+
+  // T-008: the WSL distros on this computer, each with its home folder, for the start form (Windows only).
+  app.get("/api/wsl/distros", async () => ({ distros: process.platform === "win32" ? await listDistros() : [] }))
+
+  // T-004: the coding agents on the PATH and the model runtimes answering on this computer, for the welcome.
+  app.get("/api/welcome/found", async () => ({ agents: findAgents(process.env), runtimes: await findRuntimes() }))
 
   // D-099: a summary of a change for people who did not watch it, every sentence from its evidence pack, redacted.
   app.get("/api/evidence/summary", async (req, reply) => {

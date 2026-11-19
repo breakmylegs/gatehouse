@@ -1,5 +1,7 @@
 import { MemoryCard } from "../components/MemoryCard"
 import { InstructionsReview } from "../components/InstructionsReview"
+import { WslFolders } from "../components/WslFolders"
+import { runModels, runsStarted } from "../lib/runs"
 import type { SessionInfo } from "@gatehouse/shared/ws-protocol"
 import NumberFlow from "@number-flow/react"
 import { useEffect, useState } from "react"
@@ -175,6 +177,9 @@ export function Sessions() {
   const [runs, setRuns] = useState(1)
   const [runPrompt, setRunPrompt] = useState("")
   const several = !fresh && inWorktree && runs > 1
+  // T-029: a model for each run, and whether they start in the background while the form stays ready.
+  const [runModelChoice, setRunModelChoice] = useState<string[]>([])
+  const [inBackground, setInBackground] = useState(false)
 
   const sorted = [...sessions].sort(
     (a, b) => STATE[a.state].rank - STATE[b.state].rank || b.createdAt.localeCompare(a.createdAt),
@@ -193,13 +198,14 @@ export function Sessions() {
   async function startRuns() {
     const ids: string[] = []
     const at = Date.now()
+    const perRun = runModels(runs, runModelChoice, model)
     for (let i = 0; i < runs; i++) {
       const r = await send(
         {
           type: "create_session",
           cwd: cwd.trim(),
           worktree: base.trim() ? { base: base.trim() } : {},
-          ...(model ? { model } : {}),
+          ...(perRun[i] ? { model: perRun[i] } : {}),
           ...(effort ? { effort } : {}),
           ...wireOf(mode),
           ...accountForNew(),
@@ -222,9 +228,12 @@ export function Sessions() {
       s.addUserText(id, runPrompt.trim())
       void send({ type: "prompt", sessionId: id, text: runPrompt.trim() })
     }
-    useStore.setState({ panes: ids, selectedSession: ids[0], compare: { ids, at } })
-    toast(`${runs} runs started, each in its own worktree. Keep the best when they are done.`)
+    const label = (id: string) => models.find((m) => m.id === id)?.label ?? id
+    toast(runsStarted(perRun, inBackground, label))
     setRunPrompt("")
+    // In the background the form stays here, ready for the next thing; the runs are compared when you open them.
+    if (inBackground) return void useStore.setState({ compare: { ids, at } })
+    useStore.setState({ panes: ids, selectedSession: ids[0], compare: { ids, at } })
     setRoute("workspace")
   }
 
@@ -320,6 +329,7 @@ export function Sessions() {
             >
               {picking ? "Waiting for the folder window..." : "Choose a folder..."}
             </button>
+            <WslFolders onPick={setCwd} />
           </label>
           <label className="grid w-[170px] grid-cols-[minmax(0,1fr)] gap-1">
             <span>Model</span>
@@ -458,6 +468,30 @@ export function Sessions() {
                   ))}
                 </select>
               </label>
+            ) : null}
+            {several ? (
+              <div className="flex w-full flex-wrap items-end gap-2">
+                {runModels(runs, runModelChoice, model).map((m, i) => (
+                  <label key={i} className="grid gap-1 text-[13px]">
+                    <span>Run {i + 1}</span>
+                    <select
+                      className="field w-[150px]"
+                      value={m}
+                      onChange={(e) => setRunModelChoice((c) => Object.assign([...runModels(runs, c, model)], { [i]: e.target.value }))}
+                    >
+                      {models.map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+                <label className="flex items-center gap-2 text-[13px]">
+                  <input type="checkbox" checked={inBackground} onChange={(e) => setInBackground(e.target.checked)} />
+                  In the background
+                </label>
+              </div>
             ) : null}
             {several ? (
               <label className="grid w-full gap-1">

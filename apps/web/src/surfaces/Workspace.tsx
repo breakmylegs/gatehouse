@@ -140,6 +140,7 @@ import { FallbackButton } from "../components/FallbackButton"
 import { GoalDialog } from "../components/GoalDialog"
 import { startReview } from "../lib/review"
 import { runTestsUntilPass } from "../lib/testLoop"
+import { indent as indentList, marks, newLine } from "../lib/markdown-edit"
 
 /** Moves a session to a mode. Extreme approval is Manual plus the session flag, so both are set in order. */
 async function changeMode(session: SessionInfo, m: UiMode) {
@@ -2118,6 +2119,8 @@ function Composer({
     })
   }
   const area = useRef<HTMLTextAreaElement>(null)
+  // T-037: what the Markdown in the box is, coloured behind the text.
+  const backdrop = useRef<HTMLDivElement>(null)
   const addUserText = useStore((s) => s.addUserText)
   const meta = useStore((s) => s.meta[sessionId])
   const insert = (more: string) => {
@@ -2665,10 +2668,22 @@ function Composer({
           }}
           disabled={disabled}
         />
+        <div className="composer-field">
+        <div aria-hidden="true" className="composer-backdrop" ref={backdrop}>
+          {marks(text).map((m, i) => (
+            <span key={i} className={`md-${m.kind}`}>
+              {m.text}
+            </span>
+          ))}
+          {"​"}
+        </div>
         <textarea
           id={composerId}
           ref={area}
-          className="composer-input"
+          className="composer-input composer-md"
+          onScroll={(e) => {
+            if (backdrop.current) backdrop.current.scrollTop = e.currentTarget.scrollTop
+          }}
           onPaste={(e) => {
             const files = [...e.clipboardData.files]
             if (files.length) {
@@ -2748,6 +2763,24 @@ function Composer({
                 setText(step.text)
                 setRecall(step.recall)
               }
+            } else if (
+              // T-037: the key that makes a new line continues a list or closes a code block; Tab indents a list item.
+              !e.nativeEvent.isComposing &&
+              ((e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && (sendKey === "enter" ? e.shiftKey : !e.shiftKey)) || (e.key === "Tab" && !e.ctrlKey && !e.altKey)) &&
+              (() => {
+                const el = e.currentTarget
+                const edit =
+                  e.key === "Tab"
+                    ? indentList(text, el.selectionStart, el.selectionEnd, e.shiftKey)
+                    : newLine(text, el.selectionStart, el.selectionEnd)
+                if (!edit) return false
+                e.preventDefault()
+                setText(edit.text)
+                requestAnimationFrame(() => area.current?.setSelectionRange(edit.caret, edit.caret))
+                return true
+              })()
+            ) {
+              // handled above
             } else if (sends({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, isComposing: e.nativeEvent.isComposing }, sendKey)) {
               // T-053: Enter, or Ctrl+Enter when that is the choice (then Enter makes a new line).
               e.preventDefault()
@@ -2755,6 +2788,7 @@ function Composer({
             }
           }}
         />
+        </div>
         <span className="composer-tools">
           <VoiceButton target={area} disabled={disabled} />
           <button

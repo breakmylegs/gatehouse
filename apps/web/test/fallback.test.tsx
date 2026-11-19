@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   boundaryRank,
-  carriedText,
+  handoff,
   FallbackButton,
   fallbackModels,
 } from "../src/components/FallbackButton"
@@ -94,7 +94,6 @@ describe("carrying a chat on with another model", () => {
     expect(sent[1]).toMatchObject({ type: "create_session", kind: "chat", localModel: "qwen3:8b" })
     expect(String(sent[2]?.text)).toContain("You: Plan the launch\n\nClaude: Start with the date.")
     expect(useStore.getState().panes).toContain("c2")
-    expect(carriedText("c1", 10)).toMatch(/^\.\.\.\n/)
   })
 
   it("is not offered for a coding session, nor when no model is ready", async () => {
@@ -105,5 +104,27 @@ describe("carrying a chat on with another model", () => {
     render(<FallbackButton session={chat} />)
     await new Promise((r) => setTimeout(r, 20))
     expect(screen.queryByRole("button")).toBeNull()
+  })
+})
+
+describe("a budgeted hand-off (T-015)", () => {
+  const said = ["You: Plan the launch for the new shop", ...Array.from({ length: 30 }, (_, i) => `Claude: step ${i} ${"x".repeat(400)}`)]
+  it("keeps the first message and the newest that fit, says how many were left out, and stays within the budget", () => {
+    const h = handoff(said, 1_000)
+    expect(h.text.startsWith("You: Plan the launch for the new shop")).toBe(true)
+    expect(h.text).toContain("step 29")
+    expect(h.text).not.toContain("step 0 ")
+    expect(h.text).toMatch(/\[\d+ earlier messages left out\]/)
+    expect(h.tokens).toBeLessThanOrEqual(1_050)
+    expect(h.of).toBe(31)
+    expect(handoff(said, 25_000)).toMatchObject({ kept: 31, of: 31 })
+    expect(handoff(said, 25_000).text).not.toContain("left out")
+  })
+
+  it("cuts a first message too long for the budget, and keeps the end of a newest one that does not fit", () => {
+    const h = handoff(["You: " + "a".repeat(20_000), "Claude: " + "b".repeat(20_000)], 2_000)
+    expect(h.tokens).toBeLessThanOrEqual(2_050)
+    expect(h.text).toMatch(/a\.\.\.\n\n\.\.\.b+$/)
+    expect(handoff([], 2_000)).toEqual({ text: "", kept: 0, of: 0, tokens: 0 })
   })
 })

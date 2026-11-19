@@ -15,18 +15,18 @@ Slices, in order:
 | T-001 | Desktop app for Windows, macOS and Linux, and package-manager installs. | Have | built (Codehouse had it) | | |
 | T-002 | Open a project in the running app from a terminal (`t3 app <folder>`). | Build, S | built | feat/open-folder | `Codehouse.exe <folder>` opens the start-session form on it, in the running copy too; nothing starts until you say what to build |
 | T-003 | Background service at sign-in, restarted if it exits. | Have | built (Codehouse had it) | | |
-| T-004 | Welcome page that finds installed agents and imports recent projects and conversations from Claude Code's history. | Partly | todo | | |
+| T-004 | Welcome page that finds installed agents and imports recent projects and conversations from Claude Code's history. | Partly | built | feat/t004 | Setup's last step: coding agents on the PATH (shown only), runtimes on 127.0.0.1, recent projects from the history with Open and Carry on |
 | T-005 | Drop a folder on the sidebar to open it as a project. | Build, S | built | feat/t005 | WebView2 1.0.4314.35 has postMessageWithAdditionalObjects and CoreWebView2File.Path (checked); the window reads the dropped folder's path and sends T-002's open-folder; Windows window only, a browser, CNW and the Mac say how to open a folder instead |
 | T-006 | Threads without a project, in dated scratch folders, and Turn into project. | Partly | built in part | slice/t4 | scratch sessions in dated folders; Turn into project not yet |
 | T-007 | Desktop as a remote only, with no local server. | Conflicts | listed for decision | | |
-| T-008 | Run agents and projects inside a WSL distro. | Build, L | todo | | |
+| T-008 | Run agents and projects inside a WSL distro. | Build, L | built | feat/t004 | Safe variant: Claude Code stays the bundled Windows binary (invariant 6); a project in a distro opened by its \\wsl.localhost path, told to run commands through wsl.exe; start form lists distros; allow rules through the wrapper listed for decision |
 | T-009 | Other coding agents (Codex, Cursor, Grok, OpenCode, Antigravity, Kiro, Pi, Muse Code, fx) on their own sign-ins. | Conflicts | listed for decision | | |
 | T-010 | ACP Registry agents and local ACP commands, downloaded and run by the app. | Conflicts | listed for decision | | |
 | T-011 | Provider instances with their own environment variables, API keys, base URLs and routers (OpenRouter, Claude Code Router, CLIProxyAPI hubs). | Conflicts | listed for decision | | |
 | T-012 | Binary path and launch arguments per provider (for example `--chrome`, `--settings`). | Conflicts | listed for decision | | |
 | T-013 | Several Claude accounts through separate config folders. | Have | built (Codehouse had it) | | |
 | T-014 | Provider version warnings, Update now, readiness timeouts. | Have | built (Codehouse had it) | | |
-| T-015 | Change model mid-thread, and switch provider with a budgeted context handoff. | Partly | todo | | |
+| T-015 | Change model mid-thread, and switch provider with a budgeted context handoff. | Partly | built | feat/t004 | Model change mid-thread was there (set_model); the provider hand-off now has a model choice and a budget (2k, 8k, 25k tokens): first message, newest that fit, how many left out |
 | T-016 | Custom models and display names for models. | Build, S | built | feat/model-choices | Settings, Sessions, Your own models; in every model picker |
 | T-017 | Remembered model and options for new threads, and a project default model. | Build, S | built | feat/model-choices | last choices, and a folder's own; never an Extreme approval mode |
 | T-018 | Text generation: thread titles, commit messages, PR titles and descriptions, branch names, with optional API-key text generators. | Build (safe variant), S | partly built | slice/T2-titles | titles built (no tools, on the session account check, recorded); commit messages, PR texts and branch names follow in slice T3 (T-074, T-086) |
@@ -34,13 +34,13 @@ Slices, in order:
 | T-020 | Suggested next prompt after a turn (Tab to fill, never sent). | Build, S | built | feat/open-folder | the SDK's prompt_suggestion in the empty prompt box; Tab fills it in; off in Settings |
 | T-021 | Image generation (Codex). | Conflicts | listed for decision | | |
 | T-022 | Threads outlive the agent process; stop and resume. | Have | built (Codehouse had it) | | |
-| T-023 | Pin threads and drag to reorder or between sections. | Partly | todo | | |
+| T-023 | Pin threads and drag to reorder or between sections. | Partly | built | feat/t004 | Drag to reorder (kept on this computer) and onto Pinned, a project or its own folder; Move up and Move down for the keyboard |
 | T-024 | Settle finished threads, automatically after inactivity or a merged PR, Never per thread. | Build, S | built in part | feat/settle | archived after 3 days ended and untouched (Settings, 0 for never); pinning keeps one; after a merged PR not yet |
 | T-025 | Snooze a thread until a time or until limits reset; it wakes early for an approval, a question or a failure. | Build, S | built | | snooze in the sidebar, wakes at once if it needs you (status corrected 17 Nov) |
 | T-026 | Undo for sidebar actions (a five-second notice, mod+Z). | Build, S | built in part | | an Undo notice for rename, pin, archive, group and snooze (status corrected 17 Nov); mod+Z not yet |
 | T-027 | A folded Working section for busy threads. | Partly | built | feat/working | Working in the sidebar, after Pinned, for sessions working on their own; open until you fold it |
 | T-028 | Group threads by project. | Have | built (Codehouse had it) | | |
-| T-029 | Send the same prompt to several models, each in its own worktree; start in the background and open a fresh draft. | Partly | todo | | |
+| T-029 | Send the same prompt to several models, each in its own worktree; start in the background and open a fresh draft. | Partly | built | feat/t004 | Several runs each on its own model, and In the background keeps the start form ready |
 | T-030 | Search every thread by title, branch, PR and project, and inside messages, from the palette. | Partly | built | feat/palette-search | the palette knows sessions by title, project, folder, branch and PRs, and finds what was said in the open sessions; Earlier sessions still searches older ones |
 | T-031 | Copy a link or id for a thread. | Build, S | built | feat/send-key | Copy session id in a session's menu (Claude Code's id); no link, as Codehouse registers no address scheme |
 | T-032 | Subagent threads, an Agents view, and Stop that stops subagents too. | Have | built (Codehouse had it) | | |
@@ -48,7 +48,7 @@ Slices, in order:
 | T-034 | Side chats (`/side`, `/btw`) with tools, their own composer, and Bring back. | Partly | built | slice/T2-side | /side opens beside the pane (not a tab), Plan mode, Bring back |
 | T-035 | Threads from older versions migrated on first start. | Have | built (Codehouse had it) | | |
 | T-036 | A large paste becomes an attachment. | Have | built (Codehouse had it) | | |
-| T-037 | Rich-text Markdown composer (styled as you type, list continuation, code blocks with a language). | Build, M | todo | | |
+| T-037 | Rich-text Markdown composer (styled as you type, list continuation, code blocks with a language). | Build, M | built | feat/t004 | Text box kept; lists continue and end, Tab indents, code blocks close with the caret inside; a backdrop colours the Markdown without moving the text |
 | T-038 | Many attachments, images, videos, HEIC converted. | Have | built (Codehouse had it) | | |
 | T-039 | Follow-ups queued or steered into the running turn; queued messages listed, edited, removed, Send now; a held queue resumed. | Partly | partly built | slice/T2-held | held until the turn ends: listed, edited, removed, sent now, resumed; steering a running turn waits for an SDK call recorded in sdk-notes |
 | T-040 | Quote part of a reply into the composer with a comment (Cite in composer). | Build, S | built | slice/T1-composer | |

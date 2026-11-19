@@ -1178,6 +1178,10 @@ mark.hidden-char {
 .rail-session {
   position: relative;
 }
+/* T-023: the row being dragged, faded so the place it goes is plain. */
+.rail-session[data-dragging] {
+  opacity: 0.45;
+}
 .rail-session-menu {
   position: absolute;
   top: 50%;
@@ -1783,6 +1787,59 @@ mark.hidden-char {
   font: inherit;
   line-height: 1.45;
   field-sizing: content;
+}
+/* T-037: the Markdown coloured as you type. The backdrop holds the same text in the same place (same padding, font,
+   line height, wrapping and scroll), coloured and shaded only, never bolder or wider, so the caret stays on its
+   letter; the box's own text is see-through, its caret and selection are not. */
+.composer-field {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+.composer-backdrop {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  padding: 7px 4px;
+  color: var(--c-tx);
+  font: inherit;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  pointer-events: none;
+  scrollbar-gutter: stable;
+}
+.composer-md {
+  position: relative;
+  color: transparent;
+  caret-color: var(--c-tx);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  scrollbar-gutter: stable;
+}
+.composer-md::placeholder {
+  color: var(--c-mut);
+}
+.composer-md::selection {
+  color: transparent;
+  background: color-mix(in srgb, var(--c-acc) 30%, transparent);
+}
+.composer-backdrop .md-heading,
+.composer-backdrop .md-marker {
+  color: var(--c-acc);
+}
+.composer-backdrop .md-strong {
+  color: var(--c-tx);
+  text-decoration: underline 1px color-mix(in srgb, var(--c-acc) 60%, transparent);
+  text-underline-offset: 3px;
+}
+.composer-backdrop .md-quote {
+  color: var(--c-mut);
+}
+.composer-backdrop .md-code,
+.composer-backdrop .md-fence {
+  background: color-mix(in srgb, var(--c-mut) 16%, transparent);
+  border-radius: 3px;
 }
 .composer-tools {
   display: flex;
