@@ -68,6 +68,7 @@ interface Config {
   timelineSummaries?: boolean
   /** E-089: true pauses Extreme sessions on battery. */
   pauseExtremeOnBattery?: boolean
+  onePassword?: boolean
   /** T-020: false turns off the suggested next prompt. */
   promptSuggestions?: boolean
   /** T-016: models of your own, with their names. */
@@ -180,6 +181,7 @@ interface Values {
   tlOn: boolean
   /** E-089: Extreme approval pauses on battery. */
   batPause: boolean
+  onePassword: boolean
   /** T-020: a suggested next prompt after each turn. */
   psOn: boolean
   /** T-016: your own models, "id = Display name" one to a line. */
@@ -276,6 +278,7 @@ export function valuesOf(d: SettingsData): Values {
     ladHere: c.escalationLadder?.onlyWhenHere === true,
     tlOn: c.timelineSummaries !== false,
     batPause: c.pauseExtremeOnBattery === true,
+    onePassword: c.onePassword === true,
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
     settleDays: String(c.settleAfterDays ?? 3),
@@ -485,6 +488,8 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else body.promptSuggestions = false
   if (v.tlOn) delete body.timelineSummaries
   else body.timelineSummaries = false
+  if (v.onePassword) body.onePassword = true
+  else delete body.onePassword
   if (v.batPause) body.pauseExtremeOnBattery = true
   else delete body.pauseExtremeOnBattery
   // E-094: saved only when a channel waits; all at once is no setting at all.
@@ -585,6 +590,7 @@ export const DEFAULT_VALUES: Values = {
   ladHere: false,
   tlOn: true,
   batPause: false,
+  onePassword: false,
   psOn: true,
   cmText: "",
   settleDays: "3",
@@ -1996,6 +2002,19 @@ export function Settings() {
             </Group>
 
             {/* O41: pair this computer with your Codehouse Neighbourhood Watch server. */}
+            <Group section="connectors" title="1Password" gap="gap-2" changed={differs(v, ["onePassword"])}>
+              <p className="m-0 text-sm text-mut">
+                The Slack tokens and the ntfy token or password can be a 1Password reference, such as
+                op://Private/Slack/bot-token, instead of the value. Codehouse then reads it with 1Password&apos;s op command
+                each time it is needed and never stores it; the value is taken out of everything Codehouse records or
+                sends. An Anthropic credential is always refused.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.onePassword} onChange={(e) => change({ onePassword: e.target.checked }, "1Password")} />
+                Read 1Password references with op
+              </label>
+            </Group>
+
             <Group section="connectors" title="Neighbourhood Watch" gap="gap-2">
               <NeighbourhoodWatchPanel />
             </Group>

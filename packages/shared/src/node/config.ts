@@ -140,6 +140,8 @@ function build(loose: boolean) {
     timelineSummaries: z.boolean().optional(),
     /** E-089: on battery, Extreme sessions pause until mains power is back. Off unless true. */
     pauseExtremeOnBattery: z.boolean().optional(),
+    /** T-134: credential fields may hold 1Password references, read with op when needed. Off unless true. */
+    onePassword: z.boolean().optional(),
     escalationLadder: obj({
       phoneAfterMinutes: z.number().int().min(0).max(60).optional(),
       pushAfterMinutes: z.number().int().min(0).max(60).optional(),

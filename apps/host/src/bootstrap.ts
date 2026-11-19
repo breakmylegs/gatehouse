@@ -25,6 +25,7 @@ import { TriggerWatcher } from "./routine-triggers.js"
 import { fillPrompt } from "./webhooks.js"
 import { CliAccess, cliSession, settledSession } from "./cli-access.js"
 import { HostStalls } from "./host-stalls.js"
+import { resolveSecret, SecretTerms } from "./secret-providers.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
@@ -211,7 +212,10 @@ export function createHost(opts: HostOptions = {}): Host {
   const config = opts.config ?? loadConfig(env)
   // E-080: your redaction list and every imported team list, together, wherever config.redactTerms is read.
   const redactionLists = new RedactionLists(gatehouseDataDir(env))
-  const teamTerms = withTeamTerms(config, redactionLists)
+  // T-134: values read from 1Password are redacted like your own list, from the moment they are read.
+  const secretTerms = new SecretTerms()
+  const teamTerms = withTeamTerms(config, redactionLists, () => secretTerms.terms())
+  const secretDeps = { enabled: () => config.onePassword === true, terms: secretTerms }
   const rulesPath =
     opts.rulesPath ??
     env.GATEHOUSE_RULES_PATH ??
@@ -1072,7 +1076,7 @@ export function createHost(opts: HostOptions = {}): Host {
     broker,
     // T-067: no push channel when the organisation turned the phone off.
     settings: () => (phoneAllowed(store.current?.managedSettings) ? config.push?.ntfy : undefined),
-    secret: () => ntfySecrets.load(),
+    secret: async () => resolveSecret(await ntfySecrets.load(), secretDeps),
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
     log,
@@ -1103,7 +1107,10 @@ export function createHost(opts: HostOptions = {}): Host {
   const slack = new SlackChannel({
     broker,
     settings: () => (phoneAllowed(store.current?.managedSettings) ? config.push?.slack : undefined),
-    secrets: () => slackSecrets.load(),
+    secrets: async () => {
+      const s = await slackSecrets.load()
+      return s ? { botToken: (await resolveSecret(s.botToken, secretDeps))!, appToken: (await resolveSecret(s.appToken, secretDeps))! } : undefined
+    },
     redact: (t) => redactString(t, { terms: config.redactTerms }),
     expiryMs: () => config.phoneExpiryMs,
     log,

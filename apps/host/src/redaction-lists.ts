@@ -117,12 +117,13 @@ export class RedactionLists {
  * Makes `config.redactTerms` your own words and every imported list's together, wherever it is read, while saving
  * Settings changes only your own (the setter). `ownTerms()` is what Settings shows and edits.
  */
-export function withTeamTerms(config: { redactTerms: string[] }, lists: RedactionLists): { ownTerms: () => string[] } {
+export function withTeamTerms(config: { redactTerms: string[] }, lists: RedactionLists, extra: () => string[] = () => []): { ownTerms: () => string[] } {
   let own = [...(config.redactTerms ?? [])]
   Object.defineProperty(config, "redactTerms", {
     configurable: true,
     enumerable: true,
-    get: () => [...new Set([...own, ...lists.terms()])],
+    // T-134: and values read from a secret provider while Codehouse runs.
+    get: () => [...new Set([...own, ...lists.terms(), ...extra()])],
     set: (v: unknown) => {
       own = Array.isArray(v) ? v.filter((t): t is string => typeof t === "string") : []
     },

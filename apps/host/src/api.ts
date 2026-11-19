@@ -121,6 +121,7 @@ import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { extractToken, secretsEqual } from "./server-guard.js"
 import { CliAccess, registerCliRoutes, type CliDeps } from "./cli-access.js"
+import { isOpRef } from "./secret-providers.js"
 import { deliveryKey, hashHookToken, HookDeliveries, MAX_BODY, passes } from "./webhooks.js"
 import type { RoutineDrafts } from "./routine-drafts.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
@@ -1303,7 +1304,9 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const str = (k: string) => (typeof b[k] === "string" ? (b[k] as string).trim() : "")
     const botToken = str("botToken")
     const appToken = str("appToken")
-    if ((botToken || appToken) && !(botToken.startsWith("xoxb-") && appToken.startsWith("xapp-")))
+    // T-134: or a 1Password reference for each.
+    const ok = (t: string, prefix: string) => t.startsWith(prefix) || isOpRef(t)
+    if ((botToken || appToken) && !(ok(botToken, "xoxb-") && ok(appToken, "xapp-")))
       return bad(
         reply,
         400,
@@ -2219,6 +2222,8 @@ const LIVE_SETTINGS = [
   "timelineSummaries",
   // E-089: read when the computer goes on battery.
   "pauseExtremeOnBattery",
+  // T-134: read each time a credential is needed.
+  "onePassword",
   // T-020: read when a session starts.
   "promptSuggestions",
   // T-024: read at each hourly look.

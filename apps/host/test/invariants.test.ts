@@ -244,7 +244,9 @@ describe("what a real session is started with", () => {
         if (/\.credentials\.json/i.test(text)) offenders.push(`${full}: credentials file`)
         // One reviewed exception: the Relay run inside Codehouse writes its own one-time enrolment token, and the Host
         // reads it to link itself. It is Codehouse's own secret, never a Claude credential. Nothing else may read one.
-        const reviewed = full.split(path.sep).join("/").endsWith("src/relay/local.ts")
+        // T-124 adds the command line's own token, sealed by Codehouse for you (cli-access.ts writes it, cli-client.ts
+        // opens it): also Codehouse's own, never a Claude credential.
+        const reviewed = ["src/relay/local.ts", "src/cli-access.ts", "src/cli-client.ts"].some((r) => full.split(path.sep).join("/").endsWith(r))
         if (!reviewed && /readFile(Sync)?\([^)]*(credential|token)/i.test(text))
           offenders.push(`${full}: reads a token file`)
         if (reviewed && /credential/i.test(text)) offenders.push(`${full}: mentions credentials`)
