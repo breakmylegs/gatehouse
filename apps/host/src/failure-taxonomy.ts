@@ -6,7 +6,7 @@ import type { AuditRecord } from "@gatehouse/shared/audit"
  *   loop                 the loop guard saw the same failure repeat (thrash_warned, thrash_paused)
  *   tool-error           a tool call failed (tool_failed, not a test)
  *   failing-test         a test command failed (tool_failed, a test)
- *   undo                 edits were put back (edit_files_reverted)
+ *   undo                 edits were put back (edit_files_reverted, files_undone, change_undone)
  *   contradicted-claim   what Claude said it did did not hold (claim_verified, denied)
  *   denial               the floor, the rules or a person said no
  */
@@ -34,6 +34,8 @@ export function classify(r: Rec): FailureKind | undefined {
     case "tool_failed":
       return inputOf(r).test === true ? "failing-test" : "tool-error"
     case "edit_files_reverted":
+    case "files_undone":
+    case "change_undone":
       return "undo"
     case "claim_verified":
       return r.verdict?.outcome === "deny" ? "contradicted-claim" : undefined

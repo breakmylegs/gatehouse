@@ -19,7 +19,7 @@ import { createHash } from "node:crypto"
 import { runMutation } from "./mutation.js"
 import { projectCommand } from "./claims.js"
 import os from "node:os"
-import { TestLockError, type TestLocks } from "./test-locks.js"
+import { TestLockError, TestLocks } from "./test-locks.js"
 import { approveInstructions, InstructionsChangedError, type InstructionPins } from "./instruction-pins.js"
 import { BoundaryStaleError, classificationOf, refuseHandoff, refuseStaleSend, type Boundaries } from "./boundary.js"
 import { HeldOutError, type HeldOutChecks, type HeldOutExec } from "./heldout.js"
@@ -49,7 +49,8 @@ import {
   type ServerEvent,
 } from "@gatehouse/shared"
 import type { AccountMonitor } from "./account.js"
-import { registerApi, type AdminContext } from "./api.js"
+import { recordsSince, registerApi, type AdminContext } from "./api.js"
+import { addLesson, lessonsFor } from "./lessons-store.js"
 import type { PhoneService } from "./relay/service.js"
 import {
   Broker,
@@ -643,6 +644,21 @@ export class HostServer {
         if (!(await approveInstructions(pins, a.audit, cmd.cwd)))
           throw new CommandError("audit", "The approval could not be recorded, so the change is not approved.")
         return await pins.state(cmd.cwd)
+      }
+      case "lessons_list": {
+        // D-073: what your undos and denials here suggest for CLAUDE.md, with the records each rests on.
+        this.#knownCwd(cmd.cwd)
+        const auditDir = a.admin?.auditDir
+        return { lessons: auditDir ? lessonsFor(recordsSince(auditDir, Date.now() - 90 * 86_400_000), cmd.cwd) : [] }
+      }
+      case "lesson_add": {
+        // D-073 through D-059: the line is made here from the records, never taken from the page; recorded first.
+        this.#knownCwd(cmd.cwd)
+        const auditDir = a.admin?.auditDir
+        if (!auditDir || !a.instructions) throw new CommandError("unavailable", "Lessons are not available here")
+        const added = await addLesson({ pins: a.instructions, audit: a.audit, records: recordsSince(auditDir, Date.now() - 90 * 86_400_000), cwd: cmd.cwd, key: cmd.key })
+        if (typeof added === "string") throw new CommandError("not-allowed", added)
+        return added
       }
       case "heldout_list": {
         // The desktop only: this socket is the desktop's, never the phone's or a push channel's.

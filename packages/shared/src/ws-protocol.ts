@@ -108,6 +108,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("locks_accept"), cwd: z.string().min(1).max(1000) }),
   z.object({ type: z.literal("instructions_state"), cwd: z.string().min(1).max(1000) }),
   z.object({ type: z.literal("instructions_approve"), cwd: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("lessons_list"), cwd: z.string().min(1).max(1000) }),
+  z.object({ type: z.literal("lesson_add"), cwd: z.string().min(1).max(1000), key: z.string().min(1).max(200) }),
   z.object({
     type: z.literal("heldout_add"),
     sessionId: Id,
