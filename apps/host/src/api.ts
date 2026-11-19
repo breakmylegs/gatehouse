@@ -5,6 +5,7 @@ import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
 import { deadCode } from "./dead-code.js"
 import { measuredTime, outcomes } from "./outcomes.js"
+import { stakeholderSummary } from "./stakeholder-summary.js"
 import { contextReport, projectBlocks } from "./context-efficiency.js"
 import { staleInstructions } from "./stale-instructions.js"
 import { glossary } from "./glossary.js"
@@ -666,6 +667,16 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const session = String((req.query as { session?: string }).session ?? "")
     if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
     return { packs: (ctx.evidence?.packs(session) ?? []).slice(0, 20) }
+  })
+
+  // D-099: a summary of a change for people who did not watch it, every sentence from its evidence pack, redacted.
+  app.get("/api/evidence/summary", async (req, reply) => {
+    const q = req.query as { session?: string; sha?: string }
+    const session = String(q.session ?? "")
+    if (!/^[\w-]{1,80}$/.test(session)) return bad(reply, 400, "Name a session.")
+    const found = (ctx.evidence?.packs(session) ?? []).find((p) => p.sha === q.sha)
+    if (!found) return bad(reply, 404, "That evidence pack is not this session's, or it is no longer kept.")
+    return stakeholderSummary(found.pack, found.sha, (s) => redactString(s, { terms: ctx.config().redactTerms }))
   })
 
   app.get("/api/timeline/export", async (req, reply) => {

@@ -189,7 +189,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-084 | Adversarial pair | todo | | | Needs C-043 and C-044 (todo); built after them in queue section 7 |
 | D-086 | Local judge for claims | built | feat/d068 | apps/host/test/claim-judge.test.ts | Built-in hard-coded-answer check, optional model on this computer (never a gateway); flag or escalate only, lowers Verified to Unverified; T158 |
 | D-090 | Measured time panel | built | feat/d068 | apps/host/test/outcomes.test.ts, apps/web/test/measured-time.test.ts | Insights: Claude's measured minutes per change as an interval against the period before; faster or slower only with enough of both |
-| D-099 | Evidence-backed stakeholder summary | todo | | | |
+| D-099 | Evidence-backed stakeholder summary | built | feat/d068 | apps/host/test/stakeholder-summary.test.ts | Evidence, Copy a summary: sentences only from the pack, each with its evidence; unconfirmed claims and assumptions withheld and listed; redacted |
 
 ## Wave 6: enterprise and large items
 

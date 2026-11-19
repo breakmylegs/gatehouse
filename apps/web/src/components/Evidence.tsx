@@ -85,6 +85,27 @@ export function Evidence({ sessionId, onClose }: { sessionId: string; onClose: (
             Export, signed
           </button>
         ) : null}
+        {newest ? (
+          <button
+            type="button"
+            className="btn !min-h-7"
+            onClick={async () => {
+              // D-099: for people who did not watch: every sentence from the pack, with what it rests on.
+              const r = await api<{ markdown: string; withheld: unknown[] }>(
+                "GET",
+                `/api/evidence/summary?session=${encodeURIComponent(sessionId)}&sha=${newest.sha}`,
+              )
+              if (!r.ok || !r.data) return void toast.error(r.error ?? "The summary could not be made")
+              const left = r.data.withheld.length
+              await navigator.clipboard
+                .writeText(r.data.markdown)
+                .then(() => toast(`Copied a summary for stakeholders${left ? `, with ${left} claim${left === 1 ? "" : "s"} left out for want of evidence` : ""}.`))
+                .catch(() => toast.error("It could not be copied"))
+            }}
+          >
+            Copy a summary
+          </button>
+        ) : null}
         <button type="button" className="btn !min-h-7" onClick={onClose}>
           Close
         </button>
