@@ -9,6 +9,8 @@ import AppKit
 /// A panel without a title bar can take a click without becoming the active app.
 private final class WingPanel: NSPanel {
   override var canBecomeKey: Bool { true }
+  /// Where it is put, up against the top of the screen beside the notch, not moved down below the menu bar.
+  override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 }
 
 final class NotchWing: PageWindow {
@@ -35,7 +37,11 @@ final class NotchWing: PageWindow {
     panel.isOpaque = false
     panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
     super.init(window: panel, firstClick: true)
-    if web.responds(to: Selector(("setDrawsBackground:"))) { web.setValue(false, forKey: "drawsBackground") }
+    // A clear page, not white round the wing and the list (19 Nov). WKWebView's setter is _setDrawsBackground:, which
+    // key-value coding finds for drawsBackground; the check had asked for setDrawsBackground:, so it was never set.
+    if web.responds(to: Selector(("_setDrawsBackground:"))) || web.responds(to: Selector(("setDrawsBackground:"))) {
+      web.setValue(false, forKey: "drawsBackground")
+    }
     web.underPageBackgroundColor = .clear
     web.pageZoom = 1
     panel.contentView = web
@@ -77,18 +83,24 @@ final class NotchWing: PageWindow {
     }
   }
 
-  /// On the screen the pointer is on: its top-left against the notch's right edge if that screen has a notch, else
-  /// top centre under its menu bar. The page is told which, for its shape.
+  /// On the screen the pointer is on, at its top: against the notch's right edge, or right of another app's shape there
+  /// (Vorssaint's, over the notch or in the middle of an external display's menu bar); with neither, top centre under
+  /// the menu bar. The page is told which, for its shape.
   private func place() {
     let mouse = NSEvent.mouseLocation
     guard let s = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) }) ?? NSScreen.main else { return }
     let frame: NSRect
     let byNotch: Bool
-    if s.safeAreaInsets.top > 0, let right = s.auxiliaryTopRightArea {
-      // Right of another notch app's shape, if one covers the notch's right side (NotchPlace.swift).
+    let screenTop = (NSScreen.screens.first?.frame.maxY ?? s.frame.maxY) - s.frame.maxY
+    let windows = Self.topWindows()
+    let start = s.safeAreaInsets.top > 0
+      ? s.auxiliaryTopRightArea?.minX
+      : NotchPlace.shapeStart(screenTop: screenTop, screenMinX: s.frame.minX, screenMaxX: s.frame.maxX, windows: windows)
+    if let start {
+      // Right of another notch app's shape, if one covers where it would be (NotchPlace.swift).
       let x = NotchPlace.wingX(
-        notchRight: right.minX, screenTop: (NSScreen.screens.first?.frame.maxY ?? s.frame.maxY) - s.frame.maxY,
-        screenMinX: s.frame.minX, screenMaxX: s.frame.maxX, wingWidth: size.width, windows: Self.topWindows())
+        notchRight: start, screenTop: screenTop, screenMinX: s.frame.minX, screenMaxX: s.frame.maxX,
+        wingWidth: size.width, windows: windows)
       frame = NSRect(x: x, y: s.frame.maxY - size.height, width: size.width, height: size.height)
       byNotch = true
     } else {

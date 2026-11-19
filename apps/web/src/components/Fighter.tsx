@@ -21,6 +21,17 @@ const MOVES: Record<"waiting" | "working", Frame[]> = {
 /** From the page's own address, as the icon sprite is (Icon.tsx), wherever the Host serves it. */
 const SHEET = "url(./codehouse/fighter.png)"
 
+/** His face, from his stance: the 16 pixels square of his head (owner, 19 Nov: in the notch's wing, for its dot). */
+export function FighterFace({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={clsx("fighter-face", className)}
+      style={{ backgroundImage: SHEET, backgroundPosition: "-28px -1px" }}
+    />
+  )
+}
+
 const still = () =>
   document.documentElement.dataset.motion === "reduced" ||
   (typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches)

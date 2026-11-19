@@ -39,4 +39,16 @@ enum NotchPlace {
     }
     return min(x, screenMaxX - wingWidth)
   }
+
+  /// On a screen without a notch (19 Nov: an external display, where Vorssaint draws its shape in the middle of the
+  /// menu bar): the left edge of another app's shape at the top of this screen, the one nearest its middle, for wingX to
+  /// step right of; nil when there is none, and the wing goes under the menu bar instead.
+  static func shapeStart(screenTop: CGFloat, screenMinX: CGFloat, screenMaxX: CGFloat, windows: [TopWindow]) -> CGFloat? {
+    let mid = (screenMinX + screenMaxX) / 2
+    return windows.filter {
+      !$0.mine && $0.layer > statusLevel && $0.y <= screenTop + 4 && $0.width < (screenMaxX - screenMinX) / 2
+        && $0.x >= screenMinX && $0.x < screenMaxX
+    }
+    .min { abs($0.x + $0.width / 2 - mid) < abs($1.x + $1.width / 2 - mid) }?.x
+  }
 }

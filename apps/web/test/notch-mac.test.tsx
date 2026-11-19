@@ -109,6 +109,16 @@ describe("the wing beside the notch", () => {
     expect(box().hasAttribute("data-free")).toBe(false)
   })
 
+  it("shows the fighter's face where the dot was, ringed with the highest risk (owner, 19 Nov)", () => {
+    const high = view("r-high", "permission", 80, "gatehouse")
+    useStore.setState({ pending: { [high.request.id]: high } })
+    const { container } = render(<NotchMac />)
+    const face = container.querySelector(".notch-wing .fighter-face") as HTMLElement
+    expect(face.style.backgroundImage).toContain("fighter.png")
+    expect(face.style.backgroundPosition).toBe("-28px -1px")
+    expect(container.querySelector(".notch")!.getAttribute("data-risk")).toBe("high")
+  })
+
   it("the main window opens a request it is told of, on Approvals", () => {
     const severe = view("r-severe", "permission", 95, "billing")
     useStore.setState({ pending: { [severe.request.id]: severe }, route: "workspace" })

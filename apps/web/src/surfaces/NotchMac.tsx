@@ -7,7 +7,7 @@
 // risk, never the command.
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Fighter } from "../components/Fighter"
+import { Fighter, FighterFace } from "../components/Fighter"
 import { QuickDecision } from "../components/QuickDecision"
 import { RiskBadge } from "../components/RiskBadge"
 import { riskBand } from "../lib/format"
@@ -82,7 +82,7 @@ export function NotchMac() {
         aria-label={open ? `Close the list: ${label}` : `Open the list: ${label}`}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="notch-dot" aria-hidden="true" />
+        <FighterFace className="notch-dot" />
         <span className="notch-count">{pending.length}</span>
       </button>
       {open ? (
