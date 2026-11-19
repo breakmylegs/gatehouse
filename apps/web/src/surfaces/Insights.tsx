@@ -5,6 +5,7 @@ import { Hotspots } from "../components/Hotspots"
 import { PersonalData } from "../components/PersonalData"
 import { DeadCode } from "../components/DeadCode"
 import { Lessons } from "../components/Lessons"
+import { ContextEfficiency } from "../components/ContextEfficiency"
 import {
   Bar,
   BarChart,
@@ -265,6 +266,7 @@ export function Insights() {
       <PersonalData />
       <DeadCode />
       <Lessons />
+      <ContextEfficiency />
 
       <section aria-label="Suggested rules" className="grid gap-2">
         <h2 className="m-0 text-[18px]">Suggested rules</h2>

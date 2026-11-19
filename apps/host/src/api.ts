@@ -5,6 +5,8 @@ import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
 import { deadCode } from "./dead-code.js"
 import { outcomes } from "./outcomes.js"
+import { contextReport, projectBlocks } from "./context-efficiency.js"
+import { TestLocks } from "./test-locks.js"
 import { grantLimitsFor } from "./canuse.js"
 import { createHash, randomBytes } from "node:crypto"
 import { registerAttachRoutes } from "./attach-api.js"
@@ -1960,6 +1962,20 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const days = Math.min(90, Math.max(1, Number((req.query as { days?: string }).days ?? 30) || 30))
     const to = Date.now()
     return { days, ...failureTaxonomy(recordsSince(ctx.auditDir, to - days * DAY)) }
+  })
+
+  // D-077: the instruction blocks a session never used, with the project's recent sessions for comparison.
+  app.get("/api/insights/context", async (req, reply) => {
+    const id = String((req.query as { session?: string }).session ?? "")
+    const cwd = ctx.sessionCwd?.(id)
+    if (!cwd) return reply.code(404).send({ error: "That session is not running." })
+    const root = TestLocks.rootOf(cwd)
+    const norm = (p: string) => path.resolve(p).replace(/\\/g, "/").toLowerCase()
+    const inside = (p?: string) => !!p && (norm(p) === norm(root) || norm(p).startsWith(norm(root) + "/"))
+    const recent = new Map<string, AuditRecord[]>()
+    for (const r of recordsSince(ctx.auditDir, Date.now() - 30 * DAY))
+      if (r.session !== id && r.session !== "desktop" && inside(r.cwd)) recent.set(r.session, [...(recent.get(r.session) ?? []), r])
+    return { root: path.basename(root), ...contextReport(projectBlocks(root), sessionRecords(ctx.auditDir, id), recent) }
   })
 
   // D-076 and D-100: cost per accepted change, rework included, and estimates from that history.
