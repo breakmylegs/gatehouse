@@ -19,7 +19,7 @@ vi.mock("../src/lib/api", () => ({
         at: "2026-11-02T22:00:00Z",
         report: "Codehouse 2.1.20, checked 2026-11-02T22:00:00Z",
         checks: [
-          { id: "claude-code", label: "Claude Code", state: "ok", detail: "Claude Code 2.1.310." },
+          { id: "claude-code", label: "Claude Code", state: "ok", detail: "Claude Code 2.1.329." },
           {
             id: "approver",
             label: "Approver",

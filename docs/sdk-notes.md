@@ -2,6 +2,19 @@
 
 Verified on 2026-10-26 by reading the installed type definitions. Later phases use only APIs recorded here. Items marked UNVERIFIED are not yet confirmed by the spike.
 
+
+## Agent SDK 0.3.329, Claude Code 2.1.329 (C-008, 20 Nov 2026)
+
+From 0.3.310 (Claude Code 2.1.310). Checked against the SDK's own changelog for 0.3.311 to 0.3.329, and live:
+
+- **Hooks as arrays (0.3.327, breaking).** A hook event's value and a matcher's `hooks` must be arrays. The Host already passes `PreToolUse: [{ hooks: [floor] }]` and the like, so nothing changed. Options that cannot be sent to Claude Code are now refused at `query()`; none of the Host's are.
+- **Stricter, which suits invariants 1 and 2.** A permission check that fails after a PreToolUse hook allowed the call now goes to `canUseTool` (0.3.323). Read-only git commands in a repository other than the working directory's now go through the permission flow (0.3.325). A PreToolUse hook that cannot answer gets a `hook_no_verdict` warning (0.3.325).
+- **canUseTool unchanged in what matters.** `suggestions` for Bash now lists rules only when saving them would allow the command (0.3.325); the Host never returns `updatedPermissions` (invariant 5), so this does not reach it. The `description` passed to `canUseTool` masks secrets better (0.3.326); `input` is unchanged.
+- **MCP servers.** `createSdkMcpServer()` servers in an agent's `mcpServers` are now ignored with a warning (0.3.327); the Host gives its in-process Companion at the top level, as before. `mcpServersDelivery` (0.3.326) is left at its default (`argv`), which a later release may change: recheck then.
+- **The shadow warning (invariant 4)** is still `process.emitWarning(..., { code: "CLAUDE_SDK_CAN_USE_TOOL_SHADOWED" })` with "canUseTool will not be invoked for: ..." in sdk.mjs, so the Host's fatal check is unchanged.
+- **Live, 20 Nov** (`probes/companion-live-probe.ts`, on this laptop's sign-in): a call to the Companion reached the PreToolUse hook and then `canUseTool`, both reporting `mcp_server` / `mcpServer` `{ name: "companion", source: "sdk" }`, and the tool ran; `ToolSearch` reached the hook only, as before.
+- `CLAUDE_CODE_RANGE` (claude-range.ts) is now 2.1.329 to 2.1.329: sessions run only the bundled Claude Code.
+
 ## Versions
 
 | Package | Version | Notes |

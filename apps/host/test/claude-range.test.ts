@@ -24,10 +24,10 @@ describe("the Claude Code versions a release was checked with", () => {
   it("let in only plain versions within the range", () => {
     expect(inClaudeRange(CLAUDE_CODE_RANGE.from)).toBe(true)
     expect(inClaudeRange(CLAUDE_CODE_RANGE.to)).toBe(true)
-    expect(inClaudeRange("2.1.309")).toBe(false)
+    expect(inClaudeRange("2.1.328")).toBe(false)
     expect(inClaudeRange("2.2.0")).toBe(false)
     expect(inClaudeRange("9.9.9")).toBe(false)
-    expect(inClaudeRange("2.1.310-beta")).toBe(false)
+    expect(inClaudeRange("2.1.329-beta")).toBe(false)
     expect(inClaudeRange(undefined)).toBe(false)
     expect(inClaudeRange(2)).toBe(false)
     expect(rangeText()).toMatch(/^Claude Code \d/)

@@ -1,14 +1,14 @@
 /**
  * The Claude Code versions this Codehouse release was checked with (B04). Codehouse's safety rests on how Claude
  * Code decides a call: the order of hooks, rules and modes, Plan mode, and what a plugin's mod can do (read from
- * 2.1.310's own reference, 2 Nov). A Claude Code outside this range could decide differently, so a session that
+ * 2.1.310's own reference, 2 Nov, and checked again for 2.1.329 on 20 Nov, C-008). A Claude Code outside this range could decide differently, so a session that
  * reports one stops before any tool runs.
  *
  * The range is part of the signed release, like the rest of the app. Sessions only ever run the bundled Claude Code,
  * which changes only when a release updates the Agent SDK; a test then fails until the new version has been checked
  * and written here.
  */
-export const CLAUDE_CODE_RANGE = { from: "2.1.310", to: "2.1.310" } as const
+export const CLAUDE_CODE_RANGE = { from: "2.1.329", to: "2.1.329" } as const
 
 const parts = (v: string): number[] | undefined => {
   const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(v.trim())

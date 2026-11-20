@@ -72,7 +72,7 @@ describe("the offline vulnerability snapshot (D-057)", () => {
         killSwitch: { engaged: false, approverConfirmed: true },
         pwsh: { running: true },
       }
-      const doctor = doctorChecks({ health: health as never, claude: { found: true, version: "2.1.310" }, listener: { address: "127.0.0.1" }, vulnSnapshot: st })
+      const doctor = doctorChecks({ health: health as never, claude: { found: true, version: "2.1.329" }, listener: { address: "127.0.0.1" }, vulnSnapshot: st })
       expect(doctor.find((c) => c.id === "vuln-snapshot")).toMatchObject({ state: "fail" })
     }
     // With no snapshot at all nothing changes, and Doctor has nothing to say about it.

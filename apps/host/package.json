@@ -11,7 +11,7 @@
     "codehouse": "tsx src/cli-client.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.310",
+    "@anthropic-ai/claude-agent-sdk": "0.3.329",
     "@fastify/static": "10.1.10",
     "@fastify/websocket": "11.3.4",
     "@gatehouse/companion": "0.0.0",

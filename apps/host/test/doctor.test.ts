@@ -22,7 +22,7 @@ const health = (o: Partial<Health> = {}): Health => ({
 })
 const facts = (o: Partial<DoctorFacts> = {}): DoctorFacts => ({
   health: health(),
-  claude: { found: true, version: "2.1.310" },
+  claude: { found: true, version: "2.1.329" },
   listener: { address: "127.0.0.1" },
   diskFree: 50 * 1024 ** 3,
   updates: { kind: "release" },
@@ -133,7 +133,7 @@ describe("GET /api/doctor", () => {
     const app = Fastify()
     registerDoctorRoutes(app, {
       health: () => health(),
-      claude: async () => ({ found: true, version: "2.1.310" }),
+      claude: async () => ({ found: true, version: "2.1.329" }),
       updates: { status: () => ({ current: "2.1.20", kind: "release" }) },
       config: () => ({}) as never,
       env: process.env,
@@ -149,7 +149,7 @@ describe("GET /api/doctor", () => {
       expect(body.version).toBe("2.1.20")
       expect(body.checks.find((c) => c.id === "listener")).toMatchObject({ state: "ok" })
       expect(body.report).toMatch(/^Codehouse 2\.1\.20, checked /)
-      expect(body.report).toContain("OK   Claude Code: Claude Code 2.1.310, the version")
+      expect(body.report).toContain("OK   Claude Code: Claude Code 2.1.329, the version")
       expect(body.report).not.toContain("someone@example.com")
     } finally {
       await app.close()
