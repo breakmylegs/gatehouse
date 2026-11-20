@@ -119,7 +119,16 @@ export async function createCnw(o: CnwOptions) {
     audit.update((a) => ({ entries: [...a.entries, { at: new Date((o.now ?? Date.now)()).toISOString(), user, action, detail }].slice(-1000) }))
   const sessions = new Sessions(o.now)
   const throttle = new Throttle(o.now)
-  const hub = new Hub(() => paired.read().computers, o.now)
+  // ADR 0020: caddy's root certificate (public), copied by cnw-config next to its configuration.
+  const caddyRoot = () => {
+    try {
+      const pem = fs.readFileSync(path.join(o.caddyConfigDir ?? "/caddy-config", "root.crt"), "utf8")
+      return pem.includes("-----BEGIN CERTIFICATE-----") && !/PRIVATE KEY/.test(pem) ? pem : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const hub = new Hub(() => paired.read().computers, o.now, caddyRoot)
   const origin = new URL(o.publicUrl).origin
   const rpId = new URL(o.publicUrl).hostname
 
@@ -376,6 +385,16 @@ export async function createCnw(o: CnwOptions) {
       ...(saved.port !== undefined && (env.CNW_PORT ?? "") !== saved.port ? { portInEnv: env.CNW_PORT ?? "" } : {}),
       ...(sha ? { certificate: grouped(sha) } : {}),
       rootCertificate: fs.existsSync(path.join(caddyDir, "root.crt")),
+      // ADR 0020: what Codehouse pins, to compare when it asks to trust CNW's certificate again.
+      ...((): { rootFingerprint?: string } => {
+        const pem = caddyRoot()
+        if (!pem) return {}
+        try {
+          return { rootFingerprint: grouped(crypto.createHash("sha256").update(new crypto.X509Certificate(pem).raw).digest("hex")) }
+        } catch {
+          return {}
+        }
+      })(),
     }
   }
   app.get("/api/server", async (req, reply) => (need(req, reply, "server") ? await serverView() : undefined))
@@ -422,7 +441,7 @@ export async function createCnw(o: CnwOptions) {
   // most every few seconds; an offline one keeps only its last seen.
   const boardCache = new Map<string, { at: number; row: BoardRow }>()
   const rowOf = async (c: ReturnType<Hub["status"]>[number], user: string, signedIn: boolean): Promise<BoardRow> => {
-    const base: BoardRow = { id: c.id, label: c.label, ...(c.tags?.length ? { tags: c.tags } : {}), online: c.online, waiting: [], ...(c.lastSeen ? { lastSeen: c.lastSeen } : {}), ...(c.version ? { version: c.version } : {}), ...(c.needsUpdate ? { needsUpdate: c.needsUpdate } : {}) }
+    const base: BoardRow = { id: c.id, label: c.label, ...(c.tags?.length ? { tags: c.tags } : {}), online: c.online, waiting: [], ...(c.lastSeen ? { lastSeen: c.lastSeen } : {}), ...(c.version ? { version: c.version } : {}), ...(c.needsUpdate ? { needsUpdate: c.needsUpdate } : {}), ...(c.refused ? { refused: c.refused } : {}) }
     if (!c.online) return { ...base, note: "Not connected." }
     const t = (o.now ?? Date.now)()
     const hit = boardCache.get(c.id)
@@ -1025,6 +1044,14 @@ export async function createCnw(o: CnwOptions) {
     } catch (e) {
       return reply.code(502).send({ error: `The updater could not be reached: ${(e as Error).message}` })
     }
+  })
+
+  // ADR 0020: caddy's root certificate, the public part, for Codehouse to pin at pairing. Codehouse believes it only once
+  // CNW's own certificate verifies against it. None with a certificate the system trusts (Let's Encrypt).
+  app.get("/agent/ca", async (_req, reply) => {
+    const pem = caddyRoot()
+    if (!pem) return reply.code(404).send({ error: "There is no root certificate here." })
+    return reply.type("application/x-pem-file").send(pem)
   })
 
   // A computer pairs with a code and its public key; no session needed, the code is the proof.

@@ -104,15 +104,18 @@ the second start, once caddy has made it), or get it with
 (Windows: Manage computer certificates, Trusted Root Certification Authorities; iPhone: install the profile, then turn it
 on in Settings, General, About, Certificate Trust Settings). Or accept the warning once per browser.
 
-Codehouse does not need the root trusted: it pins CNW's certificate when you pair. The authority and certificates live
-in the `caddy-data` volume, so they stay the same across restarts and CNW updates and the pin keeps working. Never
-remove that volume (`docker compose down -v` would); if it is lost, pair each computer again.
+Codehouse does not need the root trusted on the computer: it pins caddy's root certificate when you pair (ADR 0020),
+and checks every connection against it, the chain and the address. caddy renews CNW's own certificate every few hours
+with a new key, and that keeps connecting, as do restarts, rebuilds and CNW updates. The root lives in the
+`caddy-data` volume; never remove it (`docker compose down -v` would). If it is lost, each computer says CNW's
+certificate changed, and you can trust it again there (below) or pair it again.
 
 ## The Server panel
 
 Once signed in, the Server panel sets CNW's address, its kind of certificate and its port (and, behind your own
 proxy, the proxy's address). Saved there, they win over `.env`; Save writes caddy's configuration again and starts
-caddy and CNW again, which takes a minute. It also shows the fingerprint of CNW's certificate, the one Codehouse pins.
+caddy and CNW again, which takes a minute. It also shows the fingerprint of caddy's root certificate, the one
+Codehouse pins and shows when you trust CNW again, and that of this address's own certificate, which caddy renews.
 
 A new address, or the other kind of certificate, gives CNW a new certificate: the panel names every paired computer
 that will stop connecting, and changes it only when you confirm; pair each one again after. Docker publishes the port
@@ -127,8 +130,12 @@ the panel says when they differ. An allowed network cannot see or change any of 
 3. The computer appears in CNW's list. **Open** shows its Codehouse; **Remove** disconnects it at once.
 
 Codehouse makes a key pair for the computer and keeps the private half sealed for your Windows user (the Keychain on a
-Mac). It pins CNW's certificate on first use: if the certificate changes, it stops connecting until you pair again.
-Untick **Share this computer's sessions** to stop for a while, or **Unpair** to end it.
+Mac). It pins caddy's root certificate on first use (or, with a public certificate, trusts the system's store), and a
+computer paired before that moves to the root by itself the next time it connects. If CNW's certificate really changes
+(a new address or kind of certificate, or a new root), it stops connecting and says so, and CNW's board shows
+"certificate refused by this computer". Then either pair again, or choose **Trust CNW's certificate again** in
+Codehouse: it shows the root's fingerprint, which you compare with the Server panel's, and keeps this computer as it is
+on CNW. Untick **Share this computer's sessions** to stop for a while, or **Unpair** to end it.
 
 ## What CNW can and cannot do
 

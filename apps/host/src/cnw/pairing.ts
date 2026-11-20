@@ -4,18 +4,23 @@ import net from "node:net"
 import os from "node:os"
 import tls from "node:tls"
 import { newComputerKey } from "./connector.js"
+import { trustFor, verifyOptions, type Trust } from "./trust.js"
 
 /**
  * O41: pairing this computer with Codehouse Neighbourhood Watch. You give CNW's address and the one-time code it
- * shows. Codehouse reads CNW's certificate and pins its SHA-256 (trust on first use, so a home server with caddy's
- * own certificate authority works without installing it here; a later different certificate stops the connection),
- * makes this computer's key pair, sends the public half with the code over that pinned connection, and keeps the
- * private half sealed for this Windows user. Nothing of yours is sent: no credential, no token.
+ * shows. Codehouse works out how to trust CNW (trust.ts, ADR 0020): the system's store for a public certificate, else
+ * caddy's root certificate, read from CNW on first use and believed only once a connection verifies against it, chain
+ * and address. It makes this computer's key pair, sends the public half with the code over a connection verified that
+ * way, and keeps the private half sealed for this Windows user. Nothing of yours is sent: no credential, no token.
+ * An older CNW that gives no root is pinned on its leaf certificate as before, and moves to its root once it can.
  */
 export interface Pairing {
   url: string
   computerId: string
+  /** The leaf certificate seen at pairing: an older Codehouse (after an undone update) still pins it. */
   certSha256: string
+  /** ADR 0020: how this Codehouse trusts CNW. Absent in a pairing made before it: the leaf pin. */
+  trust?: Trust
 }
 
 export function checkUrl(raw: string): URL {
@@ -103,6 +108,38 @@ export function pinnedPost(url: URL, body: unknown, certSha256: string): Promise
   })
 }
 
+/** POSTs JSON to CNW over a connection verified under a trust (the chain to the pinned root, or the system's store, and the address). */
+export function verifiedPost(url: URL, body: unknown, trust: Trust): Promise<{ status: number; json: Record<string, unknown> }> {
+  const data = JSON.stringify(body)
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      url,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", "content-length": Buffer.byteLength(data) },
+        ...verifyOptions(trust),
+        ...(tlsTarget(url).servername ? { servername: tlsTarget(url).servername } : {}),
+        timeout: 20_000,
+        agent: false,
+      },
+      (res) => {
+        let text = ""
+        res.on("data", (c) => (text += c))
+        res.on("end", () => {
+          try {
+            resolve({ status: res.statusCode ?? 0, json: JSON.parse(text || "{}") })
+          } catch {
+            reject(new Error("Neighbourhood Watch's answer could not be read."))
+          }
+        })
+      },
+    )
+    req.on("timeout", () => req.destroy(new Error("Neighbourhood Watch did not answer.")))
+    req.on("error", (e: NodeJS.ErrnoException) => reject(new Error(`Neighbourhood Watch's certificate was not trusted, so nothing was sent (${e.code ?? e.message}).`)))
+    req.end(data)
+  })
+}
+
 export async function pair(
   rawUrl: string,
   code: string,
@@ -111,16 +148,21 @@ export async function pair(
     seal: (key: Buffer) => Promise<void>
     fingerprint?: (u: URL) => Promise<string>
     post?: typeof pinnedPost
+    trust?: (u: URL) => Promise<Trust | undefined>
+    verifiedPost?: typeof verifiedPost
   },
 ): Promise<Pairing> {
   const url = checkUrl(rawUrl)
+  const trust = await (d.trust ?? trustFor)(url)
   const certSha256 = await (d.fingerprint ?? certFingerprint)(url)
   const key = newComputerKey()
   // With no label given, CNW lists the computer by its own name rather than as "A computer".
   const name = (label.trim() || os.hostname()).slice(0, 60)
-  const r = await (d.post ?? pinnedPost)(new URL("/agent/pair", url), { code: code.trim(), publicKey: key.publicKey, label: name }, certSha256)
+  const body = { code: code.trim(), publicKey: key.publicKey, label: name }
+  const target = new URL("/agent/pair", url)
+  const r = trust ? await (d.verifiedPost ?? verifiedPost)(target, body, trust) : await (d.post ?? pinnedPost)(target, body, certSha256)
   if (r.status !== 200 || typeof r.json.computer !== "string")
     throw new Error(typeof r.json.error === "string" ? r.json.error : "Neighbourhood Watch did not accept the code.")
   await d.seal(key.privateKey)
-  return { url: url.origin, computerId: r.json.computer, certSha256 }
+  return { url: url.origin, computerId: r.json.computer, certSha256, ...(trust ? { trust } : {}) }
 }

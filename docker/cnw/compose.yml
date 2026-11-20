@@ -38,8 +38,8 @@ services:
       - "${CNW_HTTP_PORT:-80}:80"
     volumes:
       - caddy-config:/caddy-config:ro
-      # caddy's certificates and its own certificate authority: kept, so the certificate Codehouse pinned at pairing
-      # stays the same across restarts and updates. Never remove this volume (docker compose down -v would).
+      # caddy's certificates and its own certificate authority: kept, so the root certificate Codehouse pins at pairing
+      # (ADR 0020) stays the same across restarts and updates. Never remove this volume (docker compose down -v would).
       - caddy-data:/data
     networks:
       front:

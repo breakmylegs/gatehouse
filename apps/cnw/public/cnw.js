@@ -334,6 +334,8 @@ const waited = (iso) => {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`
 }
 const ago = (ms) => (ms ? `last seen ${waited(new Date(ms).toISOString())} ago` : "never connected")
+// ADR 0020: a computer that refused CNW's certificate says so, signed, and the board says that rather than "never connected".
+const refusedText = (r) => `certificate refused by this computer ${waited(new Date(r.at).toISOString())} ago: trust it again in its Codehouse, or pair again`
 
 function boardView() {
   main.append(el("h1", { text: "Board" }))
@@ -350,7 +352,7 @@ function boardView() {
     const lit = c.waiting.length > 0
     const oldest = lit ? c.waiting.reduce((a, b) => (Date.parse(a.since) < Date.parse(b.since) ? a : b)) : undefined
     const parts = [
-      c.online ? (c.sessions ? `${c.sessions.working} working, ${c.sessions.waiting} waiting` : (c.note ?? "")) : ago(c.lastSeen),
+      c.online ? (c.sessions ? `${c.sessions.working} working, ${c.sessions.waiting} waiting` : (c.note ?? "")) : c.refused ? refusedText(c.refused) : ago(c.lastSeen),
       c.version ? `Codehouse ${c.version}` : "",
       c.kill ? "kill switch on" : "",
       c.safeMode ? "safe mode" : "",
@@ -704,7 +706,9 @@ async function serverPanel() {
   else panel.append(field("Your proxy's address (trusted proxy)", proxy, "Only its X-Forwarded-For is believed."))
   if (v.portInEnv !== undefined)
     panel.append(el("p", { class: "err", text: `.env sets the port to ${v.portInEnv || "443"}, which Docker uses when the stack is started by hand. Set CNW_PORT in .env to the same, or remove it.` }))
-  if (v.certificate) panel.append(el("p", {}, el("span", { class: "muted", text: "Certificate fingerprint (SHA-256), the one Codehouse pins: " }), el("span", { class: "code fp", text: v.certificate })))
+  // ADR 0020: Codehouse pins caddy's root, which lasts; this address's own certificate is renewed every few hours.
+  if (v.rootFingerprint) panel.append(el("p", {}, el("span", { class: "muted", text: "Root certificate fingerprint (SHA-256), the one Codehouse pins and shows when you trust CNW again: " }), el("span", { class: "code fp", text: v.rootFingerprint })))
+  if (v.certificate) panel.append(el("p", {}, el("span", { class: "muted", text: v.rootFingerprint ? "This address's own certificate (SHA-256), which caddy renews every few hours: " : "Certificate fingerprint (SHA-256): " }), el("span", { class: "code fp", text: v.certificate })))
   if (v.rootCertificate)
     panel.append(
       el(

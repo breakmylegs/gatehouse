@@ -11,6 +11,9 @@ interface Status {
   refusal?: "removed" | "certificate"
   /** Connected, but one side is older (the protocol handshake; absent from an older Host). */
   needsUpdate?: "cnw" | "codehouse"
+  /** ADR 0020: how CNW's certificate is trusted, and the pinned root's fingerprint. */
+  trust?: "root" | "public" | "leaf"
+  root?: string
 }
 
 /** Owner, 18 Nov: a version mismatch is said, never left to lose data quietly. */
@@ -22,7 +25,7 @@ export const UPDATE_TEXT: Record<"cnw" | "codehouse", string> = {
 /** What the panel says about the connection: a changed certificate is told apart from a computer CNW removed. */
 export const stateText = (s: Pick<Status, "state" | "refusal">): string =>
   s.state === "refused" && s.refusal === "certificate"
-    ? "Refused: Neighbourhood Watch's certificate changed since you paired, so nothing was sent. Unpair and pair again."
+    ? "Refused: CNW's certificate changed, so nothing was sent. Trust it again, or pair again."
     : STATE[s.state]
 
 const STATE: Record<Status["state"], string> = {
@@ -41,6 +44,8 @@ export function NeighbourhoodWatchPanel() {
   const [url, setUrl] = useState("")
   const [code, setCode] = useState("")
   const [busy, setBusy] = useState(false)
+  /** ADR 0020: what trusting CNW's certificate again would trust, shown for you to compare before you confirm. */
+  const [candidate, setCandidate] = useState<{ kind: string; root?: string }>()
   const load = async () => {
     const r = await api<Status>("GET", "/api/cnw")
     if (r.ok && r.data) setS(r.data)
@@ -89,6 +94,68 @@ export function NeighbourhoodWatchPanel() {
       <p className="m-0">
         Paired with <span className="mono">{s.url}</span>: <strong>{stateText(s)}</strong>
       </p>
+      {s.state === "refused" && s.refusal === "certificate" ? (
+        <div className="grid gap-2 rounded-md border border-line p-2 text-[13px]" role="group" aria-label="Trust CNW's certificate again">
+          {!candidate ? (
+            <>
+              <span>
+                If you changed nothing on CNW, its certificate authority may have been made again. You can trust it again
+                here and keep this computer as it is on CNW, once you have checked its fingerprint.
+              </span>
+              <button
+                type="button"
+                className="btn w-fit"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true)
+                  const r = await api<{ kind: string; root?: string }>("GET", "/api/cnw/trust-again")
+                  setBusy(false)
+                  if (!r.ok || !r.data) return void toast.error(r.error ?? "CNW's certificate could not be read.", { id: "cnw" })
+                  setCandidate(r.data)
+                }}
+              >
+                Trust CNW&apos;s certificate again
+              </button>
+            </>
+          ) : (
+            <>
+              <span>
+                {candidate.root
+                  ? "Check that this is the root certificate fingerprint on CNW's Server page before you trust it:"
+                  : "CNW now has a certificate this computer's system trusts (a public one)."}
+              </span>
+              {candidate.root ? <code className="mono break-all">{candidate.root}</code> : null}
+              <span className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true)
+                    const r = await api<Status>("POST", "/api/cnw/trust-again", { fingerprint: candidate.root ?? "public" })
+                    setBusy(false)
+                    setCandidate(undefined)
+                    if (!r.ok || !r.data) return void toast.error(r.error ?? "Not trusted.", { id: "cnw" })
+                    setS(r.data)
+                    toast("CNW's certificate is trusted again.", { id: "cnw" })
+                  }}
+                >
+                  It matches: trust it
+                </button>
+                <button type="button" className="btn" onClick={() => setCandidate(undefined)}>
+                  Not now
+                </button>
+              </span>
+            </>
+          )}
+        </div>
+      ) : null}
+      {s.trust === "root" && s.root && s.state !== "refused" ? (
+        <p className="m-0 text-xs text-mut">
+          Trusted through CNW&apos;s root certificate <span className="mono">{s.root}</span>, so its renewed certificates
+          keep connecting.
+        </p>
+      ) : null}
       {s.needsUpdate ? (
         <p role="status" className="m-0 font-semibold text-warn">
           {UPDATE_TEXT[s.needsUpdate]}

@@ -80,12 +80,21 @@ export class Hub {
   /** Messages arriving in parts, per computer connection: id to the parts so far. */
   readonly #parts = new WeakMap<Socket, Map<string, { of: number; got: string[]; size: number }>>()
   readonly #now: () => number
+  /**
+   * ADR 0020: computers that refused CNW's certificate, by id, with when: each told CNW so, signed with its key over
+   * "cnw-refused:" and the challenge (never the challenge alone, so it signs no one in). Cleared when it connects.
+   */
+  readonly #refused = new Map<string, { at: number; reason: "certificate" }>()
+  /** caddy's root certificate (public), for a computer pinned on an old leaf to move to; undefined when there is none. */
+  readonly #ca: () => string | undefined
 
   constructor(
     readonly computers: () => Computer[],
     now: () => number = Date.now,
+    ca: () => string | undefined = () => undefined,
   ) {
     this.#now = now
+    this.#ca = ca
   }
 
   /** A computer has connected: it is sent a challenge to sign. */
@@ -108,6 +117,13 @@ export class Hub {
     if (!known) {
       const challenge = this.#challenges.get(socket)
       const computer = this.computers().find((c) => c.id === m.computer)
+      // ADR 0020: this computer refused CNW's certificate, and says so, signed; noted for the board, and nothing more.
+      if (m.type === "refused" && challenge && computer && typeof m.signature === "string" && verifyChallenge(computer, `cnw-refused:${challenge}`, m.signature)) {
+        this.#challenges.delete(socket)
+        this.#refused.set(computer.id, { at: this.#now(), reason: "certificate" })
+        socket.close(4000, "refusal noted")
+        return undefined
+      }
       if (m.type !== "hello" || !challenge || !computer || typeof m.signature !== "string" || !verifyChallenge(computer, challenge, m.signature)) {
         socket.close(4401, "not paired")
         return undefined
@@ -120,7 +136,10 @@ export class Hub {
       const needsUpdate = protocolGap(PROTOCOL, m.protocol)
       this.#agents.set(computer.id, { socket, computer, ...(m.version ? { version: String(m.version).slice(0, 40) } : {}), ...(needsUpdate ? { needsUpdate } : {}), connectedAt: t, lastSeen: t })
       this.#note(computer.id, "connected")
-      socket.send(JSON.stringify({ type: "welcome", protocol: PROTOCOL }))
+      this.#refused.delete(computer.id)
+      // ADR 0020: the root, so a computer pinned on an old leaf certificate can move to it (it checks it first).
+      const ca = this.#ca()
+      socket.send(JSON.stringify({ type: "welcome", protocol: PROTOCOL, ...(ca ? { ca } : {}) }))
       this.#broadcast(computer.id, { type: "computer_online", online: true })
       // Back after a drop: each tab already open is sent the computer's state afresh, so no view is left stale with
       // whatever it missed in the gap. One snapshot for each user, as watch() asks for one.
@@ -263,10 +282,10 @@ export class Hub {
   }
 
   /** Each paired computer, and whether it is connected now. */
-  status(): Array<{ id: string; label: string; tags?: string[]; online: boolean; version?: string; lastSeen?: number; needsUpdate?: "cnw" | "codehouse" }> {
+  status(): Array<{ id: string; label: string; tags?: string[]; online: boolean; version?: string; lastSeen?: number; needsUpdate?: "cnw" | "codehouse"; refused?: { at: number; reason: "certificate" } }> {
     return this.computers().map((c) => {
       const a = this.#agents.get(c.id)
-      return { id: c.id, label: c.label, ...(c.tags?.length ? { tags: c.tags } : {}), online: Boolean(a), ...(a?.version ? { version: a.version } : {}), ...(a ? { lastSeen: a.lastSeen } : {}), ...(a?.needsUpdate ? { needsUpdate: a.needsUpdate } : {}) }
+      return { id: c.id, label: c.label, ...(c.tags?.length ? { tags: c.tags } : {}), online: Boolean(a), ...(a?.version ? { version: a.version } : {}), ...(a ? { lastSeen: a.lastSeen } : {}), ...(a?.needsUpdate ? { needsUpdate: a.needsUpdate } : {}), ...(!a && this.#refused.has(c.id) ? { refused: this.#refused.get(c.id)! } : {}) }
     })
   }
 

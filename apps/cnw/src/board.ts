@@ -35,6 +35,8 @@ export interface BoardRow {
   lastSeen?: number
   version?: string
   needsUpdate?: "cnw" | "codehouse"
+  /** ADR 0020: this computer refused CNW's certificate, and said so (signed), when. */
+  refused?: { at: number; reason: "certificate" }
   /** Absent when the computer is offline or did not answer. */
   sessions?: { total: number; working: number; waiting: number }
   waiting: Waiting[]

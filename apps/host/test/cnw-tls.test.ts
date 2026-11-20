@@ -80,7 +80,9 @@ describe.skipIf(!opensslPath)("Neighbourhood Watch over TLS with its own certifi
     expect([c.status, c.refusal]).toEqual(["refused", "certificate"])
     // A moment for anything that might still arrive.
     await new Promise((r) => setTimeout(r, 300))
-    expect(cnw.agentMessages).toEqual([])
+    // ADR 0020: no hello and nothing else; only the signed note that it refused, which carries nothing but this.
+    expect(cnw.agentMessages.filter((m) => m.type !== "refused")).toEqual([])
+    for (const m of cnw.agentMessages) expect(Object.keys(m).sort()).toEqual(["computer", "reason", "signature", "type"])
   }, 30_000)
 
   it("pairing writes the code and key only to the pinned certificate, and nothing to another", async () => {

@@ -5,7 +5,8 @@ import { z } from "zod"
 import type { HostAudit } from "../hostaudit.js"
 import type { RemoteVia } from "../server.js"
 import { CnwConnector, type VirtualSocket } from "./connector.js"
-import { pair, type Pairing } from "./pairing.js"
+import { checkUrl, pair, type Pairing } from "./pairing.js"
+import { checkRootPem, grouped, pemSha256, trustFor, type Trust } from "./trust.js"
 
 /**
  * O41: Neighbourhood Watch in Codehouse: the pairing kept in the data folder (the address, this computer's id and the
@@ -16,6 +17,17 @@ interface Saved extends Pairing {
   on: boolean
 }
 
+/** A trust as kept, checked; undefined for anything else (a file from a newer version keeps it, an older drops it). */
+function readTrust(v: unknown): Trust | undefined {
+  const t = v as Partial<{ kind: string; pem: string; sha256: string }> | undefined
+  if (t?.kind === "public") return { kind: "public" }
+  if (t?.kind === "root" && typeof t.pem === "string") {
+    const pem = checkRootPem(t.pem)
+    return typeof pem === "string" ? { kind: "root", pem, sha256: pemSha256(pem) } : undefined
+  }
+  return undefined
+}
+
 export interface CnwDeps {
   dataDir: string
   version: string
@@ -24,6 +36,8 @@ export interface CnwDeps {
   seal: (plain: Buffer) => Promise<Buffer>
   open: (sealed: Buffer) => Promise<Buffer>
   log: (line: string) => void
+  /** For tests. */
+  trustFor?: (u: URL) => Promise<Trust | undefined>
 }
 
 export class CnwService {
@@ -46,7 +60,10 @@ export class CnwService {
     try {
       const v = JSON.parse(fs.readFileSync(this.#file, "utf8")) as Partial<Saved>
       return typeof v.url === "string" && typeof v.computerId === "string" && typeof v.certSha256 === "string"
-        ? { url: v.url, computerId: v.computerId, certSha256: v.certSha256, on: v.on !== false }
+        ? (() => {
+            const trust = readTrust(v.trust)
+            return { url: v.url, computerId: v.computerId, certSha256: v.certSha256, ...(trust ? { trust } : {}), on: v.on !== false }
+          })()
         : undefined
     } catch {
       return undefined
@@ -60,11 +77,49 @@ export class CnwService {
     fs.renameSync(tmp, this.#file)
   }
 
-  status(): { paired: boolean; on: boolean; url?: string; state: CnwConnector["status"]; refusal?: "removed" | "certificate"; needsUpdate?: "cnw" | "codehouse" } {
+  status(): { paired: boolean; on: boolean; url?: string; state: CnwConnector["status"]; refusal?: "removed" | "certificate"; needsUpdate?: "cnw" | "codehouse"; trust?: Trust["kind"]; root?: string } {
     const s = this.saved()
     const refusal = this.#conn?.status === "refused" ? this.#conn.refusal : undefined
     const needsUpdate = this.#conn?.status === "connected" ? this.#conn.needsUpdate : undefined
-    return { paired: Boolean(s), on: s?.on ?? false, ...(s ? { url: s.url } : {}), state: this.#conn?.status ?? "off", ...(refusal ? { refusal } : {}), ...(needsUpdate ? { needsUpdate } : {}) }
+    const trust = s?.trust ?? (s ? ({ kind: "leaf", sha256: s.certSha256 } as const) : undefined)
+    return {
+      paired: Boolean(s),
+      on: s?.on ?? false,
+      ...(s ? { url: s.url } : {}),
+      state: this.#conn?.status ?? "off",
+      ...(refusal ? { refusal } : {}),
+      ...(needsUpdate ? { needsUpdate } : {}),
+      ...(trust ? { trust: trust.kind } : {}),
+      ...(trust?.kind === "root" ? { root: grouped(trust.sha256) } : {}),
+    }
+  }
+
+  /**
+   * ADR 0020: what "Trust CNW's certificate again" would trust, looked at now: CNW's root as it gives it, checked
+   * against its own certificate (chain and address), with its fingerprint for you to compare with CNW's Server page.
+   * Nothing is kept until you confirm that fingerprint.
+   */
+  async candidate(): Promise<{ kind: Trust["kind"]; root?: string }> {
+    const s = this.saved()
+    if (!s) throw new Error("This computer is not paired with Neighbourhood Watch.")
+    const t = await (this.#d.trustFor ?? trustFor)(checkUrl(s.url))
+    if (!t) throw new Error("This Neighbourhood Watch gives no root certificate. Update it, or pair again.")
+    return { kind: t.kind, ...(t.kind === "root" ? { root: grouped(t.sha256) } : {}) }
+  }
+
+  /** Trusts CNW's certificate again, keeping this computer's id and key, once you confirm the fingerprint you saw. */
+  async trustAgain(fingerprint: string): Promise<void> {
+    const s = this.saved()
+    if (!s) throw new Error("This computer is not paired with Neighbourhood Watch.")
+    const t = await (this.#d.trustFor ?? trustFor)(checkUrl(s.url))
+    if (!t) throw new Error("This Neighbourhood Watch gives no root certificate. Update it, or pair again.")
+    const seen = t.kind === "root" ? grouped(t.sha256) : "public"
+    if (fingerprint.replace(/\s+/g, "").toUpperCase() !== seen.replace(/\s+/g, "").toUpperCase())
+      throw new Error("CNW's certificate is not the one you confirmed, so nothing changed. Look again.")
+    const next: Saved = { ...s, trust: t }
+    this.#save(next)
+    await this.#record("cnw_trusted_again", { url: s.url, computer: s.computerId, trust: t.kind, ...(t.kind === "root" ? { root: t.sha256 } : {}) }, "Neighbourhood Watch's certificate was trusted again from the desktop.")
+    if (next.on) await this.#connect(next)
   }
 
   /** Called once the Host's server is up: CNW's commands join it as clients. */
@@ -89,9 +144,17 @@ export class CnwService {
       computerId: s.computerId,
       privateKey: key,
       certSha256: s.certSha256,
+      ...(s.trust ? { trust: s.trust } : {}),
       version: this.#d.version,
       attach: this.#attach,
       log: this.#d.log,
+    })
+    // ADR 0020: a leaf-pinned pairing moved to CNW's root by itself: kept, and recorded.
+    this.#conn.on("trust", (t: Trust) => {
+      const now = this.saved()
+      if (!now || now.computerId !== s.computerId) return
+      this.#save({ ...now, trust: t })
+      void this.#record("cnw_trust_moved", { url: now.url, computer: now.computerId, trust: t.kind, ...(t.kind === "root" ? { root: t.sha256 } : {}) }, "Neighbourhood Watch's pairing moved from its certificate to its root certificate, while the certificate still matched.")
     })
     this.#conn.start()
   }
@@ -157,6 +220,24 @@ export function registerCnwRoutes(app: FastifyInstance, cnw: CnwService): void {
   app.post("/api/cnw/on", async (req, reply) => {
     try {
       await cnw.setOn((req.body as { on?: unknown })?.on === true)
+      return cnw.status()
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  // ADR 0020: Trust CNW's certificate again, in two steps: look (its root's fingerprint), then confirm it.
+  app.get("/api/cnw/trust-again", async (_req, reply) => {
+    try {
+      return await cnw.candidate()
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/cnw/trust-again", async (req, reply) => {
+    const b = z.object({ fingerprint: z.string().min(1).max(200) }).safeParse(req.body)
+    if (!b.success) return reply.code(422).send({ error: "Confirm the fingerprint you were shown." })
+    try {
+      await cnw.trustAgain(b.data.fingerprint)
       return cnw.status()
     } catch (e) {
       return reply.code(409).send({ error: (e as Error).message })
