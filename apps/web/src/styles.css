@@ -1963,6 +1963,11 @@ main[data-rail="hidden"] {
   font-size: 13.5px;
   overflow-wrap: anywhere;
 }
+/* A bypass's bar folded to one line (owner, 20 Nov): the same warning colour, less room. */
+.pane-stopped-folded {
+  padding: 4px 10px;
+  font-size: 13px;
+}
 
 /* A run of tool calls folded into one line. */
 /* A ledger row (Stitch, R5): a quiet box with the tools it ran, what is waiting or blocked, and the arrow. */

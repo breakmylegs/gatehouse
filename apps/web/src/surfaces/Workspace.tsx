@@ -1802,24 +1802,73 @@ function BypassForm({ session, onClose }: { session: SessionInfo; onClose?: () =
   )
 }
 
-/** A bypass running: how long it has left and what it may still spend, and a way to end it now. */
-function BypassLine({ session }: { session: SessionInfo }) {
+/** Owner, 20 Nov: a bypass's bar folded to one line, kept for that bypass only (by when it began), per session. */
+const foldKey = (sessionId: string) => `gatehouse.bypassFolded.${sessionId}`
+export function bypassFolded(sessionId: string, since: string): boolean {
+  try {
+    return localStorage.getItem(foldKey(sessionId)) === since
+  } catch {
+    return false
+  }
+}
+export function setBypassFolded(sessionId: string, since: string | undefined): void {
+  try {
+    if (since) localStorage.setItem(foldKey(sessionId), since)
+    else localStorage.removeItem(foldKey(sessionId))
+  } catch {
+    // storage blocked: it stays folded until the window reloads
+  }
+}
+
+/**
+ * A bypass running: how long it has left and what it may still spend, and a way to end it now. It folds to one line
+ * (owner, 20 Nov) once you have read it; a new bypass shows in full again, and ending it is there either way.
+ */
+export function BypassLine({ session }: { session: SessionInfo }) {
   const b = session.bypass!
+  const [folded, setFolded] = useState(() => bypassFolded(session.id, b.since))
+  const fold = (on: boolean) => {
+    setBypassFolded(session.id, on ? b.since : undefined)
+    setFolded(on)
+  }
   const parts = [
     b.until ? `until ${clock(b.until) || "later today"}` : "",
     b.maxUsd !== undefined
       ? `up to $${b.maxUsd.toFixed(2)} of spending ($${b.spentUsd.toFixed(2)} so far)`
       : "",
   ].filter(Boolean)
+  const short = [
+    b.maxUsd !== undefined ? `$${b.spentUsd.toFixed(2)} of $${b.maxUsd.toFixed(2)}` : "",
+    b.until ? `until ${clock(b.until) || "later today"}` : "",
+  ].filter(Boolean)
+  const end = (
+    <button type="button" className="btn !min-h-7" onClick={() => void setBypass(session.id, null)}>
+      End the bypass
+    </button>
+  )
+  if (folded)
+    return (
+      <div role="status" className="pane-stopped pane-stopped-folded">
+        <span>
+          <strong>Limits bypassed</strong>
+          {short.length ? `: ${short.join(", ")}` : ""}
+        </span>
+        <button type="button" className="btn !min-h-7" aria-expanded={false} onClick={() => fold(false)}>
+          Show
+        </button>
+        {end}
+      </div>
+    )
   return (
     <div role="status" className="pane-stopped">
       <span>
         <strong>Limits bypassed</strong> for this session {parts.join(" or ")}, whichever comes
         first. Then the limits in Settings apply again and it pauses if they are still over.
       </span>
-      <button type="button" className="btn !min-h-7" onClick={() => void setBypass(session.id, null)}>
-        End the bypass
+      <button type="button" className="btn !min-h-7" aria-expanded={true} onClick={() => fold(true)}>
+        Fold it away
       </button>
+      {end}
     </div>
   )
 }
