@@ -159,6 +159,27 @@ export class AuditIndex {
     if (changed) await writeFileAtomic(this.#stateFile(), JSON.stringify(state))
   }
 
+  /** C-015: every entry since a time, oldest first, from the month files that can hold it. Not redacted: for counting. */
+  async since(fromMs: number): Promise<IndexEntry[]> {
+    await this.update()
+    // Two days early, so a month file named by local time near a month's end is not missed.
+    const from = new Date(fromMs - 2 * 86_400_000)
+    const first = `audit-${from.getUTCFullYear()}-${String(from.getUTCMonth() + 1).padStart(2, "0")}.jsonl`
+    const files = fs.existsSync(this.#dir) ? fs.readdirSync(this.#dir).filter((f) => /^audit-\d{4}-\d{2}\.jsonl$/.test(f) && f >= first).sort() : []
+    const out: IndexEntry[] = []
+    for (const f of files)
+      for (const raw of fs.readFileSync(path.join(this.#dir, f), "utf8").split("\n")) {
+        if (!raw) continue
+        try {
+          const e = JSON.parse(raw) as IndexEntry
+          if (Date.parse(e.ts) >= fromMs) out.push(e)
+        } catch {
+          // a damaged line
+        }
+      }
+    return out
+  }
+
   /** A saved query's results, newest first, at most `limit`, redacted. */
   async query(template: QueryTemplate, o: { project?: string; limit?: number; redact: (text: string) => string }): Promise<{ results: IndexEntry[]; total: number }> {
     await this.update()

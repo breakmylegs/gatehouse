@@ -27,6 +27,7 @@ import { CliAccess, cliSession, settledSession } from "./cli-access.js"
 import { HostStalls } from "./host-stalls.js"
 import { resolveSecret, SecretTerms } from "./secret-providers.js"
 import { refuseRequest, SecretRequests } from "./secret-requests.js"
+import { AutonomyStore } from "./autonomy.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
@@ -217,6 +218,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const secretTerms = new SecretTerms()
   const teamTerms = withTeamTerms(config, redactionLists, () => secretTerms.terms())
   const secretDeps = { enabled: () => config.onePassword === true, terms: secretTerms }
+  // C-015: adaptive autonomy that only lowers: each project's cap, kept in the data folder.
+  const autonomy = new AutonomyStore(path.join(gatehouseDataDir(env), "autonomy.json"))
   // T-135: secrets you give a session for one command, desktop only; their values are redacted like the above.
   const secretRequests = new SecretRequests(secretTerms, () => opts.onHealthChanged?.())
   const rulesPath =
@@ -596,6 +599,8 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     checkpoints,
     grants,
+    // C-015: each project's cap, from its record.
+    autonomy,
     secrets: secretRequests,
     account,
     // Owner, 9 Nov: a bypass that ran out pauses its session at once, not at the next look.
@@ -1602,6 +1607,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // T-119: Run now, once the routines are running (filled in below).
       // T-135: the requests waiting on the desktop, and your answers.
       secretRequests,
+      autonomy,
       // T-132: stalls and slow requests, for Doctor.
       stalls: (() => {
         const s = new HostStalls()

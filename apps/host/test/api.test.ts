@@ -487,6 +487,27 @@ describe("secrets a session asks for (T-135)", () => {
   })
 })
 
+describe("autonomy caps (C-015)", () => {
+  it("lists caps, raises one only on your request, recorded, and refuses a raise that is not one", async () => {
+    const { AutonomyStore } = await import("../src/autonomy.js")
+    const store = new AutonomyStore(path.join(root, "autonomy-c015.json"))
+    await store.lower("shop", "default", ["the floor denied 10 calls in 30 days"])
+    const recorded: Array<{ event: string; verdict: { decidedBy: string } }> = []
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never })
+    try {
+      expect((await app2.inject({ method: "GET", url: "/api/autonomy" })).json()).toMatchObject({ caps: { shop: { level: "default", by: "record" } } })
+      expect((await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "plan" } })).statusCode).toBe(409)
+      expect((await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "sideways" } })).statusCode).toBe(422)
+      expect((await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "auto" } })).json()).toMatchObject({ caps: { shop: { level: "auto", by: "you" } } })
+      expect(recorded).toMatchObject([{ event: "autonomy_raised", verdict: { decidedBy: "human-desktop" } }])
+    } finally {
+      await app2.close()
+      fs.rmSync(path.join(root, "autonomy-c015.json"), { force: true })
+    }
+  })
+})
+
 describe("settings endpoints", () => {
   it("rejects unknown keys and bad values", async () => {
     const put = (body: unknown) =>

@@ -121,6 +121,7 @@ import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { extractToken, secretsEqual } from "./server-guard.js"
 import { CliAccess, registerCliRoutes, type CliDeps } from "./cli-access.js"
+import { isLevel, LEVEL_NAMES, LIMITS as AUTONOMY_LIMITS, reviewAutonomy } from "./autonomy.js"
 import { isOpRef } from "./secret-providers.js"
 import { registerVoiceRoutes, VoiceSettings } from "./voice.js"
 import { deliveryKey, hashHookToken, HookDeliveries, MAX_BODY, passes } from "./webhooks.js"
@@ -163,6 +164,8 @@ export interface AdminContext {
   runRoutine?: (id: string) => Promise<string>
   /** T-135: secrets sessions asked you for, answered on the desktop only. */
   secretRequests?: import("./secret-requests.js").SecretRequests
+  /** C-015: each project's autonomy cap, from its record. */
+  autonomy?: import("./autonomy.js").AutonomyStore
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */
@@ -584,6 +587,44 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
 
   // D-031: saved questions about the audit log, answered from an index kept beside it, redacted.
   const index = new AuditIndex({ auditDir: ctx.auditDir, dir: path.join(path.dirname(path.resolve(ctx.auditDir)), "audit-index") })
+  // C-015: each project's cap, from 30 days of this log: lowered by the record (five minutes after start, then daily,
+  // or when you ask), raised only by you, here on the desktop.
+  const autonomy = ctx.autonomy
+  if (autonomy) {
+    const record = (event: string, input: Record<string, unknown>, reason: string, by: "rules" | "human-desktop") =>
+      ctx.audit.record({
+        session: "desktop",
+        event,
+        channel: by === "rules" ? "host" : "desktop",
+        tool: "autonomy",
+        input,
+        verdict: { outcome: "allow", ruleId: event.replace(/_/g, "-"), reason, risk: 0, decidedBy: by, policyHash: ctx.store.current?.hash ?? "" },
+        latencyMs: 0,
+      })
+    const review = () => reviewAutonomy({ store: autonomy, entries: (from) => index.since(from), record: (e, input, why) => record(e, input, why, "rules") })
+    const first = setTimeout(() => void review().catch(() => undefined), 5 * 60_000)
+    first.unref?.()
+    const daily = setInterval(() => void review().catch(() => undefined), 86_400_000)
+    daily.unref?.()
+    app.addHook("onClose", async () => {
+      clearTimeout(first)
+      clearInterval(daily)
+    })
+    app.get("/api/autonomy", async () => ({ caps: autonomy.caps(), limits: AUTONOMY_LIMITS }))
+    app.post("/api/autonomy/review", async () => ({ lowered: await review(), caps: autonomy.caps() }))
+    app.post("/api/autonomy/:project/raise", async (req, reply) => {
+      const project = (req.params as { project: string }).project
+      const level = (req.body as { level?: unknown } | undefined)?.level
+      if (!isLevel(level)) return bad(reply, 422, "Say which level: plan, default, acceptEdits, auto or extreme.")
+      try {
+        await autonomy.raise(project, level)
+      } catch (e) {
+        return bad(reply, 409, (e as Error).message)
+      }
+      await record("autonomy_raised", { project, level }, `You raised ${project}'s cap to ${LEVEL_NAMES[level]} from the desktop.`, "human-desktop")
+      return { caps: autonomy.caps() }
+    })
+  }
   app.get("/api/audit/query", async (req, reply) => {
     const q = req.query as { template?: string; project?: string; limit?: string }
     const template = String(q.template ?? "") as QueryTemplate

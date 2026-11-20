@@ -69,7 +69,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-031 | Tree-sitter outline and navigation (WASM) | Wave 2 | built | (commit 6d2eb89) | apps/host/test/outline.test.ts | Outline and go to symbol for TS, JS, Python, C#, PowerShell, JSON; 5,000 lines under 50 ms; row was out of date |
 | C-032 | TypeScript language service worker | Wave 3 | built | feat/c032 | apps/host/test/ts-service.test.ts | Diagnostics, what a name is (as text, never a tooltip), definition (F12) and references in the file view; a worker with a memory cap that ends and starts again; typescript 5.9.3 pinned in the Host's dependencies |
 | C-057 | Mermaid and Markdown artifacts | Wave 3 | built | feat/c057 | apps/host/test/mermaid-artifact.test.ts | Markdown artifacts were there; Mermaid diagrams drawn offline in the artifact sandbox, its file inlined, strict and locked against directives; mermaid a development dependency, one file ships |
-| C-015 | Adaptive autonomy that only lowers | Wave 4 | todo | | | |
+| C-015 | Adaptive autonomy that only lowers | Wave 4 | built | feat/c015 | BUILD_REPORT "Frontier C-015" | Each project's cap from 30 days of the audit (floor denies, your denies), lowered by itself, raised only by your click; sessions start no higher and cannot be raised past it |
 | C-008 | Pin a newer Claude Code through conformance | Wave 5 | todo | | | |
 | C-036 | Local codebase index | Wave 5 | todo | | | |
 | C-043 | Cross-model review through the gateway | Wave 5 | todo | | | |

@@ -513,6 +513,8 @@ export const SessionInfo = z.object({
   intentDrift: z.object({ at: z.string(), reason: z.string() }).optional(),
   /** D-036: the session is writing its tests first, and they are not approved yet. */
   testsFirst: z.boolean().optional(),
+  /** C-015: the most this project's record allows a session here (Extreme approval, the most, is never sent). */
+  autonomyCap: z.enum(["plan", "default", "acceptEdits", "auto"]).optional(),
   /** D-037: the assumptions Claude declared, until you verify them. Absent from older Hosts. */
   assumptions: z
     .array(z.object({ id: z.string(), text: z.string(), check: z.string().optional(), at: z.string(), verified: z.boolean().optional() }))

@@ -45,6 +45,7 @@ import { folderExample } from "@gatehouse/shared/node" // Mac fork
 import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
+import { clamp, LEVEL_NAMES, rank, type AutonomyStore, type Level } from "./autonomy.js"
 import { createCanUseTool, DEFAULT_EXTREME_LIMIT, recheckEdited, type CanUseDeps } from "./canuse.js"
 import { withSecrets, type SecretRequests } from "./secret-requests.js"
 import type { CheckpointManager } from "./checkpoints.js"
@@ -123,6 +124,15 @@ export class ManagedPolicyError extends Error {
 
 /** T-067: what the organisation's managed settings do not allow, said with who manages it. */
 export class ManagedSettingError extends Error {}
+
+/** C-015: this project's record caps what a session here may do; only you raise the cap, in Settings. */
+export class AutonomyCapError extends Error {}
+
+/** C-015: why a session cannot go higher, in words. */
+export function capRefusal(project: string, cap: Level, store: AutonomyStore | undefined): string {
+  const why = store?.caps()[project]?.reasons ?? []
+  return `${project} is capped at ${LEVEL_NAMES[cap]}${why.length ? ` because ${why.join(" and ")}` : ""}. Raise it in Settings, Sessions, Autonomy, if you are sure.`
+}
 
 /** B09: as many sessions are open as Settings allows; another waits until one is closed. */
 export class SessionLimitError extends Error {
@@ -326,6 +336,8 @@ export interface SessionInfo {
   intentDrift?: { at: string; reason: string }
   /** D-036: the session is writing its tests first, and they are not approved yet. */
   testsFirst?: boolean
+  /** C-015: the most this project's record allows a session here; absent when there is no cap. */
+  autonomyCap?: "plan" | "default" | "acceptEdits" | "auto"
   /** D-037: the assumptions Claude declared, until you verify them. */
   assumptions?: Array<{ id: string; text: string; check?: string; at: string; verified?: boolean }>
   /** The Claude Code conversation this one carries on from: the screen shows what was said there. */
@@ -514,6 +526,8 @@ export interface SessionDeps {
   checkpoints: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
+  /** C-015: each project's cap, from its record; lowered by itself, raised only by you. */
+  autonomy?: AutonomyStore
   /** T-135: secrets you gave a session for one command. */
   secrets?: SecretRequests
   /** D-007: the locked tests. */
@@ -1000,8 +1014,15 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.#written.has(writtenKey(absPath, this.cwd))
   }
 
+  /** C-015: this project's cap, Extreme approval (none) for a chat or with no store. */
+  #autonomyCap(): Level {
+    return this.#opts.kind === "chat" ? "extreme" : (this.#deps.autonomy?.capFor(this.project) ?? "extreme")
+  }
+
   info(): SessionInfo {
+    const cap = this.#autonomyCap()
     return {
+      ...(cap !== "extreme" ? { autonomyCap: cap } : {}),
       id: this.id,
       cwd: this.cwd,
       project: this.project,
@@ -2605,6 +2626,9 @@ export class Session extends EventEmitter<SessionEvents> {
     // T-067: never broader than the organisation allows.
     const managed = this.#deps.policy()?.managedSettings
     if (!modeAllowed(managed, mode)) throw new ManagedSettingError(managedRefusal(managed, `the broadest mode allowed is ${managed?.maxMode}`))
+    // C-015: no higher than this project's record allows.
+    const cap = this.#autonomyCap()
+    if (rank(mode) > rank(cap)) throw new AutonomyCapError(capRefusal(this.project, cap, this.#deps.autonomy))
     await this.#q?.setPermissionMode(mode)
     this.#mode = mode
     this.emit("state", this.info())
@@ -2693,6 +2717,8 @@ export class Session extends EventEmitter<SessionEvents> {
     if (this.#opts.kind === "chat" && on) throw new ChatModeError()
     const managed = this.#deps.policy()?.managedSettings
     if (on && !extremeAllowed(managed)) throw new ManagedSettingError(managedRefusal(managed, "Extreme approval is turned off"))
+    // C-015: Extreme approval only where this project's record allows it.
+    if (on && this.#opts.kind !== "chat" && this.#autonomyCap() !== "extreme") throw new AutonomyCapError(capRefusal(this.project, this.#autonomyCap(), this.#deps.autonomy))
     this.#extreme = on
     this.#extremeMax = on && max
     await this.#deps.audit.record({
@@ -2891,6 +2917,16 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     if (opts.extreme === true && !extremeAllowed(ms)) throw new ManagedSettingError(managedRefusal(ms, "Extreme approval is turned off"))
     if (opts.localModel !== undefined && !providerAllowed(ms, "local") && !providerAllowed(ms, "gateway")) throw new ManagedSettingError(managedRefusal(ms, "models other than Claude are not allowed"))
     if (opts.localModel === undefined && !providerAllowed(ms, "claude")) throw new ManagedSettingError(managedRefusal(ms, "Claude is not one of the providers allowed"))
+    // C-015: no higher than this project's record allows; a session asked for more starts lowered, and says so.
+    if (opts.kind !== "chat" && this.#deps.autonomy) {
+      const project = path.basename(findProjectRoot(opts.cwd))
+      const cap = this.#deps.autonomy.capFor(project)
+      const c = clamp(opts.mode ?? "default", opts.extreme === true, cap)
+      if (c.lowered) {
+        this.#deps.log?.(`${project}: started at ${LEVEL_NAMES[c.extreme ? "extreme" : c.mode]}, its record's cap, not higher`)
+        opts = { ...opts, mode: c.mode, extreme: c.extreme }
+      }
+    }
     // C-004: nothing new starts while memory is committed over the point in Settings; one coming back after a restart
     // or a force stop was open before and takes back what it had.
     if (!opts.restore || opts.restore.wake)

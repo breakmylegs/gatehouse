@@ -42,6 +42,7 @@ function ScreenReaderSetting() {
 import { ProvidersPanel } from "../components/ProvidersPanel"
 import { RoutinesPanel } from "../components/RoutinesPanel"
 import { CliAccessPanel } from "../components/CliAccessPanel"
+import { AutonomyPanel } from "../components/AutonomyPanel"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { modelsText, parseModels, setCustomModels } from "../lib/models"
@@ -1267,6 +1268,10 @@ export function Settings() {
 
             <Group section="sessions" title="Routines" gap="gap-2">
               <RoutinesPanel />
+            </Group>
+
+            <Group section="sessions" title="Autonomy" gap="gap-2">
+              <AutonomyPanel />
             </Group>
 
             <Group section="sessions" title="Command line" gap="gap-2">
