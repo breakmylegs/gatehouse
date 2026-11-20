@@ -149,13 +149,21 @@ try {
     st.phase === "ready",
     `${v2} was downloaded and checked in the background${st.error ? `: ${st.error}` : ""}`,
   )
+  // Only the parts that differ from the installed copy are fetched: the app part for the same package, and also the
+  // modules or the runtime when an update changes them (a new dependency, a new Node), never a part that is the same.
   const zips = seen.filter((s) => s.endsWith(".zip"))
+  const installedParts = (JSON.parse(fs.readFileSync(path.join(from, "release.json"), "utf8")) as { parts?: Array<{ name: string; tree?: string }> }).parts ?? []
+  const differing = made.manifest.parts
+    .filter((p) => installedParts.find((q) => q.name === p.name)?.tree !== (p as { tree?: string }).tree)
+    .map((p) => p.name)
+    .sort()
+  const fetched = zips.map((z) => /-([a-z]+)\.zip$/.exec(z)?.[1] ?? z).sort()
   check(
-    zips.length === 1 && zips[0]!.endsWith("-app.zip"),
-    `only the app part was downloaded (${zips.map((z) => path.basename(z)).join(", ")})`,
+    fetched.length > 0 && JSON.stringify(fetched) === JSON.stringify(differing),
+    `only the parts that changed were downloaded (${zips.map((z) => path.basename(z)).join(", ")}; changed: ${differing.join(", ") || "none"})`,
   )
-  const appPart = made.manifest.parts.find((p) => p.name === "app")
-  say(`downloaded ${Math.round((appPart?.size ?? 0) / 1024)} KB instead of the whole package`)
+  const fetchedSize = made.manifest.parts.filter((p) => fetched.includes(p.name)).reduce((n, p) => n + (p.size ?? 0), 0)
+  say(`downloaded ${Math.round(fetchedSize / 1024)} KB instead of the whole package`)
 
   say("choosing Update")
   await call("POST", "/api/update/apply", { version: v2 })
