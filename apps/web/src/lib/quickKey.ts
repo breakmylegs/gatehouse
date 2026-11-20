@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react"
 import { toast } from "sonner"
 import { useStore } from "../store"
 import { inShell, onShell, tellShell } from "./shell"
+import { readPromptLink } from "./prompt-link"
 
 /**
  * The quick prompt's shortcut (W1-15). The window registers it with Windows and says how that went: taken, it keeps
@@ -18,6 +19,8 @@ export type HotkeyState =
   | { kind: "clash"; text: string; alternatives: string[] }
 
 let state: HotkeyState = { kind: "unknown" }
+/** T-137: the shortcut with Shift added, which opens the quick prompt with the window you were in pictured. */
+let snap: string | undefined
 const subs = new Set<() => void>()
 
 export function savedHotkey(): string {
@@ -60,6 +63,11 @@ export function chooseHotkey(text: string): void {
 export function startShell(): () => void {
   if (!inShell()) return () => undefined
   const off = onShell((m) => {
+    if (m.startsWith("hotkey-snap:") || m === "hotkey-snap-none") {
+      snap = m === "hotkey-snap-none" ? undefined : m.slice(12)
+      subs.forEach((f) => f())
+      return
+    }
     const s = readHotkeyReply(m)
     if (s) {
       if (s.kind === "ok") keep(s.text)
@@ -80,6 +88,21 @@ export function startShell(): () => void {
     if (m.startsWith("open-folder:")) {
       const folder = m.slice(12).trim()
       if (folder && folder.length <= 1000 && !/[\r\n]/.test(folder)) useStore.getState().openFolder(folder)
+      return
+    }
+    // T-087: a codehouse: link: a draft for the next session you start, never sent; hidden characters taken out.
+    if (m.startsWith("open-link:")) {
+      const link = readPromptLink(m.slice(10))
+      if ("error" in link) {
+        toast.error(link.error, { id: "link" })
+        return
+      }
+      useStore.getState().openLinkPrompt(link.prompt)
+      const notes = [
+        link.removed.length ? `${link.removed.length} character${link.removed.length === 1 ? "" : "s"} you could not see (${link.removed.join(", ")}) were taken out.` : "",
+        link.ignored.length ? `It also named ${link.ignored.join(", ")}, which a link cannot set.` : "",
+      ].filter(Boolean)
+      if (notes.length) toast.warning(`A link gave you a prompt. ${notes.join(" ")}`, { id: "link" })
       return
     }
     // T-005: something dropped on the sidebar that is not a folder.
@@ -119,3 +142,4 @@ const subscribe = (f: () => void) => {
   }
 }
 export const useHotkeyState = () => useSyncExternalStore(subscribe, () => state)
+export const useSnapHotkey = () => useSyncExternalStore(subscribe, () => snap)

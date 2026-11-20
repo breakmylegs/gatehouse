@@ -95,6 +95,9 @@ internal sealed class MainForm : Form
     private uint hotkeyMods, hotkeyVk;
     private bool hotkeyOn;
     private const int HotkeyId = 1;
+    /// <summary>T-137: the same shortcut with Shift added opens the quick prompt with the window you were in pictured.</summary>
+    private const int SnapHotkeyId = 2;
+    private bool snapOn;
     private const int WM_HOTKEY = 0x0312;
 
     internal MainForm(bool check, bool withRelay, string relayArgs, bool startInTray)
@@ -373,8 +376,12 @@ internal sealed class MainForm : Form
         Guard(core);
         core.PermissionRequested += delegate(object s, CoreWebView2PermissionRequestedEventArgs e)
         {
-            // Only our own page is ever loaded, so notifications are the one thing it may ask for.
-            e.State = e.PermissionKind == CoreWebView2PermissionKind.Notifications ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+            // Only our own page is ever loaded, so notifications are what it may ask for, and (T-136) the microphone,
+            // which it asks for only when you press it with a speech server on this computer named in Settings.
+            bool ownPage = url != null && e.Uri != null && e.Uri.StartsWith(new Uri(url).GetLeftPart(UriPartial.Authority) + "/", StringComparison.OrdinalIgnoreCase);
+            e.State = e.PermissionKind == CoreWebView2PermissionKind.Notifications
+                || (e.PermissionKind == CoreWebView2PermissionKind.Microphone && ownPage)
+                ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
         };
         core.WebMessageReceived += delegate(object s, CoreWebView2WebMessageReceivedEventArgs e)
         {
@@ -404,6 +411,8 @@ internal sealed class MainForm : Form
                 PrepareQuick();
                 PrepareWing();
                 OpenPendingFolder();
+                OpenPendingLink();
+                RegisterLinks();
                 SayIfRestarted();
             }
         };
@@ -648,6 +657,59 @@ internal sealed class MainForm : Form
         else if (what == "not-folder") Tell("drop-not-folder");
     }
 
+    // ---- prompt links (T-087) ----
+
+    /// <summary>Where Codehouse.exe codehouse://... leaves the link for the window: read once, then removed.</summary>
+    internal static string OpenLinkFile { get { return Path.Combine(Hosting.DataDir(), "open-link.txt"); } }
+
+    /// <summary>The link to the page, which opens a draft from it: never a mode, a folder, an account, or a send.</summary>
+    internal void OpenPendingLink()
+    {
+        if (env == null || url == null) return; // the page is not up yet; it looks again when it is
+        string link = null;
+        try
+        {
+            if (!File.Exists(OpenLinkFile)) return;
+            link = File.ReadAllText(OpenLinkFile).Trim();
+            File.Delete(OpenLinkFile);
+        }
+        catch (Exception ex) { Remember("[link] the link could not be read: " + ex.Message); return; }
+        if (!IsLink(link)) return;
+        ShowWindow();
+        Tell("open-link:" + link);
+    }
+
+    /// <summary>A codehouse: link of a size a prompt can be, on one line.</summary>
+    internal static bool IsLink(string link)
+    {
+        return link != null && link.Length <= 20000 && link.StartsWith("codehouse:", StringComparison.OrdinalIgnoreCase)
+            && link.IndexOfAny(new[] { '\r', '\n', '\0' }) < 0;
+    }
+
+    /// <summary>
+    /// codehouse: links open this Codehouse, for you only (HKCU). Written at each start, so an in-app update keeps it
+    /// pointing here; only from the installed copy under your Programs folder, so a copy built from source never takes
+    /// it over. The installer writes the same key and its uninstaller removes it.
+    /// </summary>
+    private void RegisterLinks()
+    {
+        try
+        {
+            string exe = Application.ExecutablePath;
+            string programs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs") + "\\";
+            if (!exe.StartsWith(programs, StringComparison.OrdinalIgnoreCase)) return;
+            string command = "\"" + exe + "\" --link \"%1\"";
+            using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey("Software\\Classes\\codehouse"))
+            {
+                k.SetValue("", "URL:Codehouse prompt link");
+                k.SetValue("URL Protocol", "");
+            }
+            using (Microsoft.Win32.RegistryKey k = Microsoft.Win32.Registry.CurrentUser.CreateSubKey("Software\\Classes\\codehouse\\shell\\open\\command"))
+                if ((k.GetValue("") as string) != command) k.SetValue("", command);
+        }
+        catch (Exception ex) { Remember("[link] codehouse: links could not be registered: " + ex.Message); }
+    }
+
     // ---- the wing at the top of the screen (O37, the Windows version of the Mac's beside the notch) ----
 
     /// <summary>Its presence turns the wing off (the tray's switch), so the choice outlasts a restart and an update.</summary>
@@ -734,6 +796,22 @@ internal sealed class MainForm : Form
         else ShowWindow();
     }
 
+    /// <summary>T-137: the quick prompt with the window you were in already pictured.</summary>
+    private void OpenQuickWithPicture()
+    {
+        if (quick != null && quick.Ready) quick.OpenWithPicture();
+        else ShowWindow();
+    }
+
+    /// <summary>T-137: Shift added to the quick prompt's shortcut, when it has none and nothing else holds it.</summary>
+    private void SetSnapHotkey()
+    {
+        if (snapOn) Hotkey.UnregisterHotKey(Handle, SnapHotkeyId);
+        snapOn = hotkeyOn && (hotkeyMods & Hotkey.ModShift) == 0
+            && Hotkey.RegisterHotKey(Handle, SnapHotkeyId, hotkeyMods | Hotkey.ModShift | Hotkey.ModNoRepeat, hotkeyVk);
+        Tell(snapOn ? "hotkey-snap:" + Hotkey.Format(hotkeyMods | Hotkey.ModShift, hotkeyVk) : "hotkey-snap-none");
+    }
+
     private void Tell(string message)
     {
         try { web.CoreWebView2.PostWebMessageAsString(message); } catch (Exception) { }
@@ -749,6 +827,7 @@ internal sealed class MainForm : Form
         {
             if (hotkeyOn) Hotkey.UnregisterHotKey(Handle, HotkeyId);
             hotkeyOn = false;
+            SetSnapHotkey();
             quickItem.Text = "Quick prompt";
             Tell("hotkey-off");
             return;
@@ -765,6 +844,7 @@ internal sealed class MainForm : Form
             hotkeyVk = vk;
             quickItem.Text = "Quick prompt (" + Hotkey.Format(mods, vk) + ")";
             Tell("hotkey-ok:" + Hotkey.Format(mods, vk));
+            SetSnapHotkey();
             return;
         }
         if (hotkeyOn) hotkeyOn = Hotkey.RegisterHotKey(Handle, HotkeyId, hotkeyMods | Hotkey.ModNoRepeat, hotkeyVk);
@@ -774,6 +854,7 @@ internal sealed class MainForm : Form
     protected override void WndProc(ref Message m)
     {
         if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == HotkeyId) OpenQuick();
+        if (m.Msg == WM_HOTKEY && m.WParam.ToInt32() == SnapHotkeyId) OpenQuickWithPicture();
         base.WndProc(ref m);
     }
 
@@ -782,6 +863,7 @@ internal sealed class MainForm : Form
     {
         base.OnHandleCreated(e);
         if (hotkeyOn) Hotkey.RegisterHotKey(Handle, HotkeyId, hotkeyMods | Hotkey.ModNoRepeat, hotkeyVk);
+        if (snapOn) Hotkey.RegisterHotKey(Handle, SnapHotkeyId, hotkeyMods | Hotkey.ModShift | Hotkey.ModNoRepeat, hotkeyVk);
         // Backlog U16: Mica behind the title bar where Windows draws it; otherwise the window stays opaque.
         Backdrop.Apply(Handle);
     }
@@ -915,6 +997,7 @@ internal sealed class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         if (hotkeyOn) Hotkey.UnregisterHotKey(Handle, HotkeyId);
+        if (snapOn) Hotkey.UnregisterHotKey(Handle, SnapHotkeyId);
         tray.Visible = false;
         tray.Dispose();
         Hosting.StopChildren(relay, host);
@@ -958,6 +1041,7 @@ internal static class Program
         int afterPid = 0;
         string relayArgs = "";
         string openFolder = null;
+        string openLink = null;
         for (int i = 0; i < args.Length; i++)
         {
             string a = args[i];
@@ -971,6 +1055,9 @@ internal static class Program
             else if (a == "--public-url" && i + 1 < args.Length) relayArgs = "--public-url \"" + args[++i] + "\"";
             // T-002: a folder to open in Codehouse, from a terminal: --open <folder>, or the folder on its own.
             else if (a == "--open" && i + 1 < args.Length) openFolder = args[++i];
+            // T-087: a prompt link, from the browser or another program: --link codehouse://new?prompt=...
+            else if (a == "--link" && i + 1 < args.Length) openLink = args[++i];
+            else if (a.StartsWith("codehouse:", StringComparison.OrdinalIgnoreCase) && openLink == null) openLink = a;
             else if (!a.StartsWith("-") && openFolder == null && Directory.Exists(a)) openFolder = a;
             else
             {
@@ -985,6 +1072,7 @@ internal static class Program
             Console.WriteLine("  --check                       start, check the window and Host, stop (exit code 0 or 1)");
             Console.WriteLine("  --relay [--public-url URL]    also start the phone Relay (docs\\relay-local.md)");
             Console.WriteLine("  Codehouse.exe <folder>        open Codehouse on a new session in that folder (--open <folder> too)");
+            Console.WriteLine("  --link codehouse://new?prompt=...   open a draft of that prompt (nothing is sent)");
             Console.WriteLine("  --tray                        start hidden in the tray (what start at sign-in uses)");
             Console.WriteLine("  --browser                     use the default browser instead of this window");
             Console.WriteLine("Use Codehouse-Console.exe for a console window with the Host's messages.");
@@ -1015,6 +1103,13 @@ internal static class Program
             try { Directory.CreateDirectory(Hosting.DataDir()); File.WriteAllText(MainForm.OpenFolderFile, full); }
             catch (Exception ex) { Console.WriteLine("[gatehouse] The folder could not be passed on: " + ex.Message); return 1; }
         }
+        if (openLink != null)
+        {
+            // Left for the window (this one or the one already running), which hands it to the page as a draft.
+            if (!MainForm.IsLink(openLink)) { Console.WriteLine("[gatehouse] That is not a codehouse: link."); return 2; }
+            try { Directory.CreateDirectory(Hosting.DataDir()); File.WriteAllText(MainForm.OpenLinkFile, openLink); }
+            catch (Exception ex) { Console.WriteLine("[gatehouse] The link could not be passed on: " + ex.Message); return 1; }
+        }
         bool created;
         string lockName = SingleInstanceName();
         Mutex single = new Mutex(true, "Local\\Gatehouse.App" + lockName, out created);
@@ -1033,7 +1128,7 @@ internal static class Program
         {
             while (show.WaitOne())
             {
-                try { form.BeginInvoke((Action)delegate { form.ShowWindow(); form.OpenPendingFolder(); }); } catch (Exception) { }
+                try { form.BeginInvoke((Action)delegate { form.ShowWindow(); form.OpenPendingFolder(); form.OpenPendingLink(); }); } catch (Exception) { }
             }
         });
         watcher.IsBackground = true;

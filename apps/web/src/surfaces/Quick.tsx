@@ -4,6 +4,7 @@ import { api } from "../lib/api"
 import { onShell, tellShell } from "../lib/shell"
 import { titleOf } from "../lib/sessionActions"
 import { accountForNew, send, useSessionList } from "../store"
+import { pictureLine, pictureName, readWindowFrom, type WindowFrom } from "../lib/window-from"
 
 /** How long starting a chat may take before the quick prompt gives up waiting. */
 const START_WAIT_MS = 60_000
@@ -39,12 +40,18 @@ export function Quick() {
   /** A picture of the screen to attach (CH-08): PNG bytes as base64. Pictures are not redacted. */
   const [picture, setPicture] = useState<string>()
   const [capturing, setCapturing] = useState(false)
+  /** T-137: the program and title of the window pictured, when it was a window. */
+  const [from, setFrom] = useState<WindowFrom>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const box = useRef<HTMLTextAreaElement>(null)
   useEffect(() => {
     box.current?.focus()
     return onShell((m) => {
+      if (m.startsWith("captured-from:")) {
+        setFrom(readWindowFrom(m))
+        return
+      }
       if (m.startsWith("captured:")) {
         setCapturing(false)
         setPicture(m.slice("captured:".length))
@@ -98,7 +105,7 @@ export function Quick() {
       const a = await api<{ rel: string }>("POST", "/api/files/attach-data", {
         session: id,
         type: "image/png",
-        name: "screen.png",
+        name: pictureName(from),
         data: picture,
         source: "screen-capture",
       })
@@ -107,7 +114,7 @@ export function Quick() {
         setError(a.error ?? "The picture could not be attached")
         return
       }
-      message = `@${a.data.rel}\n\n${said}`
+      message = `@${a.data.rel}${from ? ` ${pictureLine(from)}` : ""}\n\n${said}`
     }
     const r = await send({ type: "prompt", sessionId: id, text: message })
     setBusy(false)
@@ -117,6 +124,7 @@ export function Quick() {
     }
     setText("")
     setPicture(undefined)
+    setFrom(undefined)
     tellShell(`quick-open:${JSON.stringify({ session: id, text: said })}`)
   }
 
@@ -192,12 +200,15 @@ export function Quick() {
             className="h-12 rounded border border-line"
           />
           <span role="note" className="text-mut">
-            Pictures are not redacted: what is in it goes to Claude as it is.
+            {from ? `${pictureLine(from)} ` : ""}Pictures are not redacted: what is in it goes to Claude as it is.
           </span>
           <button
             type="button"
             className="btn !min-h-7 ml-auto"
-            onClick={() => setPicture(undefined)}
+            onClick={() => {
+              setPicture(undefined)
+              setFrom(undefined)
+            }}
           >
             Remove
           </button>
@@ -210,6 +221,7 @@ export function Quick() {
           disabled={capturing}
           onClick={() => {
             setCapturing(true)
+            setFrom(undefined)
             tellShell("capture:region")
           }}
         >

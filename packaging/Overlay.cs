@@ -21,6 +21,12 @@ internal sealed class QuickOverlay : Form
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int max);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
     private readonly WebView2 web = new WebView2();
     private readonly Action<CoreWebView2> guard;
     private readonly Func<CoreWebView2, HashSet<ulong>> ownLoads;
@@ -117,6 +123,53 @@ internal sealed class QuickOverlay : Form
 
     /// <summary>CH-08: a picture of part of the screen, or of the window you were in, for the page to attach. This
     /// window steps aside while it is taken, so it is not in the picture.</summary>
+    /// <summary>T-137: the quick prompt with a picture of the window you were in already taken.</summary>
+    internal void OpenWithPicture()
+    {
+        Open();
+        TakePicture(true);
+    }
+
+    /// <summary>T-137: the program a window belongs to (its description, else its name) and its title, as JSON.</summary>
+    private static string WindowFrom(IntPtr hWnd)
+    {
+        string app = "", title = "";
+        try
+        {
+            System.Text.StringBuilder sb = new System.Text.StringBuilder(512);
+            GetWindowText(hWnd, sb, sb.Capacity);
+            title = sb.ToString();
+            uint pid;
+            GetWindowThreadProcessId(hWnd, out pid);
+            using (System.Diagnostics.Process p = System.Diagnostics.Process.GetProcessById((int)pid))
+            {
+                app = p.ProcessName;
+                try
+                {
+                    string d = p.MainModule.FileVersionInfo.FileDescription;
+                    if (!string.IsNullOrEmpty(d)) app = d;
+                }
+                catch (Exception) { }
+            }
+        }
+        catch (Exception) { }
+        if (title.Length > 200) title = title.Substring(0, 200);
+        if (app.Length > 100) app = app.Substring(0, 100);
+        return "{\"app\":" + Json(app) + ",\"title\":" + Json(title) + "}";
+    }
+
+    private static string Json(string s)
+    {
+        System.Text.StringBuilder b = new System.Text.StringBuilder("\"");
+        foreach (char c in s)
+        {
+            if (c == '"' || c == '\\') b.Append('\\').Append(c);
+            else if (c < ' ') b.Append(' ');
+            else b.Append(c);
+        }
+        return b.Append('"').ToString();
+    }
+
     private void TakePicture(bool window)
     {
         Hide();
@@ -129,6 +182,9 @@ internal sealed class QuickOverlay : Form
         Activate();
         SetForegroundWindow(Handle);
         web.Focus();
+        // T-137: what the window was, before the picture, so the page can name it.
+        if (window && png != null)
+            try { web.CoreWebView2.PostWebMessageAsString("captured-from:" + WindowFrom(before)); } catch (Exception) { }
         try { web.CoreWebView2.PostWebMessageAsString(png != null ? "captured:" + Convert.ToBase64String(png) : "capture-none"); }
         catch (Exception) { }
     }

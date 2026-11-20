@@ -122,6 +122,7 @@ import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { extractToken, secretsEqual } from "./server-guard.js"
 import { CliAccess, registerCliRoutes, type CliDeps } from "./cli-access.js"
 import { isOpRef } from "./secret-providers.js"
+import { registerVoiceRoutes, VoiceSettings } from "./voice.js"
 import { deliveryKey, hashHookToken, HookDeliveries, MAX_BODY, passes } from "./webhooks.js"
 import type { RoutineDrafts } from "./routine-drafts.js"
 import { PROVIDER_IDS, ProjectError, type ProjectStore, type ProviderId } from "./projects.js"
@@ -1047,6 +1048,20 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   registerMemoryRoutes(app, ctx)
   registerRoutineRoutes(app, ctx)
   registerCliAccessRoutes(app, ctx)
+  // T-136: speech to text through a Whisper-compatible server on this computer, off until you name it.
+  registerVoiceRoutes(app, {
+    settings: new VoiceSettings(gatehouseDataDir(ctx.env)),
+    record: (event, input) =>
+      ctx.audit.record({
+        session: "desktop",
+        event,
+        channel: "desktop",
+        tool: "settings",
+        input,
+        verdict: { outcome: "allow", ruleId: "voice-server", reason: "The speech server was changed from the desktop.", risk: 0, decidedBy: "human-desktop", policyHash: ctx.store.current?.hash ?? "" },
+        latencyMs: 0,
+      }),
+  })
   registerSecretRequestRoutes(app, ctx)
   registerArtifactRoutes(app, ctx)
   registerLibraryRoutes(app, ctx)

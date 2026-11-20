@@ -21,7 +21,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | G26 | Sandbox | todo | | Egress proxy on 127.0.0.1 with an allow-list, optional upstream proxy; relates to D-094 |
 | G38 | Test explorer | todo | | Connectors to the project's own runners (Vitest, Jest, pytest, dotnet) |
 | G7 | XLSX in chats | todo | | Node built-ins only, no library |
-| G9 | Voice | todo | | Whisper-compatible server through 127.0.0.1 (ADR 0010), Windows voice typing kept |
+| G9 | Voice | built | feat/pkg1 | Whisper-compatible server through 127.0.0.1 (ADR 0010), Windows voice typing kept (T-136) |
 | G34 | Language servers | todo | | Folds into C-032 (TypeScript language service) plus user-installed servers |
 | G37 | Debugger | todo | | Debug adapters (debugpy, netcoredbg, js-debug); DAP only, never CDP |
 | G40 | Public hosts and sharing | todo | | Host CLIs with their own sign-in; zip without secrets |
@@ -51,6 +51,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | O40 | A prompt an Ask about code chat sent shows in the code session (owner, 15 Nov, screenshot) | built | fix/extreme-modes | BUILD_REPORT "O40" | |
 | O41 | Codehouse Neighbourhood Watch: a docker compose web front end on a home server for remote Codehouse sessions, Codehouse connecting out, full control, in-app updates, username and password with passkeys, an IP allow list, desktop, tablet and phone (owner, 15 Nov) | todo | | | Priority 1: research first. Changes invariants 7 to 9 and 11; design note before building |
 | O29 | Review the fork david-mcclymont-acn/gatehouse (owner, 13 Nov) | todo | | | A more Apple-like layout and better ntfy handling; bring across what fits invariant 16 (Codehouse's own look) and the push-channel rules (invariants 8, 9, 11) |
+| O44 | The changelog as a clickable timeline of releases: a point per release with version and date, its notes in a pop-up (never raw HTML), the running and newer releases and what is new since you read it marked, offline, keyboard and screen reader, reusing the session timeline (owner, 20 Nov) | todo | | | Queue 2026-11-18, section 7 item 6 |
+| O45 | One approval option instead of two: "Max approval", exactly as Extreme max approval is now; the rules-based Extreme mode and its risk-limit setting removed; existing sessions, choices and settings moved over; managed policy cap, carry-on and never-remembered kept; help, guide, Audit template, CNW and the Mac app updated; floor and Approver always consulted (owner, 20 Nov) | todo | | | Queue 2026-11-18, section 7 item 7 |
 
 ## Prerequisites (C-backlog)
 

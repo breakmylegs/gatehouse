@@ -52,6 +52,13 @@ Type: filesandordirs; Name: "{app}.next"
 Type: filesandordirs; Name: "{app}.previous"
 Type: filesandordirs; Name: "{app}\app\node_modules\@gatehouse"
 
+[Registry]
+; T-087: codehouse: links open a draft in Codehouse, for you only; the uninstaller removes the key. Codehouse writes the
+; same key at each start, so an in-app update keeps it pointing here.
+Root: HKCU; Subkey: "Software\Classes\codehouse"; ValueType: string; ValueName: ""; ValueData: "URL:Codehouse prompt link"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\codehouse"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\codehouse\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Codehouse.exe"" --link ""%1"""
+
 [Icons]
 Name: "{group}\Codehouse"; Filename: "{app}\Codehouse.exe"
 Name: "{userstartup}\Codehouse"; Filename: "{app}\Codehouse.exe"; Parameters: "--tray"; Tasks: logon

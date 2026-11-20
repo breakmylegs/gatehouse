@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
 import { trayName } from "../lib/platform-mac" // Mac fork
-import { chooseHotkey, savedHotkey, useHotkeyState } from "../lib/quickKey"
+import { chooseHotkey, savedHotkey, useHotkeyState, useSnapHotkey } from "../lib/quickKey"
 import { inShell } from "../lib/shell"
 
 /** Settings: the quick prompt's shortcut (W1-15), with three free ones offered when another program has it. */
 export function QuickKeyPanel() {
   const state = useHotkeyState()
+  const snap = useSnapHotkey()
   const [text, setText] = useState(savedHotkey)
   useEffect(() => {
     if (state.kind === "ok") setText(state.text)
@@ -58,6 +59,8 @@ export function QuickKeyPanel() {
       </form>
       <p role="status" className="m-0 text-xs">
         {said}
+        {/* T-137 */}
+        {state.kind === "ok" && snap ? ` ${snap} opens it with a picture of the window you were in, named with its program and title.` : ""}
       </p>
       {state.kind === "clash" && state.alternatives.length ? (
         <div className="flex flex-wrap gap-2">

@@ -129,6 +129,8 @@ export function Sessions() {
   // T-002: a folder opened from a terminal (Codehouse.exe <folder>) fills the form; you still say what to build.
   const startFolder = useStore((s) => s.startFolder)
   const openFolder = useStore((s) => s.openFolder)
+  // T-087: a prompt from a codehouse: link, for the message box of the session you start next, unsent.
+  const linkPrompt = useStore((s) => s.linkPrompt)
   useEffect(() => {
     if (!startFolder) return
     setCwd(startFolder)
@@ -276,6 +278,15 @@ export function Sessions() {
       sessionId: string
       info: { cwd: string; worktree?: { branch: string } }
     }
+    // T-087: the link's prompt waits in the new session's message box; nothing is sent.
+    if (linkPrompt) {
+      try {
+        localStorage.setItem(`gatehouse.draft.${id}`, linkPrompt)
+      } catch {
+        // storage blocked: the prompt is lost, as a draft would be
+      }
+      useStore.getState().openLinkPrompt(undefined)
+    }
     // T-017: kept for next time, and for this folder (never an Extreme approval mode).
     rememberChoices(fresh ? freshPath : cwd.trim(), { model, effort, mode })
     if (fresh) {
@@ -306,6 +317,18 @@ export function Sessions() {
 
       <form onSubmit={create} className="panel grid gap-3 p-4" aria-label="Start a session">
         <h2 className="m-0 text-[17px]">Start a session</h2>
+        {linkPrompt ? (
+          <div role="note" aria-label="A prompt from a link" className="grid gap-1 rounded-md border border-line p-2 text-[13px]">
+            <span>
+              A link gave you this prompt. Choose a folder and start the session: it waits in the message box, unsent, for
+              you to read and send.
+            </span>
+            <span className="line-clamp-4 whitespace-pre-wrap text-mut">{linkPrompt}</span>
+            <button type="button" className="btn !min-h-7 justify-self-start" onClick={() => useStore.getState().openLinkPrompt(undefined)}>
+              Not now
+            </button>
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid min-w-[240px] flex-[1_1_320px] gap-1">
             <span>Folder</span>

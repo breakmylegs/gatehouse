@@ -163,6 +163,9 @@ export interface State {
   /** T-002: a folder you opened from a terminal, for the start-session form to take (and clear). */
   startFolder?: string
   openFolder: (path: string | undefined) => void
+  /** T-087: a prompt from a codehouse: link, for the next session you start to have in its message box, unsent. */
+  linkPrompt?: string
+  openLinkPrompt: (prompt: string | undefined) => void
   selectSession: (id: string | undefined) => void
   /** Sessions shown side by side in the workspace, left to right. At most MAX_PANES. */
   panes: string[]
@@ -381,6 +384,7 @@ export const useStore = create<State>((set, get) => ({
   setRoute: (route) => set({ route }),
   // T-002: the start-session form, with the folder filled in; nothing starts until you say what to do.
   openFolder: (startFolder) => (startFolder ? set({ startFolder, route: "sessions" }) : set({ startFolder: undefined })),
+  openLinkPrompt: (linkPrompt) => (linkPrompt ? set({ linkPrompt, route: "sessions" }) : set({ linkPrompt: undefined })),
   openImported: (importedChat) => set({ importedChat, route: "imported" }),
   selectSession: (selectedSession) =>
     set((s) => {
