@@ -53,6 +53,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | O29 | Review the fork david-mcclymont-acn/gatehouse (owner, 13 Nov) | todo | | | A more Apple-like layout and better ntfy handling; bring across what fits invariant 16 (Codehouse's own look) and the push-channel rules (invariants 8, 9, 11) |
 | O44 | The changelog as a clickable timeline of releases: a point per release with version and date, its notes in a pop-up (never raw HTML), the running and newer releases and what is new since you read it marked, offline, keyboard and screen reader, reusing the session timeline (owner, 20 Nov) | todo | | | Queue 2026-11-18, section 7 item 6 |
 | O45 | One approval option instead of two: "Max approval", exactly as Extreme max approval is now; the rules-based Extreme mode and its risk-limit setting removed; existing sessions, choices and settings moved over; managed policy cap, carry-on and never-remembered kept; help, guide, Audit template, CNW and the Mac app updated; floor and Approver always consulted (owner, 20 Nov) | todo | | | Queue 2026-11-18, section 7 item 7 |
+| O46 | Release nodes on a session's Timeline: a marked node for each release this install can update to on its track, in time order among the ten-minute summaries, its notes in a pop-up (never raw HTML), the installed one marked, Update now through the existing flow, offline, keyboard and screen reader; one implementation with O44 (owner, 20 Nov) | todo | | | Queue 2026-11-18, section 7 item 8 |
 
 ## Prerequisites (C-backlog)
 
