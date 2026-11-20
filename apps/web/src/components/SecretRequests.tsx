@@ -26,7 +26,8 @@ export function SecretRequests() {
     let live = true
     const look = () =>
       void api<{ requests: Ask[] }>("GET", "/api/secret-requests").then((r) => {
-        if (live && r.ok && r.data) setAsks(r.data.requests)
+        // An answer of another shape (an older Host, say) shows nothing rather than failing.
+        if (live && r.ok && Array.isArray(r.data?.requests)) setAsks(r.data.requests)
       })
     look()
     const t = setInterval(look, EVERY_MS)
