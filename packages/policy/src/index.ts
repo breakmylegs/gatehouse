@@ -14,6 +14,7 @@ export { loadLibrary, mergeRules, readUserRules, type RuleSource } from "./libra
 export * from "./test-integrity.js"
 export * from "./expand.js"
 export * from "./explain.js"
+export * from "./registry-policy.js"
 export { compileGlobs } from "./match.js"
 export * from "./dependencies.js"
 export * from "./licences.js"

@@ -1,3 +1,4 @@
+import type { RegistryOverlay } from "./registry-policy.js"
 import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
@@ -42,6 +43,8 @@ export interface LoadOptions {
   /** C-055: signed shared rule packs, and the Ed25519 public keys (PEM) trusted to sign them. */
   sharedPacksDir?: string
   trustedPackKeys?: readonly string[]
+  /** D-095: what IT set in Group Policy (HKLMSoftwarePoliciesCodehouse), read by the Host; tightening only. */
+  registryOverlay?: RegistryOverlay
 }
 
 /** The prefix of every error about IT's policy, so the Host can refuse to start sessions on one (B37). */
@@ -235,6 +238,15 @@ export function loadPolicy(opts: LoadOptions): Policy {
     rules.escalate = [...rules.escalate, ...(managed.escalate ?? [])]
     // D-020: so an explanation can say only IT can change these.
     for (const r of [...(managed.deny ?? []), ...(managed.escalate ?? [])]) sources[r.id] = "managed"
+  }
+  // D-095: Group Policy, the same way: deny and escalate added, allows removed, never an allow added.
+  const gpo = opts.registryOverlay
+  if (gpo) {
+    const removed = new Set(gpo.removeAllow)
+    rules.allow = rules.allow.filter((r) => !removed.has(r.id))
+    rules.deny = [...rules.deny, ...gpo.deny]
+    rules.escalate = [...rules.escalate, ...gpo.escalate]
+    for (const r of [...gpo.deny, ...gpo.escalate]) sources[r.id] = "managed"
   }
 
   const ids = new Set<string>()

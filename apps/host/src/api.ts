@@ -175,6 +175,8 @@ export interface AdminContext {
   loosening?: import("./loosening.js").LooseningStore
   /** D-024: tells the phone and push channels, for information only. */
   tell?: (title: string, body: string) => void
+  /** D-095: Group Policy's Doctor check. */
+  groupPolicy?: () => import("./doctor.js").DoctorCheck
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */

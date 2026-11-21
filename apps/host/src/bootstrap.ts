@@ -1,3 +1,4 @@
+import { groupPolicyCheck, readGroupPolicy } from "./group-policy.js"
 import { EgressMonitor, windowsSampler } from "./egress.js"
 import { KnowledgeKey } from "./knowledge-pack.js"
 import { noteMemory, reportLastStop } from "./last-stop.js"
@@ -228,7 +229,7 @@ export function createHost(opts: HostOptions = {}): Host {
   reportLastStop(gatehouseDataDir(env), (t) => redactString(t, { terms: config.redactTerms }), log)
   noteMemory(log)
   // C-015: adaptive autonomy that only lowers: each project's cap, kept in the data folder.
-  const autonomy = new AutonomyStore(path.join(gatehouseDataDir(env), "autonomy.json"))
+  const autonomy = new AutonomyStore(path.join(gatehouseDataDir(env), "autonomy.json"), () => gpo?.cap)
   // T-135: secrets you give a session for one command, desktop only; their values are redacted like the above.
   const secretRequests = new SecretRequests(secretTerms, () => opts.onHealthChanged?.())
   const rulesPath =
@@ -238,7 +239,11 @@ export function createHost(opts: HostOptions = {}): Host {
     path.join(REPO_ROOT, "policy", "rules.yaml")
   const rulesDir = path.dirname(rulesPath)
   const localRules = env.GATEHOUSE_LOCAL_RULES ?? path.join(rulesDir, "rules.local.yaml")
+  // D-095: Group Policy, read once now; tightening only, merged like IT's managed policy.
+  const gpo = readGroupPolicy()
+  if (gpo?.ignored.length) log(`group policy: ignored ${gpo.ignored.join("; ")}`)
   const loadOptions = {
+    ...(gpo ? { registryOverlay: gpo } : {}),
     rulesPath,
     overlayDir: env.GATEHOUSE_OVERLAY_DIR ?? path.join(rulesDir, "projects"),
     localPath: localRules,
@@ -1656,6 +1661,8 @@ export function createHost(opts: HostOptions = {}): Host {
       autonomy,
       // D-019: the paired phone confirms a raise you accepted.
       broker,
+      // D-095: Group Policy's line in Doctor.
+      groupPolicy: () => groupPolicyCheck(gpo),
       // D-024: loosening waits ten minutes after its phrase; the phone and push channels are told, for information.
       loosening: new LooseningStore(path.join(gatehouseDataDir(env), "loosening.json")),
       tell: (title: string, body: string) => {

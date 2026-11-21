@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>Codehouse</displayName>
+  <description>Settings that make Codehouse stricter on managed computers. None of them can allow anything.</description>
+  <resources>
+    <stringTable>
+      <string id="Codehouse">Codehouse</string>
+      <string id="DenyCommands">Commands Codehouse refuses</string>
+      <string id="DenyCommands_Help">One command pattern a line, such as terraform destroy*. A session's command that matches is refused, whatever the user's own rules say. Read when Codehouse starts.</string>
+      <string id="AskCommands">Commands Codehouse asks about</string>
+      <string id="AskCommands_Help">One command pattern a line. A session's command that matches always goes to the user, even where their rules would allow it. Read when Codehouse starts.</string>
+      <string id="RemoveAllow">Allow rules to remove</string>
+      <string id="RemoveAllow_Help">One rule id a line, such as safe-shell. Those allow rules no longer apply, so what they allowed asks instead. Read when Codehouse starts.</string>
+      <string id="MaxAutonomy">The most a session may do by itself</string>
+      <string id="MaxAutonomy_Help">Sessions start no higher than this and cannot be raised past it. Plan is the least, then Manual, Accept edits and Auto. Read when Codehouse starts.</string>
+      <string id="Level_Plan">Plan</string>
+      <string id="Level_Manual">Manual</string>
+      <string id="Level_AcceptEdits">Accept edits</string>
+      <string id="Level_Auto">Auto</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="DenyCommands"><multiTextBox refId="DenyCommandsList">Command patterns, one a line:</multiTextBox></presentation>
+      <presentation id="AskCommands"><multiTextBox refId="AskCommandsList">Command patterns, one a line:</multiTextBox></presentation>
+      <presentation id="RemoveAllow"><multiTextBox refId="RemoveAllowList">Allow rule ids, one a line:</multiTextBox></presentation>
+      <presentation id="MaxAutonomy"><dropdownList refId="MaxAutonomyLevel" defaultItem="1">Highest level:</dropdownList></presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

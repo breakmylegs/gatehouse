@@ -48,6 +48,8 @@ export interface DoctorFacts {
   canaries?: CanaryRun
   /** T-132: whether the Host has stalled or been slow to answer in the last hour. */
   responsiveness?: DoctorCheck
+  /** D-095: what Group Policy set for Codehouse, and anything it ignored. */
+  groupPolicy?: DoctorCheck
 }
 
 /** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
@@ -130,6 +132,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
   // E-100: a failing safety check stops every session, so it comes straight after Claude Code itself.
   if ("canaries" in f) add(canaryCheck(f.canaries))
   if (f.responsiveness) add(f.responsiveness)
+  if (f.groupPolicy) add(f.groupPolicy)
 
   const s = h.signin
   add(
@@ -421,6 +424,8 @@ export function registerDoctorRoutes(
     canaries?: () => CanaryRun | undefined
     /** T-132: stalls and slow requests. */
     stalls?: HostStalls
+    /** D-095: Group Policy's check. */
+    groupPolicy?: () => DoctorCheck
   },
 ): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -449,6 +454,7 @@ export function registerDoctorRoutes(
       ...(ctx.cnwStatus ? { cnw: ctx.cnwStatus() } : {}),
       ...(ctx.canaries ? { canaries: ctx.canaries() } : {}),
       ...(stalls ? { responsiveness: stalls.check() } : {}),
+      ...(ctx.groupPolicy ? { groupPolicy: ctx.groupPolicy() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

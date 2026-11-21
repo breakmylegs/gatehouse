@@ -145,7 +145,11 @@ export class AutonomyStore {
   #declined: Record<string, string> = {}
   #extra: Record<string, unknown> = {}
 
-  constructor(private readonly file: string) {
+  constructor(
+    private readonly file: string,
+    /** D-095: the most Group Policy allows, a ceiling over every project's cap. */
+    private readonly ceiling: () => Level | undefined = () => undefined,
+  ) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
       const { caps, proposals, declined, ...rest } = raw
@@ -164,7 +168,9 @@ export class AutonomyStore {
 
   /** The cap for a project; Extreme approval (no cap) when there is none. */
   capFor(project: string): Level {
-    return this.#caps[project]?.level ?? "extreme"
+    const own = this.#caps[project]?.level ?? "extreme"
+    const top = this.ceiling()
+    return top && rank(top) < rank(own) ? top : own
   }
 
   caps(): Record<string, Cap> {

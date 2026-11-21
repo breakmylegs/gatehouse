@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  D-095: Group Policy for Codehouse. Copy this file to PolicyDefinitions and en-US\Codehouse.adml to
+  PolicyDefinitions\en-US (or import both into Intune as an ADMX). Every setting can only make Codehouse stricter;
+  Codehouse reads them when it starts, from HKLM\Software\Policies\Codehouse.
+-->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="codehouse" namespace="Codehouse.Policies" />
+    <using prefix="windows" namespace="Microsoft.Policies.Windows" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <categories>
+    <category name="Codehouse" displayName="$(string.Codehouse)" />
+  </categories>
+  <policies>
+    <policy name="DenyCommands" class="Machine" displayName="$(string.DenyCommands)" explainText="$(string.DenyCommands_Help)" presentation="$(presentation.DenyCommands)" key="Software\Policies\Codehouse">
+      <parentCategory ref="Codehouse" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <elements>
+        <multiText id="DenyCommandsList" valueName="DenyCommands" />
+      </elements>
+    </policy>
+    <policy name="AskCommands" class="Machine" displayName="$(string.AskCommands)" explainText="$(string.AskCommands_Help)" presentation="$(presentation.AskCommands)" key="Software\Policies\Codehouse">
+      <parentCategory ref="Codehouse" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <elements>
+        <multiText id="AskCommandsList" valueName="AskCommands" />
+      </elements>
+    </policy>
+    <policy name="RemoveAllow" class="Machine" displayName="$(string.RemoveAllow)" explainText="$(string.RemoveAllow_Help)" presentation="$(presentation.RemoveAllow)" key="Software\Policies\Codehouse">
+      <parentCategory ref="Codehouse" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <elements>
+        <multiText id="RemoveAllowList" valueName="RemoveAllow" />
+      </elements>
+    </policy>
+    <policy name="MaxAutonomy" class="Machine" displayName="$(string.MaxAutonomy)" explainText="$(string.MaxAutonomy_Help)" presentation="$(presentation.MaxAutonomy)" key="Software\Policies\Codehouse">
+      <parentCategory ref="Codehouse" />
+      <supportedOn ref="windows:SUPPORTED_Windows_10_0" />
+      <elements>
+        <enum id="MaxAutonomyLevel" valueName="MaxAutonomy" required="true">
+          <item displayName="$(string.Level_Plan)"><value><string>plan</string></value></item>
+          <item displayName="$(string.Level_Manual)"><value><string>default</string></value></item>
+          <item displayName="$(string.Level_AcceptEdits)"><value><string>acceptEdits</string></value></item>
+          <item displayName="$(string.Level_Auto)"><value><string>auto</string></value></item>
+        </enum>
+      </elements>
+    </policy>
+  </policies>
+</policyDefinitions>
