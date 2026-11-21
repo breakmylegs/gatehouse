@@ -46,6 +46,17 @@ export const Effects = z.object({
 })
 export type Effects = z.infer<typeof Effects>
 
+/**
+ * D-014: a path a call would move or overwrite, read from its words before you decide (apps/host/src/effects.ts);
+ * nothing is run to find it. `what` is what is there now: "file", "folder", "not there", "pattern".
+ */
+export const Touch = z.object({
+  effect: z.enum(["move", "overwrite"]),
+  path: z.string(),
+  what: z.string(),
+})
+export type Touch = z.infer<typeof Touch>
+
 export const EscalationRequest = z.object({
   id: z.string(), // UUIDv7
   nonce: z.string(), // 32 random bytes, base64url
@@ -59,6 +70,8 @@ export const EscalationRequest = z.object({
   verdict: Verdict,
   /** G20: absent when the call deletes and discards nothing. */
   effects: Effects.optional(),
+  /** D-014: absent when the call moves and overwrites nothing it names. */
+  touches: z.array(Touch).max(20).optional(),
   createdAt: z.string(),
   expiresAt: z.string(),
   payloadHash: z.string(), // SHA-256 of the canonical plaintext payload sent to the phone

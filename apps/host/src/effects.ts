@@ -11,9 +11,9 @@
 import { execFile } from "node:child_process"
 import fs from "node:fs"
 import path from "node:path"
-import type { Effects } from "@gatehouse/shared"
+import type { Effects, Touch } from "@gatehouse/shared"
 
-export type { Effects }
+export type { Effects, Touch }
 
 /** Said when working out the effects failed outright: taken as a call that cannot be undone. */
 export const UNKNOWN_EFFECTS: Effects = {
@@ -247,6 +247,87 @@ async function notRestorable(cwd: string, files: string[], run: Git): Promise<nu
     return files.length
   }
   return lost
+}
+
+/** D-014: commands that move their sources, and those that copy onto their destination. */
+const MOVERS = new Set(["mv", "move", "mi", "move-item", "ren", "rename", "rename-item", "rni"])
+const RENAMERS = new Set(["ren", "rename", "rename-item", "rni"])
+const COPIERS = new Set(["cp", "copy", "cpi", "copy-item", "xcopy", "robocopy"])
+const WRITERS = new Set(["set-content", "sc", "out-file", "tee", "tee-object"])
+const NULL_DEVICE = /^(\/dev\/null|nul:?|\$null)$/i
+
+/** What is at a path now, looked at only (links not followed): for the card's "Would touch" list. */
+function whatIsAt(cwd: string, p: string): string {
+  if (UNREADABLE.test(p) || /[*?]/.test(p)) return "pattern"
+  try {
+    return fs.lstatSync(path.resolve(cwd, p)).isDirectory() ? "folder" : "file"
+  } catch {
+    return "not there"
+  }
+}
+
+/** The operands of a move or copy: [sources, destination], PowerShell's -Path and -Destination picked out. */
+function moveOperands(words: string[]): [string[], string | undefined] {
+  const plain: string[] = []
+  let dest: string | undefined
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i]!
+    if (/^-(path|literalpath)$/i.test(w)) {
+      if (words[i + 1] !== undefined) plain.push(...words[++i]!.split(","))
+    } else if (/^-(destination|newname)$/i.test(w)) dest = words[++i]
+    else if (/^-(include|exclude|filter|value|encoding|inputobject|width)$/i.test(w)) i++
+    else if (/^--?[A-Za-z]/.test(w) || /^\/[A-Za-z]+(:.*)?$/.test(w) || w === "--") continue
+    else plain.push(w)
+  }
+  if (dest === undefined && plain.length > 1) dest = plain.pop()
+  return [plain, dest]
+}
+
+/**
+ * D-014, consequence preview (the safe variant): the paths a shell call would move or overwrite, read from its words,
+ * so the card can show them beside what G20 says it deletes. Nothing is run, not even git: each path is only looked
+ * at. Output redirects (>, not >>), Set-Content and Out-File overwrite; mv and Move-Item move their sources onto a
+ * destination; cp, Copy-Item, xcopy and robocopy overwrite theirs. At most 20.
+ */
+export function touchesOf(toolName: string, input: Record<string, unknown>, cwd: string): Touch[] {
+  if (toolName !== "Bash" && toolName !== "PowerShell") return []
+  const command = typeof input.command === "string" ? input.command : ""
+  const out: Touch[] = []
+  const seen = new Set<string>()
+  const add = (effect: Touch["effect"], p: string | undefined) => {
+    if (!p || NULL_DEVICE.test(p) || out.length >= MAX_PATHS) return
+    const key = `${effect}:${p}`
+    if (seen.has(key)) return
+    seen.add(key)
+    out.push({ effect, path: UNREADABLE.test(p) ? p : shown(cwd, path.resolve(cwd, p)), what: whatIsAt(cwd, p) })
+  }
+  for (const raw of commandsOf(command)) {
+    // A redirect overwrites its file whatever the command: "> f", ">f" or "2> f"; ">>" appends and "2>&1" names no file.
+    const words: string[] = []
+    for (let i = 0; i < raw.length; i++) {
+      const w = raw[i]!
+      const append = /^\d?>>(.*)$/.exec(w)
+      const over = /^\d?>(.*)$/.exec(w)
+      if (append) {
+        if (!append[1]) i++
+      } else if (over) {
+        const target = over[1] || raw[++i]
+        if (!target?.startsWith("&")) add("overwrite", target)
+      } else words.push(w)
+    }
+    const name = (words[0] ?? "").toLowerCase().replace(/\.exe$/, "")
+    const appends = words.some((w) => /^(-a|--append|-append)$/i.test(w))
+    if (MOVERS.has(name)) {
+      const [sources, dest] = moveOperands(words)
+      for (const s of sources) add("move", s)
+      if (!RENAMERS.has(name)) add("overwrite", dest)
+    } else if (COPIERS.has(name)) add("overwrite", moveOperands(words)[1])
+    else if (WRITERS.has(name) && !appends) {
+      const [first, last] = moveOperands(words)
+      add("overwrite", first[0] ?? last)
+    }
+  }
+  return out
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`)

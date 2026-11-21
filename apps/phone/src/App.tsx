@@ -637,6 +637,21 @@ function Detail({
               </dd>
             </>
           ) : null}
+          {o.payload.touches?.length ? (
+            <>
+              {/* D-014: what it would move or overwrite, read from its words. */}
+              <dt className="text-mut">Touches</dt>
+              <dd className="m-0 grid gap-0.5" aria-label="What it would move or overwrite">
+                {o.payload.touches.map((t, i) => (
+                  <span key={i}>
+                    {t.effect === "move" ? "Moves " : "Overwrites "}
+                    <span className="mono text-[14px] [overflow-wrap:anywhere]">{t.path}</span>
+                    <span className="text-mut"> ({t.what})</span>
+                  </span>
+                ))}
+              </dd>
+            </>
+          ) : null}
           {o.payload.verdict.expanded?.length || o.payload.verdict.unknownEffects?.length ? (
             <>
               {/* D-013: what it would also run. */}

@@ -23,9 +23,9 @@ import {
   type PolicyEngine,
   type PwshWorker,
 } from "@gatehouse/policy"
-import { canonicalize, type Effects, type Verdict } from "@gatehouse/shared"
+import { canonicalize, type Effects, type Touch, type Verdict } from "@gatehouse/shared"
 import { auditChannelOf, type Broker, type Resolution } from "./broker.js"
-import { effectsOf, UNKNOWN_EFFECTS } from "./effects.js"
+import { effectsOf, touchesOf, UNKNOWN_EFFECTS } from "./effects.js"
 import type { GrantUses } from "./grant-uses.js"
 import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import type { CheckpointManager } from "./checkpoints.js"
@@ -635,6 +635,16 @@ async function effectsFor(
   }
 }
 
+/** D-014: the paths the call would move or overwrite, read from its words (nothing is run), for the card. */
+function touchesFor(deps: CanUseDeps, toolName: string, input: Record<string, unknown>): { touches?: Touch[] } {
+  try {
+    const touches = touchesOf(toolName, input, deps.cwd)
+    return touches.length ? { touches } : {}
+  } catch {
+    return {}
+  }
+}
+
 /**
  * Extreme approval mode: an escalation is approved without asking. It is audited first (an allow that cannot be
  * recorded is not given), then the phone is told. The floor already ran before this and every deny verdict
@@ -729,6 +739,7 @@ async function escalate(
     project: deps.project,
     verdict,
     ...(effects ? { effects } : {}),
+    ...touchesFor(deps, toolName, input),
     signal: options.signal,
     defaultToNo: options.defaultToNo === true || verdict.risk >= 70,
   })

@@ -75,7 +75,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-043 | Cross-model review through the gateway | Wave 5 | built | feat/c036 | BUILD_REPORT "Frontier C-043" | A model on the runtime or gateway on 127.0.0.1 reviews the session's change (secret files left out, redacted, no tools); findings in the session's Review row |
 | C-044 | Best-of-N in worktrees, judged by tests | Wave 5 | built | feat/c036 | BUILD_REPORT "Frontier C-044" | G25's runs ranked on their bars by checks (passing, not run, failing), then change size, then calls that asked; the memory governor caps N, keeping two or more that started |
 | C-055 | Signed shared rule packs | Wave 6 | built | feat/c036 | BUILD_REPORT "Frontier C-055" | Signed shared rule packs in rule-packs under the data folder, keys trusted in Settings; deny and escalate always, allows only where IT's policy does not forbid them (packAllows, removeAllow); a bad signature stops the policy loading |
-| C-067 | Foundry Local profiles | Wave 6 | todo | | | |
+| C-067 | Foundry Local profiles | Wave 6 | built | feat/c036 | BUILD_REPORT "Frontier C-067" | Foundry Local as an OpenAI-compatible runtime with profile foundry-local; Find it reads its address from foundry server status (127.0.0.1 only); licence from its catalogue before first use; IT's list applies |
 
 ## Wave 1: truth and guards
 
@@ -152,7 +152,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
-| D-014 | Consequence preview | todo | | | Safe variant only |
+| D-014 | Consequence preview | built | feat/c036 | BUILD_REPORT "Frontier D-014" | Safe variant: moves and overwrites read from the words beside G20's deletes; nothing run. Shadow execution (Windows Sandbox, AppContainer) listed for IT and security |
 | D-019 | Earned-autonomy proposals | todo | | | |
 | D-020 | Explain why and what would change | todo | | | |
 | D-022 | In-turn batch approvals | listed for decision | | | LIST: owner decides whether one approval may cover identical calls in one turn; never High |

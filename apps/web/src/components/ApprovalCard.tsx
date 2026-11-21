@@ -432,6 +432,21 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 </dd>
               </>
             ) : null}
+            {req.touches?.length ? (
+              <>
+                {/* D-014: the paths it would move or overwrite, read from its words; nothing was run to find them. */}
+                <dt className="text-mut">Would touch</dt>
+                <dd className="m-0 grid gap-0.5" aria-label="What it would move or overwrite">
+                  {req.touches.map((t, i) => (
+                    <span key={i} className="text-[12.5px]">
+                      {t.effect === "move" ? "Moves " : "Overwrites "}
+                      <code className="mono [overflow-wrap:anywhere]">{t.path}</code>
+                      <span className="text-mut"> ({t.what})</span>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
             {req.verdict.expanded?.length || req.verdict.unknownEffects?.length ? (
               <>
                 {/* D-013: what it would also run, each line judged like the call. */}

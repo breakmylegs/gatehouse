@@ -4,6 +4,7 @@ import {
   newNonce,
   uuidv7,
   type Effects,
+  type Touch,
   type EscalationRequest,
   type Verdict,
 } from "@gatehouse/shared"
@@ -72,6 +73,8 @@ export interface BrokerRequestSpec {
   verdict: Verdict
   /** G20: what the call would delete or throw away, shown on the desktop and the phone. */
   effects?: Effects
+  /** D-014: the paths it would move or overwrite. */
+  touches?: Touch[]
   /** The SDK's abort signal for this call. */
   signal?: AbortSignal
   /** The ask must not be approvable by a stray keystroke. */
@@ -192,6 +195,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
       project: this.#opts.redact(spec.project),
       verdict: this.#opts.redact(spec.verdict),
       ...(spec.effects ? { effects: this.#opts.redact(spec.effects) } : {}),
+      ...(spec.touches?.length ? { touches: this.#opts.redact(spec.touches) } : {}),
       createdAt: created.toISOString(),
       expiresAt: expiresAt.toISOString(),
     }

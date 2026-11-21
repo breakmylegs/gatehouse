@@ -88,6 +88,8 @@ export interface OpenedRequest {
       reversible: boolean
       undo: string
     }
+    /** D-014: the paths it would move or overwrite, when it names any. */
+    touches?: Array<{ effect: "move" | "overwrite"; path: string; what: string }>
     createdAt: string
     expiresAt: string
   }
