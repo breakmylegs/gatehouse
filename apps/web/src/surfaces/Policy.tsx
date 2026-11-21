@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { RegressionConfirm, regressionIn, type Regression } from "../components/RegressionConfirm"
 import { LooseningConfirm, LooseningList, looseningIn, type LooseningAsk } from "../components/LooseningConfirm"
 import { api } from "../lib/api"
+import { Explanation, type ExplanationData } from "../components/Explanation"
 import { Insights } from "./Insights"
 import { PolicyChoices } from "./PolicyChoices"
 
@@ -35,6 +36,8 @@ interface PolicyData {
   localYaml: string
 }
 interface Verdict {
+  /** D-020: how it was decided, and what would change it. */
+  explain?: ExplanationData
   outcome: string
   ruleId: string
   reason: string
@@ -353,6 +356,7 @@ function TestCommand() {
           <p className="m-0">
             <span className="mono font-semibold">{verdict.ruleId}</span>: {verdict.reason}
           </p>
+          {verdict.explain ? <Explanation area="policy" x={verdict.explain} /> : null}
           {verdict.segments?.length ? (
             <ul className="m-0 list-none p-0">
               {verdict.segments.map((s, i) => (
