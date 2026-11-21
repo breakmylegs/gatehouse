@@ -1,3 +1,4 @@
+import { KnowledgeKey } from "./knowledge-pack.js"
 import { noteMemory, reportLastStop } from "./last-stop.js"
 import { TestLocks } from "./test-locks.js"
 import { sessionPorts } from "./session-ports.js"
@@ -1606,6 +1607,8 @@ export function createHost(opts: HostOptions = {}): Host {
     fuzzExec: (id: string) => actionFor(id, "a time-boxed fuzz pass of the changed parsing functions"),
     // D-071: an upgrade's admission checks read the same snapshot as the commit guard.
     vulnSnapshot,
+    // D-080: knowledge packs are signed with a key kept sealed for this user.
+    knowledgeKey: new KnowledgeKey(path.join(gatehouseDataDir(env), "knowledge-key.json"), sealer()),
     dataDir: gatehouseDataDir(env),
     locks,
     evidence,

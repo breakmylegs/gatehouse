@@ -10,6 +10,7 @@ import { TestsFirstBanner, TestsFirstStart } from "../components/TestsFirst"
 import { Requirements } from "../components/Requirements"
 import { Evidence } from "../components/Evidence"
 import { MigrationPanel } from "../components/MigrationPanel"
+import { KnowledgePanel } from "../components/KnowledgePanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -400,6 +401,7 @@ function SessionPane({
   const [evidence, setEvidence] = useState(false)
   const [migration, setMigration] = useState(false)
   const [pwsh7, setPwsh7] = useState(false)
+  const [knowledge, setKnowledge] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -668,6 +670,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Plan a migration...", onSelect: () => setMigration(true) }]),
     // D-070: what in the scripts will not run in PowerShell 7.
     ...(chat ? [] : [{ label: "Check PowerShell for version 7...", onSelect: () => setPwsh7(true) }]),
+    // D-080: the project's ADRs, glossary and instructions as a signed pack.
+    ...(chat ? [] : [{ label: "Knowledge pack...", onSelect: () => setKnowledge(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
     ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
@@ -915,6 +919,11 @@ function SessionPane({
       {requirements ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {knowledge ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <KnowledgePanel sessionId={session.id} onClose={() => setKnowledge(false)} />
         </div>
       ) : null}
       {pwsh7 ? (

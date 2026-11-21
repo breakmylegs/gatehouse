@@ -288,6 +288,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-080: the project's ADRs, glossary and instructions as a signed pack, and importing one signed by a trusted key. */
+  z.object({ type: z.literal("knowledge_export"), sessionId: Id }),
+  z.object({ type: z.literal("knowledge_import"), sessionId: Id, pack: z.object({ pack: z.string().max(20_000_000), signature: z.string().max(400), publicKey: z.string().max(2000) }) }),
   /** D-071: one pack for a change's dependency upgrades: tests after it, the SBOM delta, and the admission checks. */
   z.object({ type: z.literal("upgrade_pack"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-070: what in the project's PowerShell scripts will not run, or runs differently, in PowerShell 7. */

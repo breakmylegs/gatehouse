@@ -202,7 +202,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-067 | Migration planner with evidence | built | feat/d067 | BUILD_REPORT "Frontier D-067" | Waves from a folder's imports, leaves first (a cycle one wave); each wave's callable files captured before (D-066) and compared after (D-006); done only with both; Claude asked one wave at a time |
 | D-070 | PowerShell modernisation | built | feat/d067 | BUILD_REPORT "Frontier D-070" | PowerShell 7 check per script: the AST worker's commands against what 7 removed (cmdlets, aliases, -Encoding Byte, workflows), PSScriptAnalyzer added where installed; nothing runs |
 | D-071 | Dependency upgrade with evidence | built | feat/d067 | BUILD_REPORT "Frontier D-071" | Upgrade evidence: upgrades from and to, tests after the change (from the D-003 pack), the SBOM delta, and admission checks (new names, licences, vulnerability snapshot); complete only with passing tests and no refusal |
-| D-080 | Signed knowledge packs | todo | | | |
+| D-080 | Signed knowledge packs | built | feat/d080 | BUILD_REPORT "Frontier D-080" | ADRs, glossary settings and CLAUDE.md or AGENTS.md exported as an Ed25519-signed pack (key sealed with DPAPI); import only with a trusted key (C-055's), unchanged, knowledge paths only; never .claude settings |
 | D-094 | Verifiable egress report | todo | | | Safe variant |
 | D-095 | GPO and Intune templates | todo | | | Safe variant |
 | D-097 | Constrained Language Mode awareness | todo | | | |

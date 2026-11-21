@@ -1,3 +1,4 @@
+import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
 import { admit, DEFAULT_LICENCES, fromManifestEdit, licenceFindings, type AddedDependency } from "@gatehouse/policy"
 import { inlineScriptArgs, powerShellExe } from "@gatehouse/policy"
@@ -115,6 +116,8 @@ export interface HostApp {
   fuzzExec?: (sessionId: string) => import("./fuzz.js").FuzzExec
   /** D-071: the managed vulnerability snapshot, for an upgrade's admission checks. */
   vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches">
+  /** D-080: this computer's key for signing knowledge packs. */
+  knowledgeKey?: KnowledgeKey
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1073,6 +1076,47 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "knowledge_export": {
+        // D-080: signed with this computer's key; the public key is shown so the receiver can trust it.
+        const s = this.#session(cmd.sessionId)
+        if (!a.knowledgeKey) throw new CommandError("unavailable", "Knowledge packs are not available here.")
+        const pack = makePack(s.cwd, s.project)
+        if (!pack.files.length) throw new CommandError("nothing", "This project has no ADRs, glossary settings or CLAUDE.md to pack.")
+        const signed = await a.knowledgeKey.sign(pack)
+        await a.audit.record({
+          session: s.id, event: "knowledge_exported", channel: "desktop", tool: "knowledge", cwd: s.cwd, project: s.project,
+          input: { files: pack.files.map((f) => f.path) },
+          verdict: { outcome: "allow", ruleId: "knowledge-exported", reason: `The project's knowledge was exported as a signed pack of ${pack.files.length} file(s).`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { signed, files: pack.files.map((f) => f.path) }
+      }
+      case "knowledge_import": {
+        // D-080: only a pack signed by a key you trust, unchanged, carrying only knowledge files; refused otherwise.
+        const s = this.#session(cmd.sessionId)
+        const opened = openPack(cmd.pack, a.admin?.config().rulePackKeys ?? [])
+        if (!opened.ok) {
+          await a.audit.record({
+            session: s.id, event: "knowledge_refused", channel: "desktop", tool: "knowledge", cwd: s.cwd, project: s.project,
+            input: { why: opened.why },
+            verdict: { outcome: "deny", ruleId: "knowledge-refused", reason: `A knowledge pack was refused: ${opened.why}`, risk: 0, decidedBy: "rules", policyHash: "n/a" },
+            latencyMs: 0,
+          })
+          throw new CommandError("refused", opened.why)
+        }
+        const recorded = await a.audit.record({
+          session: s.id, event: "knowledge_imported", channel: "desktop", tool: "knowledge", cwd: s.cwd, project: s.project,
+          input: { from: opened.pack.project, files: opened.pack.files.map((f) => f.path) },
+          verdict: { outcome: "allow", ruleId: "knowledge-imported", reason: `A signed knowledge pack from ${opened.pack.project} was imported from the desktop.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        if (!recorded) throw new CommandError("not-recorded", "It could not be recorded, so nothing was written.")
+        const done = await importPack(s.cwd, opened.pack)
+        // What the project tells agents changed by your hand, so D-059 takes it as the new pinned version.
+        const told = done.written.filter((p) => p === "CLAUDE.md" || p === "AGENTS.md")
+        if (told.length) await a.instructions?.repin(s.cwd, told).catch(() => undefined)
+        return done
       }
       case "upgrade_pack": {
         // D-071: the lockfiles' change, the evidence pack's test runs, the SBOM delta and the admission checks; nothing runs.

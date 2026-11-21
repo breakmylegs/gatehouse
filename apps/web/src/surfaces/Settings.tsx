@@ -1887,7 +1887,8 @@ export function Settings() {
                 A rule pack your team signed, put in the rule-packs folder in Codehouse's data folder, adds its rules to
                 yours: its deny and ask rules always, its allow rules only where your organisation&apos;s policy does not
                 forbid them. A pack not signed with a key below, or changed after it was signed, stops the policy loading,
-                so the rules stay as they were. Takes effect when Codehouse starts again.
+                so the rules stay as they were. Takes effect when Codehouse starts again. The same keys are trusted for
+                knowledge packs (a project's ADRs, glossary and instructions).
               </p>
               <Field label="Trusted keys" help="Your team's public keys, as PEM (BEGIN PUBLIC KEY). Saves when you leave the box.">
                 <textarea
