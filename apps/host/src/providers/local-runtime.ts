@@ -12,6 +12,7 @@
  * has the redaction list applied first, as for any runtime, and the window says where the words go.
  */
 import { itAllows, type ItModels } from "./it-models.js"
+import { FOUNDRY_PROFILE, foundryLicence, foundryModels } from "./foundry-local.js"
 
 export interface LocalModel {
   name: string
@@ -27,10 +28,12 @@ export interface LocalRuntimeConfig {
   forwardsTo?: string
   /** For a gateway: what that provider keeps of what is sent, as your agreement with it says. */
   keeps?: "nothing" | "30-days" | "unknown"
+  /** C-067: an OpenAI-compatible runtime that is Foundry Local, for its model list and licences. */
+  profile?: "foundry-local"
 }
 
 /** The settings a runtime may have. Anything else, a key or a password above all, is refused when saved. */
-export const RUNTIME_FIELDS = new Set(["kind", "url", "models", "forwardsTo", "keeps"])
+export const RUNTIME_FIELDS = new Set(["kind", "url", "models", "forwardsTo", "keeps", "profile"])
 
 /** Where a chat on this runtime sends its words, in the window's words. */
 export function runtimeLabel(cfg: Pick<LocalRuntimeConfig, "kind" | "forwardsTo">): string {
@@ -91,8 +94,10 @@ export async function modelLicence(
   model: string,
   fetchFn: typeof fetch = fetch,
 ): Promise<string | undefined> {
-  if (cfg.kind !== "ollama" || addressProblem(cfg.url)) return undefined
+  const foundry = cfg.kind === "openai-compatible" && cfg.profile === FOUNDRY_PROFILE
+  if ((cfg.kind !== "ollama" && !foundry) || addressProblem(cfg.url)) return undefined
   if (!cfg.models.some((m) => m.name === model)) return undefined
+  if (foundry) return await foundryLicence(cfg.url, model, fetchFn)
   try {
     const res = await fetchFn(`${base(cfg.url)}/api/show`, {
       method: "POST",
@@ -181,11 +186,16 @@ async function checkListed(cfg: LocalRuntimeConfig, fetchFn: typeof fetch): Prom
         ? { ok: true, models, version, left }
         : { ok: false, code: "runtime.no-models", reason: "None of the listed models can be used." }
     }
-    const list = (await getJson(fetchFn, `${base(cfg.url)}/v1/models`)) as { data?: unknown }
+    // C-067: Foundry Local lists the models it has downloaded at /openai/models.
+    const foundry = cfg.kind === "openai-compatible" && cfg.profile === FOUNDRY_PROFILE
+    const downloaded = foundry ? await foundryModels(cfg.url, fetchFn) : undefined
+    if (foundry && !downloaded) throw new Error("not Foundry Local")
+    const list = foundry ? { data: [] } : ((await getJson(fetchFn, `${base(cfg.url)}/v1/models`)) as { data?: unknown })
     const ids = new Set(
-      (Array.isArray(list.data) ? list.data : [])
-        .map((m) => (m as { id?: unknown }).id)
-        .filter((id): id is string => typeof id === "string"),
+      downloaded ??
+        (Array.isArray(list.data) ? list.data : [])
+          .map((m) => (m as { id?: unknown }).id)
+          .filter((id): id is string => typeof id === "string"),
     )
     const models: string[] = []
     for (const m of cfg.models) {

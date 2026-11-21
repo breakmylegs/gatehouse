@@ -14,6 +14,7 @@ import {
   type LocalRuntimeConfig,
 } from "./local-runtime.js"
 import { judgeRuntime } from "../claim-judge.js"
+import { findFoundry, type FoundFoundry } from "./foundry-local.js"
 import { managedRefusal, providerAllowed, type ManagedSettings } from "@gatehouse/policy"
 
 type Providers = NonNullable<GatehouseConfig["providers"]>
@@ -34,6 +35,8 @@ export function registerProviderRoutes(
     itModels?: () => ItModels
     /** T-067: the organisation's managed settings, for the providers it allows. */
     managed?: () => ManagedSettings | undefined
+    /** C-067: finds Foundry Local on this computer (a test passes its own). */
+    findFoundry?: () => Promise<FoundFoundry | undefined>
   },
 ): void {
   const view = async () => {
@@ -62,6 +65,12 @@ export function registerProviderRoutes(
       return reply.code(404).send({ error: "There is no such model on this computer." })
     const licence = await modelLicence(local, model, ctx.fetchFn)
     return { licence: licence ?? null }
+  })
+
+  // C-067: where Foundry Local listens now (its port changes each time it starts) and the models it has. Read only.
+  app.get("/api/providers/foundry", async () => {
+    const found = await (ctx.findFoundry ?? (() => findFoundry(process.env, undefined, ctx.fetchFn)))()
+    return found ? { found: true, url: found.url, models: found.models } : { found: false }
   })
 
   // B17: what a provider does with your words, as you recorded it. Recorded first, then saved by adding.

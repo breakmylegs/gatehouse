@@ -9,7 +9,11 @@ interface LocalRuntime {
   models: Array<{ name: string; digest?: string }>
   forwardsTo?: string
   keeps?: "nothing" | "30-days" | "unknown"
+  /** C-067: an OpenAI-compatible runtime that is Foundry Local. */
+  profile?: "foundry-local"
 }
+/** The runtime as the page offers it: Foundry Local is saved as an OpenAI-compatible server with its profile. */
+type Choice = LocalRuntime["kind"] | "foundry-local"
 type Check =
   | { ok: true; models: string[]; version?: string; left: Array<{ name: string; why: string }> }
   | { ok: false; code: string; reason: string }
@@ -50,7 +54,7 @@ function parseModels(text: string): LocalRuntime["models"] {
 export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => void }) {
   const [view, setView] = useState<ProvidersView>()
   const [enabled, setEnabled] = useState(false)
-  const [kind, setKind] = useState<LocalRuntime["kind"]>("ollama")
+  const [kind, setKind] = useState<Choice>("ollama")
   const [url, setUrl] = useState("http://127.0.0.1:11434")
   const [models, setModels] = useState("")
   const [forwardsTo, setForwardsTo] = useState("")
@@ -64,7 +68,7 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
     setEnabled(v.enabled)
     setClaimJudge(v.claimJudge ?? "")
     if (v.local) {
-      setKind(v.local.kind)
+      setKind(v.local.profile === "foundry-local" ? "foundry-local" : v.local.kind)
       setUrl(v.local.url)
       setForwardsTo(v.local.forwardsTo ?? "")
       setKeeps(v.local.keeps ?? "unknown")
@@ -75,6 +79,21 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
     void api<ProvidersView>("GET", "/api/providers").then((r) => r.ok && r.data && show(r.data))
   }, [])
 
+  // C-067: Foundry Local's port changes each time it starts, so ask Codehouse where it is now.
+  const [finding, setFinding] = useState(false)
+  async function findFoundry() {
+    setFinding(true)
+    const r = await api<{ found: boolean; url?: string; models?: string[] }>("GET", "/api/providers/foundry")
+    setFinding(false)
+    if (!r.ok || !r.data?.found || !r.data.url) {
+      toast.error("Foundry Local is not running on this computer. Start it (foundry server start), then try again.", { id: "settings" })
+      return
+    }
+    setUrl(r.data.url)
+    if (!models.trim() && r.data.models?.length) setModels(r.data.models.join("\n"))
+    toast(`Foundry Local found at ${r.data.url}`, { id: "settings" })
+  }
+
   async function save() {
     setBusy(true)
     const list = parseModels(models)
@@ -83,7 +102,7 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
       ...(list.length
         ? {
             local: {
-              kind,
+              ...(kind === "foundry-local" ? { kind: "openai-compatible", profile: "foundry-local" } : { kind }),
               url: url.trim(),
               models: list,
               ...(gateway ? { forwardsTo: forwardsTo.trim(), keeps } : {}),
@@ -119,7 +138,7 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
     <>
       <p className="m-0 text-xs text-mut">
         Chat with a model that runs on this computer instead of Claude: Ollama, or a server that
-        speaks the OpenAI chat API (llama.cpp, LM Studio). IT installs it; Codehouse never downloads
+        speaks the OpenAI chat API (Foundry Local, llama.cpp, LM Studio). IT installs it; Codehouse never downloads
         one. It must listen on this computer only, Ollama must be 0.17.1 or newer, and only the
         models you list are offered. Chats on it are in Plan mode with read-only tools, and every
         tool call goes to the Approver, as Claude&apos;s do. Nothing goes to another company.
@@ -141,9 +160,10 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
           <select
             className="field"
             value={kind}
-            onChange={(e) => setKind(e.target.value as LocalRuntime["kind"])}
+            onChange={(e) => setKind(e.target.value as Choice)}
           >
             <option value="ollama">Ollama</option>
+            <option value="foundry-local">Foundry Local</option>
             <option value="openai-compatible">OpenAI-compatible server</option>
             <option value="gateway">Your organisation&apos;s gateway (hosted models)</option>
           </select>
@@ -157,7 +177,18 @@ export function ProvidersPanel({ onSaved }: { onSaved?: (providers: unknown) => 
             onChange={(e) => setUrl(e.target.value)}
           />
         </label>
+        {kind === "foundry-local" ? (
+          <button type="button" className="btn" disabled={finding} onClick={() => void findFoundry()}>
+            {finding ? "Finding…" : "Find it"}
+          </button>
+        ) : null}
       </div>
+      {kind === "foundry-local" ? (
+        <p className="m-0 text-xs text-mut">
+          Foundry Local listens on a new port each time it starts. Find it fills in where it is now and the models it has
+          downloaded; find it again after it restarts. Each model&apos;s licence is shown before you first use it.
+        </p>
+      ) : null}
       {gateway ? (
         <div className="flex flex-wrap items-end gap-2">
           <label className="grid gap-1 text-sm">

@@ -271,6 +271,8 @@ function build(loose: boolean) {
         /** For a gateway (ADR 0010): the provider it forwards to, and what that provider keeps. */
         forwardsTo: z.string().max(60).optional(),
         keeps: z.enum(["nothing", "30-days", "unknown"]).optional(),
+        /** C-067: an OpenAI-compatible runtime that is Foundry Local (a new kind would stop older versions reading this file). */
+        profile: z.enum(["foundry-local"]).optional(),
         url: z.string().max(200),
         models: z
           .array(
