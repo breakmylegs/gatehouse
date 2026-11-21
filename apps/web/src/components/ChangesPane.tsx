@@ -9,6 +9,7 @@ import { REVIEW_PROMPT } from "./ReviewCard"
 import { askForGuide } from "./ReviewGuide"
 import { composeIn } from "../lib/compose"
 import { describeDecision } from "../lib/decision"
+import { moveBetweenHunks, narrate } from "../lib/narrate"
 import { editsOn, linesOf, originOf } from "../lib/hunkOrigin"
 import { commentKey, reviewMessage, type ReviewComment } from "../lib/reviewComments"
 import { isViewed, readViewed, setViewed } from "../lib/viewed"
@@ -821,6 +822,11 @@ function ChangeList({
     const d = decisions[origin.toolUseId]
     return d ? `${origin.name}: ${describeDecision(d).line}` : `Made by Claude's ${origin.name}.`
   }
+  // D-091: the risk of the decision that allowed the edit behind a change, for its narration.
+  const riskOf = (h: Hunk): number | undefined => {
+    const origin = originOf(edits, linesOf(after, h.afterStart, h.afterLines), linesOf(before, h.beforeStart, h.beforeLines))
+    return origin ? decisions[origin.toolUseId]?.risk : undefined
+  }
   const quoteOf = (h: Hunk) =>
     h.afterLines
       ? linesOf(after, h.afterStart, h.afterLines)
@@ -857,7 +863,14 @@ function ChangeList({
         {hunks.map((h, i) => {
           const comment = comments[commentKey(path, h.afterStart)]?.text ?? ""
           return (
-            <li key={i} className="grid gap-1 text-[13px]">
+            <li
+              key={i}
+              data-hunk={i}
+              tabIndex={0}
+              aria-label={narrate(path, h, i, hunks.length, riskOf(h))}
+              onKeyDown={moveBetweenHunks}
+              className="grid gap-1 text-[13px] focus-visible:outline focus-visible:outline-2"
+            >
               <span className="flex flex-wrap items-center gap-2">
                 <span>{changeWords(h)}</span>
                 {writing !== i ? (

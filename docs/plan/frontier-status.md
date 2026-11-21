@@ -161,7 +161,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-087 | Interruption budget | built | feat/d087 | BUILD_REPORT "Frontier D-087" | Settings, Fewer interruptions: sessions finishing, notes from Claude and the digest gathered into one summary every 15 to 120 minutes; approvals and warnings at once; off by default |
 | D-088 | Adaptive explanation depth | built | feat/d088 | BUILD_REPORT "Frontier D-088" | Short, Normal or Full per area (approvals, policy tester), kept on this computer; floor decisions always in full |
 | D-089 | Review load meter | built | feat/d089 | BUILD_REPORT "Frontier D-089" | Review minutes on every pending change (5 lines a minute, a minute a file, x1.5 High, x2 Severe); Approvals warns when the last hour's allowed changes need more than your capacity (Settings, Review load) |
-| D-091 | Narrated diffs and approvals | todo | | | |
+| D-091 | Narrated diffs and approvals | built | feat/d089 | BUILD_REPORT "Frontier D-091" | Each change in the Changes pane narrated (file, change N of M, kind, where and lines, risk) and reached with the arrow keys, Home and End. Owed by the owner: an NVDA run |
 | D-092 | Safe keyboard approvals | todo | | | U4 built typed confirmation for Severe |
 | D-093 | Cognitive load presets | todo | | | |
 
