@@ -141,6 +141,7 @@ import { isLargePaste, textToBase64 } from "../lib/paste"
 import { CompareBar } from "../components/CompareBar"
 import { FallbackButton } from "../components/FallbackButton"
 import { GoalDialog } from "../components/GoalDialog"
+import { LeaseDialog } from "../components/LeaseDialog"
 import { startReview } from "../lib/review"
 import { runTestsUntilPass } from "../lib/testLoop"
 import { indent as indentList, marks, newLine } from "../lib/markdown-edit"
@@ -383,6 +384,7 @@ function SessionPane({
   }
   const [renaming, setRenaming] = useState(false)
   const [goalOpen, setGoalOpen] = useState(false)
+  const [leaseOpen, setLeaseOpen] = useState(false)
   const [bypassOpen, setBypassOpen] = useState(false)
   // G31: the evidence for this session's work, above its transcript.
   const [walkthrough, setWalkthrough] = useState(false)
@@ -632,6 +634,8 @@ function SessionPane({
             label: session.goal ? "Change the goal..." : "Set a goal...",
             onSelect: () => setGoalOpen(true),
           },
+          // D-023: what Auto and Accept edits may do by themselves.
+          { label: session.lease ? "Change the scope lease..." : "Scope lease...", onSelect: () => setLeaseOpen(true) },
         ]),
     {
       label: session.pinned ? "Unpin" : "Pin to the top",
@@ -909,6 +913,17 @@ function SessionPane({
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Evidence sessionId={session.id} onClose={() => setEvidence(false)} />
         </div>
+      ) : null}
+      {leaseOpen ? (
+        <LeaseDialog
+          current={session.lease}
+          onClose={() => setLeaseOpen(false)}
+          onSave={(lease) =>
+            void send({ type: "set_lease", sessionId: session.id, paths: lease?.paths ?? null, commands: lease?.commands ?? null }).then((r) =>
+              r.ok ? toast(lease ? "Scope lease set" : "Scope lease cleared") : toast.error(r.error?.message ?? "The scope lease was not changed"),
+            )
+          }
+        />
       ) : null}
       {goalOpen ? (
         <GoalDialog

@@ -1,3 +1,4 @@
+import { LEASE_MODES, outsideLease, type ScopeLease } from "./scope-lease.js"
 import {
   fromOutside,
   TAINT_RULE,
@@ -121,6 +122,8 @@ export interface SessionHookDeps {
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
   mode?: () => string
+  /** D-023: the scope lease; in acceptEdits and auto a call outside it is asked. */
+  lease?: () => ScopeLease | undefined
   /** The Approver, for the modes in which Claude Code would otherwise decide alone. */
   approver?: Pick<ApproverClient, "evaluate">
   projectRoot?: string
@@ -259,6 +262,12 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           .touched(cwd, input.tool_name, toolInput)
           .catch(() => ["(the locks could not be read)"])
         if (files.length) return askOutput(lockedReason(files))
+      }
+      // D-023: and so is a write or a command outside the scope lease.
+      const lease = LEASE_MODES.has(mode) ? deps.lease?.() : undefined
+      if (lease) {
+        const why = outsideLease(lease, deps.projectRoot ?? cwd, cwd, input.tool_name, toolInput)
+        if (why) return askOutput(`Codehouse asks about this even in ${mode === "auto" ? "Auto" : "Accept edits"} mode: ${why}`)
       }
       // D-059: and so is a change to what the project tells Claude.
       if (SELF_APPROVING_MODES.has(mode) && deps.instructions) {

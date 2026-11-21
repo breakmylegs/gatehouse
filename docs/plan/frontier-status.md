@@ -156,7 +156,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-019 | Earned-autonomy proposals | built | feat/d019 | BUILD_REPORT "Frontier D-019" | Clean record since the cap (20 approvals none undone, 3 Verified claims, no failed sealed check, no floor deny) proposes one step; applies only on your desktop click, and with a phone paired only when its passkey confirms |
 | D-020 | Explain why and what would change | built | feat/d020 | BUILD_REPORT "Frontier D-020" | PolicyEngine.explain: stage-by-stage trace and the smallest change; floor fixed with no change; IT's rules named; How it was decided on the card, explain on the policy tester |
 | D-022 | In-turn batch approvals | listed for decision | | | LIST: owner decides whether one approval may cover identical calls in one turn; never High |
-| D-023 | Scope lease | todo | | | |
+| D-023 | Scope lease | built | feat/d020 | BUILD_REPORT "Frontier D-023" | Lease of path globs and command families from the approved plan or the desktop; in Auto and Accept edits a write or command outside it asks (hook and canUseTool, rule scope-lease) |
 | D-024 | Second confirmation for loosening | todo | | | Safe variant |
 | D-087 | Interruption budget | todo | | | |
 | D-088 | Adaptive explanation depth | todo | | | |

@@ -356,6 +356,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     check: z.string().min(1).max(300).nullable(),
   }),
+  /** D-023: the scope lease (paths and command families used by itself in Auto and Accept edits), or null paths for none. */
+  z.object({
+    type: z.literal("set_lease"),
+    sessionId: Id,
+    paths: z.array(z.string().max(200)).max(50).nullable(),
+    commands: z.array(z.string().max(40)).max(50).nullable().optional(),
+  }),
   /** B22: of chats started side by side with the same message, the one you kept; recorded, the rest are closed. */
   z.object({
     type: z.literal("compare_chosen"),
@@ -513,6 +520,8 @@ export const SessionInfo = z.object({
   intentDrift: z.object({ at: z.string(), reason: z.string() }).optional(),
   /** D-036: the session is writing its tests first, and they are not approved yet. */
   testsFirst: z.boolean().optional(),
+  /** D-023: the scope lease: paths and command families used by itself in Auto and Accept edits; outside it asks. */
+  lease: z.object({ paths: z.array(z.string()), commands: z.array(z.string()), from: z.enum(["plan", "you"]), at: z.string() }).optional(),
   /** C-015: the most this project's record allows a session here (Extreme approval, the most, is never sent). */
   autonomyCap: z.enum(["plan", "default", "acceptEdits", "auto"]).optional(),
   /** D-037: the assumptions Claude declared, until you verify them. Absent from older Hosts. */

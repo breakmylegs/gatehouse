@@ -1,4 +1,5 @@
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
+import { LEASE_MODES, outsideLease, SCOPE_LEASE_RULE, type ScopeLease } from "./scope-lease.js"
 import { API_RULE, apiBreak, apiReason, hasApiCompat } from "./api-surface.js"
 import { ADR_RULE, adrContradictions, adrReason, readAdrs } from "./adr.js"
 import { ARCH_RULE, archCheck, archReason } from "./architecture.js"
@@ -79,6 +80,10 @@ export interface CanUseDeps {
   mutantTask?: () => Survivor | undefined
   /** D-036: whether the session is writing its tests first and they are not approved yet. */
   testsFirst?: () => boolean
+  /** D-023: the paths and commands this session may use by itself in Auto and Accept edits. */
+  lease?: () => ScopeLease | undefined
+  /** D-023: a plan was approved, with its words, so the session can set its lease from it. */
+  onPlanApproved?: (plan: string) => void
   lockedCalls?: Map<string, string[]>
   /** D-059: what the project tells Claude, and the calls that changed it (so an approved change pins it again). */
   instructions?: Pick<InstructionPins, "touched">
@@ -330,6 +335,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         const file = String(input.file_path ?? input.notebook_path ?? "")
         if (!TEST_FILE.test(file))
           verdict = { ...verdict, outcome: "escalate", ruleId: TESTS_FIRST_RULE, reason: testsFirstReason(file), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
+      // D-023: in Auto and Accept edits, a write or a command outside the scope lease goes to a person, whatever the rules.
+      const lease = LEASE_MODES.has(deps.mode?.() ?? "") ? deps.lease?.() : undefined
+      if (lease && verdict.outcome !== "deny") {
+        const why = outsideLease(lease, deps.projectRoot ?? deps.cwd, deps.cwd, toolName, input)
+        if (why) verdict = { ...verdict, outcome: "escalate", ruleId: SCOPE_LEASE_RULE, reason: why, risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
       }
       // D-057: a commit that adds a dependency version the snapshot lists goes to a person, with the advisories. A
       // lockfile that cannot be read while a snapshot is in use counts as one (fail closed).
@@ -987,6 +998,7 @@ async function ask(
         "The decision could not be recorded in the audit log, so it was not applied.",
         toolUseID,
       )
+    if (kind === "plan" && typeof input.plan === "string") deps.onPlanApproved?.(input.plan)
     return allow(kind === "question" ? { ...input, answers } : input, toolUseID)
   }
   const resolution = await deps.broker.request({
@@ -1023,6 +1035,7 @@ async function ask(
     if (kind === "question") {
       return allow({ ...input, answers: resolution.answers ?? {} }, toolUseID)
     }
+    if (typeof input.plan === "string") deps.onPlanApproved?.(input.plan)
     return allow(input, toolUseID)
   }
   if (resolution.outcome === "deny") {

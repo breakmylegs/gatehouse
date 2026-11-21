@@ -890,6 +890,9 @@ export class HostServer {
       case "set_goal":
         await this.#session(cmd.sessionId).setGoal(cmd.check ?? undefined)
         return undefined
+      case "set_lease":
+        await this.#session(cmd.sessionId).setLease(cmd.paths ?? undefined, cmd.commands ?? undefined)
+        return undefined
       case "set_extreme":
         await this.#session(cmd.sessionId).setExtreme(cmd.on, cmd.max === true)
         return undefined

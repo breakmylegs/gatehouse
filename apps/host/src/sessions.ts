@@ -1,3 +1,4 @@
+import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
 import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
 import { checkLastCommit, readRules } from "./writing-rules.js"
@@ -332,6 +333,8 @@ export interface SessionInfo {
   effortCap?: Effort
   /** B25: the check Extreme approval carries on until. */
   goal?: string
+  /** D-023: the paths and commands the session may use by itself in Auto and Accept edits. */
+  lease?: ScopeLease
   /** D-040: a model on this computer found the work may have drifted from the goal. */
   intentDrift?: { at: string; reason: string }
   /** D-036: the session is writing its tests first, and they are not approved yet. */
@@ -1065,6 +1068,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#deps.limiter ? { resources: this.#resources } : {}),
       ...(this.#deps.config().effortCap ? { effortCap: this.#deps.config().effortCap } : {}),
       ...(this.#goal ? { goal: this.#goal } : {}),
+      ...(this.#lease ? { lease: this.#lease } : {}),
       ...(this.#assumptions.length ? { assumptions: this.#assumptions.map((a) => ({ ...a })) } : {}),
       ...(this.#testsFirst ? { testsFirst: true } : {}),
       ...(this.#drift ? { intentDrift: this.#drift } : {}),
@@ -1253,6 +1257,7 @@ export class Session extends EventEmitter<SessionEvents> {
       provenance: this.#provenance,
       log: d.log,
       mode: () => this.#mode,
+      lease: () => this.#lease,
       approver: d.approver,
       verdicts: this.#verdicts,
       onWritten: (file) => {
@@ -1356,6 +1361,9 @@ export class Session extends EventEmitter<SessionEvents> {
       mutantTask: () => this.#mutantTask,
       // D-036: and while it writes its tests first.
       testsFirst: () => this.#testsFirst,
+      // D-023: the scope lease, and a plan approved to set it from.
+      lease: () => this.#lease,
+      onPlanApproved: (plan) => void this.#leaseFromPlan(plan),
       sessionId: this.id,
       cwd: this.cwd,
       sessionKind: this.#opts.kind === "chat" ? "chat" : "code",
@@ -1794,6 +1802,55 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /** D-036: tests-first mode: the tests are being written and are not approved yet. */
   #testsFirst = false
+  #lease: ScopeLease | undefined
+
+  /** D-023: an approved plan that names paths sets the lease (recorded first); one that names none leaves it as it was. */
+  async #leaseFromPlan(plan: string): Promise<void> {
+    const lease = leaseFromPlan(plan)
+    if (!lease) return
+    await this.#recordLease(lease, "rules").catch(() => false)
+  }
+
+  async #recordLease(lease: ScopeLease | undefined, by: "rules" | "human-desktop"): Promise<boolean> {
+    const recorded = await this.#deps.audit.record({
+      session: this.id,
+      event: "scope_lease_set",
+      channel: by === "rules" ? "host" : "desktop",
+      tool: "lease",
+      cwd: this.cwd,
+      project: this.project,
+      input: lease ? { paths: lease.paths, commands: lease.commands, from: lease.from } : { lease: null },
+      verdict: {
+        outcome: "allow",
+        ruleId: lease ? "scope-lease-set" : "scope-lease-off",
+        reason: !lease
+          ? "The scope lease was cleared from the desktop."
+          : lease.from === "plan"
+            ? "The approved plan set the scope lease: in Auto and Accept edits, anything outside it asks."
+            : "The scope lease was set from the desktop: in Auto and Accept edits, anything outside it asks.",
+        risk: 0,
+        decidedBy: by,
+        policyHash: this.#deps.policy()?.hash ?? "",
+      },
+      latencyMs: 0,
+    })
+    // Not recorded: the lease stays as it was (a plan's lease is then simply not set).
+    if (!recorded) return false
+    this.#lease = lease
+    this.emit("state", this.info())
+    return true
+  }
+
+  /** D-023: the lease from the desktop, or none. Recorded first; refused if it cannot be recorded. */
+  async setLease(paths: string[] | undefined, commands: string[] | undefined): Promise<void> {
+    let lease: ScopeLease | undefined
+    if (paths !== undefined) {
+      const clean = cleanLease(paths, commands ?? [])
+      if (typeof clean === "string") throw new Error(clean)
+      lease = clean
+    }
+    if (!(await this.#recordLease(lease, "human-desktop"))) throw new Error("It could not be recorded, so the scope lease was not changed.")
+  }
 
   /** D-036: starts tests-first mode: Claude writes the tests for the criteria, and only test files change. */
   startTestsFirst(criteria: string): void {
