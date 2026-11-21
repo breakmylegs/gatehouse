@@ -1,3 +1,4 @@
+import { noteMemory, reportLastStop } from "./last-stop.js"
 import { TestLocks } from "./test-locks.js"
 import { sessionPorts } from "./session-ports.js"
 import { checkIntent } from "./intent-drift.js"
@@ -218,6 +219,10 @@ export function createHost(opts: HostOptions = {}): Host {
   const secretTerms = new SecretTerms()
   const teamTerms = withTeamTerms(config, redactionLists, () => secretTerms.terms())
   const secretDeps = { enabled: () => config.onePassword === true, terms: secretTerms }
+  // Why Codehouse last stopped, when the launcher noted the Host's last error lines: redacted into host.log, then
+  // deleted. And the Host's memory, every 15 minutes, so a slow growth towards the heap limit shows before a stop.
+  reportLastStop(gatehouseDataDir(env), (t) => redactString(t, { terms: config.redactTerms }), log)
+  noteMemory(log)
   // C-015: adaptive autonomy that only lowers: each project's cap, kept in the data folder.
   const autonomy = new AutonomyStore(path.join(gatehouseDataDir(env), "autonomy.json"))
   // T-135: secrets you give a session for one command, desktop only; their values are redacted like the above.

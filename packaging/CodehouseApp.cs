@@ -271,7 +271,7 @@ internal sealed class MainForm : Form
                 else if (Hosting.AwakeLine.IsMatch(ev.Data)) { bool on = Hosting.AwakeLine.Match(ev.Data).Groups[1].Value == "true"; OnUi(delegate { KeepAwake(on); }); }
                 else Remember(ev.Data);
             };
-            host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) Remember(ev.Data); };
+            host.ErrorDataReceived += delegate(object s, DataReceivedEventArgs ev) { if (ev.Data != null) { Remember(ev.Data); KeepError(ev.Data); } };
             host.Exited += delegate { OnUi(delegate { OnHostExited(); }); };
             host.EnableRaisingEvents = true;
             host.BeginOutputReadLine();
@@ -337,6 +337,21 @@ internal sealed class MainForm : Form
         }
         if (check) Say(line);
     }
+
+    // What the Host last wrote to its error output: Node says there why it stopped (a fatal error, an assertion) just before
+    // a crash that leaves only an exit code. Kept for the Host to read, redact and log when it starts again.
+    private readonly System.Collections.Generic.Queue<string> errors = new System.Collections.Generic.Queue<string>();
+
+    private void KeepError(string line)
+    {
+        lock (errors)
+        {
+            errors.Enqueue(line.Length > 300 ? line.Substring(0, 300) : line);
+            while (errors.Count > 40) errors.Dequeue();
+        }
+    }
+
+    private string LastStopFile { get { return Path.Combine(dataDir, "last-stop.txt"); } }
 
     private string Tail()
     {
@@ -535,6 +550,14 @@ internal sealed class MainForm : Form
         {
             File.AppendAllText(Path.Combine(dataDir, "host.log"),
                 DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'") + " the Host stopped unexpectedly with " + how + "\r\n");
+        }
+        catch (Exception) { }
+        // Its last error lines, unredacted, for the Host to redact into host.log and delete when it starts (last-stop.ts).
+        try
+        {
+            string said;
+            lock (errors) { said = string.Join("\n", errors.ToArray()); }
+            if (said.Trim().Length > 0) File.WriteAllText(LastStopFile, how + "\n" + said);
         }
         catch (Exception) { }
         // Started again by itself, at most three times in ten minutes: open sessions come back as after an update.
