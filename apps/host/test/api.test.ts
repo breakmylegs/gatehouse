@@ -506,6 +506,84 @@ describe("autonomy caps (C-015)", () => {
       fs.rmSync(path.join(root, "autonomy-c015.json"), { force: true })
     }
   })
+
+  it("applies a proposal only when you accept it, recorded; with a phone paired, only once the phone confirms (D-019)", async () => {
+    const { AutonomyStore } = await import("../src/autonomy.js")
+    const { Broker } = await import("../src/broker.js")
+    const file = path.join(root, "autonomy-d019.json")
+    const store = new AutonomyStore(file)
+    await store.lower("shop", "default", ["the floor denied 10 calls in 30 days"])
+    await store.lower("cafe", "acceptEdits", ["you denied 5 calls in 30 days"])
+    await store.propose("shop", { from: "default", to: "acceptEdits", reasons: ["clean"] })
+    await store.propose("cafe", { from: "acceptEdits", to: "auto", reasons: ["clean"] })
+    const recorded: Array<{ event: string; channel: string; verdict: { decidedBy: string } }> = []
+    const audit = { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never
+    const alone = Fastify()
+    registerApi(alone, { ...ctx, autonomy: store, audit })
+    const broker = new Broker({ phoneExpiryMs: 60_000, hardTimeoutMs: 120_000, redact: (v) => v })
+    const paired = Fastify()
+    registerApi(paired, { ...ctx, autonomy: store, audit, broker, phone: { listPhones: () => [{ id: "p1" }] } as never })
+    try {
+      expect((await alone.inject({ method: "GET", url: "/api/autonomy/proposals" })).json()).toMatchObject({ proposals: { shop: { to: "acceptEdits" } } })
+      // No phone: your click applies it, recorded first.
+      expect((await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).json()).toMatchObject({ caps: { shop: { level: "acceptEdits", by: "you" } }, proposals: {} })
+      expect(recorded.at(-1)).toMatchObject({ event: "autonomy_raised", verdict: { decidedBy: "human-desktop" } })
+      expect((await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(404)
+      // A phone paired: accepted on the desktop, it waits; an allow from the desktop is refused; the phone's applies it.
+      const r = await paired.inject({ method: "POST", url: "/api/autonomy/cafe/accept" })
+      expect(r.statusCode).toBe(202)
+      expect(r.json()).toMatchObject({ waitingForPhone: true, confirming: ["cafe"] })
+      expect(store.capFor("cafe")).toBe("acceptEdits")
+      const pending = broker.list()[0]!
+      expect(pending.request).toMatchObject({ toolName: "AutonomyRaise", verdict: { ruleId: "autonomy-raise" } })
+      expect(broker.resolve(pending.request.id, { kind: "decision", decision: "allow" }, "desktop")).toMatchObject({ ok: false, reason: "not-allowed-on-channel" })
+      expect(broker.resolve(pending.request.id, { kind: "decision", decision: "allow" }, "push")).toMatchObject({ ok: false, reason: "not-allowed-on-channel" })
+      expect(store.capFor("cafe")).toBe("acceptEdits")
+      expect(broker.resolve(pending.request.id, { kind: "decision", decision: "allow" }, "phone")).toMatchObject({ ok: true })
+      await vi.waitFor(() => expect(store.capFor("cafe")).toBe("auto"))
+      expect(recorded.at(-1)).toMatchObject({ event: "autonomy_raised", channel: "phone", verdict: { decidedBy: "human-phone" } })
+      // Saying no is recorded and forgets the proposal.
+      await store.propose("cafe", { from: "auto", to: "extreme", reasons: ["clean"] })
+      expect((await alone.inject({ method: "POST", url: "/api/autonomy/cafe/decline" })).json()).toMatchObject({ proposals: {} })
+      expect(recorded.at(-1)).toMatchObject({ event: "autonomy_raise_declined" })
+      expect(store.capFor("cafe")).toBe("auto")
+    } finally {
+      broker.cancelAll()
+      await alone.close()
+      await paired.close()
+      fs.rmSync(file, { force: true })
+    }
+  })
+
+  it("refuses to raise when the raise cannot be recorded, or the paired phone cannot be asked (D-019)", async () => {
+    const { AutonomyStore } = await import("../src/autonomy.js")
+    const file = path.join(root, "autonomy-d019b.json")
+    const store = new AutonomyStore(file)
+    await store.lower("shop", "default", ["x"])
+    await store.propose("shop", { from: "default", to: "acceptEdits", reasons: ["clean"] })
+    const noAudit = Fastify()
+    registerApi(noAudit, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async () => false } as never })
+    const noBroker = Fastify()
+    registerApi(noBroker, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async () => true } as never, phone: { listPhones: () => [{ id: "p1" }] } as never })
+    try {
+      expect((await noAudit.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(503)
+      expect((await noBroker.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(503)
+      expect(store.capFor("shop")).toBe("default")
+      // Even a broker that let an allow through from elsewhere does not raise it: only the phone's answer does.
+      const desktopAllow = Fastify()
+      const request = vi.fn(async () => ({ outcome: "allow", channel: "desktop", at: "", waitedMs: 1 }))
+      registerApi(desktopAllow, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async () => true } as never, broker: { request } as never, phone: { listPhones: () => [{ id: "p1" }] } as never })
+      expect((await desktopAllow.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(202)
+      await vi.waitFor(() => expect(request).toHaveBeenCalled())
+      await new Promise((r) => setTimeout(r, 50))
+      expect(store.capFor("shop")).toBe("default")
+      await desktopAllow.close()
+    } finally {
+      await noAudit.close()
+      await noBroker.close()
+      fs.rmSync(file, { force: true })
+    }
+  })
 })
 
 describe("settings endpoints", () => {

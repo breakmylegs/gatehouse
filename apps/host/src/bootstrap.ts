@@ -1616,6 +1616,8 @@ export function createHost(opts: HostOptions = {}): Host {
       // T-135: the requests waiting on the desktop, and your answers.
       secretRequests,
       autonomy,
+      // D-019: the paired phone confirms a raise you accepted.
+      broker,
       // T-132: stalls and slow requests, for Doctor.
       stalls: (() => {
         const s = new HostStalls()

@@ -11,6 +11,7 @@ import {
 import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import { msUntilPhoneAllowed, phoneHeld, type QuietHours } from "./quiet-hours.js"
 import { HANDOFF_RULE } from "./about-session.js"
+import { AUTONOMY_RAISE_RULE } from "./autonomy.js"
 
 /** `push` is an outbound notification channel such as ntfy: it answers with a one-time code. */
 /** O41: "cnw" is Codehouse Neighbourhood Watch, your own server, with the desktop's scope. */
@@ -347,6 +348,13 @@ export class Broker extends EventEmitter<BrokerEvents> {
           reason: "not-allowed-on-channel",
           detail: "Only you, on the desktop, can send a chat's prompt to a session",
         }
+    }
+    // D-019: raising a cap you accepted on the desktop is confirmed by the paired phone's passkey alone, never remembered.
+    if (entry.view.request.verdict.ruleId === AUTONOMY_RAISE_RULE && answer.kind !== "answers") {
+      if (answer.remember || answer.rememberFor || answer.updatedInput !== undefined)
+        return { ok: false, reason: "invalid-answer", detail: "This is confirmed as it is, each time" }
+      if (answer.decision === "allow" && channel !== "phone")
+        return { ok: false, reason: "not-allowed-on-channel", detail: "Only your paired phone's passkey can confirm raising a cap" }
     }
     if (answer.kind === "answers") {
       if (kind !== "question")

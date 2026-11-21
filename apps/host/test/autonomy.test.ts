@@ -54,7 +54,7 @@ describe("caps only go down by themselves (C-015)", () => {
     const store = new AutonomyStore(path.join(dir, "autonomy.json"))
     const recorded: Array<[string, Record<string, unknown>]> = []
     let entries: IndexEntry[] = many(LIMITS.floorToManual, () => floorDeny())
-    const d = { store, entries: async () => entries, record: async (e: "autonomy_lowered", input: Record<string, unknown>) => (recorded.push([e, input]), true), now: () => now }
+    const d = { store, entries: async () => entries, record: async (e: string, input: Record<string, unknown>) => (recorded.push([e, input]), true), now: () => now }
     expect(await reviewAutonomy(d)).toEqual([{ project: "shop", level: "default", reasons: [`the floor denied ${LIMITS.floorToManual} calls in 30 days`] }])
     expect(store.capFor("shop")).toBe("default")
     expect(recorded).toEqual([["autonomy_lowered", { project: "shop", level: "default" }]])

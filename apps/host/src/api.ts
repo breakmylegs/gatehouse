@@ -121,7 +121,7 @@ import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { extractToken, secretsEqual } from "./server-guard.js"
 import { CliAccess, registerCliRoutes, type CliDeps } from "./cli-access.js"
-import { isLevel, LEVEL_NAMES, LIMITS as AUTONOMY_LIMITS, reviewAutonomy } from "./autonomy.js"
+import { AUTONOMY_RAISE_RULE, AUTONOMY_RAISE_TOOL, EARN as AUTONOMY_EARN, isLevel, LEVEL_NAMES, LIMITS as AUTONOMY_LIMITS, reviewAutonomy } from "./autonomy.js"
 import { isOpRef } from "./secret-providers.js"
 import { registerVoiceRoutes, VoiceSettings } from "./voice.js"
 import { deliveryKey, hashHookToken, HookDeliveries, MAX_BODY, passes } from "./webhooks.js"
@@ -166,6 +166,8 @@ export interface AdminContext {
   secretRequests?: import("./secret-requests.js").SecretRequests
   /** C-015: each project's autonomy cap, from its record. */
   autonomy?: import("./autonomy.js").AutonomyStore
+  /** D-019: asks the paired phone to confirm a raise with its passkey. */
+  broker?: import("./broker.js").Broker
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */
@@ -591,11 +593,11 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   // or when you ask), raised only by you, here on the desktop.
   const autonomy = ctx.autonomy
   if (autonomy) {
-    const record = (event: string, input: Record<string, unknown>, reason: string, by: "rules" | "human-desktop") =>
+    const record = (event: string, input: Record<string, unknown>, reason: string, by: "rules" | "human-desktop" | "human-phone") =>
       ctx.audit.record({
         session: "desktop",
         event,
-        channel: by === "rules" ? "host" : "desktop",
+        channel: by === "rules" ? "host" : by === "human-phone" ? "phone" : "desktop",
         tool: "autonomy",
         input,
         verdict: { outcome: "allow", ruleId: event.replace(/_/g, "-"), reason, risk: 0, decidedBy: by, policyHash: ctx.store.current?.hash ?? "" },
@@ -623,6 +625,62 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       }
       await record("autonomy_raised", { project, level }, `You raised ${project}'s cap to ${LEVEL_NAMES[level]} from the desktop.`, "human-desktop")
       return { caps: autonomy.caps() }
+    })
+    // D-019: a proposal to raise a cap applies only when you accept it here; with a phone paired, only once its passkey
+    // confirms too (the broker takes that answer from the phone alone). A failure to ask or to record applies nothing.
+    const confirming = new Set<string>()
+    const proposalView = () => ({ caps: autonomy.caps(), proposals: autonomy.proposals(), confirming: [...confirming] })
+    app.get("/api/autonomy/proposals", async () => ({ ...proposalView(), earn: AUTONOMY_EARN }))
+    app.post("/api/autonomy/:project/accept", async (req, reply) => {
+      const project = (req.params as { project: string }).project
+      const p = autonomy.proposals()[project]
+      if (!p) return bad(reply, 404, "There is no proposal for that project.")
+      if (autonomy.capFor(project) !== p.from) {
+        await autonomy.dropProposal(project)
+        return bad(reply, 409, "The cap has changed since, so the proposal no longer applies.")
+      }
+      const raise = async (by: "human-desktop" | "human-phone") => {
+        const said = by === "human-phone" ? "on the desktop, confirmed with your phone's passkey" : "on the desktop"
+        if (!(await record("autonomy_raised", { project, level: p.to, proposed: true, ...(by === "human-phone" ? { confirmedBy: "phone" } : {}) }, `You raised ${project}'s cap from ${LEVEL_NAMES[p.from]} to ${LEVEL_NAMES[p.to]} ${said}, as proposed.`, by)))
+          return false
+        await autonomy.raise(project, p.to)
+        return true
+      }
+      if (!(ctx.phone?.listPhones().length ?? 0)) {
+        if (!(await raise("human-desktop"))) return bad(reply, 503, "It could not be recorded, so the cap was not raised.")
+        return proposalView()
+      }
+      if (!ctx.broker) return bad(reply, 503, "Your phone is paired but cannot be asked, so the cap was not raised.")
+      if (!confirming.has(project)) {
+        confirming.add(project)
+        void ctx.broker
+          .request({
+            kind: "permission",
+            sessionId: "desktop",
+            toolUseId: `autonomy-raise-${randomBytes(8).toString("hex")}`,
+            toolName: AUTONOMY_RAISE_TOOL,
+            input: { project, from: LEVEL_NAMES[p.from], to: LEVEL_NAMES[p.to] },
+            cwd: "",
+            project,
+            verdict: { outcome: "escalate", ruleId: AUTONOMY_RAISE_RULE, reason: `You accepted on the desktop to raise ${project}'s cap from ${LEVEL_NAMES[p.from]} to ${LEVEL_NAMES[p.to]}. Confirm it here with your passkey.`, risk: 50, decidedBy: "rules", policyHash: ctx.store.current?.hash ?? "" },
+            defaultToNo: true,
+          })
+          .then(async (r) => {
+            if (r.outcome === "allow" && r.channel === "phone" && autonomy.capFor(project) === p.from && autonomy.proposals()[project]) await raise("human-phone")
+          })
+          .catch(() => undefined)
+          .finally(() => confirming.delete(project))
+      }
+      return reply.code(202).send({ ...proposalView(), waitingForPhone: true })
+    })
+    app.post("/api/autonomy/:project/decline", async (req, reply) => {
+      const project = (req.params as { project: string }).project
+      const p = autonomy.proposals()[project]
+      if (!p) return bad(reply, 404, "There is no proposal for that project.")
+      if (!(await record("autonomy_raise_declined", { project, from: p.from, to: p.to }, `You said no to raising ${project}'s cap to ${LEVEL_NAMES[p.to]}; it must be earned again from now.`, "human-desktop")))
+        return bad(reply, 503, "It could not be recorded, so nothing changed.")
+      await autonomy.decline(project)
+      return proposalView()
     })
   }
   app.get("/api/audit/query", async (req, reply) => {

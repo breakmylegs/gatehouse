@@ -10,8 +10,17 @@ import type { IndexEntry } from "./audit-index.js"
  * each project: how often the floor had to deny a call, and how often you denied one. A poor record lowers the cap by
  * itself, recorded as `autonomy_lowered`; a session in that project then starts no higher than the cap (it starts
  * lowered, and says so) and cannot be raised past it. Nothing here ever raises a cap: only your click on the desktop
- * does (`autonomy_raised`). D-019 builds the proposals to raise on this.
+ * does (`autonomy_raised`).
+ *
+ * D-019, earned-autonomy proposals: a capped project whose record since its cap was set is clean (your approvals
+ * never undone, sealed held-out checks passing, done-claims Verified, not one floor deny) earns a proposal to raise
+ * the cap by one step, recorded as `autonomy_raise_proposed`. A proposal never applies by itself: only your click on
+ * the desktop does, and when a phone is paired, also its passkey (api.ts).
  */
+/** D-019: the request that asks the paired phone to confirm a raise; the broker takes its allow from the phone only. */
+export const AUTONOMY_RAISE_RULE = "autonomy-raise"
+export const AUTONOMY_RAISE_TOOL = "AutonomyRaise"
+
 export const LEVELS = ["plan", "default", "acceptEdits", "auto", "extreme"] as const
 export type Level = (typeof LEVELS)[number]
 export const rank = (l: Level): number => LEVELS.indexOf(l)
@@ -56,6 +65,64 @@ export function recommend(s: Signals): { level: Level; reasons: string[] } {
   return { level, reasons }
 }
 
+/** D-019: a project's record since its cap was set, for a proposal to raise it. */
+export interface TrackRecord {
+  /** Calls you allowed when asked. */
+  approvals: number
+  /** Changes you undid from a checkpoint. */
+  undone: number
+  sealedPassed: number
+  sealedFailed: number
+  verified: number
+  contradicted: number
+  /** Calls the floor denied. */
+  floor: number
+}
+
+/** D-019: what earns a step up, at the least; any undo, floor deny, Contradicted claim or failed sealed check stops it. */
+export const EARN = { approvals: 20, verified: 3 } as const
+
+export function trackRecord(entries: IndexEntry[], project: string, sinceIso: string): TrackRecord {
+  const r: TrackRecord = { approvals: 0, undone: 0, sealedPassed: 0, sealedFailed: 0, verified: 0, contradicted: 0, floor: 0 }
+  for (const e of entries) {
+    if (e.project !== project || e.ts <= sinceIso) continue
+    if (e.decidedBy === "floor" && e.outcome === "deny") r.floor++
+    else if (e.event === "human_decision" && e.outcome === "allow" && /^human-/.test(e.decidedBy)) r.approvals++
+    else if (e.event === "files_undone" || e.event === "change_undone") r.undone++
+    else if (e.event === "sealed_check_run") {
+      if (e.good) r.sealedPassed++
+      else r.sealedFailed++
+    }
+    else if (e.event === "claim_verified") {
+      if (e.outcome === "deny") r.contradicted++
+      else if (e.good) r.verified++
+    }
+  }
+  return r
+}
+
+export interface Proposal {
+  from: Level
+  to: Level
+  at: string
+  reasons: string[]
+}
+
+/** D-019: the next step up from a cap, when the record has earned it; undefined otherwise. Never applied here. */
+export function propose(rec: TrackRecord, cap: Level): Omit<Proposal, "at"> | undefined {
+  if (cap === "extreme") return undefined
+  if (rec.floor || rec.undone || rec.contradicted || rec.sealedFailed) return undefined
+  if (rec.approvals < EARN.approvals || rec.verified < EARN.verified) return undefined
+  const to = LEVELS[rank(cap) + 1]!
+  const reasons = [
+    `you allowed ${rec.approvals} calls and undid none`,
+    `${rec.verified} done-claims were Verified and none Contradicted`,
+    rec.sealedPassed ? `the sealed checks passed ${rec.sealedPassed} times and never failed` : "no sealed check failed",
+    "the floor denied nothing",
+  ]
+  return { from: cap, to, reasons }
+}
+
 export interface Cap {
   level: Level
   at: string
@@ -74,13 +141,19 @@ export function clamp(mode: "default" | "plan" | "acceptEdits" | "auto", extreme
 
 export class AutonomyStore {
   #caps: Record<string, Cap> = {}
+  #proposals: Record<string, Proposal> = {}
+  #declined: Record<string, string> = {}
   #extra: Record<string, unknown> = {}
 
   constructor(private readonly file: string) {
     try {
       const raw = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
-      const { caps, ...rest } = raw
+      const { caps, proposals, declined, ...rest } = raw
       this.#extra = rest
+      for (const [p, v] of Object.entries((declined ?? {}) as Record<string, unknown>)) if (typeof v === "string") this.#declined[p] = v
+      for (const [p, v] of Object.entries((proposals ?? {}) as Record<string, Partial<Proposal>>))
+        if (v && isLevel(v.from) && isLevel(v.to) && typeof v.at === "string")
+          this.#proposals[p] = { from: v.from, to: v.to, at: v.at, reasons: Array.isArray(v.reasons) ? v.reasons.filter((r): r is string => typeof r === "string") : [] }
       for (const [p, c] of Object.entries((caps ?? {}) as Record<string, Partial<Cap>>))
         if (c && isLevel(c.level) && typeof c.at === "string")
           this.#caps[p] = { level: c.level, at: c.at, by: c.by === "you" ? "you" : "record", reasons: Array.isArray(c.reasons) ? c.reasons.filter((r): r is string => typeof r === "string") : [] }
@@ -100,13 +173,49 @@ export class AutonomyStore {
 
   async #save(): Promise<void> {
     fs.mkdirSync(path.dirname(this.file), { recursive: true })
-    await writeFileAtomic(this.file, JSON.stringify({ ...this.#extra, caps: this.#caps }, null, 2) + "\n")
+    await writeFileAtomic(this.file, JSON.stringify({ ...this.#extra, caps: this.#caps, proposals: this.#proposals, declined: this.#declined }, null, 2) + "\n")
+  }
+
+  /** D-019: the proposals waiting for you, by project. */
+  proposals(): Record<string, Proposal> {
+    return { ...this.#proposals }
+  }
+
+  /** D-019: keeps a proposal for you to decide; it changes no cap. True when it is new. */
+  async propose(project: string, p: Omit<Proposal, "at">, now = new Date()): Promise<boolean> {
+    const was = this.#proposals[project]
+    if (was && was.from === p.from && was.to === p.to) return false
+    this.#proposals[project] = { ...p, at: now.toISOString() }
+    await this.#save()
+    return true
+  }
+
+  /** D-019: forgets a proposal (the cap moved, or the record went bad). */
+  async dropProposal(project: string): Promise<void> {
+    if (!this.#proposals[project]) return
+    delete this.#proposals[project]
+    await this.#save()
+  }
+
+  /** D-019: you said no; the record must be earned again from now before another proposal. */
+  async decline(project: string, now = new Date()): Promise<void> {
+    delete this.#proposals[project]
+    this.#declined[project] = now.toISOString()
+    await this.#save()
+  }
+
+  /** D-019: where a project's record for a proposal starts: when its cap was set, or when you last said no. */
+  recordFrom(project: string): string {
+    const at = this.#caps[project]?.at ?? ""
+    const no = this.#declined[project] ?? ""
+    return no > at ? no : at
   }
 
   /** Lowers a project's cap to `level` when that is lower than it is; never raises. True when it lowered it. */
   async lower(project: string, level: Level, reasons: string[], now = new Date()): Promise<boolean> {
     if (rank(level) >= rank(this.capFor(project))) return false
     this.#caps[project] = { level, at: now.toISOString(), by: "record", reasons }
+    delete this.#proposals[project]
     await this.#save()
     return true
   }
@@ -116,6 +225,7 @@ export class AutonomyStore {
     if (rank(level) <= rank(this.capFor(project))) throw new Error(`${LEVEL_NAMES[level]} is not higher than ${project}'s cap.`)
     if (level === "extreme") delete this.#caps[project]
     else this.#caps[project] = { level, at: now.toISOString(), by: "you", reasons: [] }
+    delete this.#proposals[project]
     await this.#save()
   }
 }
@@ -124,7 +234,7 @@ export interface AutonomyDeps {
   store: AutonomyStore
   /** The audit entries of the last 30 days, brought up to date first. */
   entries: (sinceMs: number) => Promise<IndexEntry[]>
-  record: (event: "autonomy_lowered", input: Record<string, unknown>, reason: string) => Promise<boolean>
+  record: (event: "autonomy_lowered" | "autonomy_raise_proposed", input: Record<string, unknown>, reason: string) => Promise<boolean>
   now?: () => number
 }
 
@@ -144,6 +254,20 @@ export async function reviewAutonomy(d: AutonomyDeps): Promise<Array<{ project: 
     if (!(await d.store.lower(project, rec.level, rec.reasons, new Date(now)))) continue
     await d.record("autonomy_lowered", { project, level: rec.level }, `${project} now starts no higher than ${LEVEL_NAMES[rec.level]}: ${rec.reasons.join("; ")}.`)
     lowered.push({ project, level: rec.level, reasons: rec.reasons })
+  }
+  // D-019: a capped project with a clean record since its cap was set earns a proposal; it is only kept and told.
+  for (const [project, cap] of Object.entries(d.store.caps())) {
+    const p = propose(trackRecord(entries, project, d.store.recordFrom(project)), cap.level)
+    if (!p) {
+      await d.store.dropProposal(project)
+      continue
+    }
+    if (!(await d.store.propose(project, p, new Date(now)))) continue
+    await d.record(
+      "autonomy_raise_proposed",
+      { project, from: p.from, to: p.to },
+      `${project} has earned a step up, from ${LEVEL_NAMES[p.from]} to ${LEVEL_NAMES[p.to]}: ${p.reasons.join("; ")}. It waits for you.`,
+    )
   }
   return lowered
 }

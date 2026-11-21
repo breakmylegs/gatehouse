@@ -24,6 +24,8 @@ export interface IndexEntry {
   risk: number
   /** Whether the call reaches the network (a fetch, a search, or a shell command that downloads or sends). */
   net?: true
+  /** D-019: a sealed check that passed, or a done-claim that was Verified. */
+  good?: true
   summary: string
 }
 
@@ -52,7 +54,7 @@ export const TEMPLATES: Record<QueryTemplate, { title: string; needsProject?: bo
 const NET_TOOLS = new Set(["WebFetch", "WebSearch"])
 const NET_COMMAND = /\b(curl|wget|Invoke-WebRequest|Invoke-RestMethod|iwr|irm|ssh|scp|sftp|ftp|nc|ncat|git\s+(push|pull|fetch|clone)|npm\s+(install|i|publish|ci)|pnpm\s+(add|install|publish)|yarn\s+(add|install|publish)|pip\s+install|dotnet\s+(add|restore|nuget)|Start-BitsTransfer)\b|https?:\/\//i
 
-function entryOf(r: AuditRecord): IndexEntry {
+export function entryOf(r: AuditRecord): IndexEntry {
   let input: Record<string, unknown> = {}
   try {
     const v = JSON.parse(r.inputJson) as unknown
@@ -62,6 +64,7 @@ function entryOf(r: AuditRecord): IndexEntry {
   }
   const main = input.command ?? input.url ?? input.query ?? input.file_path ?? input.path ?? input.pattern ?? ""
   const summary = (typeof main === "string" ? main : JSON.stringify(main)).slice(0, 200)
+  const good = (r.event === "sealed_check_run" && input.ok === true) || (r.event === "claim_verified" && input.outcome === "verified")
   const net = NET_TOOLS.has(r.tool) || ((r.tool === "Bash" || r.tool === "PowerShell") && NET_COMMAND.test(String(input.command ?? "")))
   return {
     seq: r.seq,
@@ -76,6 +79,7 @@ function entryOf(r: AuditRecord): IndexEntry {
     decidedBy: r.verdict.decidedBy,
     risk: r.verdict.risk,
     ...(net ? { net: true as const } : {}),
+    ...(good ? { good: true as const } : {}),
     summary,
   }
 }
