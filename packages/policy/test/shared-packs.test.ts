@@ -83,7 +83,7 @@ describe("signed shared rule packs (C-055)", () => {
     expect(policy.rules.deny.map((r) => r.id)).toContain("team-no-prod-db")
     expect(policy.rules.escalate.map((r) => r.id)).toContain("team-ask-deploy")
     expect(policy.rules.allow.map((r) => r.id)).toContain("team-make-lint")
-    expect(policy.sources["team-no-prod-db"]).toBe("shared:team")
+    expect(policy.sources?.["team-no-prod-db"]).toBe("shared:team")
     const engine = new PolicyEngine({ getPolicy: () => policy })
     const v = await engine.evaluate({ toolName: "Bash", input: { command: "psql -h prod-db" } }, { cwd: fwd(fx.ws) })
     expect(v).toMatchObject({ outcome: "deny", ruleId: "team-no-prod-db" })
