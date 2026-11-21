@@ -64,6 +64,7 @@ interface Config {
   workspaceRoots?: string[]
   projectsFolder?: string
   digestTime?: string | null
+  noticeBatchMinutes?: number
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   /** E-094: minutes the phone and the push channels wait before they are told; absent, all at once. */
   escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number; onlyWhenHere?: boolean }
@@ -161,6 +162,8 @@ interface Values {
   hardMin: number
   digestOn: boolean
   digestAt: string
+  /** D-087: minutes between summaries of non-urgent notices; "" sends each at once. */
+  batchMinutes: string
   terms: string
   writeUk: boolean
   writeDashes: boolean
@@ -265,6 +268,7 @@ export function valuesOf(d: SettingsData): Values {
     hardMin: Math.round(c.hardTimeoutMs / 60_000),
     digestOn: c.digestTime !== null,
     digestAt: c.digestTime ?? "08:00",
+    batchMinutes: c.noticeBatchMinutes ? String(c.noticeBatchMinutes) : "",
     terms: c.redactTerms.join("\n"),
     teamKeys: (c.redactionListKeys ?? []).join("\n"),
     packKeys: (c.rulePackKeys ?? []).join("\n"),
@@ -409,6 +413,8 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   if (Object.keys(handoff).length) body.chatHandoff = handoff
   else delete body.chatHandoff
   body.digestTime = v.digestOn ? v.digestAt : null
+  if (v.batchMinutes) body.noticeBatchMinutes = Number(v.batchMinutes)
+  else delete body.noticeBatchMinutes
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
   // Anything a newer version keeps beside the limits stays.
@@ -582,6 +588,7 @@ export const DEFAULT_VALUES: Values = {
   hardMin: 30,
   digestOn: true,
   digestAt: "08:00",
+  batchMinutes: "",
   terms: "",
   writeUk: true,
   writeDashes: true,
@@ -1802,6 +1809,21 @@ export function Settings() {
                   />
                 </Field>
               ) : null}
+            </Group>
+
+            <Group section="phone" title="Fewer interruptions" gap="gap-2" changed={differs(v, ["batchMinutes"])}>
+              <Field
+                label="Gather updates into one every"
+                help="Sessions finishing, notes from Claude and the digest come together as one summary. Approvals, and warnings such as a stuck or paused session, still come at once."
+              >
+                <select className="field w-48" value={v.batchMinutes} onChange={(e) => change({ batchMinutes: e.target.value }, "Fewer interruptions")}>
+                  <option value="">Send each at once</option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="60">Hour</option>
+                  <option value="120">2 hours</option>
+                </select>
+              </Field>
             </Group>
 
             <Group section="privacy" title="Redaction list" gap="gap-3" changed={privacyChanged}>

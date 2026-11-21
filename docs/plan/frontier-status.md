@@ -158,7 +158,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-022 | In-turn batch approvals | listed for decision | | | LIST: owner decides whether one approval may cover identical calls in one turn; never High |
 | D-023 | Scope lease | built | feat/d020 | BUILD_REPORT "Frontier D-023" | Lease of path globs and command families from the approved plan or the desktop; in Auto and Accept edits a write or command outside it asks (hook and canUseTool, rule scope-lease) |
 | D-024 | Second confirmation for loosening | built | feat/d024 | BUILD_REPORT "Frontier D-024" | Safe variant: removing a deny or ask rule, a project no longer strict about tests, or raising an autonomy cap needs a typed phrase and applies after 10 minutes; phone and push told; cancel on the desktop. Passkey in place of the wait listed for security |
-| D-087 | Interruption budget | todo | | | |
+| D-087 | Interruption budget | built | feat/d087 | BUILD_REPORT "Frontier D-087" | Settings, Fewer interruptions: sessions finishing, notes from Claude and the digest gathered into one summary every 15 to 120 minutes; approvals and warnings at once; off by default |
 | D-088 | Adaptive explanation depth | todo | | | |
 | D-089 | Review load meter | todo | | | |
 | D-091 | Narrated diffs and approvals | todo | | | |

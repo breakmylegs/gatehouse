@@ -2400,6 +2400,8 @@ const LIVE_SETTINGS = [
   // E-080: read at each import.
   "redactionListKeys",
   "digestTime",
+  // D-087: read at each notice.
+  "noticeBatchMinutes",
   "extremeCarryOn",
   "planLimitPause",
   "effortCap",

@@ -218,6 +218,11 @@ function build(loose: boolean) {
       .optional(),
     /** When the daily digest is sent to the phone, local time. Null turns it off. Absent means 08:00. */
     digestTime: z.string().regex(TIME).nullable().optional(),
+    /**
+     * D-087: minutes between summaries of the phone's non-urgent notices (a turn finished, the digest, a note from
+     * Claude). Approvals and errors still go at once. Absent: each notice goes at once.
+     */
+    noticeBatchMinutes: z.number().int().min(5).max(240).optional(),
     /** Outbound-only push channels. Answers come back over a connection this computer opens. */
     push: obj({
       ntfy: obj({

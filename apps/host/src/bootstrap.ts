@@ -30,6 +30,7 @@ import { resolveSecret, SecretTerms } from "./secret-providers.js"
 import { refuseRequest, SecretRequests } from "./secret-requests.js"
 import { AutonomyStore } from "./autonomy.js"
 import { LooseningStore } from "./loosening.js"
+import { NoticeBatcher } from "./notice-batch.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
@@ -1283,6 +1284,13 @@ export function createHost(opts: HostOptions = {}): Host {
     enrol: (url, token) => phone.setup(url, token, os.hostname()),
     linked: () => phoneStore.relay() !== undefined,
   })
+  // D-087: the phone's non-urgent notices, batched into a summary when Settings ask for it; approvals and errors are
+  // never sent through it.
+  const notices = new NoticeBatcher({
+    minutes: () => config.noticeBatchMinutes,
+    send: async (n) => await phone.notify(n.kind ?? "notify", { title: n.title, body: n.body, project: n.project }),
+  })
+  notices.start()
   // The daily digest goes to the phone once a day after the chosen time (default 08:00). Off if digestTime is null.
   const digest = new DigestScheduler({
     time: () => (config.digestTime === null ? null : (config.digestTime ?? "08:00")),
@@ -1293,7 +1301,7 @@ export function createHost(opts: HostOptions = {}): Host {
       const to = Date.now()
       const cost = usage.snapshot().byDay[localDay(new Date(to))]?.costUsd ?? 0
       const d = computeDigest(recordsSince(dir, to - 86_400_000), to - 86_400_000, to, cost)
-      await phone.notify("info", { title: "Codehouse digest", body: d.text, project: "Codehouse" })
+      notices.add({ kind: "info", title: "Codehouse digest", body: d.text, project: "Codehouse" })
       return true
     },
   })
@@ -1334,9 +1342,7 @@ export function createHost(opts: HostOptions = {}): Host {
     const info = manager.get(sessionId)?.info()
     const project = info?.project ?? "a session"
     if (type === "notify_user" && typeof data.text === "string")
-      void phone
-        .notify("notify", { title: "Claude", body: String(data.text), project })
-        .catch(() => undefined)
+      notices.add({ kind: "notify", title: "Claude", body: String(data.text), project })
     else if (type === "queue_empty") {
       void phone
         .notify(
@@ -1385,10 +1391,7 @@ export function createHost(opts: HostOptions = {}): Host {
         void phone.notify("notify", { ...words, project }).catch(() => undefined)
         void ntfy.note(words.title.toLowerCase(), words.body, project)
       }
-    } else if (type === "stop")
-      void phone
-        .notify("stop", { title: "Session finished", body: "", project })
-        .catch(() => undefined)
+    } else if (type === "stop") notices.add({ kind: "stop", title: "Session finished", body: "", project })
     // G32: what was said changed, so the phone's view of it is shared again soon.
     if (type === "stop" || type === "queue_empty") phoneSessions.poke()
   })
@@ -2176,6 +2179,9 @@ export function createHost(opts: HostOptions = {}): Host {
       slack.stop()
       await localRelay.stop()
       digest.stop()
+      // D-087: what is held goes before Codehouse closes.
+      notices.stop()
+      await notices.flush(true).catch(() => undefined)
       phone.stop()
       await manager.closeAll()
       await usage.flush()
