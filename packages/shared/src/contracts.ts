@@ -92,3 +92,5 @@ export const DecisionEnvelope = z.object({
   expiresAt: z.string(),
 })
 export type DecisionEnvelope = z.infer<typeof DecisionEnvelope>
+// D-089: the review load estimate, for the Host and the desktop alike.
+export * from "./review-load.js"

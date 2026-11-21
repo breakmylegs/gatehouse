@@ -223,6 +223,8 @@ function build(loose: boolean) {
      * Claude). Approvals and errors still go at once. Absent: each notice goes at once.
      */
     noticeBatchMinutes: z.number().int().min(5).max(240).optional(),
+    /** D-089: the minutes of review an hour you can give; above it the approvals list warns. Absent: no warning. */
+    reviewCapacityMinutes: z.number().int().min(5).max(600).optional(),
     /** Outbound-only push channels. Answers come back over a connection this computer opens. */
     push: obj({
       ntfy: obj({

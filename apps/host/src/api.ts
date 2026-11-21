@@ -1,3 +1,4 @@
+import { changeSize, reviewMinutes } from "@gatehouse/shared/contracts"
 import { RememberFor } from "@gatehouse/shared/ws-protocol"
 import { listDevices, screenshot } from "./devices-panel.js"
 import type { Listening } from "./session-ports.js"
@@ -591,6 +592,33 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     const cwd = records.find((r) => r.cwd)?.cwd
     const checkpoints = cwd ? await listCheckpoints(cwd, session).catch(() => []) : []
     return { entries: sessionTimeline(records, checkpoints) }
+  })
+
+  // D-089: about how many minutes of review the changes allowed in the last hour need, against the capacity you set.
+  // Each call is counted once (by its id), from the audit log; nothing is recorded.
+  app.get("/api/review-load", async () => {
+    const from = Date.now() - 3_600_000
+    const seen = new Set<string>()
+    let minutes = 0
+    let changes = 0
+    for (const r of recordsSince(ctx.auditDir, from)) {
+      if (Date.parse(r.ts) < from || r.verdict.outcome !== "allow") continue
+      let input: unknown = {}
+      try {
+        input = JSON.parse(r.inputJson) as unknown
+      } catch {
+        continue
+      }
+      const size = changeSize(r.tool, input)
+      if (!size.files) continue
+      const key = r.toolUseId ?? `seq:${r.seq}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      minutes += reviewMinutes({ ...size, risk: r.verdict.risk })
+      changes++
+    }
+    const capacity = ctx.config().reviewCapacityMinutes
+    return { lastHour: { minutes, changes }, ...(capacity ? { capacity, over: minutes > capacity } : {}) }
   })
 
   // D-031: saved questions about the audit log, answered from an index kept beside it, redacted.
@@ -2402,6 +2430,8 @@ const LIVE_SETTINGS = [
   "digestTime",
   // D-087: read at each notice.
   "noticeBatchMinutes",
+  // D-089: read each time the review load is asked for.
+  "reviewCapacityMinutes",
   "extremeCarryOn",
   "planLimitPause",
   "effortCap",

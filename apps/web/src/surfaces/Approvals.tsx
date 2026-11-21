@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import clsx from "clsx"
 import { ApprovalCard } from "../components/ApprovalCard"
+import { ReviewLoadMeter } from "../components/ReviewLoad"
 import { QuickDecision } from "../components/QuickDecision"
 import { RiskBadge } from "../components/RiskBadge"
 import { SessionCode } from "../components/SessionCode"
@@ -75,11 +76,15 @@ export function Approvals() {
         aria-label="Queue"
         className="grid min-h-0 grid-rows-[auto_auto_1fr_auto] border-r border-line bg-s1 max-[1000px]:border-b max-[1000px]:border-r-0"
       >
-        <div className="flex items-baseline justify-between gap-3 border-b border-line px-4 pb-2.5 pt-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-line px-4 pb-2.5 pt-4">
           <h2 className="m-0 text-[19px]">Waiting on you</h2>
           <span className="sign text-[13px] font-normal text-mut">
             {pending.length} waiting, oldest first
           </span>
+          {/* D-089: the review the last hour's changes need, against your capacity. */}
+          <div className="basis-full">
+            <ReviewLoadMeter />
+          </div>
         </div>
         <div
           aria-hidden="true"

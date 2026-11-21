@@ -653,6 +653,33 @@ describe("autonomy caps (C-015)", () => {
   })
 })
 
+describe("the review load (D-089)", () => {
+  it("adds up the review the last hour's allowed changes need, each call once, and warns above your capacity", async () => {
+    const dir = path.join(root, "audit-d089")
+    const audit = new HostAudit(new AuditWriter({ dir, redact: (v) => redact(v, { terms: [] }) }))
+    const v = (outcome: "allow" | "deny", risk = 10) => ({ outcome, ruleId: "r", reason: "", risk, decidedBy: "rules" as const, policyHash: "h" })
+    const rec = (tool: string, input: unknown, outcome: "allow" | "deny", toolUseId: string, risk = 10) =>
+      audit.record({ session: "s", event: "decision", channel: "host", tool, toolUseId, cwd: root, input, verdict: v(outcome, risk), latencyMs: 0 })
+    const fifty = Array.from({ length: 50 }, (_, i) => `line ${i}`).join("\n")
+    await rec("Write", { file_path: "a.ts", content: fifty }, "allow", "t1") // 50 lines at five a minute, and a minute for the file: 11
+    await rec("Write", { file_path: "a.ts", content: fifty }, "allow", "t1") // the same call recorded twice: once
+    await rec("Edit", { file_path: "b.ts", old_string: "x", new_string: "y" }, "allow", "t2", 90) // (1/5 + 1) * 2 = 3
+    await rec("Write", { file_path: "c.ts", content: fifty }, "deny", "t3") // denied: not counted
+    await rec("Bash", { command: "npm test" }, "allow", "t4") // not a change
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, auditDir: dir, audit, config: () => ({ ...ctx.config(), reviewCapacityMinutes: 10 }) } as never)
+    const app3 = Fastify()
+    registerApi(app3, { ...ctx, auditDir: dir, audit } as never)
+    try {
+      expect((await app2.inject({ method: "GET", url: "/api/review-load" })).json()).toEqual({ lastHour: { minutes: 14, changes: 2 }, capacity: 10, over: true })
+      expect((await app3.inject({ method: "GET", url: "/api/review-load" })).json()).toEqual({ lastHour: { minutes: 14, changes: 2 } })
+    } finally {
+      await app2.close()
+      await app3.close()
+    }
+  })
+})
+
 describe("loosening waits after its phrase; tightening applies at once (D-024)", () => {
   it("keeps a rules change that removes a deny or an ask until the wait is over, and saves one that adds a rule at once", async () => {
     const { LooseningStore } = await import("../src/loosening.js")

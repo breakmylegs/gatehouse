@@ -65,6 +65,7 @@ interface Config {
   projectsFolder?: string
   digestTime?: string | null
   noticeBatchMinutes?: number
+  reviewCapacityMinutes?: number
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   /** E-094: minutes the phone and the push channels wait before they are told; absent, all at once. */
   escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number; onlyWhenHere?: boolean }
@@ -164,6 +165,8 @@ interface Values {
   digestAt: string
   /** D-087: minutes between summaries of non-urgent notices; "" sends each at once. */
   batchMinutes: string
+  /** D-089: minutes of review an hour; "" for no warning. */
+  reviewCapacity: string
   terms: string
   writeUk: boolean
   writeDashes: boolean
@@ -269,6 +272,7 @@ export function valuesOf(d: SettingsData): Values {
     digestOn: c.digestTime !== null,
     digestAt: c.digestTime ?? "08:00",
     batchMinutes: c.noticeBatchMinutes ? String(c.noticeBatchMinutes) : "",
+    reviewCapacity: c.reviewCapacityMinutes ? String(c.reviewCapacityMinutes) : "",
     terms: c.redactTerms.join("\n"),
     teamKeys: (c.redactionListKeys ?? []).join("\n"),
     packKeys: (c.rulePackKeys ?? []).join("\n"),
@@ -415,6 +419,8 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   body.digestTime = v.digestOn ? v.digestAt : null
   if (v.batchMinutes) body.noticeBatchMinutes = Number(v.batchMinutes)
   else delete body.noticeBatchMinutes
+  if (v.reviewCapacity) body.reviewCapacityMinutes = Number(v.reviewCapacity)
+  else delete body.reviewCapacityMinutes
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
   // Anything a newer version keeps beside the limits stays.
@@ -589,6 +595,7 @@ export const DEFAULT_VALUES: Values = {
   digestOn: true,
   digestAt: "08:00",
   batchMinutes: "",
+  reviewCapacity: "",
   terms: "",
   writeUk: true,
   writeDashes: true,
@@ -1809,6 +1816,21 @@ export function Settings() {
                   />
                 </Field>
               ) : null}
+            </Group>
+
+            <Group section="sessions" title="Review load" gap="gap-2" changed={differs(v, ["reviewCapacity"])}>
+              <Field
+                label="Minutes of review you can give an hour"
+                help="Each change waiting for you shows about how long it takes to review. When the changes allowed in the last hour need more than this, Approvals warns you."
+              >
+                <select className="field w-48" value={v.reviewCapacity} onChange={(e) => change({ reviewCapacity: e.target.value }, "Review load")}>
+                  <option value="">No warning</option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="45">45 minutes</option>
+                  <option value="60">60 minutes</option>
+                </select>
+              </Field>
             </Group>
 
             <Group section="phone" title="Fewer interruptions" gap="gap-2" changed={differs(v, ["batchMinutes"])}>

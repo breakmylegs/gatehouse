@@ -11,6 +11,7 @@ import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
 import { ExplainDecision } from "./ExplainDecision"
+import { minutesWords, reviewEstimate } from "./ReviewLoad"
 import { FileChip } from "./FileChip"
 import { api } from "../lib/api"
 import { attachedName } from "../lib/attachments"
@@ -431,6 +432,13 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                     {req.effects.undo}
                   </span>
                 </dd>
+              </>
+            ) : null}
+            {reviewEstimate(req.toolName, view.rawInput, req.verdict.risk) !== undefined ? (
+              <>
+                {/* D-089: about how long this change takes to review. */}
+                <dt className="text-mut">Review</dt>
+                <dd className="m-0">{minutesWords(reviewEstimate(req.toolName, view.rawInput, req.verdict.risk)!)} to review</dd>
               </>
             ) : null}
             {req.touches?.length ? (
