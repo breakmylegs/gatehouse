@@ -1602,6 +1602,8 @@ export function createHost(opts: HostOptions = {}): Host {
     heldOut,
     heldOutExec: actionFor,
     mutationExec: mutationExecFor,
+    // D-012: a fuzz pass's runs, judged and boxed like any Codehouse action.
+    fuzzExec: (id: string) => actionFor(id, "a time-boxed fuzz pass of the changed parsing functions"),
     dataDir: gatehouseDataDir(env),
     locks,
     evidence,

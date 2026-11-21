@@ -46,6 +46,14 @@ interface Draft {
   markdown: string
 }
 
+/** D-012: what a fuzz pass found, as the Host reports it. */
+interface FuzzReport {
+  targets: Array<{ file: string; fn: string }>
+  findings: Array<{ file: string; fn: string; kind: "crash" | "memory" | "hang"; error: string; written?: string }>
+  calls: number
+  refused?: string
+}
+
 /** D-034: a hunk neither the plan nor a requirement accounts for. */
 interface Untraced {
   file: string
@@ -160,6 +168,9 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   // D-004: the last mutation run's report, and whether one is running.
   const [mutation, setMutation] = useState<MutationReport>()
   const [mutating, setMutating] = useState(false)
+  // D-012: the last fuzz pass.
+  const [fuzzing, setFuzzing] = useState(false)
+  const [fuzz, setFuzz] = useState<FuzzReport>()
   const load = useCallback(async () => {
     const r = await send({ type: "changes", sessionId, ...(ref ? { ref } : {}) })
     if (!r.ok) {
@@ -602,6 +613,21 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
             >
               {mutating ? "Testing the tests…" : "Test the tests"}
             </button>
+            {/* D-012: the changed parsing functions, fuzzed for a minute at most. */}
+            <button
+              type="button"
+              className="btn"
+              disabled={fuzzing}
+              onClick={async () => {
+                setFuzzing(true)
+                const r = await send({ type: "fuzz_run", sessionId, ref: since.ref })
+                setFuzzing(false)
+                if (!r.ok) return void toast.error(r.error?.message ?? "The fuzz pass could not run")
+                setFuzz(r.data as FuzzReport)
+              }}
+            >
+              {fuzzing ? "Fuzzing…" : "Fuzz the parsers"}
+            </button>
             {files.some((f) => LOCKFILE.test(f.path)) ? (
               <button
                 type="button"
@@ -627,6 +653,29 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
         </>
       )}
 
+      {fuzz ? (
+        <section aria-label="Fuzz pass" className="panel grid gap-1.5 p-2.5 text-[13px]">
+          <h3 className="m-0 text-[13.5px] font-semibold">
+            {fuzz.refused
+              ? `Not run: ${fuzz.refused}.`
+              : fuzz.targets.length === 0
+                ? "No changed parsing function to fuzz (an exported parse, decode, tokenise, lex or deserialise in a changed JavaScript or TypeScript file)."
+                : fuzz.findings.length === 0
+                  ? `Nothing found in ${fuzz.calls.toLocaleString("en-GB")} calls to ${fuzz.targets.length} parsing function${fuzz.targets.length === 1 ? "" : "s"}.`
+                  : `${fuzz.findings.length} finding${fuzz.findings.length === 1 ? "" : "s"} in ${fuzz.calls.toLocaleString("en-GB")} calls; each input is offered to pin as a test.`}
+          </h3>
+          {fuzz.findings.length ? (
+            <ul className="m-0 grid gap-0.5 pl-5">
+              {fuzz.findings.map((x) => (
+                <li key={`${x.file}:${x.fn}`}>
+                  <span className="mono">{x.fn}</span> in <span className="mono">{x.file}</span>: {x.kind === "crash" ? x.error : x.kind === "memory" ? "ran out of memory" : "hung"}
+                  {x.written ? <span className="text-mut">, input in <span className="mono">{x.written}</span></span> : null}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : null}
       {mutation ? (
         <section aria-label="Mutation run" className="panel grid gap-1.5 p-2.5 text-[13px]">
           <h3 className="m-0 text-[13.5px] font-semibold">

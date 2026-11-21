@@ -288,6 +288,13 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-012: a time-boxed fuzz pass of the changed files' parsing functions; findings are offered to pin. */
+  z.object({
+    type: z.literal("fuzz_run"),
+    sessionId: Id,
+    ref: z.string().min(1).max(500).optional(),
+    seed: z.number().int().min(0).max(2 ** 31).optional(),
+  }),
   /** D-003: gathers the change since the checkpoint (the first, by default) into an evidence pack, kept and recorded. */
   z.object({
     type: z.literal("evidence_build"),

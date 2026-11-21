@@ -1,3 +1,4 @@
+import { ensureRunner, fuzzTargets, pinLines, runFuzz } from "./fuzz.js"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { TerminalScrollback } from "./terminal-scrollback.js"
 import { RubberStamp } from "./rubber-stamp.js"
@@ -105,6 +106,8 @@ export interface HostApp {
   dataDir?: string
   /** D-004: a mutation run's test runs, as Codehouse actions. */
   mutationExec?: (sessionId: string) => import("./mutation.js").MutationExec
+  /** D-012: a fuzz pass's runs, as Codehouse actions. */
+  fuzzExec?: (sessionId: string) => import("./fuzz.js").FuzzExec
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1061,6 +1064,38 @@ export class HostServer {
           input: { tool: report.tool, mutants: report.mutants, killed: report.killed, survived: report.survived.length, ...(report.score !== undefined ? { score: report.score } : {}), ...(report.aborted ? { aborted: report.aborted } : {}) },
           verdict: { outcome: "allow", ruleId: "mutation-run", reason: report.aborted ? `A mutation run stopped: ${report.aborted}.` : "The tests were run against small changes to the change's new lines.", risk: 0, decidedBy: "rules", policyHash: "n/a" },
           latencyMs: 0,
+        })
+        return report
+      }
+      case "fuzz_run": {
+        // D-012: the changed files' parsing functions, fuzzed within a time box and a heap cap, as Codehouse actions.
+        const s = this.#session(cmd.sessionId)
+        if (!a.fuzzExec || !a.dataDir) throw new CommandError("unavailable", "Fuzz passes are not available here.")
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to fuzz.")
+        const changes: Array<{ path: string; text: string }> = []
+        for (const x of c.files.filter((x) => x.change !== "deleted" && !x.binary && /\.[cm]?[jt]s$/i.test(x.path)).slice(0, 30)) {
+          const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path).catch(() => undefined)
+          if (v?.after !== undefined) changes.push({ path: x.path, text: v.after })
+        }
+        const targets = fuzzTargets(changes)
+        if (!targets.length) return { targets: [], findings: [], calls: 0, ms: 0 }
+        const scratch = path.join(os.tmpdir(), `codeh-fuzz-${s.id}-${Date.now().toString(36)}`)
+        const report = await runFuzz({ root: s.cwd, targets, exec: a.fuzzExec(s.id), runner: await ensureRunner(a.dataDir), scratch, seed: cmd.seed ?? 1 }).finally(() =>
+          fs.rmSync(scratch, { recursive: true, force: true }),
+        )
+        s.noteTestOutput(pinLines(report))
+        await a.audit.record({
+          session: s.id,
+          event: "fuzz_run",
+          channel: "host",
+          tool: "fuzz",
+          cwd: s.cwd,
+          project: s.project,
+          // Counts and where each finding was written; never the inputs themselves.
+          input: { targets: report.targets.length, calls: report.calls, findings: report.findings.map((f) => ({ fn: f.fn, kind: f.kind, written: f.written })), ...(report.refused ? { refused: report.refused } : {}) },
+          verdict: { outcome: "allow", ruleId: "fuzz-run", reason: report.refused ? `A fuzz pass did not run: ${report.refused}.` : `The changed parsing functions were fuzzed: ${report.findings.length} finding(s).`, risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: report.ms,
         })
         return report
       }

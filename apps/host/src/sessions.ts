@@ -1842,6 +1842,11 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /** D-023: the lease from the desktop, or none. Recorded first; refused if it cannot be recorded. */
+  /** D-012: output from a run Codehouse made for this session (a fuzz pass), read for counterexamples to pin. */
+  noteTestOutput(output: string): void {
+    if (output && this.#pins.noteOutput(output)) this.emit("state", this.info())
+  }
+
   async setLease(paths: string[] | undefined, commands: string[] | undefined): Promise<void> {
     let lease: ScopeLease | undefined
     if (paths !== undefined) {
