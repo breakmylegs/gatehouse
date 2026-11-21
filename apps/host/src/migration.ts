@@ -68,7 +68,12 @@ export function wavesOf(files: Array<{ file: string; text: string }>): string[][
     const reach = (f: string) => {
       const seen = new Set([f])
       const stack = [f]
-      while (stack.length) for (const d of deps.get(stack.pop()!)!) if (!done.has(d) && !seen.has(d)) (seen.add(d), stack.push(d))
+      while (stack.length)
+        for (const d of deps.get(stack.pop()!)!)
+          if (!done.has(d) && !seen.has(d)) {
+            seen.add(d)
+            stack.push(d)
+          }
       return seen
     }
     const groups = left.map((f) => [...reach(f)].sort())
