@@ -10,6 +10,7 @@ import { isMac, keyLabel, onMac } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
+import { ExplainDecision } from "./ExplainDecision"
 import { FileChip } from "./FileChip"
 import { api } from "../lib/api"
 import { attachedName } from "../lib/attachments"
@@ -467,7 +468,10 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               </>
             ) : null}
             <dt className="text-mut">Why</dt>
-            <dd className="m-0">{req.verdict.reason}</dd>
+            <dd className="m-0 grid gap-1">
+              <span>{req.verdict.reason}</span>
+              {req.kind === "permission" ? <ExplainDecision id={req.id} /> : null}
+            </dd>
             <dt className="text-mut">Status</dt>
             <dd className="m-0">
               {PHONE_TEXT[view.phone]}

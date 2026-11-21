@@ -185,6 +185,9 @@ describe("policy endpoints", () => {
       cwd: root,
     })
     expect(d.json().outcome).not.toBe("allow")
+    // D-020: with how it was decided and what would change it.
+    expect(r.json().explain).toMatchObject({ fixed: false, change: expect.stringMatching(/allow rule/) })
+    expect(r.json().explain.trace[0]).toMatchObject({ stage: "Floor", result: "passed" })
     expect((await get("/api/audit?limit=50")).records.length).toBe(before)
     for (const bad of [
       {},
@@ -192,6 +195,31 @@ describe("policy endpoints", () => {
       { toolName: "", input: {}, cwd: root },
     ]) {
       expect((await post(bad)).statusCode).toBe(400)
+    }
+  })
+
+  it("explains a request waiting for you, redacted, and says a check beyond the rules asked it (D-020)", async () => {
+    const { Broker } = await import("../src/broker.js")
+    const broker = new Broker({ phoneExpiryMs: 60_000, hardTimeoutMs: 120_000, redact: (v) => v })
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, broker, config: () => ({ ...ctx.config(), redactTerms: ["AcmeCorp"] }) } as never)
+    const ask = (command: string, ruleId: string) =>
+      void broker.request({ kind: "permission", sessionId: "s1", toolUseId: ruleId, toolName: "Bash", input: { command }, cwd: root, project: "p", verdict: { outcome: "escalate", ruleId, reason: "because", risk: 50, decidedBy: "rules", policyHash: "h" } })
+    try {
+      ask("make AcmeCorp", "no-rule")
+      ask("make all", "AcmeCorp-check")
+      const [plain, beyond] = broker.list()
+      const x = (await app2.inject({ method: "GET", url: `/api/pending/${plain!.request.id}/explain` })).json()
+      expect(x).toMatchObject({ fixed: false, outcome: "escalate", ruleId: "no-rule", change: expect.stringMatching(/an allow rule covered it/) })
+      expect(JSON.stringify(x)).not.toContain("AcmeCorp")
+      const y = (await app2.inject({ method: "GET", url: `/api/pending/${beyond!.request.id}/explain` })).json()
+      expect(y.trace.at(-1)).toMatchObject({ stage: "Session checks" })
+      expect(y.change).toMatch(/^It was asked by .+, a check Codehouse makes beyond the rules/)
+      expect(JSON.stringify([y.trace, y.change])).not.toContain("AcmeCorp")
+      expect((await app2.inject({ method: "GET", url: "/api/pending/nope/explain" })).statusCode).toBe(404)
+    } finally {
+      broker.cancelAll()
+      await app2.close()
     }
   })
 

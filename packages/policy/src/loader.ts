@@ -233,6 +233,8 @@ export function loadPolicy(opts: LoadOptions): Policy {
     rules.allow = rules.allow.filter((r) => !removed.has(r.id))
     rules.deny = [...rules.deny, ...(managed.deny ?? [])]
     rules.escalate = [...rules.escalate, ...(managed.escalate ?? [])]
+    // D-020: so an explanation can say only IT can change these.
+    for (const r of [...(managed.deny ?? []), ...(managed.escalate ?? [])]) sources[r.id] = "managed"
   }
 
   const ids = new Set<string>()

@@ -1010,7 +1010,30 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     )
       return bad(reply, 400, "Give toolName, input (an object) and cwd.")
     // Evaluating here writes nothing to the audit log: it is a dry run for the person at the desk.
-    return await ctx.engine.evaluate({ toolName: b.toolName, input: b.input }, { cwd: b.cwd })
+    // D-020: with the stages it went through and what would change it, beside the verdict as before.
+    const x = await ctx.engine.explain({ toolName: b.toolName, input: b.input }, { cwd: b.cwd })
+    return { ...x.verdict, explain: { trace: x.trace, fixed: x.fixed, ...(x.change ? { change: x.change } : {}) } }
+  })
+
+  // D-020: why a request waiting for you was asked, stage by stage, and what would change it. The same rules judge it
+  // again here, read only; nothing is recorded or decided. What it shows is redacted like the card.
+  app.get("/api/pending/:id/explain", async (req, reply) => {
+    const view = ctx.broker?.get((req.params as { id: string }).id)
+    if (!view || view.request.kind !== "permission") return bad(reply, 404, "There is no such request waiting.")
+    const x = await ctx.engine.explain({ toolName: view.request.toolName, input: view.rawInput }, { cwd: view.request.cwd })
+    const redact = (s: string) => redactString(s, { terms: ctx.config().redactTerms })
+    // A check the session makes beyond the rules (a value read from the web, a locked test, a spent grant) asked it.
+    const asked = view.request.verdict
+    const beyond = asked.ruleId !== x.verdict.ruleId || asked.outcome !== x.verdict.outcome
+    const trace = beyond ? [...x.trace, { stage: "Session checks", result: `${asked.outcome} by ${asked.ruleId}`, rules: [asked.ruleId] }] : x.trace
+    const change = beyond ? `It was asked by ${asked.ruleId}, a check Codehouse makes beyond the rules, which no rule switches off: ${asked.reason}` : x.change
+    return {
+      trace: trace.map((t) => ({ ...t, result: redact(t.result), ...(t.rules ? { rules: t.rules.map(redact) } : {}) })),
+      fixed: asked.decidedBy === "floor" || (!beyond && x.fixed),
+      ...(change && asked.decidedBy !== "floor" ? { change: redact(change) } : {}),
+      outcome: asked.outcome,
+      ruleId: redact(asked.ruleId),
+    }
   })
 
   app.post("/api/policy/replay", async (req, reply) => {

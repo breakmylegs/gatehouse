@@ -2,6 +2,7 @@ import fs from "node:fs"
 import { nugetSignatureFindings } from "./nuget-signature.js"
 import path from "node:path"
 import type { Outcome, Verdict } from "@gatehouse/shared"
+import { counterfactual, type Explanation, type TraceStep } from "./explain.js"
 import { analyse, BUILTIN_KNOWN_TOOLS, type Features } from "./analyse.js"
 import { checkCallFloor } from "./floor.js"
 import { DEFAULT_LICENCES, licenceFindings } from "./licences.js"
@@ -292,7 +293,35 @@ export class PolicyEngine {
     return eff
   }
 
-  async #evaluate(call: ToolCall, ctx: EvalContext, policy: Policy): Promise<Verdict> {
+  /**
+   * D-020: the decision with how it was reached, stage by stage, and the smallest change that would alter it. The same
+   * evaluation as evaluate(), so it is as deterministic; a floor decision is fixed and offers no change.
+   */
+  async explain(call: ToolCall, ctx: EvalContext): Promise<Explanation> {
+    const trace: TraceStep[] = []
+    const policy = this.#getPolicy()
+    if (!policy) {
+      const v = this.#verdict("escalate", BUILTIN.noPolicy, "none", "rules")
+      return { verdict: v, trace: [{ stage: "Rules", result: "none are loaded" }], fixed: false, change: "Load Codehouse's rules (Policy page); with none, every call asks." }
+    }
+    let judged: Verdict
+    try {
+      const v = await this.#evaluate(call, ctx, policy, trace)
+      judged = call.toolName === "Bash" || call.toolName === "PowerShell" ? await this.#withEffects(call, ctx, policy, v) : v
+      if (judged.ruleId !== v.ruleId || judged.outcome !== v.outcome)
+        trace.push({ stage: "What it also runs", result: `${judged.outcome} by ${judged.ruleId}`, rules: [judged.ruleId] })
+    } catch {
+      judged = this.#verdict("escalate", BUILTIN.engineError, policy.hash, "rules")
+      trace.push({ stage: "Evaluation", result: "failed, so it asks (fail closed)" })
+    }
+    trace.push({ stage: "Outcome", result: `${judged.outcome} by ${judged.ruleId}`, rules: [judged.ruleId] })
+    return { verdict: judged, trace, ...counterfactual(judged, trace, policy) }
+  }
+
+  async #evaluate(call: ToolCall, ctx: EvalContext, policy: Policy, trace?: TraceStep[]): Promise<Verdict> {
+    const step = (stage: string, result: string, rules?: string[]) => {
+      trace?.push(rules?.length ? { stage, result, rules } : { stage, result })
+    }
     const rootKeyPath = ctx.projectRoot ?? findProjectRoot(ctx.cwd)
     const projectName = path.basename(rootKeyPath).toLowerCase()
     const rootKey = realKey(rootKeyPath)
@@ -301,12 +330,18 @@ export class PolicyEngine {
     const hash = policy.hash
 
     const floor = checkCallFloor(call, f, ctx, policy.rules.floor)
+    step("Floor", floor ? `denied by ${floor.ruleId}` : "passed", floor ? [floor.ruleId] : undefined)
     if (floor) return this.#verdict("deny", { ...floor, risk: 100 }, hash, "floor")
     // After the floor, before any rule: no rule of yours can send a listed term out to the web.
     const out = sentToWeb(call)
-    if (out !== undefined && holdsTerm(out, this.#sensitive()))
+    if (out !== undefined && holdsTerm(out, this.#sensitive())) {
+      step("Listed terms", "a term on your list would be sent to the web", [BUILTIN.webQuery.ruleId])
       return this.#verdict("deny", BUILTIN.webQuery, hash, "rules")
-    if (f.malformed) return this.#verdict("escalate", BUILTIN.malformed, hash, "rules")
+    }
+    if (f.malformed) {
+      step("Input", "could not be read", [BUILTIN.malformed.ruleId])
+      return this.#verdict("escalate", BUILTIN.malformed, hash, "rules")
+    }
 
     const input = (call.input ?? {}) as Record<string, unknown>
     const env: MatchEnv = {
@@ -331,6 +366,8 @@ export class PolicyEngine {
       if (m.call) callDeny ??= cand
       for (const i of m.segs) if (!segDeny.has(i)) segDeny.set(i, cand)
     }
+    const denied = [...new Set([...(callDeny ? [callDeny.ruleId] : []), ...[...segDeny.values()].map((c) => c.ruleId)])]
+    step("Deny rules", denied.length ? `matched ${denied.join(", ")}` : "none matched", denied)
     if (callDeny) return this.#verdict("deny", callDeny, hash, "rules", segmentVerdicts(f, segDeny, new Map()))
     const firstSegDeny = [...segDeny.values()][0]
     if (firstSegDeny) return this.#verdict("deny", firstSegDeny, hash, "rules", segmentVerdicts(f, segDeny, new Map()))
@@ -338,10 +375,17 @@ export class PolicyEngine {
     // D-053: a dependency the project does not use yet goes to a person; one models are known to invent is refused.
     const deps = this.#dependencies(call, input, ctx, rootKeyPath, policy)
     const refused = deps.find((d): d is DependencyFinding => "outcome" in d && d.outcome === "deny")
+    if (deps.length) step("Dependencies", refused ? `refused by ${refused.ruleId}` : "new ones to judge", deps.map((d) => d.ruleId))
     if (refused) return this.#verdict("deny", refused, hash, "rules")
 
-    if (f.parseError) return this.#verdict("escalate", BUILTIN.parseError, hash, "rules")
-    if (f.unavailable) return this.#verdict("escalate", BUILTIN.unavailable, hash, "rules")
+    if (f.parseError) {
+      step("Parse", "the command could not be parsed", [BUILTIN.parseError.ruleId])
+      return this.#verdict("escalate", BUILTIN.parseError, hash, "rules")
+    }
+    if (f.unavailable) {
+      step("Parse", "the PowerShell parser was not available", [BUILTIN.unavailable.ruleId])
+      return this.#verdict("escalate", BUILTIN.unavailable, hash, "rules")
+    }
 
     // Remember rules sit after floor and deny, before escalate.
     const segRemembered = new Map<number, string>()
@@ -352,6 +396,9 @@ export class PolicyEngine {
       if (m.call) callRemembered ??= rule.id
       for (const i of m.segs) if (!segRemembered.has(i)) segRemembered.set(i, rule.id)
     }
+
+    const remembered = [...new Set([...(callRemembered ? [callRemembered] : []), ...segRemembered.values()])]
+    step("Remembered rules", remembered.length ? `matched ${remembered.join(", ")}` : "none matched", remembered)
 
     const escalations: Candidate[] = []
     const segEscalate = new Map<number, Candidate>()
@@ -433,6 +480,9 @@ export class PolicyEngine {
       })
     }
 
+    const builtins = [...new Set(escalations.map((c) => c.ruleId))]
+    step("Built-in checks", builtins.length ? `asked: ${builtins.join(", ")}` : "none asked", builtins)
+    const asked: string[] = []
     for (const rule of eff.escalate) {
       const m = matchRule(rule, env, "any", false)
       if (!m) continue
@@ -441,6 +491,7 @@ export class PolicyEngine {
         reason: rule.message ?? `Needs your approval (rule ${rule.id}).`,
         risk: rule.risk ?? 50,
       }
+      if ((m.call && callRemembered === undefined) || [...m.segs].some((i) => !segRemembered.has(i))) asked.push(rule.id)
       if (m.call && callRemembered === undefined) escalations.push(cand)
       for (const i of m.segs) {
         if (segRemembered.has(i)) continue
@@ -454,6 +505,8 @@ export class PolicyEngine {
       if (seg.writes) bump(segEscalate, i, BUILTIN.redirect)
     })
 
+    step("Ask rules", asked.length ? `matched ${asked.join(", ")}` : "none matched", asked)
+
     // Allow rules.
     let callAllow: Rule | undefined
     const segAllow = new Map<number, Rule>()
@@ -463,6 +516,8 @@ export class PolicyEngine {
       if (m.call) callAllow ??= rule
       for (const i of m.segs) if (!segAllow.has(i)) segAllow.set(i, rule)
     }
+    const allowed = [...new Set([...(callAllow ? [callAllow.id] : []), ...[...segAllow.values()].map((r) => r.id)])]
+    step("Allow rules", allowed.length ? `matched ${allowed.join(", ")}` : "none matched", allowed)
 
     const segOutcomes = new Map<number, { ruleId: string; outcome: Outcome }>()
     f.segments.forEach((_seg, i) => {
