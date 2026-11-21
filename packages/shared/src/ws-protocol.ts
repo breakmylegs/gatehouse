@@ -288,6 +288,15 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-067: a migration planned in waves from a folder's imports, and each wave's evidence (capture before, compare after). */
+  z.object({ type: z.literal("migration_plan"), sessionId: Id, folder: z.string().max(300), goal: z.string().min(1).max(300) }),
+  z.object({
+    type: z.literal("migration_wave"),
+    sessionId: Id,
+    planId: z.string().regex(/^[0-9a-f]{12}$/),
+    wave: z.number().int().min(1).max(300),
+    step: z.enum(["capture", "compare", "ask"]),
+  }),
   /** D-012: a time-boxed fuzz pass of the changed files' parsing functions; findings are offered to pin. */
   z.object({
     type: z.literal("fuzz_run"),

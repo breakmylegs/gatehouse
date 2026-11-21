@@ -1,3 +1,4 @@
+import { MigrationStore, planMigration, sourcesIn, waveState, wavePrompt, type MigrationPlan } from "./migration.js"
 import { ensureRunner, fuzzTargets, pinLines, runFuzz } from "./fuzz.js"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { TerminalScrollback } from "./terminal-scrollback.js"
@@ -14,7 +15,7 @@ import { execFile as execFileCb } from "node:child_process"
 import { provenanceGraph } from "./provenance-graph.js"
 import { sessionRecords } from "./timeline.js"
 import { UNTRUSTED_FILES } from "./provenance.js"
-import { behaviourDiff, capture, looksUntested, type BehaviourDelta, type Capture } from "./characterise.js"
+import { behaviourDiff, capture, exportedFunctions, looksUntested, type BehaviourDelta, type Capture } from "./characterise.js"
 import { listFiles, TEST_FILE } from "./mutation.js"
 import { writeFileAtomic } from "@gatehouse/shared/node"
 import { createHash } from "node:crypto"
@@ -1066,6 +1067,68 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "migration_plan": {
+        // D-067: waves from the folder's own imports, leaves first; each file's callable exports found as D-066 finds them.
+        const s = this.#session(cmd.sessionId)
+        if (!a.dataDir) throw new CommandError("unavailable", "Migration plans are not available here.")
+        const folder = path.posix.normalize(cmd.folder.replace(/\\/g, "/") || ".")
+        if (folder.startsWith("..") || path.isAbsolute(folder)) throw new CommandError("bad-folder", "Give a folder inside the project.")
+        const files = sourcesIn(s.cwd, folder)
+        if (!files.length) throw new CommandError("no-files", "That folder has no JavaScript or TypeScript source files.")
+        const plan = await planMigration({ root: s.cwd, goal: cmd.goal, files, callable: async (f, t) => (await exportedFunctions(f, t).catch(() => [])).length > 0 })
+        await new MigrationStore(path.join(a.dataDir, "migrations")).save(plan)
+        await a.audit.record({
+          session: s.id, event: "migration_planned", channel: "desktop", tool: "migration", cwd: s.cwd, project: s.project,
+          input: { planId: plan.id, waves: plan.waves.length, files: files.length },
+          verdict: { outcome: "allow", ruleId: "migration-planned", reason: `A migration was planned in ${plan.waves.length} waves.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { plan, states: plan.waves.map(waveState) }
+      }
+      case "migration_wave": {
+        // D-067: a wave's evidence: its callable files captured before it changes, then compared after; or Claude asked to do it.
+        const s = this.#session(cmd.sessionId)
+        if (!a.dataDir) throw new CommandError("unavailable", "Migration plans are not available here.")
+        const store = new MigrationStore(path.join(a.dataDir, "migrations"))
+        let plan: MigrationPlan
+        try {
+          plan = store.get(cmd.planId)
+        } catch {
+          throw new CommandError("no-plan", "There is no such migration plan.")
+        }
+        const w = plan.waves.find((x) => x.n === cmd.wave)
+        if (!w) throw new CommandError("no-wave", `There is no wave ${cmd.wave}.`)
+        if (cmd.step === "ask") {
+          s.prompt(wavePrompt(plan, cmd.wave))
+          return { plan, states: plan.waves.map(waveState) }
+        }
+        if (!a.mutationExec) throw new CommandError("unavailable", "Captures are not available here.")
+        const redact = (x: string) => redactString(x, { terms: a.admin?.config().redactTerms ?? [] })
+        const stamp = Date.now().toString(36)
+        const failed: Array<{ file: string; why: string }> = []
+        for (const f of w.files.filter((x) => x.callable && (cmd.step === "capture" || x.captured))) {
+          const text = fs.readFileSync(path.join(s.cwd, f.file), "utf8")
+          try {
+            if (cmd.step === "capture") {
+              const cap = await capture({ root: s.cwd, file: f.file, before: text, from: `before wave ${w.n}`, exec: a.mutationExec(s.id), sandbox: (n) => path.join(os.tmpdir(), `codeh-migrate-${s.id}-${stamp}-${n}`), redact })
+              await store.captured(plan, f.file, cap)
+            } else {
+              const deltas = await behaviourDiff({ root: s.cwd, capture: store.capture(plan, f.file), now: text, exec: a.mutationExec(s.id), sandbox: path.join(os.tmpdir(), `codeh-migrate-${s.id}-${stamp}-c`), redact })
+              await store.compared(plan, f.file, deltas)
+            }
+          } catch (e) {
+            failed.push({ file: f.file, why: (e as Error).message.slice(0, 300) })
+          }
+        }
+        const state = waveState(w)
+        await a.audit.record({
+          session: s.id, event: cmd.step === "capture" ? "migration_captured" : "migration_compared", channel: "desktop", tool: "migration", cwd: s.cwd, project: s.project,
+          input: { planId: plan.id, wave: w.n, done: state.done, changed: state.changed, failed: failed.length },
+          verdict: { outcome: "allow", ruleId: cmd.step === "capture" ? "migration-captured" : "migration-compared", reason: `Wave ${w.n}'s behaviour was ${cmd.step === "capture" ? "captured before it changes" : "compared after it changed"}.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { plan, states: plan.waves.map(waveState), failed }
       }
       case "fuzz_run": {
         // D-012: the changed files' parsing functions, fuzzed within a time box and a heap cap, as Codehouse actions.

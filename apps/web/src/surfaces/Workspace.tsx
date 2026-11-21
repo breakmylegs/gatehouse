@@ -9,6 +9,7 @@ import { Architecture } from "../components/Architecture"
 import { TestsFirstBanner, TestsFirstStart } from "../components/TestsFirst"
 import { Requirements } from "../components/Requirements"
 import { Evidence } from "../components/Evidence"
+import { MigrationPanel } from "../components/MigrationPanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
 import { InstructionsReview } from "../components/InstructionsReview"
@@ -396,6 +397,7 @@ function SessionPane({
   const models = useModels()
   // D-003: the change's evidence pack.
   const [evidence, setEvidence] = useState(false)
+  const [migration, setMigration] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -660,6 +662,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Walkthrough...", onSelect: () => setWalkthrough(true) }]),
     ...(chat ? [] : [{ label: "Audit trail...", onSelect: () => setTimeline(true) }]),
     ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
+    // D-067: a migration in waves, with each wave's behaviour captured before and compared after.
+    ...(chat ? [] : [{ label: "Plan a migration...", onSelect: () => setMigration(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
     ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
@@ -907,6 +911,11 @@ function SessionPane({
       {requirements ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {migration ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <MigrationPanel sessionId={session.id} onClose={() => setMigration(false)} />
         </div>
       ) : null}
       {evidence ? (
