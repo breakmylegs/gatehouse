@@ -1,3 +1,4 @@
+import { consumersOf, consumersWords } from "./contract-check.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { LEASE_MODES, outsideLease, SCOPE_LEASE_RULE, type ScopeLease } from "./scope-lease.js"
 import { API_RULE, apiBreak, apiReason, hasApiCompat } from "./api-surface.js"
@@ -328,7 +329,8 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       if (verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit"].includes(toolName)) {
         const root = deps.projectRoot ?? deps.cwd
         const b = await apiBreak(root, toolName, input).catch(() => undefined)
-        if (b) verdict = { ...verdict, outcome: "escalate", ruleId: API_RULE, reason: apiReason(b, hasApiCompat(root)), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+        // D-052: and names the other repositories here that use what it removes.
+        if (b) verdict = { ...verdict, outcome: "escalate", ruleId: API_RULE, reason: apiReason(b, hasApiCompat(root)) + consumersWords(consumersOf(root, b.removed.map((r) => r.name))), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
       }
       // D-036: in tests-first mode, before the tests are approved, an edit to anything but a test file goes to a person.
       if (deps.testsFirst?.() && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName)) {

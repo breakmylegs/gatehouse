@@ -1,3 +1,4 @@
+import { consumersOf, consumersWords } from "./contract-check.js"
 import { LEASE_MODES, outsideLease, type ScopeLease } from "./scope-lease.js"
 import {
   fromOutside,
@@ -313,7 +314,7 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
           if (against.length) return askOutput(adrReason(against))
           // D-046: and one that removes a library's export.
           const b = await apiBreak(root, input.tool_name, toolInput).catch(() => undefined)
-          if (b) return askOutput(apiReason(b))
+          if (b) return askOutput(apiReason(b) + consumersWords(consumersOf(root, b.removed.map((r) => r.name))))
         }
         // D-062: a commit of code rated Severe reaches canUseTool, which sends it to a person.
         if (deps.sast && makesCommit(input.tool_name, toolInput)) {

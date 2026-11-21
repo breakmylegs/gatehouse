@@ -18,7 +18,7 @@ export interface Consumer {
   uses: ConsumerUse[]
 }
 
-const SKIP = new Set(["node_modules", ".git", "dist", "build", "out", "coverage", ".next", "dist-app"])
+const SKIP = new Set(["node_modules", ".git","dist", "build", "out", "coverage", ".next", "dist-app"])
 const SOURCE = /\.(?:[cm]?[jt]s|[jt]sx)$/i
 const MAX_REPOS = 50
 const MAX_FILES = 3000

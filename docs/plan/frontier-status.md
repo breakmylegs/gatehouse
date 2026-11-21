@@ -198,7 +198,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | Id | Title | Status | Branch | Phase | Note |
 |---|---|---|---|---|---|
 | D-012 | Time-boxed fuzz pass | built | feat/d012 | BUILD_REPORT "Frontier D-012" | Safe variant: Codehouse's own seeded property runner (no new dependency) on changed exported parsers, as a Codehouse action, 60 s and a 256 MB heap cap; findings written to testdata/fuzz for D-008. Native fuzzers listed for IT and the owner |
-| D-052 | Multi-repo contract check | todo | | | |
+| D-052 | Multi-repo contract check | built | feat/d052 | BUILD_REPORT "Frontier D-052" | A removed library export names the repositories beside it that depend on the package and import the name, with file and line, in the api-break reason |
 | D-067 | Migration planner with evidence | todo | | | |
 | D-070 | PowerShell modernisation | todo | | | |
 | D-071 | Dependency upgrade with evidence | todo | | | |
