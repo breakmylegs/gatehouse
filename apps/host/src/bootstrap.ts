@@ -242,6 +242,9 @@ export function createHost(opts: HostOptions = {}): Host {
     userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
     // B37: IT's signed policy, when there is one.
     managedDir: managedPolicyDir(env),
+    // C-055: signed shared rule packs, and the keys you trust to sign them (Settings).
+    sharedPacksDir: path.join(gatehouseDataDir(env), "rule-packs"),
+    trustedPackKeys: config.rulePackKeys ?? [],
     ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
     ...(config.projectsFolder ? { extraWorkspaceRoots: [config.projectsFolder] } : {}),
   }

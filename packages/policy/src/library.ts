@@ -1,3 +1,4 @@
+import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import { parse as parseYaml } from "yaml"
@@ -12,7 +13,7 @@ import type { Rule, RulePack, RulesFile, UserRules } from "./types.js"
  */
 
 /** Where a rule in the merged policy came from, for the Library page. */
-export type RuleSource = "base" | `pack:${string}` | "yours"
+export type RuleSource = "base" | `pack:${string}` | "yours" | `shared:${string}`
 
 export function loadLibrary(dir: string | undefined, errors: string[]): RulePack[] {
   if (!dir || !fs.existsSync(dir)) return []
@@ -34,6 +35,57 @@ export function loadLibrary(dir: string | undefined, errors: string[]): RulePack
       packs.push(pack)
     } catch (e) {
       errors.push(`library ${file}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  return packs
+}
+
+/**
+ * C-055: signed shared rule packs, such as a team's, in a folder of their own. Each <pack>.yaml needs <pack>.yaml.sig,
+ * an Ed25519 signature by one of the keys you trust (Settings); one without, or signed by another key, is a load
+ * error, so the policy stays as it was. A pack's rules are on once it is there: its deny and escalate rules always
+ * apply, and its allow rules only where IT's managed policy does not forbid them (the loader decides that).
+ */
+export function loadSharedPacks(dir: string | undefined, trustedKeys: readonly string[], errors: string[]): RulePack[] {
+  if (!dir || !fs.existsSync(dir)) return []
+  const files = fs.readdirSync(dir).filter((f) => /\.ya?ml$/i.test(f)).sort()
+  if (!files.length) return []
+  const keys: crypto.KeyObject[] = []
+  for (const pem of trustedKeys) {
+    try {
+      const k = crypto.createPublicKey(pem)
+      if (k.asymmetricKeyType === "ed25519") keys.push(k)
+      else errors.push("shared packs: a trusted key is not an Ed25519 public key")
+    } catch {
+      errors.push("shared packs: a trusted key could not be read")
+    }
+  }
+  const packs: RulePack[] = []
+  for (const file of files) {
+    try {
+      const data = fs.readFileSync(path.join(dir, file))
+      const sigFile = path.join(dir, `${file}.sig`)
+      if (!fs.existsSync(sigFile)) {
+        errors.push(`shared pack ${file}: it is not signed (${file}.sig)`)
+        continue
+      }
+      const sig = Buffer.from(fs.readFileSync(sigFile, "utf8").trim(), "base64")
+      if (!keys.some((k) => crypto.verify(null, data, k, sig))) {
+        errors.push(`shared pack ${file}: it is not signed by a key you trust, or it was changed after it was signed`)
+        continue
+      }
+      const checked = checkPack(parseYaml(data.toString("utf8")))
+      if (!checked.ok) {
+        errors.push(...checked.errors.map((e) => `shared pack ${file}: ${e}`))
+        continue
+      }
+      const pack = checked.value
+      for (const rule of [...(pack.allow ?? []), ...(pack.escalate ?? []), ...(pack.deny ?? [])])
+        if (!rule.id.startsWith(`${pack.id}-`)) errors.push(`shared pack ${file}: rule ${rule.id} must start with "${pack.id}-"`)
+      if (packs.some((p) => p.id === pack.id)) errors.push(`shared pack ${file}: pack ${pack.id} is there twice`)
+      packs.push(pack)
+    } catch (e) {
+      errors.push(`shared pack ${file}: ${e instanceof Error ? e.message : String(e)}`)
     }
   }
   return packs

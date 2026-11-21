@@ -8,7 +8,7 @@ import { FILE_TOOLS, SHELL_TOOLS } from "./analyse.js"
 import { realKey, resolvePath, toKey } from "./paths.js"
 import { isFullFolder } from "@gatehouse/shared/node" // Mac fork
 import { checkOverlay, checkRememberFile, checkRulesFile } from "./schema.js"
-import { loadLibrary, mergeRules, readUserRules } from "./library.js"
+import { loadLibrary, loadSharedPacks, mergeRules, readUserRules } from "./library.js"
 import type { GrantLimits, Overlay, Policy, RememberFile, Rule, RulesFile } from "./types.js"
 
 export class PolicyLoadError extends Error {
@@ -39,6 +39,9 @@ export interface LoadOptions {
    * project as an overlay: it can add deny and escalate rules and remove allow rules, never allow anything.
    */
   managedDir?: string
+  /** C-055: signed shared rule packs, and the Ed25519 public keys (PEM) trusted to sign them. */
+  sharedPacksDir?: string
+  trustedPackKeys?: readonly string[]
 }
 
 /** The prefix of every error about IT's policy, so the Host can refuse to start sessions on one (B37). */
@@ -210,8 +213,18 @@ export function loadPolicy(opts: LoadOptions): Policy {
   const userRules = readUserRules(opts.userRulesPath, errors)
   const merged = mergeRules({ ...base, workspaceRoots: roots }, packs, userRules, errors)
   const rules: RulesFile = merged.rules
-  // B37: IT's rules last, over everything: tightening only.
   const managed = readManaged(opts.managedDir, errors)
+  // C-055: signed shared packs. Their deny and escalate rules always apply; their allows only where IT allows them
+  // (not when IT's policy sets packAllows: false, and IT's removeAllow below removes any of them as it does any other).
+  const sources: Record<string, string> = { ...merged.sources }
+  for (const pack of loadSharedPacks(opts.sharedPacksDir, opts.trustedPackKeys ?? [], errors)) {
+    rules.deny = [...rules.deny, ...(pack.deny ?? [])]
+    rules.escalate = [...rules.escalate, ...(pack.escalate ?? [])]
+    const allows = managed?.packAllows === false ? [] : (pack.allow ?? [])
+    rules.allow = [...rules.allow, ...allows]
+    for (const r of [...(pack.deny ?? []), ...(pack.escalate ?? []), ...allows]) sources[r.id] = `shared:${pack.id}`
+  }
+  // B37: IT's rules last, over everything: tightening only.
   if (managed) {
     for (const id of managed.removeAllow ?? []) {
       if (!rules.allow.some((r) => r.id === id)) errors.push(`${MANAGED_ERROR}: removeAllow names unknown allow rule ${id}`)
@@ -245,6 +258,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
         const overlay = checked.value
         // T-067: a project's overlay cannot set the organisation's settings; only IT's signed policy can.
         if (overlay.settings !== undefined) errors.push(`overlay ${file}: settings are set only by IT's managed policy`)
+        if (overlay.packAllows !== undefined) errors.push(`overlay ${file}: packAllows is set only by IT's managed policy`)
         if (overlay.project !== undefined && overlay.project.toLowerCase() !== name) {
           errors.push(`overlay ${file}: project "${overlay.project}" does not match the file name`)
         }
@@ -295,7 +309,7 @@ export function loadPolicy(opts: LoadOptions): Policy {
   const hash = sha256Hex(canonicalize({ rules, overlays, remember, ...(approvedDependencies.length ? { approvedDependencies } : {}), ...(managed?.licences ? { managedLicences: managed.licences } : {}), ...(managed?.settings ? { managedSettings: managed.settings } : {}) }))
   return {
     rules,
-    sources: merged.sources,
+    sources: sources as typeof merged.sources,
     ...(managed ? { managed: true } : {}),
     overlays,
     remember,
@@ -363,6 +377,7 @@ export class PolicyStore {
     if (this.#opts.userRulesPath) dirs.add(path.dirname(this.#opts.userRulesPath))
     if (this.#opts.localPath) dirs.add(path.dirname(this.#opts.localPath))
     if (this.#opts.managedDir) dirs.add(this.#opts.managedDir)
+    if (this.#opts.sharedPacksDir) dirs.add(this.#opts.sharedPacksDir)
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) continue
       const watcher = fs.watch(dir, { persistent: false }, (_event, filename) => {

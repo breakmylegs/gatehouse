@@ -215,6 +215,11 @@ export function Sessions() {
         START_WAIT_MS,
       )
       if (!r.ok) {
+        // C-044: the memory governor caps how many run at once; two or more already started are kept and compared.
+        if (r.error?.code === "memory" && ids.length >= 2) {
+          toast(`Memory allowed ${ids.length} of the ${runs} runs, so those ${ids.length} are compared.`)
+          break
+        }
         setBusy(false)
         for (const id of ids) void send({ type: "close_session", sessionId: id })
         setError(

@@ -100,6 +100,8 @@ export const overlaySchema = {
     escalate: { type: "array", items: ruleSchema },
     removeAllow: { type: "array", items: { type: "string" } },
     licences: { type: "array", items: { type: "string" } },
+    // C-055: false stops signed shared rule packs adding allow rules (IT's managed policy only).
+    packAllows: { type: "boolean" },
     // T-067: the organisation's settings, in IT's managed policy only. Any key not listed here is refused, so a
     // policy this version cannot enforce stops sessions instead of being half applied.
     settings: {

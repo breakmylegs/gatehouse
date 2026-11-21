@@ -57,6 +57,7 @@ interface Config {
   redactTerms: string[]
   /** E-086 (absent: UK spelling and no dashes). */
   redactionListKeys?: string[]
+  rulePackKeys?: string[]
   writingRules?: { ukSpelling?: boolean; noDashes?: boolean; terms?: Array<{ use: string; not: string[] }>; banned?: string[] }
   expectedOrg?: string
   workspaceRoots?: string[]
@@ -164,6 +165,7 @@ interface Values {
   writeDashes: boolean
   /** E-080: the trusted keys for team redaction lists, PEM blocks one after another. */
   teamKeys: string
+  packKeys: string
   writeTerms: string
   writeBanned: string
   cpEsc: boolean
@@ -264,6 +266,7 @@ export function valuesOf(d: SettingsData): Values {
     digestAt: c.digestTime ?? "08:00",
     terms: c.redactTerms.join("\n"),
     teamKeys: (c.redactionListKeys ?? []).join("\n"),
+    packKeys: (c.rulePackKeys ?? []).join("\n"),
     writeUk: c.writingRules?.ukSpelling ?? true,
     writeDashes: c.writingRules?.noDashes ?? true,
     writeTerms: (c.writingRules?.terms ?? []).map((t) => `${t.use} = ${t.not.join(", ")}`).join("\n"),
@@ -339,6 +342,10 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   const keysIn = v.teamKeys.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? []
   if (keysIn.length) body.redactionListKeys = keysIn.map((k) => k.trim())
   else delete body.redactionListKeys
+  // C-055: the keys trusted to sign shared rule packs, one PEM block each.
+  const packKeysIn = v.packKeys.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? []
+  if (packKeysIn.length) body.rulePackKeys = packKeysIn.map((k) => k.trim())
+  else delete body.rulePackKeys
   const rl = lines(v.roots)
   if (rl.length) body.workspaceRoots = rl
   else delete body.workspaceRoots
@@ -578,6 +585,7 @@ export const DEFAULT_VALUES: Values = {
   writeUk: true,
   writeDashes: true,
   teamKeys: "",
+  packKeys: "",
   writeTerms: "",
   writeBanned: "",
   cpEsc: true,
@@ -1809,6 +1817,25 @@ export function Settings() {
                   value={v.teamKeys}
                   onChange={(e) => edit({ teamKeys: e.target.value })}
                   onBlur={() => commit("Team redaction lists")}
+                  spellCheck={false}
+                />
+              </Field>
+            </Group>
+
+            <Group section="privacy" title="Shared rule packs" gap="gap-3" changed={differs(v, ["packKeys"])}>
+              <p className="m-0 text-[13px] text-mut">
+                A rule pack your team signed, put in the rule-packs folder in Codehouse's data folder, adds its rules to
+                yours: its deny and ask rules always, its allow rules only where your organisation&apos;s policy does not
+                forbid them. A pack not signed with a key below, or changed after it was signed, stops the policy loading,
+                so the rules stay as they were. Takes effect when Codehouse starts again.
+              </p>
+              <Field label="Trusted keys" help="Your team's public keys, as PEM (BEGIN PUBLIC KEY). Saves when you leave the box.">
+                <textarea
+                  className="field mono"
+                  rows={3}
+                  value={v.packKeys}
+                  onChange={(e) => edit({ packKeys: e.target.value })}
+                  onBlur={() => commit("Shared rule packs")}
                   spellCheck={false}
                 />
               </Field>

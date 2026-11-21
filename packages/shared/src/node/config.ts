@@ -49,6 +49,8 @@ function build(loose: boolean) {
     redactTerms: z.array(z.string()).default([]),
     /** E-080: the public keys (PEM, Ed25519) whose signed team redaction lists may be imported. */
     redactionListKeys: z.array(z.string().max(2000)).max(20).optional(),
+    /** C-055: the Ed25519 public keys (PEM) you trust to sign shared rule packs. Read when the policy loads. */
+    rulePackKeys: z.array(z.string().max(2000)).max(20).optional(),
     /**
      * E-086: writing rules for what Codehouse writes (corrected, listed in the preview) and what agents write (checked,
      * never rewritten). Absent: UK spelling and no dashes, the house style. Read tolerantly by the Host.
@@ -287,6 +289,8 @@ function build(loose: boolean) {
        * this computer (never a gateway), only a model listed there; it can only lower a claim, never raise one.
        */
       claimJudge: obj({ model: z.string().regex(/^[\w.:/-]{1,100}$/) }).optional(),
+      /** C-043: a model on the runtime or gateway above that reviews a session's change when you ask. It has no tools. */
+      reviewer: obj({ model: z.string().regex(/^[\w.:/-]{1,100}$/) }).optional(),
       /**
        * Where your words go, for each provider (B17): what it keeps, whether it trains on them, where, whether it has
        * zero data retention, and when and where you checked. Codehouse cannot see these itself; you record them.

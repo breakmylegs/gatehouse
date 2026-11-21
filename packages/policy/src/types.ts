@@ -81,6 +81,8 @@ export interface Overlay {
   licences?: string[]
   /** T-067: the organisation's settings. Read from the managed policy only. */
   settings?: ManagedSettings
+  /** C-055: false stops signed shared rule packs adding allow rules. Read from the managed policy only. */
+  packAllows?: boolean
 }
 
 /** T-067: what IT's signed policy sets for every session on this computer. Each only narrows what may be done. */

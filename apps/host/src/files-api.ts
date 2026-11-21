@@ -3,7 +3,11 @@ import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 import type { FastifyInstance, FastifyReply } from "fastify"
-import { secretGlobs } from "@gatehouse/policy"
+import { compileGlobs, redactString, secretGlobs } from "@gatehouse/policy"
+import { gatehouseDataDir } from "@gatehouse/shared/node"
+import { CodeIndex } from "./code-index.js"
+import { reviewDiff, reviewerRuntime, sessionDiff, type Finding } from "./review.js"
+import type { LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { createCheckpoint, writeFileAtomic } from "@gatehouse/shared/node"
 import type { AdminContext } from "./api.js"
 import { languageOf, outline } from "./outline.js"
@@ -239,6 +243,95 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     const v = await ctx.engine.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd })
     return v.outcome === "deny" ? v.reason : undefined
   }
+
+  // C-036: the session's project, indexed under the data folder (text and symbols), brought up to date at most once a
+  // minute when asked. Never built without the policy: the floor's secret globs decide what it may hold.
+  const indexes = new Map<string, CodeIndex>()
+  app.addHook("onClose", async () => {
+    for (const i of indexes.values()) i.close()
+    indexes.clear()
+  })
+  const indexFor = async (root: string, fresh: boolean): Promise<CodeIndex> => {
+    const policy = ctx.store.current
+    if (!policy) throw new SearchError("No policy is loaded, so nothing is indexed: the floor decides what an index may hold.")
+    const blocked = compileGlobs(secretGlobs(policy))
+    let i = indexes.get(root)
+    if (!i) {
+      i = new CodeIndex({ dir: path.join(gatehouseDataDir(ctx.env), "code-index"), root, blocked: (abs) => blocked(abs) })
+      indexes.set(root, i)
+    }
+    if (fresh || Date.now() - i.lastRefresh > 60_000) await i.refresh()
+    return i
+  }
+  app.get("/api/index/search", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      return { results: (await indexFor(real(root), false)).search(String(q.q ?? ""), Number(q.limit ?? 50)) }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.get("/api/index/symbols", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      return { symbols: (await indexFor(real(root), false)).symbols(String(q.q ?? ""), Number(q.limit ?? 50)) }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/index/refresh", async (req, reply) => {
+    const root = rootOf((req.body ?? {}) as Record<string, unknown>)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      // A stale index is brought up to date by indexFor; refreshing again then reads only what changed since.
+      return { stats: await (await indexFor(real(root), false)).refresh() }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+
+  // C-043: a second model reviews the session's change, through the runtime or gateway on this computer; the last
+  // review of each session is kept while Codehouse runs, for the Review pane.
+  const reviews = new Map<string, { at: string; findings: Finding[]; truncated: boolean; model: string }>()
+  app.get("/api/review", async (req) => {
+    const s = (req.query as { session?: unknown }).session
+    const p = ctx.config().providers
+    return { review: typeof s === "string" ? (reviews.get(s) ?? null) : null, available: Boolean(reviewerRuntime(p?.local as LocalRuntimeConfig | undefined, p?.reviewer?.model)) }
+  })
+  app.post("/api/review", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    const p = ctx.config().providers
+    const model = p?.reviewer?.model
+    const cfg = reviewerRuntime(p?.local as LocalRuntimeConfig | undefined, model)
+    if (!cfg || !model) return reply.code(409).send({ error: "No reviewer is set. Choose a model on your runtime or gateway in Settings, Models." })
+    const policy = ctx.store.current
+    if (!policy) return reply.code(409).send({ error: "No policy is loaded, so the change is not sent: the floor decides what may leave." })
+    try {
+      const diff = await sessionDiff(real(root), secretGlobs(policy))
+      if (!diff.trim()) return reply.code(409).send({ error: "There is no change since the last commit to review." })
+      const r = await reviewDiff({ diff, runtime: { cfg, model }, redact: (t) => redactString(t, { terms: ctx.config().redactTerms }) })
+      const kept = { at: new Date().toISOString(), ...r, model }
+      reviews.set(String(b.session), kept)
+      await ctx.audit.record({
+        session: String(b.session),
+        event: "review_run",
+        channel: "desktop",
+        tool: "review",
+        input: { model, findings: r.findings.length, truncated: r.truncated },
+        verdict: { outcome: "allow", ruleId: "review-run", reason: `A review of the change by ${model}, through the runtime on this computer.`, risk: 0, decidedBy: "human-desktop", policyHash: policy.hash },
+        latencyMs: 0,
+      })
+      return { review: kept }
+    } catch (e) {
+      return reply.code(502).send({ error: (e as Error).message })
+    }
+  })
 
   // G35: search the session's files, and replace with the changed lines shown first.
   const searchOf = (b: Record<string, unknown>): SearchOptions => ({

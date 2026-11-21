@@ -8,6 +8,7 @@ import { HeldOutPanel } from "./HeldOutPanel"
 import { LocksPanel } from "./LocksPanel"
 import { PlanMeter } from "./PlanMeter"
 import { DevicePanel } from "./DevicePanel"
+import { ReviewPanel } from "./ReviewPanel"
 
 /**
  * O21 (owner, 9 Nov, with two screenshots): a session's details beside it. Where it runs (computer, folder,
@@ -44,6 +45,8 @@ export const DETAIL_ROWS = [
   { id: "sides", label: "Side chats" },
   // T-118: an emulator or simulator beside the session.
   { id: "device", label: "A device" },
+  // C-043: a second model reviews the change.
+  { id: "review", label: "Review" },
 ] as const
 export type DetailRow = (typeof DETAIL_ROWS)[number]["id"]
 const ROWS_KEY = "gatehouse.details.rows"
@@ -437,6 +440,13 @@ export function SessionDetails({
           <p className="m-0 text-[13px] text-mut">Nothing is running in the background.</p>
         )}
       </section>
+      ) : null}
+
+      {shows("review") && !chat ? (
+        <section aria-label="Review">
+          <h3 className="m-0 mb-1.5 text-[14px]">Review</h3>
+          <ReviewPanel sessionId={session.id} />
+        </section>
       ) : null}
 
       {shows("device") && !chat ? (

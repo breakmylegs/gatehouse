@@ -4,6 +4,7 @@ import { api } from "../lib/api"
 import { money } from "../lib/format"
 import { send, useStore } from "../store"
 import { modelLabel } from "../lib/models"
+import { reportStanding, useRank } from "../lib/run-rank"
 
 /** A model's name as the pickers show it. */
 const modelName = (id: string | undefined, local?: boolean) =>
@@ -75,6 +76,11 @@ export function CompareBar({ sessionId }: { sessionId: string }) {
   const run = session?.kind !== "chat" && session?.worktree !== undefined
   const active = Boolean(compare?.ids.includes(sessionId) && session)
   const stats = useRunStats(sessionId, active && run)
+  // C-044: each run says how it stands, and the bar shows its place among them: checks first, then the smaller change.
+  useEffect(() => {
+    if (active && run) reportStanding(sessionId, { ...(stats.testsFailing !== undefined ? { testsFailing: stats.testsFailing } : {}), ...(stats.size ? { lines: stats.size.added + stats.size.removed } : {}), hits: stats.hits })
+  }, [active, run, sessionId, stats.testsFailing, stats.size, stats.hits])
+  const place = useRank(sessionId, run && compare ? compare.ids : [])
   const [asking, setAsking] = useState(false)
   if (!compare || !active || !session) return null
   const seconds =
@@ -122,6 +128,11 @@ export function CompareBar({ sessionId }: { sessionId: string }) {
         run ? `Comparing ${compare.ids.length} runs` : `Comparing ${compare.ids.length} answers`
       }
     >
+      {run && place !== undefined ? (
+        <span className={place === 1 ? "font-semibold text-ok" : "text-mut"} aria-label={`Ranked ${place} of ${compare.ids.length}, by its checks and then the size of its change`}>
+          {place === 1 ? "Best so far" : `${place} of ${compare.ids.length}`}
+        </span>
+      ) : null}
       <strong>{run ? session.worktree!.branch : modelName(session.model, session.local)}</strong>
       <span className="text-mut">
         {run
