@@ -151,6 +151,34 @@ export function AppearancePanel() {
           />
         )}
       </Row>
+      <fieldset className="settings-row m-0 border-0 p-0">
+        <legend className="grid gap-0.5 p-0">
+          <span>Lighter load</span>
+          <span className="text-xs text-mut">Presets that put less in front of you at once. Each can be on with the others.</span>
+        </legend>
+        <span className="grid gap-1">
+          {(
+            [
+              ["chunked", "Chunked plans", "A plan to approve shows a step at a time."],
+              ["calm", "Calm", "No movement or animation, as Reduce motion."],
+              ["fewer", "Fewer panels", "A session's side panel stays closed until you open it."],
+              ["focus", "Focus on one task", "The sidebar of chats and sessions stays hidden; Sidebar shows it for a moment."],
+            ] as const
+          ).map(([p, name, what]) => (
+            <label key={p} className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={a.load.includes(p)}
+                onChange={(e) => set({ load: e.target.checked ? [...a.load.filter((x) => x !== p), p] : a.load.filter((x) => x !== p) })}
+              />
+              <span>
+                {name} <span className="text-xs text-mut">{what}</span>
+              </span>
+            </label>
+          ))}
+        </span>
+      </fieldset>
       <Row
         label="Motion"
         help={`Reduce turns off movement and animation, whatever ${systemName()} says.`}

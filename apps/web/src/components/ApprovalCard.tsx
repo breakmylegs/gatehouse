@@ -12,6 +12,8 @@ import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
 import { ExplainDecision } from "./ExplainDecision"
 import { useAllowChord } from "../lib/allow-chord"
+import { useLoadPreset } from "../lib/appearance"
+import { ChunkedPlan } from "./ChunkedPlan"
 import { minutesWords, reviewEstimate } from "./ReviewLoad"
 import { FileChip } from "./FileChip"
 import { api } from "../lib/api"
@@ -116,6 +118,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const [ready, setReady] = useState(!high)
   // D-092: allowing High or Severe by keyboard takes two presses within two seconds.
   const chord = useAllowChord(high)
+  const chunked = useLoadPreset("chunked")
   const [confirming, setConfirming] = useState<"allow" | "edited">()
   const [typed, setTyped] = useState("")
 
@@ -345,9 +348,14 @@ export function ApprovalCard({ view }: { view: PendingView }) {
 
           {planText ? (
             <div className="copyable">
-              <pre className="cmd" tabIndex={0} aria-label="The plan">
-                {planText}
-              </pre>
+              {/* D-093: with Chunked plans on, a step at a time. */}
+              {chunked ? (
+                <ChunkedPlan plan={planText} />
+              ) : (
+                <pre className="cmd" tabIndex={0} aria-label="The plan">
+                  {planText}
+                </pre>
+              )}
               <CopyButton text={planText} what="the plan" />
             </div>
           ) : (

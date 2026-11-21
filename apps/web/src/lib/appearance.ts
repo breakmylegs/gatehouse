@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react"
 import type { Detail } from "./paneView"
 import type { Announce } from "./titleStatus"
 
@@ -22,7 +23,12 @@ export interface Appearance {
   announce: Announce
   /** T-057: "Needs you" or "Working" at the start of the window title. Off until you turn it on. */
   titleStatus: boolean
+  /** D-093: presets that lighten the load: plans a step at a time, no movement, fewer panels, one task at a time. */
+  load: LoadPreset[]
 }
+
+export type LoadPreset = "chunked" | "calm" | "fewer" | "focus"
+export const LOAD_PRESETS: LoadPreset[] = ["chunked", "calm", "fewer", "focus"]
 
 export const DEFAULT_APPEARANCE: Appearance = {
   width: "narrow",
@@ -33,6 +39,7 @@ export const DEFAULT_APPEARANCE: Appearance = {
   detail: "normal",
   announce: "all",
   titleStatus: false,
+  load: [],
 }
 
 export const CODE_SIZES = [0, 11, 12, 13, 14, 15, 16] as const
@@ -66,6 +73,7 @@ export function readAppearance(): Appearance {
       detail: v?.detail === "summary" || v?.detail === "verbose" ? v.detail : d.detail,
       announce: v?.announce === "requests" || v?.announce === "off" ? v.announce : d.announce,
       titleStatus: v?.titleStatus === true,
+      load: Array.isArray(v?.load) ? LOAD_PRESETS.filter((p) => (v.load as unknown[]).includes(p)) : [],
     }
   } catch {
     return DEFAULT_APPEARANCE
@@ -86,14 +94,27 @@ export function applyAppearance(a: Appearance, root: HTMLElement = document.docu
   else root.style.removeProperty("--code-size")
   if (a.codeSize) root.dataset.codeSize = ""
   else delete root.dataset.codeSize
-  if (a.motion === "reduced") root.dataset.motion = "reduced"
+  // D-093: Calm turns movement off as Reduce does; the rest are read from data-load by the stylesheet and the page.
+  if (a.motion === "reduced" || a.load.includes("calm")) root.dataset.motion = "reduced"
   else delete root.dataset.motion
+  if (a.load.length) root.dataset.load = a.load.join(" ")
+  else delete root.dataset.load
+}
+
+const subscribeAppearance = (f: () => void) => {
+  window.addEventListener(APPEARANCE_EVENT, f)
+  return () => window.removeEventListener(APPEARANCE_EVENT, f)
+}
+const loadKey = () => readAppearance().load.join(" ")
+/** D-093: whether a load preset is on, kept up to date as Settings change it. */
+export function useLoadPreset(p: LoadPreset): boolean {
+  return useSyncExternalStore(subscribeAppearance, loadKey).split(" ").includes(p)
 }
 
 export function saveAppearance(a: Appearance): void {
   try {
     const same = (Object.keys(DEFAULT_APPEARANCE) as Array<keyof Appearance>).every(
-      (k) => a[k] === DEFAULT_APPEARANCE[k],
+      (k) => JSON.stringify(a[k]) === JSON.stringify(DEFAULT_APPEARANCE[k]),
     )
     if (same) localStorage.removeItem(KEY)
     else localStorage.setItem(KEY, JSON.stringify(a))

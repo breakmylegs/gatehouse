@@ -1,3 +1,4 @@
+import { useLoadPreset } from "./lib/appearance"
 import { useAppearance } from "./components/SettingsPanels"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { Toaster } from "sonner"
@@ -62,7 +63,12 @@ export function App() {
   const setupDone = useStore((s) => s.setupDone)
   const setHelpOpen = useStore((s) => s.setHelpOpen)
   const pendingCount = usePendingCount()
-  const [railHidden, setRailHidden] = useState(() => localStorage.getItem(RAIL_HIDDEN) === "1")
+  const [railHiddenSaved, setRailHidden] = useState(() => localStorage.getItem(RAIL_HIDDEN) === "1")
+  // D-093: Focus on one task keeps the sidebar hidden; Sidebar shows it until the preset is turned off and on again.
+  const focus = useLoadPreset("focus")
+  const [focusPeek, setFocusPeek] = useState(false)
+  useEffect(() => setFocusPeek(false), [focus])
+  const railHidden = railHiddenSaved || (focus && !focusPeek)
   // T-071: the keys in force, yours or the defaults, read by the key handler below.
   const shortcuts = useShortcuts()
   const keysRef = useRef(shortcuts.keys)
@@ -196,7 +202,14 @@ export function App() {
             Skip to content
           </a>
           {railHidden ? (
-            <button type="button" className="btn show-rail" onClick={() => hideRail(false)}>
+            <button
+              type="button"
+              className="btn show-rail"
+              onClick={() => {
+                if (railHiddenSaved) hideRail(false)
+                if (focus) setFocusPeek(true)
+              }}
+            >
               <span aria-hidden="true">&raquo;</span> Sidebar
               {pendingCount > 0 ? (
                 <span className="font-semibold">, {pendingCount} need you</span>

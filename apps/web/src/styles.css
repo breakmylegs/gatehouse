@@ -635,6 +635,21 @@ mark.hidden-char {
   transition-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
+/* D-093, Fewer panels: a session's side panel stays closed until you open it, as in a narrow window. */
+:root[data-load~="fewer"] .pane-body,
+:root[data-load~="fewer"] .pane[data-viewer] .pane-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+:root[data-load~="fewer"] .pane-rail {
+  display: none;
+}
+:root[data-load~="fewer"] .pane-rail-close {
+  display: inline-flex;
+}
+:root[data-load~="fewer"] .pane[data-rail="open"] .pane-rail {
+  display: grid;
+  animation: none;
+}
 /* Settings, Appearance, Code font size: code blocks, open files, diffs and command output. */
 :root[data-code-size] pre,
 :root[data-code-size] code,

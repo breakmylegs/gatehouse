@@ -12,6 +12,8 @@ import { Projects } from "../src/surfaces/Projects"
 import { Settings } from "../src/surfaces/Settings"
 import { Workspace } from "../src/surfaces/Workspace"
 import { setScreenReaderMode } from "../src/lib/screenReader"
+import { DEFAULT_APPEARANCE, LOAD_PRESETS, saveAppearance } from "../src/lib/appearance"
+import { ApprovalCard } from "../src/components/ApprovalCard"
 import { useStore } from "../src/store"
 
 vi.mock("sonner", () => ({
@@ -104,6 +106,28 @@ afterEach(() => {
   setScreenReaderMode(false)
 })
 
+const planView = {
+  request: {
+    id: "plan-1",
+    nonce: "n",
+    kind: "plan",
+    sessionId: "s1",
+    toolUseId: "tu-plan",
+    toolName: "ExitPlanMode",
+    input: {},
+    cwd: "C:/dev/shop",
+    project: "shop",
+    verdict: { outcome: "escalate", ruleId: "exit-plan-mode", reason: "Claude wants to leave plan mode and start work.", risk: 0, decidedBy: "rules", policyHash: "h" },
+    createdAt: "2026-11-21T10:00:00Z",
+    expiresAt: "2026-11-21T10:10:00Z",
+    payloadHash: "p",
+  },
+  rawInput: { plan: "1. Add the discount to the cart\n2. Run the tests" },
+  defaultToNo: false,
+  phone: "none",
+  hardDeadline: "2026-11-21T10:30:00Z",
+} as never
+
 const SCREENS: Array<[string, () => ReactElement]> = [
   ["Home", () => <Home />],
   ["a session", () => <Workspace />],
@@ -120,6 +144,24 @@ describe("the accessibility scan", () => {
       // Let the first loads settle. Home is a picture with no buttons (owner, 17 Nov).
       await (name === "Home" ? screen.findByRole("img") : screen.findAllByRole("button"))
       expect(await problems()).toEqual([])
+    })
+
+  // D-093: each lighter-load preset passes the scan, on a session, Settings, and a plan waiting for approval.
+  for (const preset of LOAD_PRESETS)
+    it(`finds nothing wrong with the ${preset} preset on`, async () => {
+      saveAppearance({ ...DEFAULT_APPEARANCE, load: [preset] })
+      expect(document.documentElement.dataset.load).toBe(preset)
+      for (const draw of [() => <Workspace />, () => <Settings />, () => <ApprovalCard view={planView} />]) {
+        render(draw())
+        await screen.findAllByRole("button")
+        expect(await problems()).toEqual([])
+        cleanup()
+      }
+      if (preset === "chunked") {
+        render(<ApprovalCard view={planView} />)
+        expect(screen.getByText("Step 1 of 2")).toBeTruthy()
+      }
+      saveAppearance(DEFAULT_APPEARANCE)
     })
 
   it("finds nothing wrong on a session in screen reader mode", async () => {
