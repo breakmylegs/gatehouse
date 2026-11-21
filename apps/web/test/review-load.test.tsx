@@ -31,4 +31,11 @@ describe("the review load", () => {
     expect((await screen.findByRole("status")).textContent).toMatch(/about 12 minutes of review \(your capacity: 30 an hour\)/)
     expect(screen.queryByRole("alert")).toBeNull()
   })
+
+  it("says nothing, and does not break the page, when the Host answers something else (an older Host)", async () => {
+    load = { error: "no route" }
+    const { container } = render(<ReviewLoadMeter />)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(container.textContent).toBe("")
+  })
 })

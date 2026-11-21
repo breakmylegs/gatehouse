@@ -23,7 +23,11 @@ interface Load {
 export function ReviewLoadMeter() {
   const [load, setLoad] = useState<Load>()
   useEffect(() => {
-    const read = () => void api<Load>("GET", "/api/review-load").then((r) => r.ok && r.data && setLoad(r.data))
+    // Only an answer of the right shape: a Host that does not know this route (an older one) says nothing.
+    const read = () =>
+      void api<Load>("GET", "/api/review-load").then((r) => {
+        if (r.ok && typeof r.data?.lastHour?.minutes === "number" && typeof r.data.lastHour.changes === "number") setLoad(r.data)
+      })
     read()
     const t = setInterval(read, 60_000)
     return () => clearInterval(t)
