@@ -46,6 +46,17 @@ interface Draft {
   markdown: string
 }
 
+/** D-071: an upgrade's pack, as the Host gathers it. */
+interface UpgradePackView {
+  upgrades: Array<{ name: string; from: string; to: string }>
+  added: Array<{ name: string }>
+  removed: Array<{ name: string }>
+  tests: Array<{ command: string; result: string }>
+  admission: Array<{ dependency: string; check: string; outcome: "deny" | "escalate"; reason: string }>
+  complete: boolean
+  missing: string[]
+}
+
 /** D-012: what a fuzz pass found, as the Host reports it. */
 interface FuzzReport {
   targets: Array<{ file: string; fn: string }>
@@ -168,6 +179,8 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
   // D-004: the last mutation run's report, and whether one is running.
   const [mutation, setMutation] = useState<MutationReport>()
   const [mutating, setMutating] = useState(false)
+  // D-071: the upgrade's evidence.
+  const [upgrade, setUpgrade] = useState<UpgradePackView>()
   // D-012: the last fuzz pass.
   const [fuzzing, setFuzzing] = useState(false)
   const [fuzz, setFuzz] = useState<FuzzReport>()
@@ -649,10 +662,56 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                 Download the SBOM of these changes
               </button>
             ) : null}
+            {files.some((f) => LOCKFILE.test(f.path)) ? (
+              // D-071: one pack for the upgrade: tests after it, the SBOM delta and the admission checks.
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  void send({ type: "upgrade_pack", sessionId, ref: since.ref }).then((r) =>
+                    r.ok ? setUpgrade(r.data as UpgradePackView) : toast.error(r.error?.message ?? "The upgrade could not be gathered"),
+                  )
+                }
+              >
+                Upgrade evidence
+              </button>
+            ) : null}
           </div>
         </>
       )}
 
+      {upgrade ? (
+        <section aria-label="Upgrade evidence" className="panel grid gap-1.5 p-2.5 text-[13px]">
+          <h3 className="m-0 text-[13.5px] font-semibold">
+            {upgrade.complete ? "The upgrade's evidence is complete." : `Not complete: ${upgrade.missing.join("; ")}.`}
+          </h3>
+          {upgrade.upgrades.length ? (
+            <p className="m-0">
+              Upgraded: {upgrade.upgrades.slice(0, 12).map((u) => `${u.name} ${u.from} to ${u.to}`).join(", ")}
+              {upgrade.upgrades.length > 12 ? `, and ${upgrade.upgrades.length - 12} more` : ""}.
+            </p>
+          ) : null}
+          {upgrade.added.length || upgrade.removed.length ? (
+            <p className="m-0 text-mut">
+              {upgrade.added.length} added, {upgrade.removed.length} removed.
+            </p>
+          ) : null}
+          <p className="m-0">
+            Tests after the change: {upgrade.tests.length ? upgrade.tests.map((t) => `${t.command} (${t.result})`).join(", ") : "none run"}.
+          </p>
+          {upgrade.admission.length ? (
+            <ul className="m-0 grid gap-0.5 pl-5" aria-label="Admission checks">
+              {upgrade.admission.map((x, i) => (
+                <li key={i} className={x.outcome === "deny" ? "text-sev" : undefined}>
+                  {x.check}, {x.dependency}: {x.reason}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 text-mut">No admission check found anything.</p>
+          )}
+        </section>
+      ) : null}
       {fuzz ? (
         <section aria-label="Fuzz pass" className="panel grid gap-1.5 p-2.5 text-[13px]">
           <h3 className="m-0 text-[13.5px] font-semibold">

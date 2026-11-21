@@ -201,7 +201,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-052 | Multi-repo contract check | built | feat/d052 | BUILD_REPORT "Frontier D-052" | A removed library export names the repositories beside it that depend on the package and import the name, with file and line, in the api-break reason |
 | D-067 | Migration planner with evidence | built | feat/d067 | BUILD_REPORT "Frontier D-067" | Waves from a folder's imports, leaves first (a cycle one wave); each wave's callable files captured before (D-066) and compared after (D-006); done only with both; Claude asked one wave at a time |
 | D-070 | PowerShell modernisation | built | feat/d067 | BUILD_REPORT "Frontier D-070" | PowerShell 7 check per script: the AST worker's commands against what 7 removed (cmdlets, aliases, -Encoding Byte, workflows), PSScriptAnalyzer added where installed; nothing runs |
-| D-071 | Dependency upgrade with evidence | todo | | | |
+| D-071 | Dependency upgrade with evidence | built | feat/d067 | BUILD_REPORT "Frontier D-071" | Upgrade evidence: upgrades from and to, tests after the change (from the D-003 pack), the SBOM delta, and admission checks (new names, licences, vulnerability snapshot); complete only with passing tests and no refusal |
 | D-080 | Signed knowledge packs | todo | | | |
 | D-094 | Verifiable egress report | todo | | | Safe variant |
 | D-095 | GPO and Intune templates | todo | | | Safe variant |

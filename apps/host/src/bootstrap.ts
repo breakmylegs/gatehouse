@@ -1604,6 +1604,8 @@ export function createHost(opts: HostOptions = {}): Host {
     mutationExec: mutationExecFor,
     // D-012: a fuzz pass's runs, judged and boxed like any Codehouse action.
     fuzzExec: (id: string) => actionFor(id, "a time-boxed fuzz pass of the changed parsing functions"),
+    // D-071: an upgrade's admission checks read the same snapshot as the commit guard.
+    vulnSnapshot,
     dataDir: gatehouseDataDir(env),
     locks,
     evidence,

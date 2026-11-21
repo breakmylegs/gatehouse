@@ -288,6 +288,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-071: one pack for a change's dependency upgrades: tests after it, the SBOM delta, and the admission checks. */
+  z.object({ type: z.literal("upgrade_pack"), sessionId: Id, ref: z.string().min(1).max(500).optional() }),
   /** D-070: what in the project's PowerShell scripts will not run, or runs differently, in PowerShell 7. */
   z.object({ type: z.literal("pwsh_modernise"), sessionId: Id }),
   /** D-067: a migration planned in waves from a folder's imports, and each wave's evidence (capture before, compare after). */

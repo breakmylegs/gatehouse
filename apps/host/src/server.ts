@@ -1,3 +1,5 @@
+import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
+import { admit, DEFAULT_LICENCES, fromManifestEdit, licenceFindings, type AddedDependency } from "@gatehouse/policy"
 import { inlineScriptArgs, powerShellExe } from "@gatehouse/policy"
 import { ANALYZER_SCRIPT, modernise, type AnalyzerRun } from "./pwsh-modernise.js"
 import { MigrationStore, planMigration, sourcesIn, waveState, wavePrompt, type MigrationPlan } from "./migration.js"
@@ -111,6 +113,8 @@ export interface HostApp {
   mutationExec?: (sessionId: string) => import("./mutation.js").MutationExec
   /** D-012: a fuzz pass's runs, as Codehouse actions. */
   fuzzExec?: (sessionId: string) => import("./fuzz.js").FuzzExec
+  /** D-071: the managed vulnerability snapshot, for an upgrade's admission checks. */
+  vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches">
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1069,6 +1073,42 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "upgrade_pack": {
+        // D-071: the lockfiles' change, the evidence pack's test runs, the SBOM delta and the admission checks; nothing runs.
+        const s = this.#session(cmd.sessionId)
+        const c = await a.checkpoints.changes(s.cwd, s.id, cmd.ref)
+        if (!c.since || !("files" in c)) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to gather.")
+        const all: DependencyChange[] = []
+        const direct: AddedDependency[] = []
+        for (const x of c.files.filter((x) => isLockfile(x.path) || /(^|\/)(package\.json|requirements\.txt|pyproject\.toml|Cargo\.toml|go\.mod|[^/]+\.csproj)$/i.test(x.path)).slice(0, 30)) {
+          const v = await a.checkpoints.versions(s.cwd, c.since.ref, x.path)
+          if (isLockfile(x.path)) all.push(...lockfileChanges(x.path, v.before, v.after))
+          else direct.push(...fromManifestEdit(x.path, v.before ?? "", v.after ?? ""))
+        }
+        if (!all.length && !direct.length) throw new CommandError("no-upgrade", "This change does not touch the project's dependencies.")
+        const admission: AdmissionCheck[] = []
+        // New names in a manifest, as D-053 judges them; licences of new and upgraded direct dependencies, as D-055 does.
+        // With nothing counted as known, admit judges every name, one finding each, in order.
+        admit(direct, new Set(), new Set()).forEach((f, i) => admission.push({ dependency: `${direct[i]!.ecosystem}:${direct[i]!.name}`, check: "new name", outcome: f.outcome, reason: f.reason }))
+        const upgradedDirect = all.filter((x) => x.kind === "changed").map((x) => ({ ecosystem: x.package.ecosystem as AddedDependency["ecosystem"], name: x.package.name, via: x.lockfile }))
+        const allowed = a.policy()?.managedLicences ?? a.admin?.config().allowedLicences ?? DEFAULT_LICENCES
+        for (const f of licenceFindings([...direct, ...upgradedDirect].slice(0, 200), [s.cwd], allowed)) admission.push({ dependency: f.dependency, check: "licence", outcome: "escalate", reason: f.reason })
+        for (const m of a.vulnSnapshot?.matches(all) ?? []) admission.push({ dependency: `${m.ecosystem}:${m.name}`, check: "vulnerability", outcome: "escalate", reason: `${m.name} ${m.version} is in the vulnerability snapshot (${m.ids.join(", ")}).` })
+        const evidence = a.evidence ? await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions() }, cmd.ref ? { ref: cmd.ref } : {}).catch(() => undefined) : undefined
+        const pack = upgradePack({
+          changes: all,
+          evidence: evidence?.pack,
+          sbom: sbomDiff(all, { project: s.project, version: a.updates?.status().current ?? "unknown", describe: `changes since ${c.since.label} (${c.since.ref})` }),
+          admission,
+        })
+        await a.audit.record({
+          session: s.id, event: "upgrade_pack", channel: "desktop", tool: "dependencies", cwd: s.cwd, project: s.project,
+          input: { upgrades: pack.upgrades.length, added: pack.added.length, removed: pack.removed.length, testsPassed: pack.testsPassed, admission: pack.admission.length, complete: pack.complete, ...(evidence ? { evidence: evidence.sha.slice(0, 12) } : {}) },
+          verdict: { outcome: "allow", ruleId: "upgrade-pack", reason: pack.complete ? "The upgrade's evidence is complete." : `The upgrade's evidence is not complete: ${pack.missing.join("; ")}.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return pack
       }
       case "pwsh_modernise": {
         // D-070: the project's scripts read with the AST worker (and PSScriptAnalyzer where installed); nothing runs.
