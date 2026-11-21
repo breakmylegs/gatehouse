@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { appendRemember, PolicyEngine, PolicyStore, redact } from "@gatehouse/policy"
@@ -516,26 +518,46 @@ describe("secrets a session asks for (T-135)", () => {
 })
 
 describe("autonomy caps (C-015)", () => {
-  it("lists caps, raises one only on your request, recorded, and refuses a raise that is not one", async () => {
+  const looseningAt = async (name: string) => {
+    const { LooseningStore } = await import("../src/loosening.js")
+    const clock = { now: Date.parse("2026-11-21T10:00:00Z") }
+    const file = path.join(root, `${name}-loosening.json`)
+    return { store: new LooseningStore(file, () => clock.now), clock, file }
+  }
+
+  it("lists caps, raises one only on your request after the phrase and the wait, recorded, and refuses a raise that is not one", async () => {
     const { AutonomyStore } = await import("../src/autonomy.js")
     const store = new AutonomyStore(path.join(root, "autonomy-c015.json"))
     await store.lower("shop", "default", ["the floor denied 10 calls in 30 days"])
     const recorded: Array<{ event: string; verdict: { decidedBy: string } }> = []
+    const l = await looseningAt("c015")
     const app2 = Fastify()
-    registerApi(app2, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never })
+    registerApi(app2, { ...ctx, autonomy: store, loosening: l.store, audit: { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never })
     try {
       expect((await app2.inject({ method: "GET", url: "/api/autonomy" })).json()).toMatchObject({ caps: { shop: { level: "default", by: "record" } } })
       expect((await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "plan" } })).statusCode).toBe(409)
       expect((await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "sideways" } })).statusCode).toBe(422)
-      expect((await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "auto" } })).json()).toMatchObject({ caps: { shop: { level: "auto", by: "you" } } })
-      expect(recorded).toMatchObject([{ event: "autonomy_raised", verdict: { decidedBy: "human-desktop" } }])
+      const asked = await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "auto" } })
+      expect(asked.statusCode).toBe(409)
+      expect(asked.json().loosening).toMatchObject({ phrase: "loosen raise shop to Auto", minutes: 10 })
+      const kept = await app2.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "auto", confirm: "loosen raise shop to Auto" } })
+      expect(kept.statusCode).toBe(202)
+      expect(store.capFor("shop")).toBe("default")
+      l.clock.now += 9 * 60_000
+      await app2.inject({ method: "GET", url: "/api/loosening" })
+      expect(store.capFor("shop")).toBe("default")
+      l.clock.now += 2 * 60_000
+      expect((await app2.inject({ method: "GET", url: "/api/loosening" })).json()).toMatchObject({ pending: [] })
+      expect(store.capFor("shop")).toBe("auto")
+      expect(recorded.map((r) => r.event)).toEqual(["loosening_requested", "loosening_applied", "autonomy_raised"])
     } finally {
       await app2.close()
       fs.rmSync(path.join(root, "autonomy-c015.json"), { force: true })
+      fs.rmSync(l.file, { force: true })
     }
   })
 
-  it("applies a proposal only when you accept it, recorded; with a phone paired, only once the phone confirms (D-019)", async () => {
+  it("applies a proposal only when you accept it with the phrase, after the wait; with a phone paired, only once the phone confirms (D-019, D-024)", async () => {
     const { AutonomyStore } = await import("../src/autonomy.js")
     const { Broker } = await import("../src/broker.js")
     const file = path.join(root, "autonomy-d019.json")
@@ -546,30 +568,41 @@ describe("autonomy caps (C-015)", () => {
     await store.propose("cafe", { from: "acceptEdits", to: "auto", reasons: ["clean"] })
     const recorded: Array<{ event: string; channel: string; verdict: { decidedBy: string } }> = []
     const audit = { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never
+    const l = await looseningAt("d019")
     const alone = Fastify()
-    registerApi(alone, { ...ctx, autonomy: store, audit })
+    registerApi(alone, { ...ctx, autonomy: store, loosening: l.store, audit })
     const broker = new Broker({ phoneExpiryMs: 60_000, hardTimeoutMs: 120_000, redact: (v) => v })
     const paired = Fastify()
-    registerApi(paired, { ...ctx, autonomy: store, audit, broker, phone: { listPhones: () => [{ id: "p1" }] } as never })
+    registerApi(paired, { ...ctx, autonomy: store, loosening: l.store, audit, broker, phone: { listPhones: () => [{ id: "p1" }] } as never })
+    const later = async () => {
+      l.clock.now += 11 * 60_000
+      await alone.inject({ method: "GET", url: "/api/loosening" })
+    }
     try {
       expect((await alone.inject({ method: "GET", url: "/api/autonomy/proposals" })).json()).toMatchObject({ proposals: { shop: { to: "acceptEdits" } } })
-      // No phone: your click applies it, recorded first.
-      expect((await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).json()).toMatchObject({ caps: { shop: { level: "acceptEdits", by: "you" } }, proposals: {} })
+      // No phone: your click with the phrase keeps it; it applies after the wait.
+      expect((await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(409)
+      const kept = await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept", payload: { confirm: "loosen raise shop to Accept edits" } })
+      expect(kept.statusCode).toBe(202)
+      expect(kept.json()).toMatchObject({ proposals: { cafe: {} } })
+      expect(store.capFor("shop")).toBe("default")
+      await later()
+      expect(store.caps().shop).toMatchObject({ level: "acceptEdits", by: "you" })
       expect(recorded.at(-1)).toMatchObject({ event: "autonomy_raised", verdict: { decidedBy: "human-desktop" } })
-      expect((await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(404)
-      // A phone paired: accepted on the desktop, it waits; an allow from the desktop is refused; the phone's applies it.
-      const r = await paired.inject({ method: "POST", url: "/api/autonomy/cafe/accept" })
+      expect((await alone.inject({ method: "POST", url: "/api/autonomy/shop/accept", payload: { confirm: "x" } })).statusCode).toBe(404)
+      // A phone paired: it waits for the phone; an allow from the desktop is refused; the phone's starts the wait.
+      const r = await paired.inject({ method: "POST", url: "/api/autonomy/cafe/accept", payload: { confirm: "loosen raise cafe to Auto" } })
       expect(r.statusCode).toBe(202)
       expect(r.json()).toMatchObject({ waitingForPhone: true, confirming: ["cafe"] })
-      expect(store.capFor("cafe")).toBe("acceptEdits")
       const pending = broker.list()[0]!
       expect(pending.request).toMatchObject({ toolName: "AutonomyRaise", verdict: { ruleId: "autonomy-raise" } })
       expect(broker.resolve(pending.request.id, { kind: "decision", decision: "allow" }, "desktop")).toMatchObject({ ok: false, reason: "not-allowed-on-channel" })
       expect(broker.resolve(pending.request.id, { kind: "decision", decision: "allow" }, "push")).toMatchObject({ ok: false, reason: "not-allowed-on-channel" })
-      expect(store.capFor("cafe")).toBe("acceptEdits")
       expect(broker.resolve(pending.request.id, { kind: "decision", decision: "allow" }, "phone")).toMatchObject({ ok: true })
-      await vi.waitFor(() => expect(store.capFor("cafe")).toBe("auto"))
-      expect(recorded.at(-1)).toMatchObject({ event: "autonomy_raised", channel: "phone", verdict: { decidedBy: "human-phone" } })
+      await vi.waitFor(() => expect(recorded.some((e) => e.event === "autonomy_raise_accepted" && e.channel === "phone")).toBe(true))
+      expect(store.capFor("cafe")).toBe("acceptEdits")
+      await later()
+      expect(store.capFor("cafe")).toBe("auto")
       // Saying no is recorded and forgets the proposal.
       await store.propose("cafe", { from: "auto", to: "extreme", reasons: ["clean"] })
       expect((await alone.inject({ method: "POST", url: "/api/autonomy/cafe/decline" })).json()).toMatchObject({ proposals: {} })
@@ -580,6 +613,7 @@ describe("autonomy caps (C-015)", () => {
       await alone.close()
       await paired.close()
       fs.rmSync(file, { force: true })
+      fs.rmSync(l.file, { force: true })
     }
   })
 
@@ -589,27 +623,125 @@ describe("autonomy caps (C-015)", () => {
     const store = new AutonomyStore(file)
     await store.lower("shop", "default", ["x"])
     await store.propose("shop", { from: "default", to: "acceptEdits", reasons: ["clean"] })
+    const l = await looseningAt("d019b")
+    const confirm = { confirm: "loosen raise shop to Accept edits" }
     const noAudit = Fastify()
-    registerApi(noAudit, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async () => false } as never })
+    registerApi(noAudit, { ...ctx, autonomy: store, loosening: l.store, audit: { ...ctx.audit, record: async () => false } as never })
     const noBroker = Fastify()
-    registerApi(noBroker, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async () => true } as never, phone: { listPhones: () => [{ id: "p1" }] } as never })
+    registerApi(noBroker, { ...ctx, autonomy: store, loosening: l.store, audit: { ...ctx.audit, record: async () => true } as never, phone: { listPhones: () => [{ id: "p1" }] } as never })
     try {
-      expect((await noAudit.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(503)
-      expect((await noBroker.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(503)
-      expect(store.capFor("shop")).toBe("default")
+      expect((await noAudit.inject({ method: "POST", url: "/api/autonomy/shop/accept", payload: confirm })).statusCode).toBe(503)
+      expect((await noAudit.inject({ method: "POST", url: "/api/autonomy/shop/raise", payload: { level: "auto", confirm: "loosen raise shop to Auto" } })).statusCode).toBe(503)
+      expect((await noBroker.inject({ method: "POST", url: "/api/autonomy/shop/accept", payload: confirm })).statusCode).toBe(503)
+      expect(l.store.list()).toEqual([])
       // Even a broker that let an allow through from elsewhere does not raise it: only the phone's answer does.
       const desktopAllow = Fastify()
       const request = vi.fn(async () => ({ outcome: "allow", channel: "desktop", at: "", waitedMs: 1 }))
-      registerApi(desktopAllow, { ...ctx, autonomy: store, audit: { ...ctx.audit, record: async () => true } as never, broker: { request } as never, phone: { listPhones: () => [{ id: "p1" }] } as never })
-      expect((await desktopAllow.inject({ method: "POST", url: "/api/autonomy/shop/accept" })).statusCode).toBe(202)
+      registerApi(desktopAllow, { ...ctx, autonomy: store, loosening: l.store, audit: { ...ctx.audit, record: async () => true } as never, broker: { request } as never, phone: { listPhones: () => [{ id: "p1" }] } as never })
+      expect((await desktopAllow.inject({ method: "POST", url: "/api/autonomy/shop/accept", payload: confirm })).statusCode).toBe(202)
       await vi.waitFor(() => expect(request).toHaveBeenCalled())
       await new Promise((r) => setTimeout(r, 50))
+      expect(l.store.list()).toEqual([])
       expect(store.capFor("shop")).toBe("default")
       await desktopAllow.close()
     } finally {
       await noAudit.close()
       await noBroker.close()
       fs.rmSync(file, { force: true })
+      fs.rmSync(l.file, { force: true })
+    }
+  })
+})
+
+describe("loosening waits after its phrase; tightening applies at once (D-024)", () => {
+  it("keeps a rules change that removes a deny or an ask until the wait is over, and saves one that adds a rule at once", async () => {
+    const { LooseningStore } = await import("../src/loosening.js")
+    const clock = { now: Date.parse("2026-11-21T10:00:00Z") }
+    const lfile = path.join(root, "rules-loosening.json")
+    const told: string[] = []
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, loosening: new LooseningStore(lfile, () => clock.now), tell: (t: string) => told.push(t) } as never)
+    const original = fs.readFileSync(rulesPath, "utf8")
+    const doc = parseYaml(original) as { deny: Array<{ id: string }>; escalate: Array<{ id: string }> }
+    const base = () => ({ baseHash: createHash("sha256").update(fs.readFileSync(rulesPath, "utf8")).digest("hex") })
+    try {
+      // Tightening: a new deny rule is saved at once.
+      const tighter = stringifyYaml({ ...doc, deny: [...doc.deny, { id: "no-ftp-d024", commands: ["ftp*"] }] })
+      const t = await app2.inject({ method: "PUT", url: "/api/policy/rules", payload: { yaml: tighter, ...base() } })
+      expect(t.statusCode).toBe(200)
+      expect(fs.readFileSync(rulesPath, "utf8")).toBe(tighter)
+      // Loosening: taking it out again needs the phrase, then waits.
+      const looser = original
+      const asked = await app2.inject({ method: "PUT", url: "/api/policy/rules", payload: { yaml: looser, ...base() } })
+      expect(asked.statusCode).toBe(409)
+      expect(asked.json().loosening.phrase).toBe("loosen remove no-ftp-d024")
+      const kept = await app2.inject({ method: "PUT", url: "/api/policy/rules", payload: { yaml: looser, ...base(), loosen: "loosen remove no-ftp-d024" } })
+      expect(kept.statusCode).toBe(202)
+      expect(fs.readFileSync(rulesPath, "utf8")).toBe(tighter)
+      expect(told).toEqual(["Loosening in 10 minutes"])
+      clock.now += 10 * 60_000
+      await app2.inject({ method: "GET", url: "/api/loosening" })
+      expect(fs.readFileSync(rulesPath, "utf8")).toBe(original)
+      expect(told).toEqual(["Loosening in 10 minutes", "Loosening applied"])
+    } finally {
+      fs.writeFileSync(rulesPath, original)
+      ctx.store.load()
+      await app2.close()
+      fs.rmSync(lfile, { force: true })
+    }
+  })
+
+  it("drops a rules loosening when the file changed in the wait, and lets you cancel one", async () => {
+    const { LooseningStore } = await import("../src/loosening.js")
+    const clock = { now: Date.parse("2026-11-21T10:00:00Z") }
+    const lfile = path.join(root, "rules-loosening-2.json")
+    const store = new LooseningStore(lfile, () => clock.now)
+    const recorded: Array<{ event: string }> = []
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, loosening: store, audit: { ...ctx.audit, record: async (e: never) => (recorded.push(e), true) } as never })
+    const original = fs.readFileSync(rulesPath, "utf8")
+    try {
+      await store.add("rules", "remove x", { yaml: "rules: []", baseHash: "not-the-file" }, "rules")
+      clock.now += 11 * 60_000
+      await app2.inject({ method: "GET", url: "/api/loosening" })
+      expect(fs.readFileSync(rulesPath, "utf8")).toBe(original)
+      expect(recorded.map((r) => r.event)).toEqual(["loosening_applied", "loosening_dropped"])
+      const item = await store.add("autonomy", "raise shop to Auto", { project: "shop", level: "auto" }, "autonomy:shop")
+      expect((await app2.inject({ method: "POST", url: `/api/loosening/${item.id}/cancel` })).json()).toMatchObject({ pending: [] })
+      expect(recorded.at(-1)).toMatchObject({ event: "loosening_cancelled" })
+    } finally {
+      await app2.close()
+      fs.rmSync(lfile, { force: true })
+    }
+  })
+
+  it("keeps a project strict about its tests until the wait is over, and makes a new one strict at once", async () => {
+    const { LooseningStore } = await import("../src/loosening.js")
+    const clock = { now: Date.parse("2026-11-21T10:00:00Z") }
+    const lfile = path.join(root, "settings-loosening.json")
+    const app2 = Fastify()
+    registerApi(app2, { ...ctx, loosening: new LooseningStore(lfile, () => clock.now) } as never)
+    const cfgFile = path.join(root, "config.json")
+    const saved = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, "utf8") : undefined
+    const onDisk = () => JSON.parse(fs.readFileSync(cfgFile, "utf8")) as { testIntegrity?: { strictProjects?: string[] } }
+    const put = (strictProjects: string[], loosen?: string) =>
+      app2.inject({ method: "PUT", url: `/api/settings${loosen ? `?loosen=${encodeURIComponent(loosen)}` : ""}`, payload: { ...ctx.config(), testIntegrity: { strictProjects } } })
+    try {
+      expect((await put(["shop"])).statusCode).toBe(200)
+      expect(onDisk().testIntegrity?.strictProjects).toEqual(["shop"])
+      expect((await put(["cafe"])).statusCode).toBe(409)
+      const kept = await put(["cafe"], "loosen stop being strict about tests in shop")
+      expect(kept.statusCode).toBe(200)
+      expect(kept.json()).toMatchObject({ pending: { kind: "test-integrity" } })
+      expect(onDisk().testIntegrity?.strictProjects?.sort()).toEqual(["cafe", "shop"])
+      clock.now += 10 * 60_000
+      await app2.inject({ method: "GET", url: "/api/loosening" })
+      expect(onDisk().testIntegrity?.strictProjects).toEqual(["cafe"])
+    } finally {
+      if (saved === undefined) fs.rmSync(cfgFile, { force: true })
+      else fs.writeFileSync(cfgFile, saved)
+      await app2.close()
+      fs.rmSync(lfile, { force: true })
     }
   })
 })

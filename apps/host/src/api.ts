@@ -121,7 +121,9 @@ import { MemoryError, type MemoryScope, type MemoryStore } from "./memory.js"
 import { RoutineError, type Routine, type RoutineStore } from "./routines.js"
 import { extractToken, secretsEqual } from "./server-guard.js"
 import { CliAccess, registerCliRoutes, type CliDeps } from "./cli-access.js"
-import { AUTONOMY_RAISE_RULE, AUTONOMY_RAISE_TOOL, EARN as AUTONOMY_EARN, isLevel, LEVEL_NAMES, LIMITS as AUTONOMY_LIMITS, reviewAutonomy } from "./autonomy.js"
+import { AUTONOMY_RAISE_RULE, AUTONOMY_RAISE_TOOL, EARN as AUTONOMY_EARN, isLevel, LEVEL_NAMES, LIMITS as AUTONOMY_LIMITS, rank, reviewAutonomy } from "./autonomy.js"
+import { deferLoosening, registerLooseningRoutes, rulesRemoved, strictUnion, testStrictnessRemoved } from "./loosening-api.js"
+import { looseningPhrase } from "./loosening.js"
 import { isOpRef } from "./secret-providers.js"
 import { registerVoiceRoutes, VoiceSettings } from "./voice.js"
 import { deliveryKey, hashHookToken, HookDeliveries, MAX_BODY, passes } from "./webhooks.js"
@@ -168,6 +170,10 @@ export interface AdminContext {
   autonomy?: import("./autonomy.js").AutonomyStore
   /** D-019: asks the paired phone to confirm a raise with its passkey. */
   broker?: import("./broker.js").Broker
+  /** D-024: loosening that waits ten minutes after you type its phrase. */
+  loosening?: import("./loosening.js").LooseningStore
+  /** D-024: tells the phone and push channels, for information only. */
+  tell?: (title: string, body: string) => void
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */
@@ -618,13 +624,10 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       const project = (req.params as { project: string }).project
       const level = (req.body as { level?: unknown } | undefined)?.level
       if (!isLevel(level)) return bad(reply, 422, "Say which level: plan, default, acceptEdits, auto or extreme.")
-      try {
-        await autonomy.raise(project, level)
-      } catch (e) {
-        return bad(reply, 409, (e as Error).message)
-      }
-      await record("autonomy_raised", { project, level }, `You raised ${project}'s cap to ${LEVEL_NAMES[level]} from the desktop.`, "human-desktop")
-      return { caps: autonomy.caps() }
+      if (rank(level) <= rank(autonomy.capFor(project))) return bad(reply, 409, `${LEVEL_NAMES[level]} is not higher than ${project}'s cap.`)
+      // D-024: raising a cap waits ten minutes after its phrase; recorded as autonomy_raised when it applies.
+      const r = await deferLoosening(ctx, "autonomy", `raise ${project} to ${level === "extreme" ? "no cap" : LEVEL_NAMES[level]}`, { project, level }, `autonomy:${project}`, (req.body as { confirm?: unknown } | undefined)?.confirm)
+      return reply.code(r.status).send({ ...r.body, caps: autonomy.caps() })
     })
     // D-019: a proposal to raise a cap applies only when you accept it here; with a phone paired, only once its passkey
     // confirms too (the broker takes that answer from the phone alone). A failure to ask or to record applies nothing.
@@ -639,16 +642,25 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
         await autonomy.dropProposal(project)
         return bad(reply, 409, "The cap has changed since, so the proposal no longer applies.")
       }
+      // D-024: the raise then waits ten minutes after its phrase, typed on the desktop now.
+      const what = `raise ${project} to ${p.to === "extreme" ? "no cap" : LEVEL_NAMES[p.to]}`
+      const confirm = (req.body as { confirm?: unknown } | undefined)?.confirm
+      if (confirm !== looseningPhrase(what)) {
+        const r = await deferLoosening(ctx, "autonomy", what, {}, "", confirm)
+        return reply.code(r.status).send(r.body)
+      }
       const raise = async (by: "human-desktop" | "human-phone") => {
         const said = by === "human-phone" ? "on the desktop, confirmed with your phone's passkey" : "on the desktop"
-        if (!(await record("autonomy_raised", { project, level: p.to, proposed: true, ...(by === "human-phone" ? { confirmedBy: "phone" } : {}) }, `You raised ${project}'s cap from ${LEVEL_NAMES[p.from]} to ${LEVEL_NAMES[p.to]} ${said}, as proposed.`, by)))
+        if (!(await record("autonomy_raise_accepted", { project, level: p.to, ...(by === "human-phone" ? { confirmedBy: "phone" } : {}) }, `You accepted raising ${project}'s cap from ${LEVEL_NAMES[p.from]} to ${LEVEL_NAMES[p.to]} ${said}, as proposed; it applies after the wait.`, by)))
           return false
-        await autonomy.raise(project, p.to)
+        const r = await deferLoosening(ctx, "autonomy", what, { project, level: p.to }, `autonomy:${project}`, confirm)
+        if (r.status !== 202) return false
+        await autonomy.dropProposal(project)
         return true
       }
       if (!(ctx.phone?.listPhones().length ?? 0)) {
         if (!(await raise("human-desktop"))) return bad(reply, 503, "It could not be recorded, so the cap was not raised.")
-        return proposalView()
+        return reply.code(202).send({ ...proposalView(), pending: true })
       }
       if (!ctx.broker) return bad(reply, 503, "Your phone is paired but cannot be asked, so the cap was not raised.")
       if (!confirming.has(project)) {
@@ -1072,6 +1084,13 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     // D-026: a change that would allow what was refused or asked about is saved only with your typed phrase.
     const refused = await regressionGate(ctx, cand.policy, b.confirm, { from: sha(current), to: sha(b.yaml) })
     if (refused) return bad(reply, 409, refused.error, { regression: refused.regression })
+    // D-024: and one that takes out a deny or an ask waits ten minutes after its own phrase.
+    const was = current ? loadCandidate(ctx, current).policy : undefined
+    const removed = was ? rulesRemoved(was, cand.policy) : []
+    if (removed.length) {
+      const r = await deferLoosening(ctx, "rules", `remove ${removed.join(", ")}`, { yaml: b.yaml, baseHash: sha(current) }, "rules", b.loosen)
+      return reply.code(r.status).send(r.body)
+    }
     await writeFileAtomic(file, b.yaml)
     ctx.store.load()
     const hash = ctx.store.current?.hash ?? cand.policy.hash
@@ -1165,6 +1184,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
   })
 
   registerRelayRoutes(app, ctx)
+  registerLooseningRoutes(app, ctx)
   registerInsightRoutes(app, ctx)
   registerProjectRoutes(app, ctx)
   registerMemoryRoutes(app, ctx)
@@ -1696,6 +1716,17 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
     if (locked.length) return bad(reply, 403, managedRefusal(managed, `${locked.join(", ")} cannot be changed here`))
     if (!phoneAllowed(managed) && (parsed.data.push?.ntfy?.enabled || parsed.data.push?.slack?.enabled))
       return bad(reply, 403, managedRefusal(managed, "the phone and push channels are turned off"))
+    // D-024: a project no longer strict about its tests (a built-in ask switched off) waits ten minutes after its
+    // phrase; meanwhile both stay strict, so the rest of the save, tightening included, applies at once.
+    const loosened = testStrictnessRemoved((onDisk as { testIntegrity?: unknown }).testIntegrity, parsed.data.testIntegrity)
+    let pending: Record<string, unknown> | undefined
+    if (loosened.length) {
+      const r = await deferLoosening(ctx, "test-integrity", `stop being strict about tests in ${loosened.join(", ")}`, { value: parsed.data.testIntegrity ?? null }, "test-integrity", (req.query as { loosen?: unknown }).loosen)
+      if (r.status !== 202) return reply.code(r.status).send(r.body)
+      pending = r.body.pending as Record<string, unknown>
+      const union = strictUnion((onDisk as { testIntegrity?: unknown }).testIntegrity, parsed.data.testIntegrity)
+      if (union) parsed.data.testIntegrity = union as typeof parsed.data.testIntegrity
+    }
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const before = ctx.config()
     await writeFileAtomic(file, JSON.stringify(parsed.data, null, 2) + "\n")
@@ -1733,6 +1764,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       changed,
       appliedNow: changed.filter((k) => !needsRestart.includes(k)),
       audited: recorded,
+      ...(pending ? { pending } : {}),
     }
   })
 }

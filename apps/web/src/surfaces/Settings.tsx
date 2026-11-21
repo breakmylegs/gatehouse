@@ -1,3 +1,4 @@
+import { LooseningConfirm, LooseningList, looseningIn, type LooseningAsk } from "../components/LooseningConfirm"
 import { ClaudeImport } from "../components/ClaudeImport"
 import { ManagedNote } from "../components/ManagedNote"
 import { ShortcutSettings } from "../components/ShortcutSettings"
@@ -756,6 +757,9 @@ export function Settings() {
   const [data, setData] = useState<SettingsData>()
   const [error, setError] = useState<string>()
   const [errors, setErrors] = useState<string[]>()
+  // D-024: a save that stops a project being strict about its tests asks for its phrase, then applies after the wait.
+  const [looseAsk, setLooseAsk] = useState<{ ask: LooseningAsk; what: string }>()
+  const [looseWaiting, setLooseWaiting] = useState(0)
   const [restart, setRestart] = useState(false)
   const [restarting, setRestarting] = useState<{ busy: boolean; error?: string }>({ busy: false })
 
@@ -818,13 +822,23 @@ export function Settings() {
   }, [])
 
   /** Saves what is on screen now, if it changed. Saves run one at a time, in order. */
-  function save(what: string) {
+  function save(what: string, loosen?: string) {
     queue.current = queue.current.then(async () => {
       const d = dataRef.current
       const now = latest.current
       if (!d || !now || (saved.current && same(now, saved.current))) return
       const body = bodyOf(d, now)
-      const r = await api<{ restartRequired: boolean }>("PUT", "/api/settings", body)
+      const r = await api<{ restartRequired: boolean; pending?: unknown }>("PUT", `/api/settings${loosen ? `?loosen=${encodeURIComponent(loosen)}` : ""}`, body)
+      const loose = looseningIn(r.detail)
+      if (loose) {
+        setLooseAsk({ ask: loose, what })
+        return
+      }
+      setLooseAsk(undefined)
+      if (r.data?.pending) {
+        setLooseWaiting((n) => n + 1)
+        toast("A project stops being strict about its tests in 10 minutes, unless you cancel it", { id: "loosening" })
+      }
       if (!r.ok) {
         const why = r.errors ?? [r.error ?? "The settings were not saved"]
         setErrors(why)
@@ -937,6 +951,8 @@ export function Settings() {
           state={restarting}
         />
       ) : null}
+      <LooseningList refresh={looseWaiting} />
+      {looseAsk ? <LooseningConfirm ask={looseAsk.ask} busy={false} onConfirm={(p) => save(looseAsk.what, p)} /> : null}
       {errors?.length ? (
         <ul role="alert" className="m-0 font-semibold text-sev">
           {errors.map((m) => (

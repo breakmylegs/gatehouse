@@ -4,6 +4,7 @@ import { diffLines } from "diff"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { RegressionConfirm, regressionIn, type Regression } from "../components/RegressionConfirm"
+import { LooseningConfirm, LooseningList, looseningIn, type LooseningAsk } from "../components/LooseningConfirm"
 import { api } from "../lib/api"
 import { Insights } from "./Insights"
 import { PolicyChoices } from "./PolicyChoices"
@@ -386,6 +387,10 @@ export function Edit({ data, onActivated }: { data: PolicyData; onActivated: () 
 
   // D-026: rules that would allow what was refused or asked about before, and the phrase that saves them anyway.
   const [regression, setRegression] = useState<Regression>()
+  // D-024: and rules that take out a deny or an ask, which apply ten minutes after their own phrase.
+  const [loosening, setLoosening] = useState<LooseningAsk>()
+  const [confirmed, setConfirmed] = useState<string>()
+  const [waiting, setWaiting] = useState(0)
   const dirty = yaml !== data.rulesYaml
   const parts = useMemo(
     () => (reviewing ? diffLines(data.rulesYaml, yaml) : []),
@@ -401,22 +406,33 @@ export function Edit({ data, onActivated }: { data: PolicyData; onActivated: () 
     else setErrors(r.errors ?? [r.error ?? "The replay failed"])
   }
 
-  async function activate(confirm?: string) {
+  async function activate(confirm?: string, loosen?: string) {
     setBusy(true)
     setErrors(undefined)
-    const r = await api<{ hash: string }>("PUT", "/api/policy/rules", {
+    const r = await api<{ hash?: string; pending?: unknown }>("PUT", "/api/policy/rules", {
       yaml,
       baseHash: data.rulesYamlHash,
       ...(confirm ? { confirm } : {}),
+      ...(loosen ? { loosen } : {}),
     })
     setBusy(false)
+    if (confirm) setConfirmed(confirm)
     if (!r.ok) {
       const reg = regressionIn(r.detail)
       if (reg) setRegression(reg)
-      setErrors(r.errors ?? [r.error ?? "The rules were not saved"])
+      const loose = looseningIn(r.detail)
+      setLoosening(loose)
+      if (loose) setRegression(undefined)
+      setErrors(loose ? undefined : (r.errors ?? [r.error ?? "The rules were not saved"]))
       return
     }
     setRegression(undefined)
+    setLoosening(undefined)
+    if (r.data?.pending) {
+      setWaiting((n) => n + 1)
+      toast("These rules apply in 10 minutes unless you cancel them")
+      return
+    }
     toast("New rules are live")
     setReviewing(false)
     await onActivated()
@@ -482,6 +498,10 @@ export function Edit({ data, onActivated }: { data: PolicyData; onActivated: () 
             </ul>
           ) : null}
         </section>
+      ) : null}
+      <LooseningList refresh={waiting} />
+      {loosening ? (
+        <LooseningConfirm ask={loosening} busy={busy} onConfirm={(p) => void activate(confirmed, p)} />
       ) : null}
       {regression ? (
         <RegressionConfirm regression={regression} busy={busy} onConfirm={(p) => void activate(p)} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
+import { LooseningConfirm, LooseningList, looseningIn, type LooseningAsk } from "./LooseningConfirm"
 
 type Level = "plan" | "default" | "acceptEdits" | "auto" | "extreme"
 interface Cap {
@@ -38,6 +39,9 @@ export function AutonomyPanel() {
   const [raiseTo, setRaiseTo] = useState<Record<string, Level>>({})
   const [proposals, setProposals] = useState<Record<string, Proposal>>({})
   const [confirming, setConfirming] = useState<string[]>([])
+  // D-024: a raise asks for its phrase, then applies after ten minutes.
+  const [ask, setAsk] = useState<{ loosening: LooseningAsk; retry: (phrase: string) => Promise<void> }>()
+  const [waited, setWaited] = useState(0)
   const show = (v: ProposalsView) => {
     setCaps(v.caps)
     setProposals(v.proposals ?? {})
@@ -58,11 +62,15 @@ export function AutonomyPanel() {
     const t = setInterval(() => void load(), 5000)
     return () => clearInterval(t)
   }, [confirming.length])
-  async function accept(project: string) {
-    const r = await api<ProposalsView>("POST", `/api/autonomy/${encodeURIComponent(project)}/accept`)
-    if (!r.ok || !r.data) return toast.error(r.error ?? "Not raised", { id: "autonomy" })
+  async function accept(project: string, confirm?: string): Promise<void> {
+    const r = await api<ProposalsView>("POST", `/api/autonomy/${encodeURIComponent(project)}/accept`, confirm ? { confirm } : {})
+    const loose = looseningIn(r.detail)
+    if (loose) return void setAsk({ loosening: loose, retry: (p) => accept(project, p) })
+    if (!r.ok || !r.data) return void toast.error(r.error ?? "Not raised", { id: "autonomy" })
+    setAsk(undefined)
     show(r.data)
-    toast(r.data.waitingForPhone ? "Confirm it on your phone with your passkey" : `${project} raised`, { id: "autonomy" })
+    setWaited((n) => n + 1)
+    toast(r.data.waitingForPhone ? "Confirm it on your phone with your passkey; it then applies in 10 minutes" : `${project} is raised in 10 minutes`, { id: "autonomy" })
   }
   async function decline(project: string) {
     const r = await api<ProposalsView>("POST", `/api/autonomy/${encodeURIComponent(project)}/decline`)
@@ -76,11 +84,15 @@ export function AutonomyPanel() {
     setCaps(r.data.caps)
     toast(r.data.lowered.length ? `Lowered: ${r.data.lowered.map((l) => l.project).join(", ")}` : "Nothing to lower", { id: "autonomy" })
   }
-  async function raise(project: string, level: Level) {
-    const r = await api<{ caps: Record<string, Cap> }>("POST", `/api/autonomy/${encodeURIComponent(project)}/raise`, { level })
-    if (!r.ok || !r.data) return toast.error(r.error ?? "Not raised", { id: "autonomy" })
+  async function raise(project: string, level: Level, confirm?: string): Promise<void> {
+    const r = await api<{ caps: Record<string, Cap> }>("POST", `/api/autonomy/${encodeURIComponent(project)}/raise`, { level, ...(confirm ? { confirm } : {}) })
+    const loose = looseningIn(r.detail)
+    if (loose) return void setAsk({ loosening: loose, retry: (p) => raise(project, level, p) })
+    if (!r.ok || !r.data) return void toast.error(r.error ?? "Not raised", { id: "autonomy" })
+    setAsk(undefined)
     setCaps(r.data.caps)
-    toast(`${project} raised to ${NAMES[level]}`, { id: "autonomy" })
+    setWaited((n) => n + 1)
+    toast(`${project} is raised to ${NAMES[level]} in 10 minutes`, { id: "autonomy" })
   }
   const entries = Object.entries(caps ?? {})
   return (
@@ -93,6 +105,8 @@ export function AutonomyPanel() {
         the cap), it proposes one step up; that applies only when you accept it, and with your phone paired, when you
         confirm on the phone too.
       </p>
+      <LooseningList refresh={waited} />
+      {ask ? <LooseningConfirm ask={ask.loosening} busy={false} onConfirm={(p) => void ask.retry(p)} /> : null}
       {caps === undefined ? null : entries.length === 0 ? (
         <p className="m-0 text-mut">No project is capped.</p>
       ) : (

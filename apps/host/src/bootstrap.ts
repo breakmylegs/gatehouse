@@ -29,6 +29,7 @@ import { HostStalls } from "./host-stalls.js"
 import { resolveSecret, SecretTerms } from "./secret-providers.js"
 import { refuseRequest, SecretRequests } from "./secret-requests.js"
 import { AutonomyStore } from "./autonomy.js"
+import { LooseningStore } from "./loosening.js"
 import { BoardStore } from "./board.js"
 import { buildPhoneSessions, PhoneLive, PhoneSessionsSharer } from "./phone-sessions.js"
 import { OpenSessionsStore, restoreOpenSessions } from "./open-sessions.js"
@@ -1618,6 +1619,12 @@ export function createHost(opts: HostOptions = {}): Host {
       autonomy,
       // D-019: the paired phone confirms a raise you accepted.
       broker,
+      // D-024: loosening waits ten minutes after its phrase; the phone and push channels are told, for information.
+      loosening: new LooseningStore(path.join(gatehouseDataDir(env), "loosening.json")),
+      tell: (title: string, body: string) => {
+        void phone.notify("info", { title, body, project: "Codehouse" }).catch(() => undefined)
+        void ntfy.note(title, body, "Codehouse").catch(() => undefined)
+      },
       // T-132: stalls and slow requests, for Doctor.
       stalls: (() => {
         const s = new HostStalls()
