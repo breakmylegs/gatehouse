@@ -288,6 +288,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-094: the remote endpoints this session's processes reached, signed with this computer's key. */
+  z.object({ type: z.literal("egress_report"), sessionId: Id }),
   /** D-080: the project's ADRs, glossary and instructions as a signed pack, and importing one signed by a trusted key. */
   z.object({ type: z.literal("knowledge_export"), sessionId: Id }),
   z.object({ type: z.literal("knowledge_import"), sessionId: Id, pack: z.object({ pack: z.string().max(20_000_000), signature: z.string().max(400), publicKey: z.string().max(2000) }) }),

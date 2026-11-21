@@ -66,6 +66,7 @@ interface Config {
   digestTime?: string | null
   noticeBatchMinutes?: number
   reviewCapacityMinutes?: number
+  egress?: { strict?: boolean; allowHosts?: string[] }
   quietHours?: { start: string; end: string; tz: string; phone?: boolean }
   /** E-094: minutes the phone and the push channels wait before they are told; absent, all at once. */
   escalationLadder?: { phoneAfterMinutes?: number; pushAfterMinutes?: number; onlyWhenHere?: boolean }
@@ -167,6 +168,9 @@ interface Values {
   batchMinutes: string
   /** D-089: minutes of review an hour; "" for no warning. */
   reviewCapacity: string
+  /** D-094: stop a session that connects outside its list, and hosts a Claude session may also reach. */
+  egressStrict: boolean
+  egressHosts: string
   terms: string
   writeUk: boolean
   writeDashes: boolean
@@ -273,6 +277,8 @@ export function valuesOf(d: SettingsData): Values {
     digestAt: c.digestTime ?? "08:00",
     batchMinutes: c.noticeBatchMinutes ? String(c.noticeBatchMinutes) : "",
     reviewCapacity: c.reviewCapacityMinutes ? String(c.reviewCapacityMinutes) : "",
+    egressStrict: c.egress?.strict === true,
+    egressHosts: (c.egress?.allowHosts ?? []).join("\n"),
     terms: c.redactTerms.join("\n"),
     teamKeys: (c.redactionListKeys ?? []).join("\n"),
     packKeys: (c.rulePackKeys ?? []).join("\n"),
@@ -421,6 +427,9 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.noticeBatchMinutes
   if (v.reviewCapacity) body.reviewCapacityMinutes = Number(v.reviewCapacity)
   else delete body.reviewCapacityMinutes
+  const hosts = v.egressHosts.split(/[\s,]+/).map((h) => h.trim().toLowerCase()).filter((h) => /^[a-z0-9.-]{1,253}$/.test(h))
+  if (v.egressStrict || hosts.length) body.egress = { ...(v.egressStrict ? { strict: true } : {}), ...(hosts.length ? { allowHosts: hosts } : {}) }
+  else delete body.egress
   if (v.quiet) body.quietHours = { start: v.qStart, end: v.qEnd, tz: v.qTz, phone: v.qPhone }
   else delete body.quietHours
   // Anything a newer version keeps beside the limits stays.
@@ -596,6 +605,8 @@ export const DEFAULT_VALUES: Values = {
   digestAt: "08:00",
   batchMinutes: "",
   reviewCapacity: "",
+  egressStrict: false,
+  egressHosts: "",
   terms: "",
   writeUk: true,
   writeDashes: true,
@@ -1816,6 +1827,21 @@ export function Settings() {
                   />
                 </Field>
               ) : null}
+            </Group>
+
+            <Group section="privacy" title="Where sessions connect" gap="gap-2" changed={differs(v, ["egressStrict", "egressHosts"])}>
+              <p className="m-0 text-[13px] text-mut">
+                Every minute, Codehouse notes where each session&apos;s processes connected. A Claude session may reach Anthropic and
+                this computer; a session on a model on this computer, only this computer. Anything else is flagged in its report
+                (Where it connected...).
+              </p>
+              <Field label="Hosts a Claude session may also reach" help="One to a line, such as registry.npmjs.org.">
+                <textarea className="field mono" rows={2} value={v.egressHosts} onChange={(e) => change({ egressHosts: e.target.value }, "Where sessions connect")} />
+              </Field>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.egressStrict} onChange={(e) => change({ egressStrict: e.target.checked }, "Where sessions connect")} />
+                Stop a session that connects anywhere else (strict)
+              </label>
             </Group>
 
             <Group section="sessions" title="Review load" gap="gap-2" changed={differs(v, ["reviewCapacity"])}>

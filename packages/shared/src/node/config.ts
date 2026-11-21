@@ -225,6 +225,14 @@ function build(loose: boolean) {
     noticeBatchMinutes: z.number().int().min(5).max(240).optional(),
     /** D-089: the minutes of review an hour you can give; above it the approvals list warns. Absent: no warning. */
     reviewCapacityMinutes: z.number().int().min(5).max(600).optional(),
+    /**
+     * D-094: the egress report. Hosts a Claude session may also reach (a package registry), and strict, which stops a
+     * session that reaches anything outside its list. Absent: no extra hosts, not strict.
+     */
+    egress: z
+      .object({ strict: z.boolean().optional(), allowHosts: z.array(z.string().regex(/^[a-z0-9.-]{1,253}$/i)).max(50).optional() })
+      .passthrough()
+      .optional(),
     /** Outbound-only push channels. Answers come back over a connection this computer opens. */
     push: obj({
       ntfy: obj({

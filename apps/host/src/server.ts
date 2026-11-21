@@ -1,3 +1,4 @@
+import { signReport } from "./egress.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
 import { admit, DEFAULT_LICENCES, fromManifestEdit, licenceFindings, type AddedDependency } from "@gatehouse/policy"
@@ -118,6 +119,8 @@ export interface HostApp {
   vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches">
   /** D-080: this computer's key for signing knowledge packs. */
   knowledgeKey?: KnowledgeKey
+  /** D-094: what each session's processes reached. */
+  egress?: Pick<import("./egress.js").EgressMonitor, "report">
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1076,6 +1079,14 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "egress_report": {
+        // D-094: the endpoints sampled for this session, signed so the report can be checked later.
+        const s = this.#session(cmd.sessionId)
+        if (!a.egress || !a.knowledgeKey) throw new CommandError("unavailable", "Egress reports are not available here.")
+        const report = a.egress.report(s.id) ?? { v: 1 as const, session: s.id, from: new Date().toISOString(), to: new Date().toISOString(), endpoints: [], flagged: 0 }
+        const key = a.knowledgeKey
+        return { report, signed: await signReport(report, (b) => key.signBytes(b)) }
       }
       case "knowledge_export": {
         // D-080: signed with this computer's key; the public key is shown so the receiver can trust it.

@@ -90,6 +90,12 @@ export class KnowledgeKey {
     return (await this.#load()).publicKey
   }
 
+  /** Any bytes signed with this computer's key (D-094's egress reports use it too). */
+  async signBytes(bytes: Buffer): Promise<{ signature: string; publicKey: string }> {
+    const k = await this.#load()
+    return { signature: crypto.sign(null, bytes, k.privateKey).toString("base64"), publicKey: k.publicKey }
+  }
+
   async sign(pack: KnowledgePack): Promise<SignedKnowledgePack> {
     const k = await this.#load()
     const bytes = Buffer.from(JSON.stringify(pack), "utf8")

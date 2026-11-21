@@ -1,3 +1,4 @@
+import { EgressMonitor, windowsSampler } from "./egress.js"
 import { KnowledgeKey } from "./knowledge-pack.js"
 import { noteMemory, reportLastStop } from "./last-stop.js"
 import { TestLocks } from "./test-locks.js"
@@ -1586,6 +1587,30 @@ export function createHost(opts: HostOptions = {}): Host {
     log,
   })
 
+  // D-080 and D-094: this computer's signing key, its private half sealed for this user.
+  const machineKey = new KnowledgeKey(path.join(gatehouseDataDir(env), "knowledge-key.json"), sealer())
+  // D-094: every minute on Windows, each session's remote endpoints against what it may reach; strict stops it.
+  const egress = new EgressMonitor({
+    sessions: () => manager.liveSessions().map((s) => ({ id: s.id, rootPid: s.rootPid, local: s.info().local === true })),
+    sampler: windowsSampler,
+    extraHosts: () => config.egress?.allowHosts ?? [],
+    strict: () => config.egress?.strict === true,
+    onFlagged: (id, e, stop) => {
+      const s = manager.get(id)
+      void audit.record({
+        session: id, event: stop ? "egress_stopped" : "egress_flagged", channel: "host", tool: "egress", cwd: s?.cwd ?? "", project: s?.project ?? "",
+        input: { remote: e.remote, port: e.port, process: e.process },
+        verdict: { outcome: stop ? "deny" : "allow", ruleId: "egress-outside-list", reason: `${e.process || "A process"} in this session reached ${e.remote}:${e.port}, outside what it may reach${stop ? ", so strict mode stopped the session" : ""}.`, risk: stop ? 100 : 60, decidedBy: "rules", policyHash: store.current?.hash ?? "" },
+        latencyMs: 0,
+      }).then(() => (stop ? manager.forceStop(id).then(() => undefined) : undefined)).catch(() => undefined)
+      log(`egress: session ${id} reached ${e.remote}:${e.port} outside its list${stop ? ", stopped (strict)" : ""}`)
+    },
+  })
+  if (process.platform === "win32") {
+    const egressTimer = setInterval(() => void egress.sample().catch(() => undefined), 60_000)
+    egressTimer.unref?.()
+  }
+
   // T-119: the routine runner, set once routines start, for Run now.
   const routineRunner: { run?: (id: string) => Promise<string> } = {}
   const app: HostApp = {
@@ -1608,7 +1633,9 @@ export function createHost(opts: HostOptions = {}): Host {
     // D-071: an upgrade's admission checks read the same snapshot as the commit guard.
     vulnSnapshot,
     // D-080: knowledge packs are signed with a key kept sealed for this user.
-    knowledgeKey: new KnowledgeKey(path.join(gatehouseDataDir(env), "knowledge-key.json"), sealer()),
+    knowledgeKey: machineKey,
+    // D-094: what each session's processes reached.
+    egress,
     dataDir: gatehouseDataDir(env),
     locks,
     evidence,
