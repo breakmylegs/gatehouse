@@ -66,7 +66,7 @@ describe("the multi-repo contract check", () => {
       log: () => undefined,
     } as unknown as CanUseDeps)
     await canUse("Write", { file_path: at("core", "src", "index.ts"), content: "export const VERSION = 1\n" }, { toolUseID: "t1", signal: new AbortController().signal } as never)
-    const reason = (request.mock.calls[0]![0] as { verdict: { ruleId: string; reason: string } }).verdict
+    const reason = ((request.mock.calls as unknown as Array<[{ verdict: { ruleId: string; reason: string } }]>)[0]![0]).verdict
     expect(reason.ruleId).toBe("api-break")
     expect(reason.reason).toMatch(/removes an export from src\/index\.ts/)
     expect(reason.reason).toMatch(/Used by 2 other repositories on this computer/)
