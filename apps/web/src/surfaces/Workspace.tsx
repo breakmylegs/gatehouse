@@ -10,6 +10,7 @@ import { TestsFirstBanner, TestsFirstStart } from "../components/TestsFirst"
 import { Requirements } from "../components/Requirements"
 import { Evidence } from "../components/Evidence"
 import { MigrationPanel } from "../components/MigrationPanel"
+import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
 import { InstructionsReview } from "../components/InstructionsReview"
@@ -398,6 +399,7 @@ function SessionPane({
   // D-003: the change's evidence pack.
   const [evidence, setEvidence] = useState(false)
   const [migration, setMigration] = useState(false)
+  const [pwsh7, setPwsh7] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -664,6 +666,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Evidence...", onSelect: () => setEvidence(true) }]),
     // D-067: a migration in waves, with each wave's behaviour captured before and compared after.
     ...(chat ? [] : [{ label: "Plan a migration...", onSelect: () => setMigration(true) }]),
+    // D-070: what in the scripts will not run in PowerShell 7.
+    ...(chat ? [] : [{ label: "Check PowerShell for version 7...", onSelect: () => setPwsh7(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
     ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
@@ -911,6 +915,11 @@ function SessionPane({
       {requirements ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {pwsh7 ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <PwshModernisePanel sessionId={session.id} onClose={() => setPwsh7(false)} />
         </div>
       ) : null}
       {migration ? (

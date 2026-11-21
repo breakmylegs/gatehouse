@@ -200,7 +200,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-012 | Time-boxed fuzz pass | built | feat/d012 | BUILD_REPORT "Frontier D-012" | Safe variant: Codehouse's own seeded property runner (no new dependency) on changed exported parsers, as a Codehouse action, 60 s and a 256 MB heap cap; findings written to testdata/fuzz for D-008. Native fuzzers listed for IT and the owner |
 | D-052 | Multi-repo contract check | built | feat/d052 | BUILD_REPORT "Frontier D-052" | A removed library export names the repositories beside it that depend on the package and import the name, with file and line, in the api-break reason |
 | D-067 | Migration planner with evidence | built | feat/d067 | BUILD_REPORT "Frontier D-067" | Waves from a folder's imports, leaves first (a cycle one wave); each wave's callable files captured before (D-066) and compared after (D-006); done only with both; Claude asked one wave at a time |
-| D-070 | PowerShell modernisation | todo | | | |
+| D-070 | PowerShell modernisation | built | feat/d067 | BUILD_REPORT "Frontier D-070" | PowerShell 7 check per script: the AST worker's commands against what 7 removed (cmdlets, aliases, -Encoding Byte, workflows), PSScriptAnalyzer added where installed; nothing runs |
 | D-071 | Dependency upgrade with evidence | todo | | | |
 | D-080 | Signed knowledge packs | todo | | | |
 | D-094 | Verifiable egress report | todo | | | Safe variant |

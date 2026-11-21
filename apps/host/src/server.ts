@@ -1,3 +1,5 @@
+import { inlineScriptArgs, powerShellExe } from "@gatehouse/policy"
+import { ANALYZER_SCRIPT, modernise, type AnalyzerRun } from "./pwsh-modernise.js"
 import { MigrationStore, planMigration, sourcesIn, waveState, wavePrompt, type MigrationPlan } from "./migration.js"
 import { ensureRunner, fuzzTargets, pinLines, runFuzz } from "./fuzz.js"
 import { AsyncLocalStorage } from "node:async_hooks"
@@ -1067,6 +1069,36 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "pwsh_modernise": {
+        // D-070: the project's scripts read with the AST worker (and PSScriptAnalyzer where installed); nothing runs.
+        const s = this.#session(cmd.sessionId)
+        const worker = a.pwsh
+        if (!worker) throw new CommandError("unavailable", "The PowerShell parser is not available here.")
+        const analyzer: AnalyzerRun | undefined = a.dataDir
+          ? async (file) => {
+              const script = path.join(a.dataDir!, "pwsh", "analyzer.ps1")
+              if (!fs.existsSync(script) || fs.readFileSync(script, "utf8") !== ANALYZER_SCRIPT) {
+                fs.mkdirSync(path.dirname(script), { recursive: true })
+                await writeFileAtomic(script, ANALYZER_SCRIPT)
+              }
+              const out = await new Promise<string>((resolve) =>
+                execFileCb(powerShellExe(), inlineScriptArgs(script, [`'${file.replace(/'/g, "''")}'`]), { timeout: 60_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, (_e, stdout) => resolve(String(stdout ?? ""))),
+              )
+              const t = out.trim()
+              if (!t || t === "NOPSSA") return undefined
+              const v = JSON.parse(t) as unknown
+              return (Array.isArray(v) ? v : [v]) as Array<{ RuleName: string; Line: number; Message: string }>
+            }
+          : undefined
+        const reports = await modernise({ root: s.cwd, parse: (t) => worker.parse(t), ...(analyzer ? { analyzer } : {}) })
+        await a.audit.record({
+          session: s.id, event: "pwsh_modernise", channel: "desktop", tool: "pwsh", cwd: s.cwd, project: s.project,
+          input: { scripts: reports.length, findings: reports.reduce((n, r) => n + r.findings.length, 0), analyzer: reports.some((r) => r.analyzer) },
+          verdict: { outcome: "allow", ruleId: "pwsh-modernise", reason: "The project's PowerShell scripts were checked for PowerShell 7.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { reports }
       }
       case "migration_plan": {
         // D-067: waves from the folder's own imports, leaves first; each file's callable exports found as D-066 finds them.
