@@ -70,6 +70,21 @@ describe("the request in the workspace", () => {
     await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "q1", opened: false, shownMs: expect.any(Number) }]))
   })
 
+  it("never allows High with one key: the first Ctrl+Enter only arms it (D-092)", async () => {
+    render(<QuickDecision view={view(80)} variant="panel" />)
+    const box = screen.getByRole("region", { name: "Run shell command" })
+    fireEvent.keyDown(box, { key: "Enter", ctrlKey: true })
+    fireEvent.keyDown(screen.getByRole("button", { name: /Allow once/ }), { key: "Enter" })
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toMatchObject({ type: "approve", requestId: "q1" })
+    cleanup()
+    sent.length = 0
+    render(<QuickDecision view={view(80)} variant="panel" />)
+    fireEvent.keyDown(screen.getByRole("region", { name: "Run shell command" }), { key: "Enter", ctrlKey: true })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(sent).toEqual([])
+  })
+
   it("after approvals too fast to read, waits two seconds and then sends the deliberate approval (owner, 16 Nov)", async () => {
     // Before, it sent the same plain allow again, and the Host refused it however long you waited.
     reply = (cmd) =>

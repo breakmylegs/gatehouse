@@ -1,3 +1,4 @@
+import { useAllowChord } from "../lib/allow-chord"
 import type { PendingView } from "@gatehouse/shared/ws-protocol"
 import clsx from "clsx"
 import { useEffect, useRef, useState } from "react"
@@ -90,6 +91,8 @@ export function QuickDecision({
   }
 
   const off = busy || !connected
+  // D-092: allowing High or Severe by keyboard takes two presses within two seconds.
+  const chord = useAllowChord(riskBand(req.verdict.risk) === "High" || riskBand(req.verdict.risk) === "Severe")
   const denyBtn = (
     <button
       type="button"
@@ -106,6 +109,13 @@ export function QuickDecision({
       className={clsx("btn", view.defaultToNo ? "btn-strong" : "btn-primary")}
       disabled={off || friction === "waiting"}
       onClick={() => void run("allow")}
+      // Enter or Space on Allow is a key press like any other for the chord (D-092); a pointer click is not.
+      onKeyDown={(e) => {
+        if (e.key !== "Enter" && e.key !== " ") return
+        e.preventDefault()
+        e.stopPropagation()
+        if (chord.press("button-key")) void run("allow")
+      }}
       {...(variant === "panel" ? { "aria-keyshortcuts": "Control+Enter" } : {})}
     >
       {friction === "waiting" ? "Read it first" : friction === "ready" ? "Yes, allow it" : "Allow once"}
@@ -155,7 +165,10 @@ export function QuickDecision({
         if (off) return
         if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
           e.preventDefault()
-          void run("allow")
+          if (chord.press("ctrl-enter")) void run("allow")
+        } else if (e.key === "Enter" && chord.armed && !(e.target instanceof HTMLButtonElement)) {
+          e.preventDefault()
+          if (chord.press("enter")) void run("allow")
         } else if (e.key === "Escape") {
           e.preventDefault()
           void run("deny")

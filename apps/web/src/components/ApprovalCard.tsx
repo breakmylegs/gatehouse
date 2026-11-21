@@ -11,6 +11,7 @@ import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
 import { ExplainDecision } from "./ExplainDecision"
+import { useAllowChord } from "../lib/allow-chord"
 import { minutesWords, reviewEstimate } from "./ReviewLoad"
 import { FileChip } from "./FileChip"
 import { api } from "../lib/api"
@@ -113,6 +114,8 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   const high = req.kind === "permission" && req.verdict.risk >= HIGH_RISK
   const severe = req.kind === "permission" && req.verdict.risk >= SEVERE_RISK
   const [ready, setReady] = useState(!high)
+  // D-092: allowing High or Severe by keyboard takes two presses within two seconds.
+  const chord = useAllowChord(high)
   const [confirming, setConfirming] = useState<"allow" | "edited">()
   const [typed, setTyped] = useState("")
 
@@ -240,7 +243,10 @@ export function ApprovalCard({ view }: { view: PendingView }) {
     if (busy || resolved || !connected) return
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && panel === "none") {
       e.preventDefault()
-      void allow()
+      if (ready && chord.press("ctrl-enter")) void allow()
+    } else if (e.key === "Enter" && chord.armed && panel === "none" && !typing(e.target) && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault()
+      if (chord.press("enter")) void allow()
     } else if (e.key === "Escape") {
       e.preventDefault()
       if (panel !== "none") setPanel("none")
@@ -729,11 +735,23 @@ export function ApprovalCard({ view }: { view: PendingView }) {
               className={clsx("btn pass-allow", view.defaultToNo ? "btn-strong" : "btn-primary")}
               disabled={busy || !connected || !ready}
               onClick={() => void allow()}
+              // Enter or Space on Allow is a key press like any other for the chord (D-092); a pointer click is not.
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return
+                e.preventDefault()
+                e.stopPropagation()
+                if (chord.press("button-key")) void allow()
+              }}
               aria-keyshortcuts="Control+Enter"
             >
               {req.kind === "plan" ? "Approve plan" : severe ? "Allow once…" : "Allow once"}{" "}
               <kbd aria-hidden="true">{keyLabel("Ctrl Enter")}</kbd>
             </button>
+            {chord.armed ? (
+              <span role="status" className="text-[13px] font-semibold">
+                Press Enter again within 2 seconds to allow
+              </span>
+            ) : null}
           </div>
         )}
         {/* Next to Allow, where you clicked: above the card it was missed and the click looked ignored. */}

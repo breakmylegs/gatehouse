@@ -213,12 +213,44 @@ describe("ApprovalCard", () => {
     fireEvent.keyDown(document.body, { key: "Enter", ctrlKey: true })
     expect(sent).toEqual([])
     await allowReady()
+    // D-092: at High risk the first Ctrl+Enter only arms it; Enter within two seconds allows.
     fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
+    expect(sent).toEqual([])
+    expect(screen.getByText("Press Enter again within 2 seconds to allow")).toBeInTheDocument()
+    fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter" })
     await waitFor(() =>
       expect(sent).toEqual([
         { type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) },
       ]),
     )
+  })
+
+  it("never allows High with one key: Ctrl+Enter, or Enter or Space on Allow, only arms it, and it lapses after two seconds (D-092)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      render(<ApprovalCard view={view()} />)
+      await allowReady()
+      const allowButton = screen.getByRole("button", { name: /^Allow once/ })
+      fireEvent.keyDown(allowButton, { key: "Enter" })
+      expect(sent).toEqual([])
+      vi.advanceTimersByTime(2100)
+      await waitFor(() => expect(screen.queryByText("Press Enter again within 2 seconds to allow")).toBeNull())
+      fireEvent.keyDown(allowButton, { key: " " })
+      expect(sent).toEqual([])
+      vi.advanceTimersByTime(2100)
+      fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
+      expect(sent).toEqual([])
+      fireEvent.keyDown(allowButton, { key: "Enter" })
+      await waitFor(() => expect(sent).toEqual([{ type: "approve", requestId: "req-1", opened: true, shownMs: expect.any(Number) }]))
+    } finally {
+      vi.useRealTimers()
+    }
+    // Below High, one Ctrl+Enter still allows.
+    cleanup()
+    sent.length = 0
+    render(<ApprovalCard view={view({ verdict: { ...view().request.verdict, risk: 40, segments: [] } })} />)
+    fireEvent.keyDown(screen.getByLabelText("What will run"), { key: "Enter", ctrlKey: true })
+    await waitFor(() => expect(sent).toHaveLength(1))
   })
 
   it("answers the Stitch letter keys inside the card, and no letter ever allows", async () => {
