@@ -1,3 +1,4 @@
+import { processesUnder, stopUnder, taskkill, windowsSnapshot } from "./session-procs.js"
 import type { LocalRuntimeConfig } from "./providers/local-runtime.js"
 import { AdversaryStore, adversaryOf, applyChange, BREAKER_PROMPT } from "./adversary.js"
 import { reviewerRuntime, sessionDiff } from "./review.js"
@@ -1086,6 +1087,29 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "session_processes": {
+        // E-029: the processes under the session's root, with their ports and when each started; read only.
+        const s = this.#session(cmd.sessionId)
+        if (process.platform !== "win32" || s.rootPid === undefined) return { processes: [] }
+        const { procs, listening } = await windowsSnapshot()
+        return { processes: processesUnder(s.rootPid, procs, listening) }
+      }
+      case "stop_process": {
+        // E-029: only with your confirmation, only a process still under this session; recorded first.
+        const s = this.#session(cmd.sessionId)
+        if (process.platform !== "win32" || s.rootPid === undefined) throw new CommandError("unavailable", "Codehouse cannot see this session's processes here.")
+        if (!cmd.confirm) throw new CommandError("not-confirmed", "Stopping a process needs your confirmation.")
+        const recorded = await a.audit.record({
+          session: s.id, event: "process_stopped", channel: "desktop", tool: "processes", cwd: s.cwd, project: s.project,
+          input: { pid: cmd.pid },
+          verdict: { outcome: "allow", ruleId: "process-stopped", reason: `You stopped process ${cmd.pid}, which this session started, from the desktop.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        if (!recorded) throw new CommandError("not-recorded", "It could not be recorded, so nothing was stopped.")
+        const r = await stopUnder(s.rootPid, cmd.pid, cmd.confirm, windowsSnapshot, taskkill)
+        if (!r.stopped) throw new CommandError("not-stopped", r.why ?? "It was not stopped.")
+        return r
       }
       case "adversary_start": {
         // D-084: the reviewer model, through the runtime or gateway on this computer, tries to break this session's change

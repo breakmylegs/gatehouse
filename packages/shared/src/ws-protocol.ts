@@ -288,6 +288,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** E-029: what this session left running, with its ports; and stopping one, only when you confirm. */
+  z.object({ type: z.literal("session_processes"), sessionId: Id }),
+  z.object({ type: z.literal("stop_process"), sessionId: Id, pid: z.number().int().min(1), confirm: z.boolean() }),
   /** D-084: a second model tries to break this session's change, in a worktree of its own. */
   z.object({ type: z.literal("adversary_start"), sessionId: Id }),
   /** D-079: ask Claude to write a codebase tour of a topic, in the format the tours read. */

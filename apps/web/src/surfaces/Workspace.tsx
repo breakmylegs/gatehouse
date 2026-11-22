@@ -14,6 +14,7 @@ import { KnowledgePanel } from "../components/KnowledgePanel"
 import { EgressPanel } from "../components/EgressPanel"
 import { ToursPanel } from "../components/ToursPanel"
 import { EnvironmentPanel } from "../components/EnvironmentPanel"
+import { ProcessesPanel } from "../components/ProcessesPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -408,6 +409,7 @@ function SessionPane({
   const [egress, setEgress] = useState(false)
   const [tours, setTours] = useState(false)
   const [environment, setEnvironment] = useState(false)
+  const [processes, setProcesses] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -684,6 +686,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Codebase tours...", onSelect: () => setTours(true) }]),
     // E-025: the tools this computer has against what the project asks for.
     ...(chat ? [] : [{ label: "Environment...", onSelect: () => setEnvironment(true) }]),
+    // E-029: what this session left running, with its ports.
+    ...(chat ? [] : [{ label: "Ports and processes...", onSelect: () => setProcesses(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
     ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
@@ -931,6 +935,11 @@ function SessionPane({
       {requirements ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {processes ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <ProcessesPanel sessionId={session.id} onClose={() => setProcesses(false)} />
         </div>
       ) : null}
       {environment ? (

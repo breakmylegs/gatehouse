@@ -1,3 +1,4 @@
+import { portHolder, windowsSnapshot } from "./session-procs.js"
 import { devDriveCheck, readDevDrive } from "./devdrive.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -948,6 +949,8 @@ export function createHost(opts: HostOptions = {}): Host {
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
   deps.mutationExec = mutationExecFor
+  // E-029: who listens on a port, so a server about to start on it goes to a person first (Windows).
+  if (process.platform === "win32") deps.portHolder = (port) => portHolder(port, windowsSnapshot)
   // D-084: a breaker's test runs: the project's own test command, as a Codehouse action in its worktree.
   deps.breakerTests = async (id, cwd) => {
     const command = projectCommand(cwd, "tests")

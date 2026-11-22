@@ -510,6 +510,8 @@ export interface SessionDeps {
     /** Where its chats send their words: "On this computer", or a provider through your gateway. */
     label?: () => string
   }
+  /** E-029: who listens on a port now (Windows). */
+  portHolder?: (port: number) => Promise<string | undefined>
   /** D-084: a breaker's test runs: the project's test command, as a Codehouse action in its worktree. */
   breakerTests?: (sessionId: string, cwd: string) => Promise<{ ok: boolean; output: string }>
   /** Free memory in bytes, for the warm chat; os.freemem when absent. */
@@ -1374,6 +1376,8 @@ export class Session extends EventEmitter<SessionEvents> {
       testsFirst: () => this.#testsFirst,
       // D-084: a breaker's edits go to a person.
       ...(this.#opts.breaker ? { breaker: true } : {}),
+      // E-029: a server about to start on a port in use goes to a person first.
+      ...(d.portHolder ? { portHolder: d.portHolder } : {}),
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,
       onPlanApproved: (plan) => void this.#leaseFromPlan(plan),

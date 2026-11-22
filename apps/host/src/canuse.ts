@@ -1,3 +1,4 @@
+import { PORT_CLASH_RULE, portClashReason, serverPort } from "./session-procs.js"
 import { BREAKER_EDIT_RULE, breakerEditReason } from "./adversary.js"
 import { consumersOf, consumersWords } from "./contract-check.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
@@ -84,6 +85,8 @@ export interface CanUseDeps {
   testsFirst?: () => boolean
   /** D-084: this session is a breaker; any edit it tries goes to a person. */
   breaker?: boolean
+  /** E-029: who listens on a port now, for a command that would start a server on it. */
+  portHolder?: (port: number) => Promise<string | undefined>
   /** D-023: the paths and commands this session may use by itself in Auto and Accept edits. */
   lease?: () => ScopeLease | undefined
   /** D-023: a plan was approved, with its words, so the session can set its lease from it. */
@@ -340,6 +343,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         const file = String(input.file_path ?? input.notebook_path ?? "")
         if (!TEST_FILE.test(file))
           verdict = { ...verdict, outcome: "escalate", ruleId: TESTS_FIRST_RULE, reason: testsFirstReason(file), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+      }
+      // E-029: a command that would start a server on a port something already listens on goes to a person first.
+      if (deps.portHolder && verdict.outcome === "allow" && (toolName === "Bash" || toolName === "PowerShell") && typeof input.command === "string") {
+        const port = serverPort(input.command)
+        const holder = port === undefined ? undefined : await deps.portHolder(port).catch(() => undefined)
+        if (port !== undefined && holder) verdict = { ...verdict, outcome: "escalate", ruleId: PORT_CLASH_RULE, reason: portClashReason(port, holder), risk: Math.max(verdict.risk, 30), decidedBy: "rules" }
       }
       // D-084: a breaker tries to break a change, not to change it: any edit goes to a person, whatever the rules said.
       if (deps.breaker && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName))
