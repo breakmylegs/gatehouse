@@ -32,6 +32,8 @@ export interface IacChange {
 export interface IacPlan {
   tool: IacTool
   changes: IacChange[]
+  /** E-024: what each resource depends on, changed or not (Terraform's configuration, Pulumi's steps). */
+  graph?: Record<string, string[]>
 }
 
 const rec = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {})
@@ -76,7 +78,7 @@ function terraform(v: Record<string, unknown>): IacPlan {
     const configAddress = address.replace(/\[[^\]]*\]/g, "")
     changes.push({ address, type: str(rc.type), action, before: change.before, after: change.after, ...(deps.has(configAddress) ? { dependsOn: deps.get(configAddress)! } : {}) })
   }
-  return { tool: "terraform", changes }
+  return { tool: "terraform", changes, ...(deps.size ? { graph: Object.fromEntries(deps) } : {}) }
 }
 
 function arm(v: Record<string, unknown>): IacPlan {
@@ -110,6 +112,12 @@ function cloudformation(v: Record<string, unknown>): IacPlan {
 function pulumi(v: Record<string, unknown>): IacPlan {
   const changes: IacChange[] = []
   const seen = new Set<string>()
+  const graph: Record<string, string[]> = {}
+  for (const s of arr(v.steps).map(rec)) {
+    const st = rec(s.newState ?? s.oldState)
+    const d = arr(st.dependencies).map(str).filter(Boolean)
+    if (str(s.urn) && d.length) graph[str(s.urn)] = d
+  }
   for (const s of arr(v.steps).map(rec)) {
     const op = str(s.op)
     const action: IacAction | undefined = ["replace", "create-replacement", "delete-replaced"].includes(op) ? "replace" : op === "delete" ? "delete" : op === "create" ? "create" : op === "update" ? "update" : undefined
@@ -121,7 +129,7 @@ function pulumi(v: Record<string, unknown>): IacPlan {
     const deps = arr(state.dependencies).map(str).filter(Boolean)
     changes.push({ address: urn, type, action, before: rec(s.oldState).inputs, after: rec(s.newState).inputs, ...(deps.length ? { dependsOn: deps } : {}) })
   }
-  return { tool: "pulumi", changes }
+  return { tool: "pulumi", changes, ...(Object.keys(graph).length ? { graph } : {}) }
 }
 
 /** A plan in any of the four shapes; undefined when the JSON is none of them. */
@@ -228,6 +236,41 @@ export function judgePlan(plan: IacPlan): IacFinding | undefined {
         .join(", ")}${opened.length > 5 ? `, and ${opened.length - 5} more` : ""}.`,
     }
   return undefined
+}
+
+export interface Blast {
+  /** A resource the plan deletes or replaces. */
+  resource: string
+  action: "delete" | "replace"
+  /** What depends on it, directly or through others (data sources left out). */
+  dependents: string[]
+  /** How many more there are than are listed. */
+  more: number
+}
+
+const configAddress = (a: string) => a.replace(/\[[^\]]*\]/g, "")
+
+/** E-024: for each resource the plan deletes or replaces, what depends on it in the plan's graph; only those with any. */
+export function blastRadius(plan: IacPlan, max = 30): Blast[] {
+  if (!plan.graph) return []
+  const users = new Map<string, string[]>()
+  for (const [r, deps] of Object.entries(plan.graph)) for (const d of deps) users.set(d, [...(users.get(d) ?? []), r])
+  const out: Blast[] = []
+  for (const c of plan.changes) {
+    if (c.action !== "delete" && c.action !== "replace") continue
+    const start = plan.graph[c.address] !== undefined || users.has(c.address) ? c.address : configAddress(c.address)
+    const found = new Set<string>()
+    const queue = [start]
+    while (queue.length)
+      for (const u of users.get(queue.shift()!) ?? [])
+        if (!found.has(u) && u !== start) {
+          found.add(u)
+          queue.push(u)
+        }
+    const list = [...found].filter((x) => !x.startsWith("data.") && !/(^|\.)data\./.test(x)).sort()
+    if (list.length) out.push({ resource: c.address, action: c.action, dependents: list.slice(0, max), more: Math.max(0, list.length - max) })
+  }
+  return out.slice(0, 10)
 }
 
 /** The tool a command applies a plan with, or undefined when it applies none. */

@@ -6,6 +6,7 @@ import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createCanUseTool, type CanUseDeps } from "../src/canuse.js"
 import { createPostToolHook, type SessionHookDeps } from "../src/hooks.js"
+import { computePayloadHash, phonePayload } from "@gatehouse/shared"
 import { IAC_UNSEEN_RULE, IacPlans, outputText, planFiles } from "../src/iac-plans.js"
 
 const dirs: string[] = []
@@ -74,9 +75,40 @@ describe("infrastructure applies and their plans", () => {
     expect(t.request).toHaveBeenCalledWith(expect.objectContaining({ verdict: expect.objectContaining({ ruleId: "iac-destroys-stateful" }) }))
   })
 
+  it("puts what depends on a replaced network on the card, and leaves a request without it hashing as before (E-024)", async () => {
+    const plans = new IacPlans()
+    plans.seen("s1", JSON.stringify({
+      format_version: "1.2",
+      resource_changes: [{ address: "azurerm_virtual_network.main", type: "azurerm_virtual_network", change: { actions: ["delete", "create"] } }],
+      configuration: { root_module: { resources: [
+        { address: "azurerm_virtual_network.main", expressions: {} },
+        { address: "azurerm_subnet.app", expressions: { virtual_network_name: { references: ["azurerm_virtual_network.main.name"] } } },
+        { address: "azurerm_linux_virtual_machine.web", expressions: { subnet: { references: ["azurerm_subnet.app.id"] } } },
+      ] } },
+    }))
+    const cwd = tmp()
+    const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
+    const canUse = createCanUseTool({
+      sessionId: "s1", cwd, project: "infra",
+      approver: { evaluate: async () => ({ outcome: "escalate", ruleId: "cloud-read-change", reason: "Changes cloud resources.", risk: 90, decidedBy: "rules", policyHash: "h" }) },
+      broker: { request }, audit: { record: async () => true }, kill: () => false, policy: () => undefined, engine: {}, pwsh: undefined,
+      decided: new Set<string>(), extreme: () => false, effects: async () => undefined, log: () => undefined,
+      iacPlan: (c: string) => plans.forCommand("s1", c, cwd), iacBlast: (c: string) => plans.blastFor("s1", c, cwd),
+    } as unknown as CanUseDeps)
+    await canUse("Bash", { command: "terraform apply tfplan" }, { toolUseID: "t", signal: new AbortController().signal } as never)
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      verdict: expect.objectContaining({ ruleId: "cloud-read-change" }),
+      blast: [{ resource: "azurerm_virtual_network.main", action: "replace", dependents: ["azurerm_linux_virtual_machine.web", "azurerm_subnet.app"], more: 0 }],
+    }))
+    const base = { id: "r", nonce: "n", kind: "permission" as const, sessionId: "s", toolUseId: "t", toolName: "Bash", input: {}, cwd: "c", project: "p", verdict: { outcome: "escalate" as const, ruleId: "x", reason: "y", risk: 1, decidedBy: "rules" as const, policyHash: "h" }, createdAt: "a", expiresAt: "b" }
+    expect(phonePayload(base)).not.toHaveProperty("blast")
+    expect(computePayloadHash({ ...base, blast: [] })).toBe(computePayloadHash(base))
+    expect(phonePayload({ ...base, blast: [{ resource: "v", action: "delete", dependents: ["s"], more: 0 }] })).toHaveProperty("blast")
+  })
+
   it("hears what a successful command printed, from the PostToolUse hook", async () => {
     const outputs: unknown[] = []
-    const hook = createPostToolHook({ sessionId: "s1", cwd: "C:/dev/infra", policy: () => undefined, pwsh: undefined, audit: { record: async () => true }, kill: () => false, decided: new Set(["t1", "t2"]), onEvent: () => undefined, log: () => undefined, onCommandOutput: (o) => outputs.push(o) } as unknown as SessionHookDeps)
+    const hook = createPostToolHook({ sessionId: "s1", cwd: "C:/dev/infra", policy: () => undefined, pwsh: undefined, audit: { record: async () => true }, kill: () => false, decided: new Set(["t1", "t2"]), onEvent: () => undefined, log: () => undefined, onCommandOutput: (o: unknown) => outputs.push(o) } as unknown as SessionHookDeps)
     const signal = new AbortController().signal
     const post = (event: string, id: string) => ({ hook_event_name: event, tool_name: "Bash", tool_input: { command: "terraform show -json tfplan" }, tool_use_id: id, tool_response: { stdout: deletesDb }, error: "x", cwd: "C:/dev/infra" }) as never
     await hook(post("PostToolUse", "t1"), "t1", { signal })

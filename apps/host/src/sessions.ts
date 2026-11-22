@@ -1382,7 +1382,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.breaker ? { breaker: true } : {}),
       // E-029: a server about to start on a port in use goes to a person first.
       ...(d.portHolder ? { portHolder: d.portHolder } : {}),
-      ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd) } : {}),
+      ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd), iacBlast: (command: string) => d.iacPlans!.blastFor(this.id, command, this.cwd) } : {}),
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,
       onPlanApproved: (plan) => void this.#leaseFromPlan(plan),

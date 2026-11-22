@@ -57,6 +57,18 @@ export const Touch = z.object({
 })
 export type Touch = z.infer<typeof Touch>
 
+/**
+ * E-024: what depends on a resource an infrastructure apply deletes or replaces, from the plan's dependency graph
+ * (apps/host/src/iac-plans.ts). On a request only where there is something to say.
+ */
+export const Blast = z.object({
+  resource: z.string(),
+  action: z.enum(["delete", "replace"]),
+  dependents: z.array(z.string()).max(30),
+  more: z.number().int().min(0),
+})
+export type Blast = z.infer<typeof Blast>
+
 export const EscalationRequest = z.object({
   id: z.string(), // UUIDv7
   nonce: z.string(), // 32 random bytes, base64url
@@ -72,6 +84,8 @@ export const EscalationRequest = z.object({
   effects: Effects.optional(),
   /** D-014: absent when the call moves and overwrites nothing it names. */
   touches: z.array(Touch).max(20).optional(),
+  /** E-024: absent unless the call applies a plan that deletes or replaces something others depend on. */
+  blast: z.array(Blast).max(10).optional(),
   createdAt: z.string(),
   expiresAt: z.string(),
   payloadHash: z.string(), // SHA-256 of the canonical plaintext payload sent to the phone

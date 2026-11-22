@@ -34,6 +34,8 @@ export function phonePayload(req: Omit<EscalationRequest, "payloadHash">) {
     ...(req.effects ? { effects: req.effects } : {}),
     // D-014: likewise only when there is something to say.
     ...(req.touches?.length ? { touches: req.touches } : {}),
+    // E-024: likewise only when there is something to say.
+    ...(req.blast?.length ? { blast: req.blast } : {}),
     createdAt: req.createdAt,
     expiresAt: req.expiresAt,
   }

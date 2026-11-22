@@ -7,7 +7,7 @@
  */
 import fs from "node:fs"
 import path from "node:path"
-import { applyTool, judgePlan, parsePlanText, type IacFinding, type IacPlan, type IacTool } from "@gatehouse/policy"
+import { applyTool, blastRadius, judgePlan, parsePlanText, type Blast, type IacFinding, type IacPlan, type IacTool } from "@gatehouse/policy"
 
 export const IAC_UNSEEN_RULE = "iac-plan-unseen"
 export const IAC_UNSEEN_RISK = 75
@@ -82,6 +82,17 @@ export class IacPlans {
       return { ruleId: IAC_UNSEEN_RULE, risk: IAC_UNSEEN_RISK, resources: [], plans, reason: `This applies infrastructure changes, and Codehouse has not seen the plan, so it cannot say what would be deleted or opened. Show the plan as JSON first (${SHOW[tool]}).` }
     const found = plans.map(judgePlan).filter((f): f is IacFinding => !!f).sort((a, b) => b.risk - a.risk)[0]
     return found ? { ...found, plans } : undefined
+  }
+
+  /** E-024: what depends on what an apply's plans delete or replace, for its card. */
+  blastFor(sessionId: string, command: string, cwd: string): Blast[] {
+    const tool = applyTool(command)
+    if (!tool) return []
+    const seen = new Set<string>()
+    return this.plansFor(sessionId, tool, cwd)
+      .flatMap((p) => blastRadius(p))
+      .filter((b) => (seen.has(b.resource) ? false : (seen.add(b.resource), true)))
+      .slice(0, 10)
   }
 
   forget(sessionId: string): void {

@@ -5,6 +5,7 @@ import {
   uuidv7,
   type Effects,
   type Touch,
+  type Blast,
   type EscalationRequest,
   type Verdict,
 } from "@gatehouse/shared"
@@ -76,6 +77,8 @@ export interface BrokerRequestSpec {
   effects?: Effects
   /** D-014: the paths it would move or overwrite. */
   touches?: Touch[]
+  /** E-024: what depends on what an apply deletes or replaces. */
+  blast?: Blast[]
   /** The SDK's abort signal for this call. */
   signal?: AbortSignal
   /** The ask must not be approvable by a stray keystroke. */
@@ -197,6 +200,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
       verdict: this.#opts.redact(spec.verdict),
       ...(spec.effects ? { effects: this.#opts.redact(spec.effects) } : {}),
       ...(spec.touches?.length ? { touches: this.#opts.redact(spec.touches) } : {}),
+      ...(spec.blast?.length ? { blast: this.#opts.redact(spec.blast) } : {}),
       createdAt: created.toISOString(),
       expiresAt: expiresAt.toISOString(),
     }

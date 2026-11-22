@@ -470,6 +470,26 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 </dd>
               </>
             ) : null}
+            {req.blast?.length ? (
+              <>
+                {/* E-024: what depends on what this apply deletes or replaces, from the plan's dependency graph. */}
+                <dt className="text-mut">Blast radius</dt>
+                <dd className="m-0 grid gap-1" aria-label="What depends on what this would delete or replace">
+                  {req.blast.map((b) => (
+                    <span key={b.resource} className="grid gap-0.5 text-[12.5px]">
+                      <span>
+                        {b.action === "delete" ? "Deletes " : "Replaces "}
+                        <code className="mono [overflow-wrap:anywhere]">{b.resource}</code>, which {b.dependents.length + b.more === 1 ? "this depends" : `these ${b.dependents.length + b.more} depend`} on:
+                      </span>
+                      <span className="mono text-mut [overflow-wrap:anywhere]">
+                        {b.dependents.join(", ")}
+                        {b.more ? `, and ${b.more} more` : ""}
+                      </span>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
             {req.verdict.expanded?.length || req.verdict.unknownEffects?.length ? (
               <>
                 {/* D-013: what it would also run, each line judged like the call. */}
