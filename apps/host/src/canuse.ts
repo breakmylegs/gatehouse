@@ -91,6 +91,8 @@ export interface CanUseDeps {
   iacPlan?: (command: string) => { ruleId: string; risk: number; reason: string; resources: string[] } | undefined
   /** E-024: what depends on what an apply's plan deletes or replaces, for the card. */
   iacBlast?: (command: string) => import("@gatehouse/shared").Blast[] | undefined
+  /** E-019: the monthly change an apply's plan makes, for the card. */
+  iacCost?: (command: string) => import("@gatehouse/shared").CostDelta | undefined
   /** D-023: the paths and commands this session may use by itself in Auto and Accept edits. */
   lease?: () => ScopeLease | undefined
   /** D-023: a plan was approved, with its words, so the session can set its lease from it. */
@@ -674,14 +676,19 @@ async function effectsFor(
 
 /** D-014: the paths the call would move or overwrite, read from its words (nothing is run), for the card. */
 /** E-024: the blast radius of an apply, for its card; nothing when it is not one or a failure stops the reading. */
-function blastFor(deps: CanUseDeps, toolName: string, input: Record<string, unknown>): { blast?: import("@gatehouse/shared").Blast[] } {
-  if (!deps.iacBlast || (toolName !== "Bash" && toolName !== "PowerShell") || typeof input.command !== "string") return {}
-  try {
-    const blast = deps.iacBlast(input.command)
-    return blast?.length ? { blast } : {}
-  } catch {
-    return {}
+function blastFor(deps: CanUseDeps, toolName: string, input: Record<string, unknown>): { blast?: import("@gatehouse/shared").Blast[]; cost?: import("@gatehouse/shared").CostDelta } {
+  if ((toolName !== "Bash" && toolName !== "PowerShell") || typeof input.command !== "string") return {}
+  const command = input.command
+  const tryIt = <T>(f: (() => T) | undefined): T | undefined => {
+    try {
+      return f?.()
+    } catch {
+      return undefined
+    }
   }
+  const blast = tryIt(deps.iacBlast && (() => deps.iacBlast!(command)))
+  const cost = tryIt(deps.iacCost && (() => deps.iacCost!(command)))
+  return { ...(blast?.length ? { blast } : {}), ...(cost ? { cost } : {}) }
 }
 
 function touchesFor(deps: CanUseDeps, toolName: string, input: Record<string, unknown>): { touches?: Touch[] } {

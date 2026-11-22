@@ -56,6 +56,8 @@ export interface DoctorFacts {
   devDrive?: DoctorCheck
   /** E-026: container runs, on, off or unavailable. */
   containers?: DoctorCheck
+  /** E-019: the price sheet, when there is one. */
+  priceSheet?: DoctorCheck
 }
 
 /** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
@@ -142,6 +144,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
   if (f.powershellMode) add(f.powershellMode)
   if (f.devDrive) add(f.devDrive)
   if (f.containers) add(f.containers)
+  if (f.priceSheet) add(f.priceSheet)
 
   const s = h.signin
   add(
@@ -441,6 +444,8 @@ export function registerDoctorRoutes(
     devDrive?: () => Promise<DoctorCheck>
     /** E-026: container runs. */
     containers?: () => DoctorCheck
+    /** E-019: the price sheet. */
+    priceSheet?: () => DoctorCheck | undefined
   },
 ): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -473,6 +478,10 @@ export function registerDoctorRoutes(
       ...(ctx.lockdown ? { powershellMode: await ctx.lockdown() } : {}),
       ...(ctx.devDrive ? { devDrive: await ctx.devDrive() } : {}),
       ...(ctx.containers ? { containers: ctx.containers() } : {}),
+      ...((): { priceSheet?: DoctorCheck } => {
+        const c = ctx.priceSheet?.()
+        return c ? { priceSheet: c } : {}
+      })(),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

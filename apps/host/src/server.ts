@@ -138,6 +138,8 @@ export interface HostApp {
   artifacts?: Pick<import("./artifacts.js").ArtifactStore, "save">
   /** E-013 (with E-026): the container a session's heavy jobs run in, when container runs are on and Podman is here. */
   container?: (sessionId: string) => import("./codehouse-action.js").ContainerRun | undefined
+  /** E-019: signed price sheets. */
+  priceSheets?: import("./price-sheet.js").PriceSheets
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1208,6 +1210,19 @@ export class HostServer {
           latencyMs: 0,
         })
         return { queries: queries.length, ...r }
+      }
+      case "price_sheet_import": {
+        // E-019: kept only when it verifies; recorded either way.
+        if (!a.priceSheets) throw new CommandError("unavailable", "Price sheets are not available here.")
+        const r = a.priceSheets.import(cmd.sheet, cmd.signature)
+        await a.audit.record({
+          session: "host", event: "price_sheet_imported", channel: "desktop", tool: "price-sheet", cwd: "", project: "",
+          input: { kept: r.state === "ok", ...(r.state === "ok" ? { items: r.items } : {}) },
+          verdict: { outcome: r.state === "ok" ? "allow" : "deny", ruleId: "price-sheet", reason: r.state === "refused" ? `A price sheet was refused: ${r.why}.` : "A signed price sheet was imported.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        if (r.state === "refused") throw new CommandError("refused", `The price sheet was not kept: ${r.why}.`)
+        return r
       }
       case "test_data": {
         // E-015: the scan reads only; generated rows are checked in a throwaway database and shown, never written.

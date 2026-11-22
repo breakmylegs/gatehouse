@@ -515,6 +515,8 @@ export interface SessionDeps {
   portHolder?: (port: number) => Promise<string | undefined>
   /** E-018: the infrastructure plans sessions have shown, for the applies that follow. */
   iacPlans?: import("./iac-plans.js").IacPlans
+  /** E-019: the signed price sheet, when there is one. */
+  priceSheet?: () => import("./price-sheet.js").PriceSheet | undefined
   /** D-084: a breaker's test runs: the project's test command, as a Codehouse action in its worktree. */
   breakerTests?: (sessionId: string, cwd: string) => Promise<{ ok: boolean; output: string }>
   /** Free memory in bytes, for the warm chat; os.freemem when absent. */
@@ -1382,7 +1384,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.breaker ? { breaker: true } : {}),
       // E-029: a server about to start on a port in use goes to a person first.
       ...(d.portHolder ? { portHolder: d.portHolder } : {}),
-      ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd), iacBlast: (command: string) => d.iacPlans!.blastFor(this.id, command, this.cwd) } : {}),
+      ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd), iacBlast: (command: string) => d.iacPlans!.blastFor(this.id, command, this.cwd), iacCost: (command: string) => d.iacPlans!.costFor(this.id, command, this.cwd, d.priceSheet?.()) } : {}),
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,
       onPlanApproved: (plan) => void this.#leaseFromPlan(plan),

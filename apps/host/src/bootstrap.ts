@@ -2,6 +2,7 @@ import { portHolder, windowsSnapshot } from "./session-procs.js"
 import { devDriveCheck, readDevDrive } from "./devdrive.js"
 import { containerCheck, containerFor, findPodman } from "./container-runs.js"
 import { IacPlans } from "./iac-plans.js"
+import { PriceSheets, priceSheetCheck } from "./price-sheet.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
@@ -959,6 +960,9 @@ export function createHost(opts: HostOptions = {}): Host {
   if (process.platform === "win32") deps.portHolder = (port) => portHolder(port, windowsSnapshot)
   // E-018: the infrastructure plans each session shows, for the applies that follow.
   deps.iacPlans = new IacPlans()
+  // E-019: a price sheet signed with the key in the managed folder, for an apply's monthly change.
+  const priceSheets = new PriceSheets(managedPolicyDir(env), gatehouseDataDir(env))
+  deps.priceSheet = () => priceSheets.sheet()
   // D-084: a breaker's test runs: the project's own test command, as a Codehouse action in its worktree.
   deps.breakerTests = async (id, cwd) => {
     const command = projectCommand(cwd, "tests")
@@ -1671,6 +1675,7 @@ export function createHost(opts: HostOptions = {}): Host {
     // D-084: breaker runs and what they found.
     adversary,
     artifacts,
+    priceSheets,
     container: (id: string) => container(id)(),
     // D-080: knowledge packs are signed with a key kept sealed for this user.
     knowledgeKey: machineKey,
@@ -1711,6 +1716,8 @@ export function createHost(opts: HostOptions = {}): Host {
         : {}),
       // E-026: container runs, on, off or unavailable without Podman.
       containers: () => containerCheck(config.containerRuns, podman),
+      // E-019: the price sheet, only when there is one.
+      priceSheet: () => priceSheetCheck(priceSheets.status()),
       // D-024: loosening waits ten minutes after its phrase; the phone and push channels are told, for information.
       loosening: new LooseningStore(path.join(gatehouseDataDir(env), "loosening.json")),
       tell: (title: string, body: string) => {

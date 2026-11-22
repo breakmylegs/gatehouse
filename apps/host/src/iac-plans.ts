@@ -6,6 +6,7 @@
  * Codehouse has not seen goes to a person too (decided by me, stricter): there is nothing to judge it by.
  */
 import fs from "node:fs"
+import { costDelta, type CostDelta, type PriceSheet } from "./price-sheet.js"
 import path from "node:path"
 import { applyTool, blastRadius, judgePlan, parsePlanText, type Blast, type IacFinding, type IacPlan, type IacTool } from "@gatehouse/policy"
 
@@ -93,6 +94,13 @@ export class IacPlans {
       .flatMap((p) => blastRadius(p))
       .filter((b) => (seen.has(b.resource) ? false : (seen.add(b.resource), true)))
       .slice(0, 10)
+  }
+
+  /** E-019: the monthly change an apply's plans make, priced from a signed sheet. */
+  costFor(sessionId: string, command: string, cwd: string, sheet: PriceSheet | undefined): CostDelta | undefined {
+    const tool = applyTool(command)
+    if (!tool || !sheet) return undefined
+    return costDelta(this.plansFor(sessionId, tool, cwd), sheet)
   }
 
   forget(sessionId: string): void {

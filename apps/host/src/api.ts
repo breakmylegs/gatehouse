@@ -183,6 +183,8 @@ export interface AdminContext {
   devDrive?: () => Promise<import("./doctor.js").DoctorCheck>
   /** E-026: container runs for Doctor. */
   containers?: () => import("./doctor.js").DoctorCheck
+  /** E-019: the price sheet for Doctor. */
+  priceSheet?: () => import("./doctor.js").DoctorCheck | undefined
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */

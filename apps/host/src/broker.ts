@@ -6,6 +6,7 @@ import {
   type Effects,
   type Touch,
   type Blast,
+  type CostDelta,
   type EscalationRequest,
   type Verdict,
 } from "@gatehouse/shared"
@@ -79,6 +80,8 @@ export interface BrokerRequestSpec {
   touches?: Touch[]
   /** E-024: what depends on what an apply deletes or replaces. */
   blast?: Blast[]
+  /** E-019: the monthly change an apply's plan makes. */
+  cost?: CostDelta
   /** The SDK's abort signal for this call. */
   signal?: AbortSignal
   /** The ask must not be approvable by a stray keystroke. */
@@ -201,6 +204,7 @@ export class Broker extends EventEmitter<BrokerEvents> {
       ...(spec.effects ? { effects: this.#opts.redact(spec.effects) } : {}),
       ...(spec.touches?.length ? { touches: this.#opts.redact(spec.touches) } : {}),
       ...(spec.blast?.length ? { blast: this.#opts.redact(spec.blast) } : {}),
+      ...(spec.cost ? { cost: this.#opts.redact(spec.cost) } : {}),
       createdAt: created.toISOString(),
       expiresAt: expiresAt.toISOString(),
     }

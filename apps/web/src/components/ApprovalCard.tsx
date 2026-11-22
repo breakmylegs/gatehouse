@@ -74,6 +74,12 @@ const isShell = (tool: string) => tool === "Bash" || tool === "PowerShell"
 const typing = (t: EventTarget) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
 
+/** E-019: a monthly change, with its sign. */
+function money(n: number, currency: string): string {
+  const v = new Intl.NumberFormat("en-GB", { style: "currency", currency: /^[A-Z]{3}$/.test(currency) ? currency : "GBP", maximumFractionDigits: 0 }).format(Math.abs(n))
+  return n > 0 ? `+${v}` : n < 0 ? `-${v}` : v
+}
+
 export function ApprovalCard({ view }: { view: PendingView }) {
   const req = view.request
   const resolved = useStore((s) => s.resolved[req.id])
@@ -467,6 +473,16 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                       <span className="text-mut"> ({t.what})</span>
                     </span>
                   ))}
+                </dd>
+              </>
+            ) : null}
+            {req.cost ? (
+              <>
+                {/* E-019: the monthly change from a signed price sheet; SKUs it does not know are listed. */}
+                <dt className="text-mut">Cost a month</dt>
+                <dd className="m-0 text-[12.5px]" aria-label="The monthly change this would make">
+                  {req.cost.low === req.cost.high ? money(req.cost.low, req.cost.currency) : `${money(req.cost.low, req.cost.currency)} to ${money(req.cost.high, req.cost.currency)}`}
+                  {req.cost.unknown.length ? <span className="block text-mut">Not known: {req.cost.unknown.join(", ")}</span> : null}
                 </dd>
               </>
             ) : null}

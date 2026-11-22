@@ -1,4 +1,5 @@
 import { LooseningConfirm, LooseningList, looseningIn, type LooseningAsk } from "../components/LooseningConfirm"
+import { PriceSheetImport } from "../components/PriceSheetImport"
 import { ClaudeImport } from "../components/ClaudeImport"
 import { ManagedNote } from "../components/ManagedNote"
 import { ShortcutSettings } from "../components/ShortcutSettings"
@@ -2163,6 +2164,10 @@ export function Settings() {
                 token; it only reads, for the repository a session works in, and each read is recorded. Anything that
                 writes, such as a comment, a merge or a push, stays a request Claude makes through your rules.
               </p>
+            </Group>
+
+            <Group section="connectors" title="Price sheet" gap="gap-2">
+              <PriceSheetImport />
             </Group>
 
             <Group section="connectors" title="Containers" gap="gap-2" changed={differs(v, ["containers", "containerImage"])}>

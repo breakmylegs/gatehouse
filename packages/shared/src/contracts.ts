@@ -69,6 +69,15 @@ export const Blast = z.object({
 })
 export type Blast = z.infer<typeof Blast>
 
+/** E-019: the monthly change an apply's plan makes, from a signed price sheet; SKUs it does not know are listed. */
+export const CostDelta = z.object({
+  currency: z.string().max(8),
+  low: z.number(),
+  high: z.number(),
+  unknown: z.array(z.string()).max(20),
+})
+export type CostDelta = z.infer<typeof CostDelta>
+
 export const EscalationRequest = z.object({
   id: z.string(), // UUIDv7
   nonce: z.string(), // 32 random bytes, base64url
@@ -86,6 +95,8 @@ export const EscalationRequest = z.object({
   touches: z.array(Touch).max(20).optional(),
   /** E-024: absent unless the call applies a plan that deletes or replaces something others depend on. */
   blast: z.array(Blast).max(10).optional(),
+  /** E-019: absent unless the call applies a plan and a signed price sheet is in use. */
+  cost: CostDelta.optional(),
   createdAt: z.string(),
   expiresAt: z.string(),
   payloadHash: z.string(), // SHA-256 of the canonical plaintext payload sent to the phone
