@@ -117,13 +117,20 @@ export interface Engine {
   close(): void
 }
 
+/** E-014: SQLite's engine also answers queries (EXPLAIN QUERY PLAN, a table's columns). */
+export interface SqliteEngine extends Engine {
+  file: string
+  all(sql: string): Array<Record<string, unknown>>
+}
+
 /** A throwaway SQLite database in the temporary folder; closing deletes it. */
-export function sqliteEngine(dir = os.tmpdir()): Engine & { file: string } {
+export function sqliteEngine(dir = os.tmpdir()): SqliteEngine {
   const file = path.join(dir, `codeh-rehearsal-${crypto.randomBytes(6).toString("hex")}.db`)
   const db = new DatabaseSync(file)
   return {
     file,
     exec: (sql) => db.exec(sql),
+    all: (sql) => db.prepare(sql).all() as Array<Record<string, unknown>>,
     schema: () =>
       (db.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name").all() as Array<{ type: string; name: string; sql: string | null }>)
         .map((r) => `${r.type} ${r.name}: ${(r.sql ?? "").replace(/\s+/g, " ")}`)
@@ -255,7 +262,7 @@ export function runPostgresContainer(c: ContainerRun, ms: Migration[], timeoutMs
  * Statements that reach outside the throwaway database (another file attached or written, an extension loaded, a
  * folder set); a migration with one is not run here at all.
  */
-const OUTSIDE = /\b(attach|vacuum|load_extension|temp_store_directory|data_store_directory)\b/i
+export const OUTSIDE = /\b(attach|vacuum|load_extension|temp_store_directory|data_store_directory)\b/i
 
 /** The whole rehearsal for a project's migrations. */
 export async function rehearse(ms: Migration[], o: { container?: ContainerRun; tmp?: string; postgres?: (c: ContainerRun, ms: Migration[]) => Promise<string> } = {}): Promise<Rehearsal> {

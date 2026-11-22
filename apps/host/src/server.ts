@@ -7,6 +7,8 @@ import { tourPrompt } from "./tours.js"
 import { signReport } from "./egress.js"
 import { projectSchemaDiff } from "./schema-diff.js"
 import { findMigrations, rehearse } from "./migration-rehearsal.js"
+import { explainAll, gitOut, queriesIn } from "./query-plan.js"
+import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
 import { admit, DEFAULT_LICENCES, fromManifestEdit, licenceFindings, type AddedDependency } from "@gatehouse/policy"
@@ -1181,6 +1183,30 @@ export class HostServer {
           latencyMs: 0,
         })
         return r
+      }
+      case "query_plan": {
+        // E-014: EXPLAIN QUERY PLAN compiles each query without running it, in a database deleted afterwards.
+        const s = this.#session(cmd.sessionId)
+        const read = (p: string) => {
+          try {
+            return fs.readFileSync(path.join(s.cwd, p), "utf8")
+          } catch {
+            return ""
+          }
+        }
+        const listed = await gitLines(s.cwd, ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => undefined)
+        if (!listed) throw new CommandError("not-a-repo", "The folder is not a git repository, so there is no change to read.")
+        const lines = addedLines((await gitOut(s.cwd, ["diff", "HEAD", "-U0", "--no-color", "--no-ext-diff"])) ?? "")
+        for (const f of (await gitOut(s.cwd, ["ls-files", "--others", "--exclude-standard"]))?.split("\n").filter(Boolean) ?? []) lines.set(f, new Set(read(f).split("\n").map((_, i) => i + 1)))
+        const queries = (await Promise.all([...lines].filter(([f, l]) => l.size && languageOf(f)).slice(0, 200).map(([f, l]) => queriesIn(f, read(f), l)))).flat()
+        const r = explainAll(findMigrations(listed, read), queries)
+        await a.audit.record({
+          session: s.id, event: "query_plans_read", channel: "desktop", tool: "query-plans", cwd: s.cwd, project: s.project,
+          input: { queries: queries.length, scans: r.findings.filter((f) => f.scans.length).length },
+          verdict: { outcome: "allow", ruleId: "query-plans-read", reason: r.notRun ?? `${queries.length} added quer${queries.length === 1 ? "y" : "ies"} explained.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { queries: queries.length, ...r }
       }
       case "egress_report": {
         // D-094: the endpoints sampled for this session, signed so the report can be checked later.
