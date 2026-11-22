@@ -6,6 +6,7 @@ import { secretGlobs } from "@gatehouse/policy"
 import { tourPrompt } from "./tours.js"
 import { signReport } from "./egress.js"
 import { projectSchemaDiff } from "./schema-diff.js"
+import { findMigrations, rehearse } from "./migration-rehearsal.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
 import { admit, DEFAULT_LICENCES, fromManifestEdit, licenceFindings, type AddedDependency } from "@gatehouse/policy"
@@ -132,6 +133,8 @@ export interface HostApp {
   adversary?: AdversaryStore
   /** E-012: where a schema diff is kept, as a Mermaid artifact of its session. */
   artifacts?: Pick<import("./artifacts.js").ArtifactStore, "save">
+  /** E-013 (with E-026): the container a session's heavy jobs run in, when container runs are on and Podman is here. */
+  container?: (sessionId: string) => import("./codehouse-action.js").ContainerRun | undefined
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1156,6 +1159,28 @@ export class HostServer {
         if (!d) throw new CommandError("no-schema", "This project keeps no schema Codehouse reads: SQL migrations, a DDL file, a Prisma schema or an EF Core model snapshot.")
         const artifact = d.tables.length && a.artifacts ? await a.artifacts.save(s.id, "Schema changes", "mermaid", d.mermaid) : undefined
         return { source: d.source, files: d.files, summary: d.summary, ...(artifact ? { artifact: { id: artifact.id, version: artifact.version.version } } : {}) }
+      }
+      case "migration_rehearse": {
+        // E-013: a throwaway database, deleted afterwards; Postgres only in a container; recorded with its outcome.
+        const s = this.#session(cmd.sessionId)
+        const listed = await gitLines(s.cwd, ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => undefined)
+        if (!listed) throw new CommandError("not-a-repo", "The folder is not a git repository, so its migrations cannot be listed.")
+        const ms = findMigrations(listed, (p) => {
+          try {
+            return fs.readFileSync(path.join(s.cwd, p), "utf8")
+          } catch {
+            return ""
+          }
+        })
+        const container = a.container?.(s.id)
+        const r = await rehearse(ms, container ? { container } : {})
+        await a.audit.record({
+          session: s.id, event: "migration_rehearsed", channel: "desktop", tool: "migrations", cwd: s.cwd, project: s.project,
+          input: { engine: r.engine, migrations: r.steps.length, irreversible: r.irreversible.length, failures: r.failures.length },
+          verdict: { outcome: "allow", ruleId: "migration-rehearsed", reason: r.notRun ?? `${r.steps.length} migration(s) rehearsed on ${r.engine}: ${r.irreversible.length} irreversible, ${r.failures.length} failed.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return r
       }
       case "egress_report": {
         // D-094: the endpoints sampled for this session, signed so the report can be checked later.
