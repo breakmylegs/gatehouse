@@ -14,6 +14,7 @@ From 0.3.310 (Claude Code 2.1.310). Checked against the SDK's own changelog for 
 - **The shadow warning (invariant 4)** is still `process.emitWarning(..., { code: "CLAUDE_SDK_CAN_USE_TOOL_SHADOWED" })` with "canUseTool will not be invoked for: ..." in sdk.mjs, so the Host's fatal check is unchanged.
 - **Live, 20 Nov** (`probes/companion-live-probe.ts`, on this laptop's sign-in): a call to the Companion reached the PreToolUse hook and then `canUseTool`, both reporting `mcp_server` / `mcpServer` `{ name: "companion", source: "sdk" }`, and the tool ran; `ToolSearch` reached the hook only, as before.
 - `CLAUDE_CODE_RANGE` (claude-range.ts) is now 2.1.329 to 2.1.329: sessions run only the bundled Claude Code.
+- **`maxBudgetUsd` (used from 22 Nov, D-074).** `Options.maxBudgetUsd?: number` (sdk.d.ts 0.3.329): the query stops with an `error_max_budget_usd` result once its estimated cost passes the figure. It counts what `total_cost_usd` counts, from the start of that `query()` call (a resumed session's earlier spend is not counted again). The Host passes it only when a session is started with `maxBudgetUsd` (the behaviour check's spend cap); no other session has one.
 
 ## Versions
 

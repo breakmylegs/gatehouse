@@ -641,6 +641,8 @@ export interface StartSessionOptions {
    * may only turn things off); with it, the plugin runs as installed.
    */
   evaluation?: { plugin: string; with: boolean }
+  /** D-074: the most this session may spend, in US dollars (the SDK's maxBudgetUsd); a behaviour check's cap. */
+  maxBudgetUsd?: number
 }
 
 /**
@@ -1458,6 +1460,7 @@ export class Session extends EventEmitter<SessionEvents> {
               : {}),
           }),
       includePartialMessages: true,
+      ...(this.#opts.maxBudgetUsd !== undefined ? { maxBudgetUsd: this.#opts.maxBudgetUsd } : {}),
       // T-020: a suggested next prompt after each turn (the SDK's prompt_suggestion, from the turn's own cache). It only
       // fills the prompt box when you press Tab; nothing is ever sent by it. Off in Settings, Sessions.
       ...(d.config().promptSuggestions !== false ? { promptSuggestions: true } : {}),

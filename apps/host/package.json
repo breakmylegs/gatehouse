@@ -8,6 +8,7 @@
     "typecheck": "tsc -p tsconfig.json",
     "start": "tsx src/main.ts",
     "cli": "tsx src/cli.ts",
+    "behaviour": "tsx src/behaviour-run.ts",
     "codehouse": "tsx src/cli-client.ts"
   },
   "dependencies": {

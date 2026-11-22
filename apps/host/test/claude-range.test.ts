@@ -2,6 +2,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
+import { BEHAVIOUR_DIR, rangeChangeBlocked, readReport } from "../src/behaviour.js"
 import { CLAUDE_CODE_RANGE, inClaudeRange, rangeText } from "../src/claude-range.js"
 
 const REPO = path.resolve(import.meta.dirname, "../../..")
@@ -19,6 +20,14 @@ describe("the Claude Code versions a release was checked with", () => {
     const patch = /^0\.3\.(\d+)$/.exec(sdk.version)?.[1]
     expect(patch, `an Agent SDK version this test does not know: ${sdk.version}`).toBeDefined()
     expect(inClaudeRange(`2.1.${patch}`)).toBe(true)
+  })
+
+  it("widen only with a behaviour report that shows no regression against the baseline (D-074)", () => {
+    // If this fails, run npm run behaviour:check -- --cap <dollars> with the new Claude Code and commit its report.
+    const dir = path.join(REPO, BEHAVIOUR_DIR)
+    const baseline = readReport(path.join(dir, "baseline.json"))
+    expect(baseline, `${BEHAVIOUR_DIR}/baseline.json is missing or not a report`).toBeDefined()
+    expect(rangeChangeBlocked(CLAUDE_CODE_RANGE.to, baseline, (v) => readReport(path.join(dir, `${v}.json`)))).toBeUndefined()
   })
 
   it("let in only plain versions within the range", () => {
