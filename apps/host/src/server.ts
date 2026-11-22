@@ -1,3 +1,7 @@
+import type { LocalRuntimeConfig } from "./providers/local-runtime.js"
+import { AdversaryStore, adversaryOf, applyChange, BREAKER_PROMPT } from "./adversary.js"
+import { reviewerRuntime, sessionDiff } from "./review.js"
+import { secretGlobs } from "@gatehouse/policy"
 import { tourPrompt } from "./tours.js"
 import { signReport } from "./egress.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -122,6 +126,8 @@ export interface HostApp {
   knowledgeKey?: KnowledgeKey
   /** D-094: what each session's processes reached. */
   egress?: Pick<import("./egress.js").EgressMonitor, "report">
+  /** D-084: each session's breaker run and what it found. */
+  adversary?: AdversaryStore
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1081,6 +1087,30 @@ export class HostServer {
         })
         return report
       }
+      case "adversary_start": {
+        // D-084: the reviewer model, through the runtime or gateway on this computer, tries to break this session's change
+        // in a worktree of its own, with read tools and RunTests only.
+        const s = this.#session(cmd.sessionId)
+        const p = a.admin?.config().providers
+        const model = p?.reviewer?.model
+        if (!a.adversary || !model || !reviewerRuntime(p?.local as LocalRuntimeConfig | undefined, model))
+          throw new CommandError("unavailable", "Name a reviewer model on the runtime or gateway on this computer first (Settings, Other AI providers).")
+        const policy = a.policy()
+        if (!policy) throw new CommandError("unavailable", "No policy is loaded, so the change cannot be copied safely.")
+        const diff = await sessionDiff(s.cwd, secretGlobs(policy))
+        if (!diff.trim()) throw new CommandError("no-change", "This session has no change to break.")
+        const b = await a.manager.start({ cwd: s.cwd, localModel: model, worktree: { about: "breaker" }, breaker: { of: s.id }, mode: "plan" })
+        await applyChange(diff, b.cwd)
+        a.adversary.started(s.id, b.id, model)
+        await a.audit.record({
+          session: s.id, event: "adversary_started", channel: "desktop", tool: "adversary", cwd: s.cwd, project: s.project,
+          input: { breaker: b.id, model },
+          verdict: { outcome: "allow", ruleId: "adversary-started", reason: `${model} was asked to break this session's change, in a worktree of its own.`, risk: 0, decidedBy: "human-desktop", policyHash: policy.hash },
+          latencyMs: 0,
+        })
+        b.prompt(BREAKER_PROMPT)
+        return { breaker: b.info() }
+      }
       case "tour_ask": {
         // D-079: Claude writes the tour; Codehouse links and checks it.
         this.#session(cmd.sessionId).prompt(tourPrompt(cmd.topic))
@@ -1156,7 +1186,7 @@ export class HostServer {
         const allowed = a.policy()?.managedLicences ?? a.admin?.config().allowedLicences ?? DEFAULT_LICENCES
         for (const f of licenceFindings([...direct, ...upgradedDirect].slice(0, 200), [s.cwd], allowed)) admission.push({ dependency: f.dependency, check: "licence", outcome: "escalate", reason: f.reason })
         for (const m of a.vulnSnapshot?.matches(all) ?? []) admission.push({ dependency: `${m.ecosystem}:${m.name}`, check: "vulnerability", outcome: "escalate", reason: `${m.name} ${m.version} is in the vulnerability snapshot (${m.ids.join(", ")}).` })
-        const evidence = a.evidence ? await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions() }, cmd.ref ? { ref: cmd.ref } : {}).catch(() => undefined) : undefined
+        const evidence = a.evidence ? await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions(), ...adversaryOf(a, s.id) }, cmd.ref ? { ref: cmd.ref } : {}).catch(() => undefined) : undefined
         const pack = upgradePack({
           changes: all,
           evidence: evidence?.pack,
@@ -1298,7 +1328,7 @@ export class HostServer {
       case "evidence_build": {
         const s = this.#session(cmd.sessionId)
         if (!a.evidence) throw new CommandError("unavailable", "Evidence packs are not available here.")
-        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions() }, cmd.ref ? { ref: cmd.ref } : {})
+        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions(), ...adversaryOf(a, s.id) }, cmd.ref ? { ref: cmd.ref } : {})
         if (!got) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to gather.")
         return got
       }
@@ -1896,3 +1926,4 @@ const gitLines = (cwd: string, args: string[]): Promise<string[]> =>
       e ? reject(e) : resolve(String(out).split(/\r?\n/).filter(Boolean)),
     ),
   )
+

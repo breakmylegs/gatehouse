@@ -1,3 +1,4 @@
+import { BREAKER_EDIT_RULE, breakerEditReason } from "./adversary.js"
 import { consumersOf, consumersWords } from "./contract-check.js"
 import { LOCKED_TEST_RULE, lockedReason, type TestLocks } from "./test-locks.js"
 import { LEASE_MODES, outsideLease, SCOPE_LEASE_RULE, type ScopeLease } from "./scope-lease.js"
@@ -81,6 +82,8 @@ export interface CanUseDeps {
   mutantTask?: () => Survivor | undefined
   /** D-036: whether the session is writing its tests first and they are not approved yet. */
   testsFirst?: () => boolean
+  /** D-084: this session is a breaker; any edit it tries goes to a person. */
+  breaker?: boolean
   /** D-023: the paths and commands this session may use by itself in Auto and Accept edits. */
   lease?: () => ScopeLease | undefined
   /** D-023: a plan was approved, with its words, so the session can set its lease from it. */
@@ -338,6 +341,9 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (!TEST_FILE.test(file))
           verdict = { ...verdict, outcome: "escalate", ruleId: TESTS_FIRST_RULE, reason: testsFirstReason(file), risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
       }
+      // D-084: a breaker tries to break a change, not to change it: any edit goes to a person, whatever the rules said.
+      if (deps.breaker && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName))
+        verdict = { ...verdict, outcome: "escalate", ruleId: BREAKER_EDIT_RULE, reason: breakerEditReason(String(input.file_path ?? input.notebook_path ?? "")), risk: Math.max(verdict.risk, 70), decidedBy: "rules" }
       // D-023: in Auto and Accept edits, a write or a command outside the scope lease goes to a person, whatever the rules.
       const lease = LEASE_MODES.has(deps.mode?.() ?? "") ? deps.lease?.() : undefined
       if (lease && verdict.outcome !== "deny") {

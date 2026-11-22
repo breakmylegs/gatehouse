@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
+import { toast } from "sonner"
 import { api } from "../lib/api"
+import { send } from "../store"
 
 interface Finding {
   file?: string
@@ -47,6 +49,18 @@ export function ReviewPanel({ sessionId }: { sessionId: string }) {
       <span className="flex flex-wrap items-center gap-2">
         <button type="button" className="btn !min-h-7" disabled={busy} onClick={() => void ask()}>
           {busy ? "Reviewing..." : r ? "Review the change again" : "Ask another model to review the change"}
+        </button>
+        {/* D-084: the same model tries to break the change, in a worktree of its own, with read tools and its tests. */}
+        <button
+          type="button"
+          className="btn !min-h-7"
+          onClick={() =>
+            void send({ type: "adversary_start", sessionId }).then((x) =>
+              x.ok ? toast("A breaker started in a worktree of its own; what it finds goes into this change's evidence") : toast.error(x.error?.message ?? "The breaker could not start"),
+            )
+          }
+        >
+          Try to break it
         </button>
         {r ? (
           <span className="text-mut">

@@ -1,6 +1,7 @@
 // D-003, the change evidence pack: what a change did, tied to the audit chain; kept by sha256, redacted, for its
 // retention without following a junction; exported inside the signed timeline export, where one changed byte fails
 // both verifiers (Node and Windows PowerShell); a 50-file pack made in under 5 s.
+import { AdversaryStore, adversaryOf } from "../src/adversary.js"
 import { execFileSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -162,6 +163,26 @@ describe("the change evidence pack (D-003)", () => {
   })
 
   // D-049: a change that touches a hot path's budget runs the benchmarks, and a seeded slowdown fails its budget.
+  it("holds what the breaker of an adversarial pair found (D-084)", async () => {
+    const files = [{ path: "src/cart.ts", change: "modified", added: 2, removed: 1, binary: false, diff: "" }]
+    const service = new EvidenceService({
+      store: new EvidenceStore({ dir: path.join(root, "adversary"), redact: (t) => t }),
+      auditDir,
+      checkpoints: { changes: async () => ({ since: SINCE, files }), versions: async () => ({ after: "" }) },
+      audit: { record: async () => true },
+      version: () => "2.0.0",
+      retentionDays: () => 90,
+      log: () => undefined,
+    })
+    const store = new AdversaryStore()
+    store.started("s1", "brk", "qwen2.5-coder", new Date("2026-11-22T10:00:00Z"))
+    store.reported("s1", ["the empty cart test fails"])
+    const got = await service.build({ id: "s1", cwd: root, project: "shop", ...adversaryOf({ adversary: store }, "s1") })
+    expect(got?.pack.adversary).toEqual({ model: "qwen2.5-coder", at: "2026-11-22T10:00:00.000Z", reported: true, findings: ["the empty cart test fails"] })
+    const none = await service.build({ id: "s2", cwd: root, project: "shop", ...adversaryOf({ adversary: store }, "s2") })
+    expect(none?.pack.adversary).toBeUndefined()
+  })
+
   it("checks the performance budgets a change touches, and a seeded slowdown fails its budget", async () => {
     const cwd = path.join(root, "bench")
     fs.mkdirSync(path.join(cwd, ".codehouse"), { recursive: true })

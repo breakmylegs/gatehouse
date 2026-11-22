@@ -288,6 +288,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-084: a second model tries to break this session's change, in a worktree of its own. */
+  z.object({ type: z.literal("adversary_start"), sessionId: Id }),
   /** D-079: ask Claude to write a codebase tour of a topic, in the format the tours read. */
   z.object({ type: z.literal("tour_ask"), sessionId: Id, topic: z.string().min(1).max(200) }),
   /** D-094: the remote endpoints this session's processes reached, signed with this computer's key. */

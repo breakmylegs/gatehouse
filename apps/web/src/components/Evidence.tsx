@@ -24,6 +24,8 @@ interface Pack {
   budgets?: Array<{ name: string; ok: boolean; detail: string }>
   /** D-047: the business capabilities the change touches (absent from an older pack). */
   capabilities?: Array<{ name: string; owner?: string; files: string[] }>
+  /** D-084: what the breaker of an adversarial pair found. */
+  adversary?: { model: string; at: string; reported: boolean; findings: string[] }
   notes: string[]
 }
 
@@ -193,6 +195,14 @@ function PackView({ pack, sha }: { pack: Pack; sha: string }) {
               <span className="font-semibold">{c.name}</span>
               {c.owner ? `, owned by ${c.owner}` : ""}: {c.files.length} file{c.files.length === 1 ? "" : "s"}
             </li>
+          ))}
+        </Part>
+      ) : null}
+      {pack.adversary ? (
+        <Part title={!pack.adversary.reported ? `The breaker (${pack.adversary.model}): still working` : `What the breaker (${pack.adversary.model}) found (${pack.adversary.findings.length})`}>
+          {pack.adversary.reported && !pack.adversary.findings.length ? <li>Nothing: it found no way to break the change.</li> : null}
+          {pack.adversary.findings.map((x, i) => (
+            <li key={i}>{x}</li>
           ))}
         </Part>
       ) : null}

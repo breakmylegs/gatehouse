@@ -1,3 +1,5 @@
+import { projectCommand } from "./claims.js"
+import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
 import { lockdownCheck, readLockdown } from "./lockdown.js"
 import { groupPolicyCheck, readGroupPolicy } from "./group-policy.js"
@@ -583,7 +585,7 @@ export function createHost(opts: HostOptions = {}): Host {
         if (!r.models.includes(model))
           throw new Error("That model is not one you allowed, or the runtime does not have it.")
       },
-      queryFn: (model) => (params) => {
+      queryFn: (model, extra) => (params) => {
         const runtime = config.providers?.local as LocalRuntimeConfig
         return localQuery(params, {
           runtime,
@@ -602,6 +604,7 @@ export function createHost(opts: HostOptions = {}): Host {
               : undefined
           },
           redact: (t) => redactString(t, { terms: config.redactTerms }),
+          ...(extra?.runTests ? { runTests: extra.runTests } : {}),
         }) as unknown as ReturnType<QueryFn>
       },
     },
@@ -944,6 +947,13 @@ export function createHost(opts: HostOptions = {}): Host {
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
   deps.mutationExec = mutationExecFor
+  // D-084: a breaker's test runs: the project's own test command, as a Codehouse action in its worktree.
+  deps.breakerTests = async (id, cwd) => {
+    const command = projectCommand(cwd, "tests")
+    if (!command) return { ok: false, output: "This project has no test command Codehouse can find (an npm test script, pytest or dotnet test)." }
+    const r = await actionFor(id, "a breaker's test run")(command, cwd, 10 * 60_000)
+    return { ok: r.exitCode === 0 && !r.refused, output: r.refused ? `Not run: ${r.refused}` : r.output.slice(-20_000) }
+  }
   // D-040: only a runtime on this computer, and only when other models are switched on in Settings.
   deps.intentCheck = (goal, said) =>
     checkIntent({
@@ -1596,6 +1606,11 @@ export function createHost(opts: HostOptions = {}): Host {
     log,
   })
 
+  // D-084: each session's breaker run; a breaker's findings are kept with the session it tried to break.
+  const adversary = new AdversaryStore()
+  manager.on("event", ({ type, data }) => {
+    if (type === "breaker_findings" && typeof data.of === "string") adversary.reported(data.of, Array.isArray(data.findings) ? (data.findings as string[]) : [])
+  })
   // D-080 and D-094: this computer's signing key, its private half sealed for this user.
   const machineKey = new KnowledgeKey(path.join(gatehouseDataDir(env), "knowledge-key.json"), sealer())
   // D-094: every minute on Windows, each session's remote endpoints against what it may reach; strict stops it.
@@ -1641,6 +1656,8 @@ export function createHost(opts: HostOptions = {}): Host {
     fuzzExec: (id: string) => actionFor(id, "a time-boxed fuzz pass of the changed parsing functions"),
     // D-071: an upgrade's admission checks read the same snapshot as the commit guard.
     vulnSnapshot,
+    // D-084: breaker runs and what they found.
+    adversary,
     // D-080: knowledge packs are signed with a key kept sealed for this user.
     knowledgeKey: machineKey,
     // D-094: what each session's processes reached.

@@ -76,6 +76,17 @@ export const LOCAL_CHAT_TOOLS: ToolSpec[] = [
 ]
 
 /** The most tool rounds in one turn, so a model that keeps asking cannot run for ever (T-13). */
+/**
+ * D-084: for a breaker (the second model of an adversarial pair), one more tool: the project's own test command, run as
+ * a Codehouse action in its worktree. It runs nothing else, takes no input, and is judged like any call.
+ */
+export const RUN_TESTS: ToolSpec = {
+  name: "RunTests",
+  canonical: "read",
+  description: "Run this project's own tests in this folder and read what they print. It runs nothing else.",
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+}
+
 export const MAX_TOOL_ROUNDS = 20
 
 export interface LocalQueryDeps {
@@ -87,6 +98,8 @@ export interface LocalQueryDeps {
   account: () => AccountInfo | undefined
   redact: (text: string) => string
   fetchFn?: typeof fetch
+  /** D-084: a breaker's test runs; when present, RunTests is offered beside the read tools. */
+  runTests?: () => Promise<{ ok: boolean; output: string }>
 }
 
 type Msg = Record<string, unknown>
@@ -132,6 +145,7 @@ export function localQuery(
   let turn: AbortController | undefined
   const history: ChatMessage[] = []
   const executor = new ToolExecutor({ workspaceRoot: cwd, redact: deps.redact })
+  const tools = deps.runTests ? [...LOCAL_CHAT_TOOLS, RUN_TESTS] : LOCAL_CHAT_TOOLS
   const system = deps.redact(typeof options.systemPrompt === "string" ? options.systemPrompt : "")
   const hooks = (event: "PreToolUse" | "PostToolUse"): HookCallbackMatcher[] =>
     (options.hooks?.[event] ?? []) as HookCallbackMatcher[]
@@ -179,6 +193,10 @@ export function localQuery(
     const allowed = (r.updatedInput as Record<string, unknown> | undefined) ?? input
     let out: { ok: boolean; output: string }
     try {
+      if (spec.name === RUN_TESTS.name && deps.runTests) {
+        const t = await deps.runTests()
+        out = { ok: t.ok, output: deps.redact(t.output) }
+      } else {
       const done = await executor.run(
         {
           callId: id,
@@ -191,6 +209,7 @@ export function localQuery(
         { kind: "allow", callId: id, input: allowed, inputHash: inputHash(allowed) },
       )
       out = { ok: done.ok, output: done.output }
+      }
     } catch (e) {
       out = {
         ok: false,
@@ -236,7 +255,7 @@ export function localQuery(
           session_id: sessionId,
           model,
           cwd,
-          tools: LOCAL_CHAT_TOOLS.map((t) => t.name),
+          tools: tools.map((t) => t.name),
           permissionMode: mode,
         }
       }
@@ -251,7 +270,7 @@ export function localQuery(
       try {
         for (;;) {
           // Only the read-only tools a chat has, whatever the mode.
-          const offered = LOCAL_CHAT_TOOLS
+          const offered = tools
           const reply = await chatOnce(
             deps.runtime,
             {

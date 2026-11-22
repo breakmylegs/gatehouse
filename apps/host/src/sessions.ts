@@ -1,3 +1,4 @@
+import { breakerFindings } from "./adversary.js"
 import { lockdownHint } from "./lockdown.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
@@ -443,6 +444,7 @@ export interface SessionEvents {
         | "intent_drift"
         | "mutant_rechecked"
         | "handed_prompt"
+        | "breaker_findings"
       data: Record<string, unknown>
     },
   ]
@@ -504,10 +506,12 @@ export interface SessionDeps {
    */
   local?: {
     check: (model: string) => Promise<void>
-    queryFn: (model: string) => QueryFn
+    queryFn: (model: string, extra?: { runTests?: () => Promise<{ ok: boolean; output: string }> }) => QueryFn
     /** Where its chats send their words: "On this computer", or a provider through your gateway. */
     label?: () => string
   }
+  /** D-084: a breaker's test runs: the project's test command, as a Codehouse action in its worktree. */
+  breakerTests?: (sessionId: string, cwd: string) => Promise<{ ok: boolean; output: string }>
   /** Free memory in bytes, for the warm chat; os.freemem when absent. */
   freeMemory?: () => number
   /** Keeps a chat's first message as its title, by its Claude Code id, so it is named the same after a restart. */
@@ -626,6 +630,8 @@ export interface StartSessionOptions {
   account?: string
   /** A chat with a model on this computer instead of Claude (ADR 0011). */
   localModel?: string
+  /** D-084: this session is the breaker of an adversarial pair, trying to break the named session's change. */
+  breaker?: { of: string }
   /** With resume and fork: carry on from this message (its uuid), for Retry and Edit. */
   resumeAt?: string
   /** The session this one replaces in its pane (Retry and Edit). */
@@ -1366,6 +1372,8 @@ export class Session extends EventEmitter<SessionEvents> {
       mutantTask: () => this.#mutantTask,
       // D-036: and while it writes its tests first.
       testsFirst: () => this.#testsFirst,
+      // D-084: a breaker's edits go to a person.
+      ...(this.#opts.breaker ? { breaker: true } : {}),
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,
       onPlanApproved: (plan) => void this.#leaseFromPlan(plan),
@@ -1541,7 +1549,9 @@ export class Session extends EventEmitter<SessionEvents> {
     // A chat on a model on this computer runs Codehouse's own loop with these same options: the floor hook, canUseTool and
     // the audit are the ones above.
     const queryFn =
-      this.#opts.localModel !== undefined ? d.local?.queryFn(this.#opts.localModel) : d.queryFn
+      this.#opts.localModel !== undefined
+        ? d.local?.queryFn(this.#opts.localModel, this.#opts.breaker && d.breakerTests ? { runTests: () => d.breakerTests!(this.id, this.cwd) } : undefined)
+        : d.queryFn
     if (!queryFn) throw new Error("Models on this computer are not switched on.")
     // Invariant 4: the SDK's own warning, raised in this process while query() reads the options.
     const unwatch = watchShadowWarning(() =>
@@ -1719,6 +1729,8 @@ export class Session extends EventEmitter<SessionEvents> {
       if (typeof m.result === "string" && m.is_error !== true) void this.#checkIntent(m.result)
       // D-009: a claim that the work is done is checked by running its command again.
       if (typeof m.result === "string" && m.is_error !== true) void this.#checkClaims(m.result)
+      // D-084: a breaker's findings go to the session it tried to break.
+      if (this.#opts.breaker && typeof m.result === "string") this.emit("event", { type: "breaker_findings", data: { of: this.#opts.breaker.of, findings: breakerFindings(m.result) } })
       // In any mode, a reply that ends the queue is worth telling you about, wherever you are (owner, 3 Nov).
       if (typeof m.result === "string" && m.is_error !== true && saysQueueEmpty(m.result))
         this.emit("event", { type: "queue_empty", data: {} })
