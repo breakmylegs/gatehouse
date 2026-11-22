@@ -297,6 +297,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("tour_ask"), sessionId: Id, topic: z.string().min(1).max(200) }),
   /** D-094: the remote endpoints this session's processes reached, signed with this computer's key. */
   z.object({ type: z.literal("egress_report"), sessionId: Id }),
+  /** E-012: the database schema at the last commit against the working folder, as an ER diff in the session's artifacts. */
+  z.object({ type: z.literal("schema_diff"), sessionId: Id }),
   /** D-080: the project's ADRs, glossary and instructions as a signed pack, and importing one signed by a trusted key. */
   z.object({ type: z.literal("knowledge_export"), sessionId: Id }),
   z.object({ type: z.literal("knowledge_import"), sessionId: Id, pack: z.object({ pack: z.string().max(20_000_000), signature: z.string().max(400), publicKey: z.string().max(2000) }) }),

@@ -76,7 +76,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-027 | Dev Drive and Defender awareness | E3 | built | feat/e3 | yes | Doctor: each project's volume (Dev Drive, ReFS, NTFS) and Defender's performance mode or not known; no elevation |
 | E-029 | Port and process tracking | E3 | built | feat/e3 | yes | Ports and processes panel: the session's processes with ports and age; stop only after confirming; a server starting on a busy port asks first (port-clash) |
 | E-026 | Container runs for Codehouse actions | E3 | done | feat/e3 | yes | Podman container, no network, project read-only; off by default |
-| E-012 | Schema diff view | E3 | todo | | |  |
+| E-012 | Schema diff view | E3 | done | feat/e3 | yes | ER diff from Prisma, EF snapshot, migrations or DDL; HEAD against working folder |
 | E-013 | Migration rehearsal | E3 | todo | | |  |
 | E-014 | Query plan review | E3 | todo | | |  |
 | E-015 | Synthetic fixtures with PII scan | E3 | todo | | |  |

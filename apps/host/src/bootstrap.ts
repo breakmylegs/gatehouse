@@ -1667,6 +1667,7 @@ export function createHost(opts: HostOptions = {}): Host {
     vulnSnapshot,
     // D-084: breaker runs and what they found.
     adversary,
+    artifacts,
     // D-080: knowledge packs are signed with a key kept sealed for this user.
     knowledgeKey: machineKey,
     // D-094: what each session's processes reached.

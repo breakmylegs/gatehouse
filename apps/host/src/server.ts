@@ -5,6 +5,7 @@ import { reviewerRuntime, sessionDiff } from "./review.js"
 import { secretGlobs } from "@gatehouse/policy"
 import { tourPrompt } from "./tours.js"
 import { signReport } from "./egress.js"
+import { projectSchemaDiff } from "./schema-diff.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
 import { admit, DEFAULT_LICENCES, fromManifestEdit, licenceFindings, type AddedDependency } from "@gatehouse/policy"
@@ -129,6 +130,8 @@ export interface HostApp {
   egress?: Pick<import("./egress.js").EgressMonitor, "report">
   /** D-084: each session's breaker run and what it found. */
   adversary?: AdversaryStore
+  /** E-012: where a schema diff is kept, as a Mermaid artifact of its session. */
+  artifacts?: Pick<import("./artifacts.js").ArtifactStore, "save">
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1139,6 +1142,20 @@ export class HostServer {
         // D-079: Claude writes the tour; Codehouse links and checks it.
         this.#session(cmd.sessionId).prompt(tourPrompt(cmd.topic))
         return undefined
+      }
+      case "schema_diff": {
+        // E-012: read only; drawn in the artifact sandbox like any Mermaid diagram.
+        const s = this.#session(cmd.sessionId)
+        const d = await projectSchemaDiff(s.cwd, (p) => {
+          try {
+            return fs.readFileSync(path.join(s.cwd, p), "utf8")
+          } catch {
+            return undefined
+          }
+        })
+        if (!d) throw new CommandError("no-schema", "This project keeps no schema Codehouse reads: SQL migrations, a DDL file, a Prisma schema or an EF Core model snapshot.")
+        const artifact = d.tables.length && a.artifacts ? await a.artifacts.save(s.id, "Schema changes", "mermaid", d.mermaid) : undefined
+        return { source: d.source, files: d.files, summary: d.summary, ...(artifact ? { artifact: { id: artifact.id, version: artifact.version.version } } : {}) }
       }
       case "egress_report": {
         // D-094: the endpoints sampled for this session, signed so the report can be checked later.

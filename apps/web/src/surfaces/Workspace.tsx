@@ -15,6 +15,7 @@ import { EgressPanel } from "../components/EgressPanel"
 import { ToursPanel } from "../components/ToursPanel"
 import { EnvironmentPanel } from "../components/EnvironmentPanel"
 import { ProcessesPanel } from "../components/ProcessesPanel"
+import { SchemaDiffPanel } from "../components/SchemaDiffPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -410,6 +411,7 @@ function SessionPane({
   const [tours, setTours] = useState(false)
   const [environment, setEnvironment] = useState(false)
   const [processes, setProcesses] = useState(false)
+  const [schema, setSchema] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -684,6 +686,8 @@ function SessionPane({
     { label: "Where it connected...", onSelect: () => setEgress(true) },
     // D-079: codebase tours, each step linked to its symbol.
     ...(chat ? [] : [{ label: "Codebase tours...", onSelect: () => setTours(true) }]),
+    // E-012: the database schema before and after the change, as an ER diff.
+    ...(chat ? [] : [{ label: "Schema changes...", onSelect: () => setSchema(true) }]),
     // E-025: the tools this computer has against what the project asks for.
     ...(chat ? [] : [{ label: "Environment...", onSelect: () => setEnvironment(true) }]),
     // E-029: what this session left running, with its ports.
@@ -950,6 +954,11 @@ function SessionPane({
       {tours ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <ToursPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setTours(false)} />
+        </div>
+      ) : null}
+      {schema ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <SchemaDiffPanel sessionId={session.id} onOpenArtifacts={openArtifacts} onClose={() => setSchema(false)} />
         </div>
       ) : null}
       {egress ? (
