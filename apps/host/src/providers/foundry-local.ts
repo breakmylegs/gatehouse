@@ -93,6 +93,24 @@ export async function findFoundry(
   return undefined
 }
 
+/**
+ * D-098: the downloaded models whose catalogue entry runs on the NPU (runtime.deviceType NPU), by name, so the claims
+ * judge can run there. Empty when there are none, or Foundry Local does not answer as it should.
+ */
+export async function foundryNpuModels(url: string, fetchFn: typeof fetch = fetch): Promise<string[]> {
+  try {
+    const v = (await getJson(fetchFn, `${base(url)}/foundry/list`)) as { models?: unknown } | unknown[]
+    const list = Array.isArray(v) ? v : Array.isArray((v as { models?: unknown }).models) ? (v as { models: unknown[] }).models : []
+    const downloaded = new Set(await foundryModels(url, fetchFn) ?? [])
+    return list
+      .map((m) => m as { name?: unknown; runtime?: { deviceType?: unknown } })
+      .filter((m) => typeof m.name === "string" && String(m.runtime?.deviceType ?? "").toUpperCase() === "NPU" && downloaded.has(m.name))
+      .map((m) => m.name as string)
+  } catch {
+    return []
+  }
+}
+
 /** A model's licence from Foundry Local's catalogue, by its name or alias: the licence and its description. */
 export async function foundryLicence(url: string, model: string, fetchFn: typeof fetch = fetch): Promise<string | undefined> {
   try {

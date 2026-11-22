@@ -2083,9 +2083,9 @@ export class Session extends EventEmitter<SessionEvents> {
         const j = await this.#deps.judgeClaim({ cwd: this.cwd, claim: c.quote }).catch((): JudgeResult => ({ outcome: "escalate", reasons: ["the claims judge failed"] }))
         if (j.outcome !== "none") {
           outcome = afterJudge(outcome, j)
-          why = `${why}, but the claims judge ${j.outcome === "flag" ? "flagged it" : "could not decide"}: ${j.reasons.join("; ")}`
+          why = `${why}, but the claims judge ${j.outcome === "flag" ? "flagged it" : "could not decide"}: ${j.reasons.join("; ")}${j.ranOn ? ` (it ran on ${j.ranOn})` : ""}`
           judged = j
-        }
+        } else if (j.ranOn) why = `${why}; the claims judge found nothing (it ran on ${j.ranOn})`
       }
       const entry = {
         kind: c.kind,

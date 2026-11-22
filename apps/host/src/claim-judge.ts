@@ -17,6 +17,8 @@ export type JudgeOutcome = "flag" | "escalate" | "none"
 export interface JudgeResult {
   outcome: JudgeOutcome
   reasons: string[]
+  /** D-098: where the judge model ran, or why it fell back from the NPU. */
+  ranOn?: string
 }
 
 export interface DiffFile {
