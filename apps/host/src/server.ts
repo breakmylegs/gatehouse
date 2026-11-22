@@ -8,6 +8,7 @@ import { signReport } from "./egress.js"
 import { projectSchemaDiff } from "./schema-diff.js"
 import { findMigrations, rehearse } from "./migration-rehearsal.js"
 import { explainAll, gitOut, queriesIn } from "./query-plan.js"
+import { generateFixtures, scanFixtures } from "./fixtures.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
@@ -1207,6 +1208,28 @@ export class HostServer {
           latencyMs: 0,
         })
         return { queries: queries.length, ...r }
+      }
+      case "test_data": {
+        // E-015: the scan reads only; generated rows are checked in a throwaway database and shown, never written.
+        const s = this.#session(cmd.sessionId)
+        const read = (p: string) => {
+          try {
+            return fs.readFileSync(path.join(s.cwd, p), "utf8")
+          } catch {
+            return ""
+          }
+        }
+        const listed = await gitLines(s.cwd, ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => undefined)
+        if (!listed) throw new CommandError("not-a-repo", "The folder is not a git repository, so its files cannot be listed.")
+        const findings = scanFixtures(listed, read)
+        const generated = cmd.generate ? generateFixtures(findMigrations(listed, read), { rows: cmd.rows ?? 10, seed: s.project }) : undefined
+        await a.audit.record({
+          session: s.id, event: "test_data_checked", channel: "desktop", tool: "test-data", cwd: s.cwd, project: s.project,
+          input: { findings: findings.length, kinds: [...new Set(findings.map((f) => f.kind))], ...(generated ? { generated: Object.values(generated.rows).reduce((x, y) => x + y, 0) } : {}) },
+          verdict: { outcome: "allow", ruleId: "test-data-checked", reason: `${findings.length} real-looking value(s) found in the fixtures${generated ? ", and seed rows made" : ""}.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { findings, ...(generated ? { generated } : {}) }
       }
       case "egress_report": {
         // D-094: the endpoints sampled for this session, signed so the report can be checked later.

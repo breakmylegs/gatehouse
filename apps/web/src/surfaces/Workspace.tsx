@@ -18,6 +18,7 @@ import { ProcessesPanel } from "../components/ProcessesPanel"
 import { SchemaDiffPanel } from "../components/SchemaDiffPanel"
 import { RehearsalPanel } from "../components/RehearsalPanel"
 import { QueryPlanPanel } from "../components/QueryPlanPanel"
+import { TestDataPanel } from "../components/TestDataPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -416,6 +417,7 @@ function SessionPane({
   const [schema, setSchema] = useState(false)
   const [rehearsal, setRehearsal] = useState(false)
   const [plans, setPlans] = useState(false)
+  const [testData, setTestData] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -696,6 +698,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Rehearse migrations...", onSelect: () => setRehearsal(true) }]),
     // E-014: the queries the change adds, with their plans.
     ...(chat ? [] : [{ label: "Query plans...", onSelect: () => setPlans(true) }]),
+    // E-015: real-looking personal data in fixtures, and synthetic seed rows.
+    ...(chat ? [] : [{ label: "Test data...", onSelect: () => setTestData(true) }]),
     // E-025: the tools this computer has against what the project asks for.
     ...(chat ? [] : [{ label: "Environment...", onSelect: () => setEnvironment(true) }]),
     // E-029: what this session left running, with its ports.
@@ -967,6 +971,11 @@ function SessionPane({
       {schema ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <SchemaDiffPanel sessionId={session.id} onOpenArtifacts={openArtifacts} onClose={() => setSchema(false)} />
+        </div>
+      ) : null}
+      {testData ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <TestDataPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setTestData(false)} />
         </div>
       ) : null}
       {plans ? (

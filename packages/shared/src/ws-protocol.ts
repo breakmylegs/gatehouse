@@ -303,6 +303,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("migration_rehearse"), sessionId: Id }),
   /** E-014: the queries the change adds, explained in a throwaway database built from the migrations. */
   z.object({ type: z.literal("query_plan"), sessionId: Id }),
+  /** E-015: real-looking personal data in the project's fixtures, and seed rows made from its schema when asked. */
+  z.object({ type: z.literal("test_data"), sessionId: Id, generate: z.boolean().optional(), rows: z.number().int().min(1).max(500).optional() }),
   /** D-080: the project's ADRs, glossary and instructions as a signed pack, and importing one signed by a trusted key. */
   z.object({ type: z.literal("knowledge_export"), sessionId: Id }),
   z.object({ type: z.literal("knowledge_import"), sessionId: Id, pack: z.object({ pack: z.string().max(20_000_000), signature: z.string().max(400), publicKey: z.string().max(2000) }) }),
