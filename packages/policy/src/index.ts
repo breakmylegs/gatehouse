@@ -27,3 +27,4 @@ export { hasRealCard, isRealCard, CARD_CANDIDATE, CARD_DATA_RULE } from "./card-
 export * from "./managed.js"
 export { migrationKind } from "./migration.js"
 export * from "./iac-plan.js"
+export * from "./iam.js"

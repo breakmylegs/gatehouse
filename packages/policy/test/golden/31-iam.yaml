@@ -1,0 +1,16 @@
+# E-020: an edit that grants more than it needs to waits for you, with a narrower alternative (broad-iam).
+# Broad (8).
+- { t: Write, in: { file_path: "${WS}/infra/policy.json", content: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"*\",\"Resource\":\"*\"}]}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/infra/s3.json", content: "{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\",\"s3:*\"],\"Resource\":\"arn:aws:s3:::b/*\"}]}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/infra/iam.tf", content: "data \"aws_iam_policy_document\" \"p\" {\n  statement {\n    actions   = [\"*\"]\n    resources = [\"arn:aws:s3:::b\"]\n  }\n}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/infra/rbac.tf", content: "resource \"azurerm_role_assignment\" \"a\" {\n  scope                = \"/subscriptions/0000\"\n  role_definition_name = \"Owner\"\n  principal_id         = var.id\n}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/infra/main.bicep", content: "targetScope = 'subscription'\nresource ra 'Microsoft.Authorization/roleAssignments@2022-04-01' = {\n  name: guid('x')\n  properties: {\n    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')\n  }\n}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/infra/gcp.tf", content: "resource \"google_project_iam_member\" \"m\" {\n  project = \"p\"\n  role    = \"roles/owner\"\n  member  = \"user:a@example.com\"\n}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/infra/admin.tf", content: "resource \"aws_iam_role_policy_attachment\" \"a\" {\n  role       = aws_iam_role.ci.name\n  policy_arn = \"arn:aws:iam::aws:policy/AdministratorAccess\"\n}\n" }, o: escalate, r: broad-iam }
+- { t: Write, in: { file_path: "${WS}/cfn/template.yaml", content: "Resources:\n  P:\n    Type: AWS::IAM::Policy\n    Properties:\n      PolicyDocument:\n        Statement:\n          - Effect: Allow\n            Action: '*'\n            Resource: '*'\n" }, o: escalate, r: broad-iam }
+# Narrow (5): not held by this rule.
+- { t: Write, in: { file_path: "${WS}/infra/ok.json", content: "{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"s3:GetObject\"],\"Resource\":\"arn:aws:s3:::b/*\"}]}\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/infra/read.json", content: "{\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"ec2:DescribeInstances\"],\"Resource\":\"*\"}]}\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/infra/rg.tf", content: "resource \"azurerm_role_assignment\" \"a\" {\n  scope                = \"/subscriptions/0000/resourceGroups/app\"\n  role_definition_name = \"Contributor\"\n}\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/infra/viewer.tf", content: "resource \"google_project_iam_member\" \"m\" {\n  role = \"roles/storage.objectViewer\"\n}\n" }, o: escalate, r: no-rule }
+- { t: Write, in: { file_path: "${WS}/src/notes.md", content: "Never grant Action * on Resource * or AdministratorAccess.\n" }, o: allow, r: edit-workspace-source }

@@ -15,6 +15,7 @@ import { bulkExport } from "./data-export.js"
 import { toolchainChange } from "./toolchain.js"
 import { k8sFindings } from "./k8s-manifest.js"
 import { destructiveMigration } from "./migration.js"
+import { iamFindings } from "./iam.js"
 import { cardDataFindings } from "./card-data.js"
 import { lockfileEdit, lockfileShellEdit } from "./lockfiles.js"
 import { INSTALL_SCRIPTS_RULE, installScriptsFinding, withoutScripts } from "./install-scripts.js"
@@ -459,6 +460,9 @@ export class PolicyEngine {
     // E-011: an edit to a migration that drops, truncates, narrows or locks out data waits for you.
     const migration = f.isShell ? undefined : destructiveMigration(call.toolName, input, f.targets[0]?.abs)
     if (migration) escalations.push(migration)
+    // E-020: an edit that grants more than it needs to (* actions or resources, Owner at subscription scope, admin roles).
+    const iam = f.isShell ? undefined : iamFindings(call.toolName, input, f.targets[0]?.abs)
+    if (iam) escalations.push(iam)
     // E-093: an edit that writes a real-looking card number, logs a card field or stores a CVV waits for you.
     const card = f.isShell ? undefined : cardDataFindings(call.toolName, input, f.targets[0]?.abs)
     if (card) escalations.push(card)

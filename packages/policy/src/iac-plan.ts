@@ -6,8 +6,11 @@
  * a public address, public access switched on) is High. An apply inherits the strictest finding of the plan it applies,
  * naming each resource.
  *
+ * A grant broader than it needs to be (E-020, iam.ts) is High too, after a deletion and before an exposure.
+ *
  * Pure: the Host keeps the plans it sees (a session's own plan output, and plan files in its folder) and asks here.
  */
+import { IAM_RISK, IAM_RULE, iamGrants, iamReason, settingsText } from "./iam.js"
 
 export const IAC_DESTROY_RULE = "iac-destroys-stateful"
 export const IAC_DESTROY_RISK = 90
@@ -196,7 +199,7 @@ export function exposures(settings: unknown): string[] {
 }
 
 export interface IacFinding {
-  ruleId: typeof IAC_DESTROY_RULE | typeof IAC_EXPOSURE_RULE
+  ruleId: typeof IAC_DESTROY_RULE | typeof IAC_EXPOSURE_RULE | typeof IAM_RULE
   risk: number
   reason: string
   /** The resources it names. */
@@ -217,6 +220,24 @@ export function judgePlan(plan: IacPlan): IacFinding | undefined {
         .slice(0, 5)
         .map((c) => `${short(c.address)} (${c.type}, ${c.action === "delete" ? "deleted" : "replaced"})`)
         .join(", ")}${destroys.length > 5 ? `, and ${destroys.length - 5} more` : ""}.`,
+    }
+  // E-020: a grant the plan creates or widens that is broader than it needs to be (High, 80).
+  const granted = plan.changes
+    .filter((c) => c.action !== "delete")
+    .map((c) => {
+      const was = new Set(iamGrants(settingsText(c.before)).map((g) => g.what))
+      return { c, grants: iamGrants(settingsText(c.after)).filter((g) => !was.has(g.what)) }
+    })
+    .filter((x) => x.grants.length)
+  if (granted.length)
+    return {
+      ruleId: IAM_RULE,
+      risk: IAM_RISK,
+      resources: granted.map((x) => x.c.address),
+      reason: granted
+        .slice(0, 3)
+        .map((x) => iamReason(x.grants, `This applies a plan where ${short(x.c.address)}`))
+        .join(" "),
     }
   const opened = plan.changes
     .filter((c) => c.action !== "delete")
