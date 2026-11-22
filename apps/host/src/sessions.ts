@@ -1,3 +1,4 @@
+import { lockdownHint } from "./lockdown.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
 import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
@@ -1329,8 +1330,10 @@ export class Session extends EventEmitter<SessionEvents> {
             `A ${tool} call failed.`,
             "rules",
           ).catch(() => undefined)
+        // D-097: a failure that carries a lockdown's signature is explained to Claude beside the error.
+        const hint = error !== undefined ? lockdownHint(tool, error) : undefined
         const r = error === undefined ? this.#loop.succeeded(tool, input) : this.#loop.failed(tool, input, error)
-        if (!r) return undefined
+        if (!r) return hint
         if (r.act === "stop") {
           void this.#stopForLoop(tool, r.what)
           return undefined
@@ -1343,7 +1346,7 @@ export class Session extends EventEmitter<SessionEvents> {
           "rules",
         ).catch(() => undefined)
         this.emit("event", { type: "thrash_warned", data: { tool } })
-        return warnText(r.what)
+        return [warnText(r.what), hint].filter(Boolean).join(" ")
       },
     }
     // Invariant 4: the SDK's warning that canUseTool is shadowed stops the session.

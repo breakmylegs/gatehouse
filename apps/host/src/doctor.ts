@@ -50,6 +50,8 @@ export interface DoctorFacts {
   responsiveness?: DoctorCheck
   /** D-095: what Group Policy set for Codehouse, and anything it ignored. */
   groupPolicy?: DoctorCheck
+  /** D-097: PowerShell's language mode, and hints of AppLocker or WDAC. */
+  powershellMode?: DoctorCheck
 }
 
 /** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
@@ -133,6 +135,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
   if ("canaries" in f) add(canaryCheck(f.canaries))
   if (f.responsiveness) add(f.responsiveness)
   if (f.groupPolicy) add(f.groupPolicy)
+  if (f.powershellMode) add(f.powershellMode)
 
   const s = h.signin
   add(
@@ -426,6 +429,8 @@ export function registerDoctorRoutes(
     stalls?: HostStalls
     /** D-095: Group Policy's check. */
     groupPolicy?: () => DoctorCheck
+    /** D-097: PowerShell's language mode, read once. */
+    lockdown?: () => Promise<DoctorCheck>
   },
 ): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -455,6 +460,7 @@ export function registerDoctorRoutes(
       ...(ctx.canaries ? { canaries: ctx.canaries() } : {}),
       ...(stalls ? { responsiveness: stalls.check() } : {}),
       ...(ctx.groupPolicy ? { groupPolicy: ctx.groupPolicy() } : {}),
+      ...(ctx.lockdown ? { powershellMode: await ctx.lockdown() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

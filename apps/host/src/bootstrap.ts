@@ -1,3 +1,5 @@
+import { powerShellExe } from "@gatehouse/policy"
+import { lockdownCheck, readLockdown } from "./lockdown.js"
 import { groupPolicyCheck, readGroupPolicy } from "./group-policy.js"
 import { EgressMonitor, windowsSampler } from "./egress.js"
 import { KnowledgeKey } from "./knowledge-pack.js"
@@ -239,6 +241,8 @@ export function createHost(opts: HostOptions = {}): Host {
     path.join(REPO_ROOT, "policy", "rules.yaml")
   const rulesDir = path.dirname(rulesPath)
   const localRules = env.GATEHOUSE_LOCAL_RULES ?? path.join(rulesDir, "rules.local.yaml")
+  // D-097: read once, when Doctor first asks.
+  let lockdownOnce: Promise<import("./doctor.js").DoctorCheck> | undefined
   // D-095: Group Policy, read once now; tightening only, merged like IT's managed policy.
   const gpo = readGroupPolicy()
   if (gpo?.ignored.length) log(`group policy: ignored ${gpo.ignored.join("; ")}`)
@@ -1663,6 +1667,8 @@ export function createHost(opts: HostOptions = {}): Host {
       broker,
       // D-095: Group Policy's line in Doctor.
       groupPolicy: () => groupPolicyCheck(gpo),
+      // D-097: PowerShell's language mode, read the first time Doctor is opened, on Windows.
+      ...(process.platform === "win32" ? { lockdown: () => (lockdownOnce ??= readLockdown(powerShellExe()).then(lockdownCheck)) } : {}),
       // D-024: loosening waits ten minutes after its phrase; the phone and push channels are told, for information.
       loosening: new LooseningStore(path.join(gatehouseDataDir(env), "loosening.json")),
       tell: (title: string, body: string) => {
