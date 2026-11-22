@@ -13,6 +13,7 @@ import { MigrationPanel } from "../components/MigrationPanel"
 import { KnowledgePanel } from "../components/KnowledgePanel"
 import { EgressPanel } from "../components/EgressPanel"
 import { ToursPanel } from "../components/ToursPanel"
+import { EnvironmentPanel } from "../components/EnvironmentPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -406,6 +407,7 @@ function SessionPane({
   const [knowledge, setKnowledge] = useState(false)
   const [egress, setEgress] = useState(false)
   const [tours, setTours] = useState(false)
+  const [environment, setEnvironment] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -680,6 +682,8 @@ function SessionPane({
     { label: "Where it connected...", onSelect: () => setEgress(true) },
     // D-079: codebase tours, each step linked to its symbol.
     ...(chat ? [] : [{ label: "Codebase tours...", onSelect: () => setTours(true) }]),
+    // E-025: the tools this computer has against what the project asks for.
+    ...(chat ? [] : [{ label: "Environment...", onSelect: () => setEnvironment(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
     ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
@@ -927,6 +931,11 @@ function SessionPane({
       {requirements ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {environment ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <EnvironmentPanel sessionId={session.id} onClose={() => setEnvironment(false)} />
         </div>
       ) : null}
       {tours ? (

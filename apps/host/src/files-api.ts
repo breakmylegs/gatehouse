@@ -1,3 +1,4 @@
+import { drift, makeManifest, saveManifest } from "./env-manifest.js"
 import { checkTour, readTours } from "./tours.js"
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
@@ -293,6 +294,16 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     } catch (e) {
       return reply.code(409).send({ error: (e as Error).message })
     }
+  })
+
+  // E-025: the tools this computer has against what the project asks for, kept in .codehouse/environment.json with
+  // environment variables by name only; drift said plainly.
+  app.post("/api/environment", async (req, reply) => {
+    const root = rootOf((req.body ?? {}) as Record<string, unknown>)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    const manifest = await makeManifest(real(root))
+    await saveManifest(real(root), manifest)
+    return { manifest, drift: drift(manifest) }
   })
 
   // D-079: the project's tours, each step checked against the index: where its symbol is now, or moved, or gone.

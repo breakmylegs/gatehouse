@@ -72,7 +72,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-008 | Pseudo-localisation and copy checks | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |
 | E-010 | Before and after UI previews on approval cards | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |
 | E-005 | Flow recorder to locked end-to-end test | E2 | listed for decision | | | Needs browser automation through --remote-debugging-pipe, which CLAUDE.md and scripts/forbidden.mjs forbid (conflict 1); owner decision |
-| E-025 | Environment manifest and drift | E3 | todo | | |  |
+| E-025 | Environment manifest and drift | E3 | built | feat/e3 | yes | versions of node, npm, pnpm, dotnet, python, pwsh, git, java against .nvmrc, global.json, rust-toolchain and engines; .codehouse/environment.json with variable names only; drift listed |
 | E-027 | Dev Drive and Defender awareness | E3 | todo | | |  |
 | E-029 | Port and process tracking | E3 | todo | | |  |
 | E-026 | Container runs for Codehouse actions | E3 | todo | | | Safe variant only; the List for part is listed |

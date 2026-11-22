@@ -1706,3 +1706,8 @@ host.log shows the Host stopping with code 0xC0000409 about ten times between 13
 - **The Mac** launcher (`packaging/mac/AppDelegate.swift`) can write the same `last-stop.txt`; the Host side is shared. Left for the Mac machine (a platform hook).
 
 The next stop will say why in host.log. Test: `apps/host/test/last-stop.test.ts`.
+
+## Expansion E3 to E6 (from 22 Nov)
+
+The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), in file order, after the frontier build.
+- **E-025, an environment manifest and drift.** A session's menu has Environment... (`POST /api/environment`, `apps/host/src/env-manifest.ts`): Codehouse asks node, npm, pnpm, the .NET SDKs, python, pwsh, git and java for their versions with fixed commands (a tool that is not there is left out), reads what the project asks for (.nvmrc or .node-version, global.json's SDK, rust-toolchain, package.json engines), and keeps both in the project's `.codehouse/environment.json` with the names of the environment variables, never a value. Where an installed version does not meet what is asked for (the common range forms: 22, 22.x, ^, ~, >=, <, ||), that is drift and the panel lists it, such as engines asking for Node 22 on a computer running Node 24, or a global.json SDK that is not installed. Test: `apps/host/test/env-manifest.test.ts` (that drift reported; no variable value stored).
