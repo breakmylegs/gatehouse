@@ -52,6 +52,8 @@ export interface DoctorFacts {
   groupPolicy?: DoctorCheck
   /** D-097: PowerShell's language mode, and hints of AppLocker or WDAC. */
   powershellMode?: DoctorCheck
+  /** E-027: the volume each project is on, and Defender's performance mode. */
+  devDrive?: DoctorCheck
 }
 
 /** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
@@ -136,6 +138,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
   if (f.responsiveness) add(f.responsiveness)
   if (f.groupPolicy) add(f.groupPolicy)
   if (f.powershellMode) add(f.powershellMode)
+  if (f.devDrive) add(f.devDrive)
 
   const s = h.signin
   add(
@@ -431,6 +434,8 @@ export function registerDoctorRoutes(
     groupPolicy?: () => DoctorCheck
     /** D-097: PowerShell's language mode, read once. */
     lockdown?: () => Promise<DoctorCheck>
+    /** E-027: project volumes and Defender. */
+    devDrive?: () => Promise<DoctorCheck>
   },
 ): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -461,6 +466,7 @@ export function registerDoctorRoutes(
       ...(stalls ? { responsiveness: stalls.check() } : {}),
       ...(ctx.groupPolicy ? { groupPolicy: ctx.groupPolicy() } : {}),
       ...(ctx.lockdown ? { powershellMode: await ctx.lockdown() } : {}),
+      ...(ctx.devDrive ? { devDrive: await ctx.devDrive() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

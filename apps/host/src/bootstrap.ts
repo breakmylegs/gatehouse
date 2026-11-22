@@ -1,3 +1,4 @@
+import { devDriveCheck, readDevDrive } from "./devdrive.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
@@ -1686,6 +1687,15 @@ export function createHost(opts: HostOptions = {}): Host {
       groupPolicy: () => groupPolicyCheck(gpo),
       // D-097: PowerShell's language mode, read the first time Doctor is opened, on Windows.
       ...(process.platform === "win32" ? { lockdown: () => (lockdownOnce ??= readLockdown(powerShellExe()).then(lockdownCheck)) } : {}),
+      // E-027: the volume each open project is on, and Defender's performance mode, on Windows.
+      ...(process.platform === "win32"
+        ? {
+            devDrive: () => {
+              const projects = [...new Map(manager.list().map((s) => [s.cwd.toLowerCase(), { name: s.project, folder: s.cwd }])).values()]
+              return readDevDrive(projects.map((p) => p.folder)).then((f) => devDriveCheck(f, projects))
+            },
+          }
+        : {}),
       // D-024: loosening waits ten minutes after its phrase; the phone and push channels are told, for information.
       loosening: new LooseningStore(path.join(gatehouseDataDir(env), "loosening.json")),
       tell: (title: string, body: string) => {
