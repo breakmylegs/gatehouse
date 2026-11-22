@@ -111,6 +111,7 @@ interface Config {
   extremeRiskLimit?: number
   titleByClaude?: boolean
   forges?: { github?: boolean }
+  containerRuns?: { enabled?: boolean; image?: string }
   titleInstructions?: string
   chatHandoff?: { target?: "edge" | "browser" | "app"; edgeProfile?: string; appLink?: boolean }
 }
@@ -251,6 +252,9 @@ interface Values {
   titles: boolean
   /** T-061: read-only GitHub through gh. */
   github: boolean
+  /** E-026: heavy checks in a Podman container. */
+  containers: boolean
+  containerImage: string
   titleInstr: string
   /** Open in Claude (CH-06). */
   handoff: "edge" | "browser" | "app"
@@ -334,6 +338,8 @@ export function valuesOf(d: SettingsData): Values {
     recap: c.recapByClaude !== false,
     titles: c.titleByClaude !== false,
     github: c.forges?.github === true,
+    containers: c.containerRuns?.enabled === true,
+    containerImage: c.containerRuns?.image ?? "",
     titleInstr: c.titleInstructions ?? "",
     handoff: c.chatHandoff?.target ?? "edge",
     edgeProfile: c.chatHandoff?.edgeProfile ?? "Default",
@@ -405,6 +411,13 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     const forges = { ...rest, ...(v.github ? { github: true } : {}) }
     if (Object.keys(forges).length) body.forges = forges
     else delete body.forges
+  }
+  // E-026: anything else kept in containerRuns by a newer version stays.
+  {
+    const { enabled: _e, image: _i, ...rest } = (d.saved.containerRuns as Record<string, unknown> | undefined) ?? {}
+    const runs = { ...rest, ...(v.containers ? { enabled: true } : {}), ...(v.containerImage.trim() ? { image: v.containerImage.trim() } : {}) }
+    if (Object.keys(runs).length) body.containerRuns = runs
+    else delete body.containerRuns
   }
   if (v.titles) delete body.titleByClaude
   else body.titleByClaude = false
@@ -660,6 +673,8 @@ export const DEFAULT_VALUES: Values = {
   recap: true,
   titles: true,
   github: false,
+  containers: false,
+  containerImage: "",
   titleInstr: "",
   handoff: "edge",
   edgeProfile: "Default",
@@ -2147,6 +2162,22 @@ export function Settings() {
                 Off until you switch it on. Codehouse asks the gh command line, with its own sign-in, so Codehouse holds no
                 token; it only reads, for the repository a session works in, and each read is recorded. Anything that
                 writes, such as a comment, a merge or a push, stays a request Claude makes through your rules.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Containers" gap="gap-2" changed={differs(v, ["containers", "containerImage"])}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.containers} onChange={(e) => change({ containers: e.target.checked }, "Containers")} />
+                Run heavy checks in a Podman container
+              </label>
+              <label className="grid gap-1">
+                <span className="text-xs text-mut">Image (empty: a small Node image)</span>
+                <input className="field mono" value={v.containerImage} placeholder="docker.io/library/node:22-alpine" onChange={(e) => change({ containerImage: e.target.value }, "Containers")} />
+              </label>
+              <p className="m-0 text-xs text-mut">
+                Off until you switch it on, and only when Podman is on this computer (Doctor says whether it is). Held-out
+                checks, mutation runs and a breaker's tests then run with no network, the project read-only and a scratch
+                folder of their own. Each command is still judged by your rules first.
               </p>
             </Group>
 

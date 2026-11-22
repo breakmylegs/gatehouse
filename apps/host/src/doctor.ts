@@ -54,6 +54,8 @@ export interface DoctorFacts {
   powershellMode?: DoctorCheck
   /** E-027: the volume each project is on, and Defender's performance mode. */
   devDrive?: DoctorCheck
+  /** E-026: container runs, on, off or unavailable. */
+  containers?: DoctorCheck
 }
 
 /** E-100: whether this build's protections proved themselves at the last canary run; a failure stops new sessions. */
@@ -139,6 +141,7 @@ export function doctorChecks(f: DoctorFacts): DoctorCheck[] {
   if (f.groupPolicy) add(f.groupPolicy)
   if (f.powershellMode) add(f.powershellMode)
   if (f.devDrive) add(f.devDrive)
+  if (f.containers) add(f.containers)
 
   const s = h.signin
   add(
@@ -436,6 +439,8 @@ export function registerDoctorRoutes(
     lockdown?: () => Promise<DoctorCheck>
     /** E-027: project volumes and Defender. */
     devDrive?: () => Promise<DoctorCheck>
+    /** E-026: container runs. */
+    containers?: () => DoctorCheck
   },
 ): { report: () => Promise<string> } {
   // Claude Code is asked its version at most every ten minutes: starting it takes a moment.
@@ -467,6 +472,7 @@ export function registerDoctorRoutes(
       ...(ctx.groupPolicy ? { groupPolicy: ctx.groupPolicy() } : {}),
       ...(ctx.lockdown ? { powershellMode: await ctx.lockdown() } : {}),
       ...(ctx.devDrive ? { devDrive: await ctx.devDrive() } : {}),
+      ...(ctx.containers ? { containers: ctx.containers() } : {}),
       listener: { ...(where && typeof where === "object" ? { address: where.address } : {}) },
       ...(diskFree !== undefined ? { diskFree } : {}),
       ...(status

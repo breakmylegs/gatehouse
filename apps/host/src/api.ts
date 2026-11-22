@@ -181,6 +181,8 @@ export interface AdminContext {
   lockdown?: () => Promise<import("./doctor.js").DoctorCheck>
   /** E-027: project volumes and Defender for Doctor. */
   devDrive?: () => Promise<import("./doctor.js").DoctorCheck>
+  /** E-026: container runs for Doctor. */
+  containers?: () => import("./doctor.js").DoctorCheck
   /** T-132: the Host's stalls and slow requests, for Doctor. */
   stalls?: import("./host-stalls.js").HostStalls
   /** T-124: the command line for scripts on this computer, its token and what it may do. */

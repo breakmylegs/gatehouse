@@ -1,5 +1,6 @@
 import { portHolder, windowsSnapshot } from "./session-procs.js"
 import { devDriveCheck, readDevDrive } from "./devdrive.js"
+import { containerCheck, containerFor, findPodman } from "./container-runs.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
@@ -916,6 +917,9 @@ export function createHost(opts: HostOptions = {}): Host {
   deps.judgeClaim = makeClaimJudge({ config: () => config, redact: (t) => redactString(t, { terms: config.redactTerms }) })
   // Section 6: what Codehouse runs itself is judged, run without credentials in a job at the session's level, and
   // stopped by the kill switch.
+  // E-026: heavy checks in a Podman container when it is here and Settings allow it.
+  const podman = findPodman(env)
+  const container = (sessionId: string) => () => containerFor(config.containerRuns, podman, gatehouseDataDir(env), sessionId)
   const actionFor = (sessionId: string, why = "this project's held-out checks"): HeldOutExec => async (command, cwd, timeoutMs) => {
     const s = manager.get(sessionId)
     const r = await runCodehouseAction(
@@ -935,6 +939,7 @@ export function createHost(opts: HostOptions = {}): Host {
         kill,
         extreme: () => s?.info().extreme === true,
         ...(limitsExe ? { limitsExe } : {}),
+        container: container(sessionId),
       },
     )
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
@@ -944,7 +949,7 @@ export function createHost(opts: HostOptions = {}): Host {
     const s = manager.get(sessionId)
     const r = await runCodehouseAction(
       { sessionId, cwd, project: s?.project ?? "", command, why: "testing the tests against small changes to the new lines", level: s?.info().resources ?? "high", timeoutMs },
-      { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+      { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), container: container(sessionId) },
     )
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
@@ -1699,6 +1704,8 @@ export function createHost(opts: HostOptions = {}): Host {
             },
           }
         : {}),
+      // E-026: container runs, on, off or unavailable without Podman.
+      containers: () => containerCheck(config.containerRuns, podman),
       // D-024: loosening waits ten minutes after its phrase; the phone and push channels are told, for information.
       loosening: new LooseningStore(path.join(gatehouseDataDir(env), "loosening.json")),
       tell: (title: string, body: string) => {

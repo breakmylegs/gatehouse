@@ -10,6 +10,7 @@
  */
 import { spawn, type ChildProcess } from "node:child_process"
 import crypto from "node:crypto"
+import fs from "node:fs"
 import type { ResourceLevel } from "@gatehouse/shared/ws-protocol"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
@@ -64,6 +65,47 @@ export interface ActionDeps {
   env?: NodeJS.ProcessEnv
   /** Tests only: stands in for starting the command. */
   start?: (command: string, cwd: string, env: NodeJS.ProcessEnv, level: ResourceLevel) => ChildProcess
+  /** E-026: run it in a container instead, when Podman is here and Settings allow it. */
+  container?: () => ContainerRun | undefined
+}
+
+/**
+ * E-026, container runs (the safe variant): a Codehouse action run in a Podman container with no network, the project
+ * mounted read-only at /work and a scratch volume at /scratch (also its home and its temporary folder). The command is
+ * judged by the policy as written before it runs, and the container only confines it further.
+ */
+export interface ContainerRun {
+  /** Podman, or a stand-in in tests. */
+  exe: string
+  /** Arguments before Podman's own (a stand-in's script). */
+  prefix?: string[]
+  image: string
+  scratch: string
+}
+
+/** The arguments that run a command in the container: no network, the project read-only, a scratch volume. */
+export function containerArgs(c: ContainerRun, command: string, cwd: string): string[] {
+  return [
+    ...(c.prefix ?? []),
+    "run",
+    "--rm",
+    "--network=none",
+    "--read-only",
+    "--tmpfs",
+    "/tmp",
+    "-v",
+    `${cwd}:/work:ro`,
+    "-v",
+    `${c.scratch}:/scratch`,
+    "-w",
+    "/work",
+    "-e",
+    "HOME=/scratch",
+    c.image,
+    "sh",
+    "-c",
+    command,
+  ]
 }
 
 function startCommand(
@@ -74,6 +116,14 @@ function startCommand(
   level: ResourceLevel,
 ): ChildProcess {
   if (d.start) return d.start(command, cwd, env, level)
+  const box = d.container?.()
+  if (box) {
+    fs.mkdirSync(box.scratch, { recursive: true })
+    const argv = [box.exe, ...containerArgs(box, command, cwd)]
+    return d.limitsExe
+      ? spawn(d.limitsExe, ["--name", `codeh-action-${crypto.randomBytes(4).toString("hex")}`, ...levelArgs(level), "--", ...argv], { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+      : spawn(argv[0]!, argv.slice(1), { cwd, env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+  }
   if (d.limitsExe)
     return spawn(
       d.limitsExe,

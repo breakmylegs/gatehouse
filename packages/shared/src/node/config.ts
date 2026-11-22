@@ -165,6 +165,8 @@ function build(loose: boolean) {
     phoneAlerts: z.enum(["all", "decisions"]).optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** E-026: heavy checks in a Podman container (no network, project read-only). Off unless switched on. */
+    containerRuns: z.object({ enabled: z.boolean().optional(), image: z.string().max(255).optional() }).passthrough().optional(),
     /** O36: the risk at or above which Rules-based Extreme approval waits for you, 1 to 101 (101: never). Absent: 80. */
     extremeRiskLimit: z.number().int().min(1).max(101).optional(),
     /** T-061: read-only forge connections through each forge's own command line. Off unless switched on. */
