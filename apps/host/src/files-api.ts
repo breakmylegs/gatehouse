@@ -1,3 +1,4 @@
+import { checkTour, readTours } from "./tours.js"
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
@@ -289,6 +290,20 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     try {
       // A stale index is brought up to date by indexFor; refreshing again then reads only what changed since.
       return { stats: await (await indexFor(real(root), false)).refresh() }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+
+  // D-079: the project's tours, each step checked against the index: where its symbol is now, or moved, or gone.
+  app.get("/api/tours", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      const index = await indexFor(real(root), false)
+      const { tours, errors } = readTours(real(root))
+      return { tours: tours.map((t) => ({ name: t.name, title: t.title, steps: checkTour(t, (n) => index.symbols(n, 50)) })), errors }
     } catch (e) {
       return reply.code(409).send({ error: (e as Error).message })
     }

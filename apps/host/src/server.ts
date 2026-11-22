@@ -1,3 +1,4 @@
+import { tourPrompt } from "./tours.js"
 import { signReport } from "./egress.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
@@ -1079,6 +1080,11 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "tour_ask": {
+        // D-079: Claude writes the tour; Codehouse links and checks it.
+        this.#session(cmd.sessionId).prompt(tourPrompt(cmd.topic))
+        return undefined
       }
       case "egress_report": {
         // D-094: the endpoints sampled for this session, signed so the report can be checked later.

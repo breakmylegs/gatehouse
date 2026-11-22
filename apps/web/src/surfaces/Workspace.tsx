@@ -12,6 +12,7 @@ import { Evidence } from "../components/Evidence"
 import { MigrationPanel } from "../components/MigrationPanel"
 import { KnowledgePanel } from "../components/KnowledgePanel"
 import { EgressPanel } from "../components/EgressPanel"
+import { ToursPanel } from "../components/ToursPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -404,6 +405,7 @@ function SessionPane({
   const [pwsh7, setPwsh7] = useState(false)
   const [knowledge, setKnowledge] = useState(false)
   const [egress, setEgress] = useState(false)
+  const [tours, setTours] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -676,6 +678,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Knowledge pack...", onSelect: () => setKnowledge(true) }]),
     // D-094: where this session's processes connected.
     { label: "Where it connected...", onSelect: () => setEgress(true) },
+    // D-079: codebase tours, each step linked to its symbol.
+    ...(chat ? [] : [{ label: "Codebase tours...", onSelect: () => setTours(true) }]),
     ...(chat ? [] : [{ label: "Requirements...", onSelect: () => setRequirements(true) }]),
     ...(chat ? [] : [{ label: "Architecture...", onSelect: () => setArchitecture(true) }]),
     ...(chat ? [] : [{ label: "Decisions...", onSelect: () => setDecisions(true) }]),
@@ -923,6 +927,11 @@ function SessionPane({
       {requirements ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <Requirements sessionId={session.id} onClose={() => setRequirements(false)} />
+        </div>
+      ) : null}
+      {tours ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <ToursPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setTours(false)} />
         </div>
       ) : null}
       {egress ? (

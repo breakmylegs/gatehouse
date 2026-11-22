@@ -288,6 +288,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     sessionId: Id,
     ref: z.string().min(1).max(500).optional(),
   }),
+  /** D-079: ask Claude to write a codebase tour of a topic, in the format the tours read. */
+  z.object({ type: z.literal("tour_ask"), sessionId: Id, topic: z.string().min(1).max(200) }),
   /** D-094: the remote endpoints this session's processes reached, signed with this computer's key. */
   z.object({ type: z.literal("egress_report"), sessionId: Id }),
   /** D-080: the project's ADRs, glossary and instructions as a signed pack, and importing one signed by a trusted key. */
