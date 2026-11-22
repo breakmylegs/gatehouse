@@ -18,8 +18,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | D-007 | Locked acceptance tests | before E2 | built | | | From the Frontier status |
 | D-009 | Done-claim verifier | before E2 | built | | | From the Frontier status |
 | C-031 | Tree-sitter outline (WASM) | before E2 | built | | | From the Frontier status |
-| C-057 | Mermaid and Markdown artifacts | before E3 | todo | | | From the Frontier status |
-| D-094 | Egress helper (packaging/Egress.cs) | before E3 | todo | | | From the Frontier status |
+| C-057 | Mermaid and Markdown artifacts | before E3 | built | | | From the Frontier status |
+| D-094 | Egress helper (packaging/Egress.cs) | before E3 | built | | | From the Frontier status |
 | C-004 | Memory governor | before E3 | built | | | From the Frontier status |
 | C-010 | Audit-backed session timeline | before E4 | built | | | From the Frontier status |
 | C-012 | Policy dry run | before E4 | built | | | From the Frontier status |
@@ -27,15 +27,15 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-016 | Verified data-boundary cards per model | before E5 | built | | | From the Frontier status |
 | C-059 | XLSX attachments | before E5 | see frontier-status | | | From the Frontier status |
 | D-033 | Requirement ledger | before E5 | built | | | From the Frontier status |
-| D-051 | Personal data flow map | before E5 | todo | | | From the Frontier status |
+| D-051 | Personal data flow map | before E5 | built | | | From the Frontier status |
 | D-055 | Licence policy | before E5 | built safe variant | | | From the Frontier status |
-| C-055 | Signed shared rule packs | before E5 | todo | | | From the Frontier status |
-| D-080 | Signed knowledge packs | before E5 | todo | | | From the Frontier status |
-| D-100 | Estimates from history | before E5 | todo | | | From the Frontier status |
+| C-055 | Signed shared rule packs | before E5 | built | | | From the Frontier status |
+| D-080 | Signed knowledge packs | before E5 | built | | | From the Frontier status |
+| D-100 | Estimates from history | before E5 | built | | | From the Frontier status |
 | C-013 | Grant lifetimes | before E6 | built | | | From the Frontier status |
 | C-054 | Signed session bundles | before E6 | see frontier-status | | | From the Frontier status |
-| D-079 | Codebase tours | before E6 | todo | | | From the Frontier status |
-| D-083 | Ubiquitous language glossary | before E6 | todo | | | From the Frontier status |
+| D-079 | Codebase tours | before E6 | built | | | From the Frontier status |
+| D-083 | Ubiquitous language glossary | before E6 | built | | | From the Frontier status |
 | C-022 | Audited editor | before E6 | see frontier-status | | | From the Frontier status |
 
 ## Expansion items
