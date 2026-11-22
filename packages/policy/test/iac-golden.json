@@ -1,0 +1,608 @@
+[
+ {
+  "name": "terraform deletes a database",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_db_instance.main",
+     "type": "aws_db_instance",
+     "name": "main",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": {
+       "identifier": "main"
+      },
+      "after": null
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "aws_db_instance.main"
+  ]
+ },
+ {
+  "name": "terraform replaces a storage account",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "azurerm_storage_account.data",
+     "type": "azurerm_storage_account",
+     "name": "data",
+     "change": {
+      "actions": [
+       "delete",
+       "create"
+      ],
+      "before": {},
+      "after": {}
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "azurerm_storage_account.data"
+  ]
+ },
+ {
+  "name": "terraform deletes a Cloud SQL instance",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "google_sql_database_instance.pg",
+     "type": "google_sql_database_instance",
+     "name": "pg",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": null,
+      "after": null
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "google_sql_database_instance.pg"
+  ]
+ },
+ {
+  "name": "terraform deletes a DynamoDB table in a module",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "module.data.aws_dynamodb_table.t[\"orders\"]",
+     "type": "aws_dynamodb_table",
+     "name": "t[\"orders\"]",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": null,
+      "after": null
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "module.data.aws_dynamodb_table.t[\"orders\"]"
+  ]
+ },
+ {
+  "name": "terraform deletes a key vault and a queue",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "azurerm_key_vault.kv",
+     "type": "azurerm_key_vault",
+     "name": "kv",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": null,
+      "after": null
+     }
+    },
+    {
+     "address": "aws_sqs_queue.jobs",
+     "type": "aws_sqs_queue",
+     "name": "jobs",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": null,
+      "after": null
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "azurerm_key_vault.kv",
+   "aws_sqs_queue.jobs"
+  ]
+ },
+ {
+  "name": "terraform deletes a bucket policy, not the bucket",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_s3_bucket_policy.p",
+     "type": "aws_s3_bucket_policy",
+     "name": "p",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": null,
+      "after": null
+     }
+    }
+   ]
+  },
+  "o": "none"
+ },
+ {
+  "name": "terraform deletes a web server",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_instance.web",
+     "type": "aws_instance",
+     "name": "web",
+     "change": {
+      "actions": [
+       "delete"
+      ],
+      "before": null,
+      "after": null
+     }
+    }
+   ]
+  },
+  "o": "none"
+ },
+ {
+  "name": "terraform creates a queue",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_sqs_queue.jobs",
+     "type": "aws_sqs_queue",
+     "name": "jobs",
+     "change": {
+      "actions": [
+       "create"
+      ],
+      "before": null,
+      "after": {
+       "name": "jobs"
+      }
+     }
+    }
+   ]
+  },
+  "o": "none"
+ },
+ {
+  "name": "terraform opens SSH to the internet",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_security_group_rule.ssh",
+     "type": "aws_security_group_rule",
+     "name": "ssh",
+     "change": {
+      "actions": [
+       "create"
+      ],
+      "before": null,
+      "after": {
+       "type": "ingress",
+       "from_port": 22,
+       "cidr_blocks": [
+        "0.0.0.0/0"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-public-exposure",
+  "names": [
+   "aws_security_group_rule.ssh"
+  ]
+ },
+ {
+  "name": "terraform makes a database public",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_db_instance.main",
+     "type": "aws_db_instance",
+     "name": "main",
+     "change": {
+      "actions": [
+       "update"
+      ],
+      "before": {
+       "publicly_accessible": false
+      },
+      "after": {
+       "publicly_accessible": true
+      }
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-public-exposure",
+  "names": [
+   "aws_db_instance.main"
+  ]
+ },
+ {
+  "name": "terraform keeps an already open rule",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_security_group.web",
+     "type": "aws_security_group",
+     "name": "web",
+     "change": {
+      "actions": [
+       "update"
+      ],
+      "before": {
+       "ingress": [
+        {
+         "cidr_blocks": [
+          "0.0.0.0/0"
+         ],
+         "from_port": 443
+        }
+       ],
+       "description": "a"
+      },
+      "after": {
+       "ingress": [
+        {
+         "cidr_blocks": [
+          "0.0.0.0/0"
+         ],
+         "from_port": 443
+        }
+       ],
+       "description": "b"
+      }
+     }
+    }
+   ]
+  },
+  "o": "none"
+ },
+ {
+  "name": "terraform adds a public address",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "azurerm_public_ip.gw",
+     "type": "azurerm_public_ip",
+     "name": "gw",
+     "change": {
+      "actions": [
+       "create"
+      ],
+      "before": null,
+      "after": {
+       "allocation_method": "Static"
+      }
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-public-exposure",
+  "names": [
+   "azurerm_public_ip.gw"
+  ]
+ },
+ {
+  "name": "terraform switches off a bucket's public access block",
+  "plan": {
+   "format_version": "1.2",
+   "terraform_version": "1.9.0",
+   "resource_changes": [
+    {
+     "address": "aws_s3_bucket_public_access_block.b",
+     "type": "aws_s3_bucket_public_access_block",
+     "name": "b",
+     "change": {
+      "actions": [
+       "update"
+      ],
+      "before": {
+       "block_public_acls": true
+      },
+      "after": {
+       "block_public_acls": false
+      }
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-public-exposure",
+  "names": [
+   "aws_s3_bucket_public_access_block.b"
+  ]
+ },
+ {
+  "name": "what-if deletes a SQL database",
+  "plan": {
+   "status": "Succeeded",
+   "changes": [
+    {
+     "resourceId": "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.Sql/servers/sql1/databases/orders",
+     "changeType": "Delete",
+     "before": {}
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.Sql/servers/sql1/databases/orders"
+  ]
+ },
+ {
+  "name": "what-if deletes a key vault",
+  "plan": {
+   "status": "Succeeded",
+   "changes": [
+    {
+     "resourceId": "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv1",
+     "changeType": "Delete"
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kv1"
+  ]
+ },
+ {
+  "name": "what-if allows any source in",
+  "plan": {
+   "status": "Succeeded",
+   "changes": [
+    {
+     "resourceId": "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.Network/networkSecurityGroups/nsg/securityRules/rdp",
+     "changeType": "Create",
+     "after": {
+      "properties": {
+       "access": "Allow",
+       "direction": "Inbound",
+       "sourceAddressPrefix": "*",
+       "destinationPortRange": "3389"
+      }
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-public-exposure",
+  "names": [
+   "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.Network/networkSecurityGroups/nsg/securityRules/rdp"
+  ]
+ },
+ {
+  "name": "what-if changes a web app",
+  "plan": {
+   "status": "Succeeded",
+   "changes": [
+    {
+     "resourceId": "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.Web/sites/app",
+     "changeType": "Modify",
+     "before": {
+      "properties": {
+       "httpsOnly": false
+      }
+     },
+     "after": {
+      "properties": {
+       "httpsOnly": true
+      }
+     }
+    },
+    {
+     "resourceId": "/subscriptions/0000/resourceGroups/rg/providers/Microsoft.Web/sites/old",
+     "changeType": "NoChange"
+    }
+   ]
+  },
+  "o": "none"
+ },
+ {
+  "name": "change set removes an RDS instance",
+  "plan": {
+   "ChangeSetName": "cs",
+   "ChangeSetId": "arn:aws:cloudformation:eu-west-2:0:changeSet/cs/1",
+   "Changes": [
+    {
+     "Type": "Resource",
+     "ResourceChange": {
+      "Action": "Remove",
+      "LogicalResourceId": "OrdersDb",
+      "ResourceType": "AWS::RDS::DBInstance"
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "OrdersDb"
+  ]
+ },
+ {
+  "name": "change set replaces a DynamoDB table",
+  "plan": {
+   "ChangeSetName": "cs",
+   "ChangeSetId": "arn:aws:cloudformation:eu-west-2:0:changeSet/cs/1",
+   "Changes": [
+    {
+     "Type": "Resource",
+     "ResourceChange": {
+      "Action": "Modify",
+      "LogicalResourceId": "Sessions",
+      "ResourceType": "AWS::DynamoDB::Table",
+      "Replacement": "True"
+     }
+    }
+   ]
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "Sessions"
+  ]
+ },
+ {
+  "name": "change set updates a function in place",
+  "plan": {
+   "ChangeSetName": "cs",
+   "ChangeSetId": "arn:aws:cloudformation:eu-west-2:0:changeSet/cs/1",
+   "Changes": [
+    {
+     "Type": "Resource",
+     "ResourceChange": {
+      "Action": "Modify",
+      "LogicalResourceId": "Api",
+      "ResourceType": "AWS::Lambda::Function",
+      "Replacement": "False"
+     }
+    }
+   ]
+  },
+  "o": "none"
+ },
+ {
+  "name": "pulumi deletes a bucket",
+  "plan": {
+   "steps": [
+    {
+     "op": "delete",
+     "urn": "urn:pulumi:prod::shop::aws:s3/bucket:Bucket::assets",
+     "oldState": {
+      "type": "aws:s3/bucket:Bucket",
+      "inputs": {}
+     }
+    }
+   ],
+   "changeSummary": {}
+  },
+  "o": "escalate",
+  "r": "iac-destroys-stateful",
+  "names": [
+   "urn:pulumi:prod::shop::aws:s3/bucket:Bucket::assets"
+  ]
+ },
+ {
+  "name": "pulumi opens a security group",
+  "plan": {
+   "steps": [
+    {
+     "op": "create",
+     "urn": "urn:pulumi:dev::shop::aws:ec2/securityGroup:SecurityGroup::web",
+     "newState": {
+      "type": "aws:ec2/securityGroup:SecurityGroup",
+      "inputs": {
+       "ingress": [
+        {
+         "cidrBlocks": [
+          "0.0.0.0/0"
+         ],
+         "fromPort": 80
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "changeSummary": {}
+  },
+  "o": "escalate",
+  "r": "iac-public-exposure",
+  "names": [
+   "urn:pulumi:dev::shop::aws:ec2/securityGroup:SecurityGroup::web"
+  ]
+ },
+ {
+  "name": "pulumi updates a function",
+  "plan": {
+   "steps": [
+    {
+     "op": "update",
+     "urn": "urn:pulumi:dev::shop::aws:lambda/function:Function::api",
+     "newState": {
+      "type": "aws:lambda/function:Function",
+      "inputs": {
+       "memorySize": 256
+      }
+     },
+     "oldState": {
+      "inputs": {
+       "memorySize": 128
+      }
+     }
+    },
+    {
+     "op": "same",
+     "urn": "urn:pulumi:dev::shop::aws:s3/bucket:Bucket::assets"
+    }
+   ],
+   "changeSummary": {}
+  },
+  "o": "none"
+ }
+]

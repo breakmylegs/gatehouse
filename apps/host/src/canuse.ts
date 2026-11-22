@@ -87,6 +87,8 @@ export interface CanUseDeps {
   breaker?: boolean
   /** E-029: who listens on a port now, for a command that would start a server on it. */
   portHolder?: (port: number) => Promise<string | undefined>
+  /** E-018: what an infrastructure apply meets from the plan it applies (or that no plan was seen). */
+  iacPlan?: (command: string) => { ruleId: string; risk: number; reason: string; resources: string[] } | undefined
   /** D-023: the paths and commands this session may use by itself in Auto and Accept edits. */
   lease?: () => ScopeLease | undefined
   /** D-023: a plan was approved, with its words, so the session can set its lease from it. */
@@ -349,6 +351,11 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         const port = serverPort(input.command)
         const holder = port === undefined ? undefined : await deps.portHolder(port).catch(() => undefined)
         if (port !== undefined && holder) verdict = { ...verdict, outcome: "escalate", ruleId: PORT_CLASH_RULE, reason: portClashReason(port, holder), risk: Math.max(verdict.risk, 30), decidedBy: "rules" }
+      }
+      // E-018: an apply inherits the strictest finding of its plan, naming each resource; never loosened here.
+      if (deps.iacPlan && verdict.outcome !== "deny" && (toolName === "Bash" || toolName === "PowerShell") && typeof input.command === "string") {
+        const f = deps.iacPlan(input.command)
+        if (f && (verdict.outcome === "allow" || f.risk >= verdict.risk)) verdict = { ...verdict, outcome: "escalate", ruleId: f.ruleId, reason: f.reason, risk: Math.max(verdict.risk, f.risk), decidedBy: "rules" }
       }
       // D-084: a breaker tries to break a change, not to change it: any edit goes to a person, whatever the rules said.
       if (deps.breaker && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName))

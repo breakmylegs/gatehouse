@@ -80,7 +80,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-013 | Migration rehearsal | E3 | done | feat/e3b | yes | SQLite in the Host, Postgres in an E-026 container; irreversible steps reported; database deleted |
 | E-014 | Query plan review | E3 | done | feat/e3b | yes | tree-sitter finds added queries; EXPLAIN QUERY PLAN in a throwaway SQLite database; scans get an index |
 | E-015 | Synthetic fixtures with PII scan | E3 | done | feat/e3b | yes | own seeded generator checked by SQLite; scan for real emails, UK phones, NI numbers and Luhn cards |
-| E-018 | IaC plan as policy | E3 | todo | | |  |
+| E-018 | IaC plan as policy | E3 | done | feat/e3c | yes | four plan shapes; stateful delete or replace Severe, new exposure High, unseen plan held; 23 golden; T161 |
 | E-024 | Blast radius preview | E3 | todo | | |  |
 | E-019 | Infrastructure cost delta | E3 | todo | | | Safe variant only; the List for part is listed |
 | E-020 | Least-privilege IAM diff | E3 | todo | | |  |

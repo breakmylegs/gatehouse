@@ -1,6 +1,7 @@
 import { portHolder, windowsSnapshot } from "./session-procs.js"
 import { devDriveCheck, readDevDrive } from "./devdrive.js"
 import { containerCheck, containerFor, findPodman } from "./container-runs.js"
+import { IacPlans } from "./iac-plans.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
@@ -956,6 +957,8 @@ export function createHost(opts: HostOptions = {}): Host {
   deps.mutationExec = mutationExecFor
   // E-029: who listens on a port, so a server about to start on it goes to a person first (Windows).
   if (process.platform === "win32") deps.portHolder = (port) => portHolder(port, windowsSnapshot)
+  // E-018: the infrastructure plans each session shows, for the applies that follow.
+  deps.iacPlans = new IacPlans()
   // D-084: a breaker's test runs: the project's own test command, as a Codehouse action in its worktree.
   deps.breakerTests = async (id, cwd) => {
     const command = projectCommand(cwd, "tests")

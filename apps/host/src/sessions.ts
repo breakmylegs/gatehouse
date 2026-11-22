@@ -1,5 +1,6 @@
 import { breakerFindings } from "./adversary.js"
 import { lockdownHint } from "./lockdown.js"
+import { outputText } from "./iac-plans.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
 import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
@@ -512,6 +513,8 @@ export interface SessionDeps {
   }
   /** E-029: who listens on a port now (Windows). */
   portHolder?: (port: number) => Promise<string | undefined>
+  /** E-018: the infrastructure plans sessions have shown, for the applies that follow. */
+  iacPlans?: import("./iac-plans.js").IacPlans
   /** D-084: a breaker's test runs: the project's test command, as a Codehouse action in its worktree. */
   breakerTests?: (sessionId: string, cwd: string) => Promise<{ ok: boolean; output: string }>
   /** Free memory in bytes, for the warm chat; os.freemem when absent. */
@@ -1282,6 +1285,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // D-008: a test run's output is read for counterexamples, offered on the pane to pin as regression tests.
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
+      ...(d.iacPlans ? { onCommandOutput: (output: unknown) => d.iacPlans!.seen(this.id, outputText(output)) } : {}),
       ...(d.evidence ? { onCommandEnded: (id: string, error: string | undefined) => (error === undefined ? d.evidence!.results.succeeded(id) : d.evidence!.results.failed(id, error)) } : {}),
       onCommitted: (cwd) => {
         // E-086: the agent's commit message, checked against the writing rules and never rewritten.
@@ -1378,6 +1382,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.breaker ? { breaker: true } : {}),
       // E-029: a server about to start on a port in use goes to a person first.
       ...(d.portHolder ? { portHolder: d.portHolder } : {}),
+      ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd) } : {}),
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,
       onPlanApproved: (plan) => void this.#leaseFromPlan(plan),
