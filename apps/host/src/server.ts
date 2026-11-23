@@ -32,6 +32,8 @@ import { exportLinks, scanLinks } from "./work-items.js"
 import { dodItems, dodStatus, readDod } from "./dod.js"
 import { readiness, readinessMarkdown, type ReadinessInput } from "./release-readiness.js"
 import { sessionNotes } from "./slsa.js"
+import { verifyBackout } from "./backout.js"
+import { cabPack, changeRecord } from "./change-record.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
@@ -623,6 +625,25 @@ export class HostServer {
         error: { code: err.code, message: err.message },
       })
     }
+  }
+
+  /** E-060: the last backout check of each project, for its change record. */
+  readonly #backouts = new Map<string, { reversible: boolean; detail: string }>()
+
+  /** Where the project's change began: where it left its default branch. */
+  async #base(root: string): Promise<string> {
+    return ((await gitOut(root, ["merge-base", "HEAD", "origin/HEAD"])) ?? (await gitOut(root, ["merge-base", "HEAD", "main"])) ?? "").trim()
+  }
+
+  async #backout(s: NonNullable<ReturnType<HostServerOptions["app"]["manager"]["get"]>>, root: string) {
+    const base = await this.#base(root)
+    if (!base) return { reversible: false, revert: "conflicts" as const, tests: "not run" as const, migrations: "none" as const, detail: "where the change began could not be found (no default branch to compare with)." }
+    const run = this.#opts.app.runAction
+    return await verifyBackout(root, base, async (command, cwd) => {
+      if (!run) return { ran: false, exitCode: null, output: "", refused: "Codehouse actions are not available here" }
+      const x = await run(s.id, command, cwd, "checking the change can be backed out")
+      return { ran: !x.refused, exitCode: x.exitCode, output: x.output, ...(x.refused ? { refused: x.refused } : {}) }
+    })
   }
 
   /** E-058: what a release readiness report reads, for a session's project. */
@@ -1352,6 +1373,38 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "backout_check": {
+        // E-060: a scratch worktree; the tests after the revert run as a Codehouse action; your tree is never touched.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const r = await this.#backout(s, root)
+        this.#backouts.set(root.toLowerCase(), { reversible: r.reversible, detail: r.detail })
+        await a.audit.record({
+          session: s.id, event: "backout_checked", channel: "desktop", tool: "release", cwd: s.cwd, project: s.project, input: { reversible: r.reversible, revert: r.revert, tests: r.tests, migrations: r.migrations },
+          verdict: { outcome: "allow", ruleId: "backout-check", reason: `The change is ${r.reversible ? "" : "not "}reversible: ${r.detail}`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return r
+      }
+      case "change_record": {
+        // E-059: every field from the evidence, or marked as needing your input.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const rd = readiness(await this.#readinessInput(s, root))
+        const base = await this.#base(root)
+        const range = base ? `${base}..HEAD` : "-50"
+        const commits = ((await gitOut(root, ["log", "--format=%H%x00%s", range])) ?? "").split("\n").filter(Boolean).map((l) => {
+          const [sha, subject] = l.split("\x00")
+          return { sha: sha!, subject: subject ?? "" }
+        })
+        const named = new Set(commits.flatMap((c) => c.subject.match(/[A-Z][A-Z0-9]{1,9}-[0-9A-F]{1,7}/g) ?? []))
+        const requirements = readRequirements(root).requirements.filter((q) => named.has(q.id)).map((q) => ({ id: q.id, title: q.title }))
+        const files = ((await gitOut(root, ["diff", "--name-only", base ? `${base}` : "HEAD~1", "HEAD"])) ?? "").split("\n").map((l) => l.trim()).filter(Boolean)
+        const candidate = cmd.candidate?.trim() || `${s.project} at ${commits[0]?.sha.slice(0, 7) ?? "HEAD"}`
+        const backout = this.#backouts.get(root.toLowerCase())
+        const fields = changeRecord({ candidate, commits, requirements, readiness: rd, claims: s.info().claims ?? [], files, ...(backout ? { backout } : {}), ...(cmd.schedule?.trim() ? { schedule: cmd.schedule.trim() } : {}) })
+        return { fields, markdown: cabPack(candidate, fields, readinessMarkdown(rd, candidate)) }
       }
       case "release_readiness": {
         // E-058: read only, apart from the sealed checks and the definition of done's commands, run as Codehouse actions.

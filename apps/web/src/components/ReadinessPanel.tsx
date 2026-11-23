@@ -22,6 +22,23 @@ export function ReadinessPanel({ sessionId, onClose }: { sessionId: string; onCl
   const [candidate, setCandidate] = useState("")
   const [r, setR] = useState<Report>()
   const [busy, setBusy] = useState(false)
+  const [backout, setBackout] = useState<{ reversible: boolean; detail: string }>()
+  const [record, setRecord] = useState<{ fields: Array<{ name: string; text?: string; evidence: string[]; needsInput?: string }>; markdown: string }>()
+  const [schedule, setSchedule] = useState("")
+  async function checkBackout() {
+    setBusy(true)
+    const x = await send({ type: "backout_check", sessionId })
+    setBusy(false)
+    if (x.ok) setBackout(x.data as NonNullable<typeof backout>)
+    else toast.error(x.error?.message ?? "Not checked", { id: "release" })
+  }
+  async function draft() {
+    setBusy(true)
+    const x = await send({ type: "change_record", sessionId, ...(candidate.trim() ? { candidate: candidate.trim() } : {}), ...(schedule.trim() ? { schedule: schedule.trim() } : {}) })
+    setBusy(false)
+    if (x.ok) setRecord(x.data as NonNullable<typeof record>)
+    else toast.error(x.error?.message ?? "Not drafted", { id: "release" })
+  }
   async function check() {
     setBusy(true)
     const x = await send({ type: "release_readiness", sessionId, ...(candidate.trim() ? { candidate: candidate.trim() } : {}) })
@@ -43,9 +60,35 @@ export function ReadinessPanel({ sessionId, onClose }: { sessionId: string; onCl
           <input className="field" value={candidate} onChange={(e) => setCandidate(e.target.value)} />
         </label>
         <button type="button" className="btn btn-primary !min-h-7" disabled={busy} onClick={() => void check()}>
-          {busy ? "Checking…" : "Check"}
+          {busy ? "Working…" : "Check"}
+        </button>
+        <button type="button" className="btn !min-h-7" disabled={busy} onClick={() => void checkBackout()}>
+          Check the backout
         </button>
       </div>
+      {backout ? <p className={`m-0 ${backout.reversible ? "" : "font-semibold"}`}>{backout.reversible ? "Reversible: " : "Not reversible: "}{backout.detail}</p> : null}
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid flex-1 gap-1">
+          <span className="text-xs text-mut">Schedule for the change record (empty: to give later)</span>
+          <input className="field" value={schedule} onChange={(e) => setSchedule(e.target.value)} />
+        </label>
+        <button type="button" className="btn !min-h-7" disabled={busy} onClick={() => void draft()}>
+          Draft the change record
+        </button>
+      </div>
+      {record ? (
+        <div className="grid gap-1">
+          {record.fields.map((f) => (
+            <span key={f.name}>
+              <strong>{f.name}</strong>: {f.text ?? ""}
+              {f.needsInput ? <span className="font-semibold"> Needs your input: {f.needsInput}</span> : null}
+            </span>
+          ))}
+          <button type="button" className="btn !min-h-7 justify-self-start" onClick={() => void navigator.clipboard.writeText(record.markdown).then(() => toast("Copied", { id: "release" }))}>
+            Copy the CAB pack
+          </button>
+        </div>
+      ) : null}
       {r ? (
         <>
           <p className={`m-0 ${r.ready ? "text-ok" : "font-semibold text-sev"}`}>{r.ready ? `${r.candidate} is ready.` : `${r.candidate} is not ready.`}</p>

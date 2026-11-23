@@ -112,8 +112,8 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-056 | Work item linkage | E5 | done | feat/e5a | yes | AB# and Jira ids from branch, commits, notes and ledger linked to session, commits, evidence and stories; local; CSV/JSON export |
 | E-057 | Definition of done checklist | E5 | done | feat/e5a | yes | .codehouse/dod.yml checked automatically where possible, ticked by hand otherwise; every claim of done shows its status |
 | E-058 | Release readiness report | E5 | done | feat/e5a | yes | escalations, sealed checks, evidence packs, vulnerabilities, licences, accessibility and DoD; a Severe escalation blocks with its reason |
-| E-059 | Change record and CAB pack | E5 | todo | | |  |
-| E-060 | Backout plan verification | E5 | todo | | |  |
+| E-059 | Change record and CAB pack | E5 | done | feat/e5a | yes | fields from evidence or Needs your input; CAB pack |
+| E-060 | Backout plan verification | E5 | done | feat/e5a | yes | scratch-worktree revert, tests and down migrations; conflict not reversible |
 | E-061 | Environment promotion gate | E5 | todo | | |  |
 | E-063 | Effort and billing log | E5 | todo | | |  |
 | E-069 | AI system register | E5 | todo | | |  |
