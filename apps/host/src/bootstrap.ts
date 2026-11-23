@@ -282,8 +282,13 @@ export function createHost(opts: HostOptions = {}): Host {
     userRulesPath: env.GATEHOUSE_USER_RULES ?? path.join(rulesDir, "rules.user.yaml"),
     // B37: IT's signed policy, when there is one.
     managedDir: managedPolicyDir(env),
-    // C-055: signed shared rule packs, and the keys you trust to sign them (Settings).
-    sharedPacksDir: path.join(gatehouseDataDir(env), "rule-packs"),
+    // C-055: signed shared rule packs, and the keys you trust to sign them (Settings). The folder is made now so the
+    // policy watches it from the start, and a pack installed later (E-092) takes effect without a restart.
+    sharedPacksDir: (() => {
+      const dir = path.join(gatehouseDataDir(env), "rule-packs")
+      fs.mkdirSync(dir, { recursive: true })
+      return dir
+    })(),
     trustedPackKeys: config.rulePackKeys ?? [],
     ...(config.workspaceRoots ? { workspaceRootsOverride: config.workspaceRoots } : {}),
     ...(config.projectsFolder ? { extraWorkspaceRoots: [config.projectsFolder] } : {}),
@@ -1829,6 +1834,8 @@ export function createHost(opts: HostOptions = {}): Host {
     container: (id: string) => container(id)(),
     // D-080: knowledge packs are signed with a key kept sealed for this user.
     knowledgeKey: machineKey,
+    // E-092: the draft industry packs ship beside the rules; signed and installed ones live in the data folder.
+    industryPacks: { draftsDir: path.join(rulesDir, "industry"), signedDir: path.join(gatehouseDataDir(env), "industry-packs"), packsDir: path.join(gatehouseDataDir(env), "rule-packs"), checklistDir: path.join(gatehouseDataDir(env), "industry-checklists") },
     // D-094: what each session's processes reached.
     egress,
     dataDir: gatehouseDataDir(env),

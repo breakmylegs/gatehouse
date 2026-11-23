@@ -129,6 +129,7 @@ import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
 import { sequenceFrom } from "./sequence.js"
+import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
 import { collectNotices, noticesText } from "./notices.js"
@@ -173,6 +174,8 @@ export interface HostApp {
   vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches" | "status">
   /** D-080: this computer's key for signing knowledge packs. */
   knowledgeKey?: KnowledgeKey
+  /** E-092: where the draft industry packs are, where signed ones wait, and where installed ones go. */
+  industryPacks?: { draftsDir: string; signedDir: string; packsDir: string; checklistDir: string }
   /** D-094: what each session's processes reached. */
   egress?: Pick<import("./egress.js").EgressMonitor, "report">
   /** D-084: each session's breaker run and what it found. */
@@ -1420,6 +1423,71 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "industry_packs": {
+        const ip = a.industryPacks
+        if (!ip) throw new CommandError("unavailable", "Industry packs are not available here.")
+        const trusted = a.admin?.config().rulePackKeys ?? []
+        const mine = a.knowledgeKey ? await a.knowledgeKey.publicKey() : undefined
+        const signedOf = (id: string): SignedIndustryPack | undefined => {
+          try {
+            return JSON.parse(fs.readFileSync(path.join(ip.signedDir, `${id}.json`), "utf8")) as SignedIndustryPack
+          } catch {
+            return undefined
+          }
+        }
+        return {
+          publicKey: mine,
+          keyTrusted: !!mine && trusted.some((k) => k.trim() === mine.trim()),
+          packs: draftPacks(ip.draftsDir).map((d) => {
+            const id = d.pack?.id
+            const signed = id ? signedOf(id) : undefined
+            return { file: d.file, ...(d.pack ? { id, industry: d.pack.industry, title: d.pack.title, status: d.pack.status, rules: [...(d.pack.rules.escalate ?? []), ...(d.pack.rules.deny ?? [])].map((r) => ({ id: r.id, message: r.message ?? "" })), checklist: d.pack.checklist } : {}), ...(d.errors ? { errors: d.errors } : {}), ...(signed ? { review: signed.review } : {}), installed: !!id && fs.existsSync(path.join(ip.packsDir, `${id}.yaml`)) }
+          }),
+        }
+      }
+      case "industry_pack_sign": {
+        const ip = a.industryPacks
+        if (!ip || !a.knowledgeKey) throw new CommandError("unavailable", "Industry packs are not available here.")
+        const pack = draftPacks(ip.draftsDir).find((d) => d.pack?.id === cmd.id)?.pack
+        if (!pack) throw new CommandError("unknown-pack", "There is no such industry pack, or it is not valid.")
+        const key = a.knowledgeKey
+        let signed: SignedIndustryPack
+        try {
+          signed = await signIndustryPack(pack, { by: cmd.by, note: cmd.note }, (b) => key.signBytes(b))
+        } catch (e) {
+          throw new CommandError("not-signed", (e as Error).message)
+        }
+        fs.mkdirSync(ip.signedDir, { recursive: true })
+        await writeFileAtomic(path.join(ip.signedDir, `${cmd.id}.json`), JSON.stringify(signed, null, 2) + "\n")
+        await a.audit.record({
+          session: "desktop", event: "industry_pack_signed", channel: "desktop", tool: "policy", input: { pack: cmd.id, by: signed.review.by, note: signed.review.note },
+          verdict: { outcome: "allow", ruleId: "industry-pack", reason: `${signed.review.by} reviewed and signed the industry pack ${cmd.id}`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { signed: cmd.id, review: signed.review }
+      }
+      case "industry_pack_install": {
+        const ip = a.industryPacks
+        if (!ip) throw new CommandError("unavailable", "Industry packs are not available here.")
+        let signed: SignedIndustryPack | undefined
+        try {
+          signed = JSON.parse(fs.readFileSync(path.join(ip.signedDir, `${cmd.id}.json`), "utf8")) as SignedIndustryPack
+        } catch {
+          signed = undefined
+        }
+        let r: Awaited<ReturnType<typeof installIndustryPack>>
+        try {
+          r = await installIndustryPack(signed, { trustedKeys: a.admin?.config().rulePackKeys ?? [], packsDir: ip.packsDir, checklistDir: ip.checklistDir })
+        } catch (e) {
+          throw new CommandError("not-installed", (e as Error).message)
+        }
+        await a.audit.record({
+          session: "desktop", event: "industry_pack_installed", channel: "desktop", tool: "policy", input: { pack: r.id, rules: r.rules, checklist: r.checklist, reviewedBy: signed?.review.by ?? "" },
+          verdict: { outcome: "allow", ruleId: "industry-pack", reason: `You installed the signed industry pack ${r.id}: ${r.rules} rules and ${r.checklist} checklist items`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return r
       }
       case "sequence_diagram": {
         // E-084: read from the code with Tree-sitter; nothing is run.

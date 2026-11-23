@@ -39,6 +39,7 @@ import { NoticesPanel } from "../components/NoticesPanel"
 import { RetentionPanel } from "../components/RetentionPanel"
 import { MeetingNotesPanel } from "../components/MeetingNotesPanel"
 import { SequencePanel } from "../components/SequencePanel"
+import { IndustryPacksPanel } from "../components/IndustryPacksPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -468,6 +469,7 @@ function SessionPane({
   const [retentionOpen, setRetentionOpen] = useState(false)
   const [meetingOpen, setMeetingOpen] = useState(false)
   const [sequenceOpen, setSequenceOpen] = useState(false)
+  const [industryOpen, setIndustryOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -786,6 +788,7 @@ function SessionPane({
     { label: "Retention and legal hold...", onSelect: () => setRetentionOpen(true) },
     ...(chat ? [] : [{ label: "Meeting notes to backlog...", onSelect: () => setMeetingOpen(true) }]),
     ...(chat ? [] : [{ label: "Sequence diagram from code...", onSelect: () => setSequenceOpen(true) }]),
+    { label: "Industry packs...", onSelect: () => setIndustryOpen(true) },
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1102,6 +1105,11 @@ function SessionPane({
       {sequenceOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <SequencePanel sessionId={session.id} onOpenArtifacts={openArtifacts} onClose={() => setSequenceOpen(false)} />
+        </div>
+      ) : null}
+      {industryOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <IndustryPacksPanel onClose={() => setIndustryOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

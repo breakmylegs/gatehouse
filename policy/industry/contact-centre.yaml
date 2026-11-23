@@ -1,0 +1,34 @@
+v: 1
+kind: codehouse-industry-pack
+id: ind-contact-centre
+industry: Contact centres
+title: Payment descoping and call recording redaction
+status: DRAFT for legal and subject expert sign-off. Not reviewed. Install only once you have reviewed and signed it.
+rules:
+  version: 1
+  id: ind-contact-centre
+  title: Contact centre data (draft)
+  description: Asks you before work touches call recordings or card data. It only adds caution; it never allows anything.
+  escalate:
+    - id: ind-contact-centre-recordings
+      pathGlobs: ["**/recordings/**", "**/*.wav", "**/*.mp3", "**/*.m4a", "**/*.opus"]
+      risk: 75
+      message: "Call recordings hold customers' voices, and card details if a payment was read aloud."
+    - id: ind-contact-centre-card-data
+      commands: ["*cardholder*", "*card_number*", "*cardnumber*", "*cvv*", "*cvc2*"]
+      risk: 85
+      message: "Touches card data: keep it out of the contact centre's systems and recordings (PCI DSS)."
+  cases:
+    - { tool: Read, input: { file_path: "calls/recordings/2026-11-01.wav" }, expect: escalate, rule: ind-contact-centre-recordings }
+    - { tool: Bash, input: { command: "grep cardholder export.csv" }, expect: escalate, rule: ind-contact-centre-card-data }
+checklist:
+  - id: payment-descoped
+    text: "Payments are descoped: card numbers are taken by DTMF masking or a hosted payment page, and never reach the agent's desktop, notes or recordings."
+  - id: recording-pause
+    text: "Recording pauses, or the card details are redacted, for the whole payment, and resumes afterwards without the agent's action."
+  - id: redaction-tested
+    text: "Redaction is tested with a sample call, and the recording, transcript and analytics copies are each checked."
+  - id: pci-scope
+    text: "The PCI DSS scope document names every system that could see card data, and this change is recorded in it."
+  - id: transcripts
+    text: "Speech analytics and transcripts are redacted the same way as the recordings."

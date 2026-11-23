@@ -1,0 +1,32 @@
+v: 1
+kind: codehouse-industry-pack
+id: ind-banking
+industry: Banking
+title: Consumer protection
+status: DRAFT for legal and subject expert sign-off. Not reviewed. Install only once you have reviewed and signed it.
+rules:
+  version: 1
+  id: ind-banking
+  title: Banking consumer protection (draft)
+  description: Asks you before work touches credit decisions, pricing or customer money movements. It only adds caution; it never allows anything.
+  escalate:
+    - id: ind-banking-credit-decisions
+      pathGlobs: ["**/*credit-decision*", "**/*credit-decision*/**", "**/*credit_decision*", "**/*credit_decision*/**", "**/*affordability*", "**/*affordability*/**", "**/*scorecard*", "**/*scorecard*/**"]
+      risk: 80
+      message: "Credit decisions must be fair, explainable and checked for bias."
+    - id: ind-banking-payments
+      commands: ["*payment-run*", "*payments-run*", "*faster-payments*", "*bacs*submit*"]
+      risk: 90
+      message: "Moves customers' money: it goes through the bank's own change and approval process."
+  cases:
+    - { tool: Edit, input: { file_path: "src/credit-decision/rules.ts", old_string: "a", new_string: "b" }, expect: escalate, rule: ind-banking-credit-decisions }
+    - { tool: Bash, input: { command: "./scripts/payment-run.sh --live" }, expect: escalate, rule: ind-banking-payments }
+checklist:
+  - id: consumer-duty
+    text: "The change is checked against the consumer outcomes the regulator expects (in the UK, the FCA's Consumer Duty): products and services, price and value, understanding, and support."
+  - id: vulnerable
+    text: "Customers in vulnerable circumstances get outcomes as good as other customers', and this was tested."
+  - id: explainable
+    text: "A credit or pricing decision the change makes can be explained to the customer and to the regulator."
+  - id: complaints
+    text: "Complaints the change could cause are handled within the regulator's rules and deadlines."

@@ -1,0 +1,32 @@
+v: 1
+kind: codehouse-industry-pack
+id: ind-telecoms
+industry: Telecoms
+title: Traffic data and customer communications
+status: DRAFT for legal and subject expert sign-off. Not reviewed. Install only once you have reviewed and signed it.
+rules:
+  version: 1
+  id: ind-telecoms
+  title: Telecoms data (draft)
+  description: Asks you before work touches call detail records or location data. It only adds caution; it never allows anything.
+  escalate:
+    - id: ind-telecoms-traffic-data
+      pathGlobs: ["**/cdr/**", "**/*.cdr", "**/*call-detail*", "**/*call-detail*/**", "**/*cell-location*", "**/*cell-location*/**"]
+      risk: 80
+      message: "Call detail records and location data are traffic data, kept and used only as the law allows."
+    - id: ind-telecoms-intercept
+      commands: ["*lawful-intercept*", "*lawful_intercept*", "*li-mediation*"]
+      risk: 90
+      message: "Lawful intercept systems are for cleared staff and their own change process only."
+  cases:
+    - { tool: Read, input: { file_path: "data/cdr/2026-11.csv" }, expect: escalate, rule: ind-telecoms-traffic-data }
+    - { tool: Bash, input: { command: "systemctl restart lawful-intercept" }, expect: escalate, rule: ind-telecoms-intercept }
+checklist:
+  - id: traffic-retention
+    text: "Traffic and location data are kept only as long as the retention rules allow, and deleted or anonymised after."
+  - id: general-conditions
+    text: "Customer-facing changes are checked against the regulator's conditions (in the UK, Ofcom's General Conditions), such as contract summaries and switching."
+  - id: vulnerable
+    text: "Customers in vulnerable circumstances are identified and supported as the regulator's guidance expects."
+  - id: number-porting
+    text: "Number porting and switching flows are tested end to end, with the deadlines they must meet."

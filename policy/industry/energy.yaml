@@ -1,0 +1,32 @@
+v: 1
+kind: codehouse-industry-pack
+id: ind-energy
+industry: Energy
+title: Vulnerable customers
+status: DRAFT for legal and subject expert sign-off. Not reviewed. Install only once you have reviewed and signed it.
+rules:
+  version: 1
+  id: ind-energy
+  title: Energy customer data (draft)
+  description: Asks you before work touches the Priority Services Register or disconnection. It only adds caution; it never allows anything.
+  escalate:
+    - id: ind-energy-psr
+      pathGlobs: ["**/psr/**", "**/*priority-services*", "**/*priority-services*/**", "**/*priority_services*", "**/*priority_services*/**"]
+      risk: 80
+      message: "Priority Services Register data says who is vulnerable, often with health details."
+    - id: ind-energy-disconnection
+      commands: ["*disconnect*customer*", "*disconnection*", "*prepay*switch*", "*force-prepayment*"]
+      risk: 85
+      message: "Disconnection and moving customers to prepayment are protected for vulnerable customers."
+  cases:
+    - { tool: Read, input: { file_path: "exports/psr/register.csv" }, expect: escalate, rule: ind-energy-psr }
+    - { tool: Bash, input: { command: "node jobs/run-disconnection.js" }, expect: escalate, rule: ind-energy-disconnection }
+checklist:
+  - id: psr-sharing
+    text: "Priority Services Register data is shared only with the network operator and as the customer agreed, and kept up to date."
+  - id: vulnerability-principles
+    text: "The change is checked against the regulator's vulnerability rules (in Great Britain, Ofgem's Consumer Vulnerability Strategy and licence conditions)."
+  - id: disconnection-protection
+    text: "Disconnection and forced prepayment are blocked for protected customers, and the block is tested."
+  - id: communications
+    text: "Customer communications are clear and accessible, with the formats a customer has asked for."
