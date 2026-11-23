@@ -4,6 +4,7 @@ import type { GatehouseConfig } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 import { correctText, mergeRules, projectRules, readRules } from "./writing-rules.js"
 import { OFFICE_MIME, officeFile } from "./office.js"
+import { formulaWorkbook } from "./formulas.js"
 
 /** The most text one export sends to be redacted. */
 export const MAX_EXPORT_CHARS = 20_000_000
@@ -67,6 +68,11 @@ export function registerExportRoutes(
     if (format in OFFICE_MIME) {
       const f = format as keyof typeof OFFICE_MIME
       const title = typeof b.title === "string" && b.title.trim() ? b.title.slice(0, 200) : "Export"
+      // E-085: a workbook's totals are formulas, each checked; what could not be is said.
+      if (f === "xlsx") {
+        const wb = formulaWorkbook(title, out)
+        return { text: out, masked, changes, banned, file: wb.file.toString("base64"), mime: OFFICE_MIME[f], formulas: { verified: wb.checks.filter((c) => c.state === "verified").length, notVerified: wb.checks.filter((c) => c.state === "not verified").length, mismatches: wb.checks.filter((c) => c.state === "mismatch").map((c) => `${c.sheet} ${c.cell}: ${c.detail}`) } }
+      }
       return { text: out, masked, changes, banned, file: officeFile(f, title, out).toString("base64"), mime: OFFICE_MIME[f] }
     }
     return { text: out, masked, changes, banned }

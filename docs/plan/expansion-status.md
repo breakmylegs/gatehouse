@@ -123,7 +123,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-065 | DORA and NIS2 evidence mapping | E5 | done | feat/e5a | yes | 20 DORA and NIS2 areas; audit records, packs, policy, controls, register, residency; gaps named |
 | E-066 | Retention and legal hold | E5 | done | feat/e5a | yes | safe variant: retention by classification for evidence and logs; legal hold; junction-safe; audit never deleted; audit retention listed |
 | E-081 | Office files with redaction preview | E5 | done | feat/e5a | yes | docx, pptx, xlsx from the previewed text; AI mark first and in properties; no library (deviation); opened in Office |
-| E-085 | Formula-first spreadsheets | E5 | todo | | |  |
+| E-085 | Formula-first spreadsheets | E5 | done | feat/e5a | yes | totals as SUM/AVERAGE/MIN/MAX/COUNT formulas; built-in evaluator; not verified and mismatch marked; checked in Excel |
 | E-082 | Meeting notes to backlog | E5 | todo | | |  |
 | E-083 | Evidence-grounded documents | E5 | todo | | |  |
 | E-084 | Sequence diagrams from code paths | E5 | todo | | |  |

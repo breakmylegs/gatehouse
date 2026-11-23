@@ -79,6 +79,8 @@ interface Preview {
   /** E-081: an Office file the Host made, as base64 (an older Host sends none). */
   file?: string
   mime?: string
+  /** E-085: a workbook's formulas and their checks. */
+  formulas?: { verified: number; notVerified: number; mismatches: string[] }
   /** E-086: writing-rule corrections made to the prose (an older Host sends none). */
   changes?: Array<{ from: string; to: string; count: number }>
   banned?: string[]
@@ -210,6 +212,11 @@ export function ExportDialog() {
         return
       }
       downloadBytes(name.replace(/\.md$/, `.${format}`), r.data.file, r.data.mime)
+      const fx = r.data.formulas
+      if (fx?.mismatches.length) {
+        setError(`Saved. Its totals are formulas; ${fx.mismatches.length} differ from what the text said (see the Formula checks sheet): ${fx.mismatches.slice(0, 3).join("; ")}`)
+        return
+      }
     } else if (format === "md") download(name, r.data.text, "text/markdown")
     else if (format === "html")
       download(name.replace(/\.md$/, ".html"), htmlPage(what.title, r.data.text), "text/html")
