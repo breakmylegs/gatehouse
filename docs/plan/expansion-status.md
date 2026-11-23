@@ -98,7 +98,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-041 | Profiling on request | E4 | done | feat/e4a | yes | --cpu-prof as a Codehouse action, never an inspector; top functions and flame graph; dotnet-trace when present |
 | E-042 | Memory leak detector | E4 | done | feat/e4a | yes | heap snapshots by a preload; constructors that keep growing reported |
 | E-045 | Crash summary | E4 | done | feat/e4b | yes | Node reports, .NET unhandled exceptions and Windows crash codes, frames source-mapped; a run with report flags; dotnet-dump when present |
-| E-043 | Verified reproduction recipes | E4 | todo | | |  |
+| E-043 | Verified reproduction recipes | E4 | done | feat/e4b | yes | reproduction accepted only if it fails before the fix, same test must pass after, then locked (D-007) |
 | E-044 | Bisect assistant | E4 | todo | | |  |
 | E-049 | Resource-aware scheduler | E4 | todo | | |  |
 | E-050 | Cross-session locks | E4 | todo | | |  |

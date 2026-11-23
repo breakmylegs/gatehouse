@@ -5,6 +5,7 @@ import { IacPlans } from "./iac-plans.js"
 import { PriceSheets, priceSheetCheck } from "./price-sheet.js"
 import { ContractSnapshots } from "./contract-snapshots.js"
 import { LogStore } from "./log-capture.js"
+import { ReproStore } from "./repro.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -1689,6 +1690,7 @@ export function createHost(opts: HostOptions = {}): Host {
     artifacts,
     priceSheets,
     logs,
+    repros: new ReproStore(path.join(gatehouseDataDir(env), "repros.json")),
     traces: { tokens: traceTokens, store: traces, port: () => (traceServer?.address() as { port?: number } | null)?.port ?? config.traceReceiver?.port ?? 4318, on: () => !!traceServer },
     // E-038: a listed log file is read only when the rules allow reading it by themselves.
     rulesAllowRead: async (sessionId: string, cwd: string, abs: string) => (await deps.approver.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd, sessionId })).outcome === "allow",

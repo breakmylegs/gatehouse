@@ -19,6 +19,7 @@ import { fixTask, triage } from "./error-triage.js"
 import { profileDotnet, profileNode, profileSummary } from "./profiler.js"
 import { findLeaks, leakSummary } from "./leak-detector.js"
 import { crashText, dotnetDumpCommand, readDotnetCrashes, runWithCrashReports, summariseCrashes } from "./crash-summary.js"
+import { confirmFails, confirmPasses, reproPrompt } from "./repro.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -158,6 +159,8 @@ export interface HostApp {
   /** E-036: a command run as a Codehouse action for a session (judged, no credentials, at its level). */
   /** E-038: the project log store, and whether the rules allow reading a file by themselves. */
   logs?: import("./log-capture.js").LogStore
+  /** E-043: each project's verified reproductions. */
+  repros?: import("./repro.js").ReproStore
   /** E-040: the trace receiver's tokens and spans, its port and whether it is on. */
   traces?: { tokens: import("./trace-receiver.js").TraceTokens; store: import("./trace-receiver.js").TraceStore; port: () => number; on: () => boolean }
   rulesAllowRead?: (sessionId: string, cwd: string, abs: string) => Promise<boolean>
@@ -1259,6 +1262,38 @@ export class HostServer {
         })
         if ("notProfiled" in r) throw new CommandError("not-profiled", `It was not profiled: ${r.notProfiled}.`)
         return { ...r, summary: profileSummary(cmd.command, r) }
+      }
+      case "repro": {
+        // E-043: the test runs as a Codehouse action; a pass before the fix is rejected; after, it is locked (D-007).
+        const s = this.#session(cmd.sessionId)
+        if (cmd.step === "list") return { repros: a.repros?.read(s.cwd) ?? [] }
+        if (cmd.step === "ask") {
+          if (!cmd.bug?.trim()) throw new CommandError("invalid", "Say what the bug is.")
+          s.prompt(reproPrompt(cmd.bug))
+          return undefined
+        }
+        const run = a.runAction
+        if (!run || !a.repros) throw new CommandError("unavailable", "Reproductions are not available here.")
+        if (!cmd.file) throw new CommandError("invalid", "Name the test file.")
+        const exec = async (command: string, cwd: string) => {
+          const x = await run(s.id, command, cwd, "checking a reproduction test")
+          return { ran: !x.refused, exitCode: x.exitCode, output: x.output, ...(x.refused ? { refused: x.refused } : {}) }
+        }
+        if (cmd.step === "before") {
+          if (!cmd.command?.trim()) throw new CommandError("invalid", "Give the command that runs the test.")
+          return await confirmFails(s.cwd, cmd.file, cmd.command.trim(), cmd.bug ?? "", exec, a.repros)
+        }
+        const locks = a.locks
+        if (!locks) throw new CommandError("unavailable", "Locked tests are not available here.")
+        return await confirmPasses(s.cwd, cmd.file, exec, a.repros, async (file) => {
+          await locks.lock(s.cwd, file)
+          await a.audit.record({
+            session: s.id, event: "test_locked", channel: "desktop", tool: "locks", cwd: s.cwd, project: s.project,
+            input: { paths: [file], why: "a verified reproduction" },
+            verdict: { outcome: "allow", ruleId: "test-locked", reason: `${file} reproduced a bug before its fix and passed after it, so it was locked.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+            latencyMs: 0,
+          })
+        })
       }
       case "leak_check": {
         // E-042: a preload writes heap snapshots; no inspector port is opened; the folder is deleted afterwards.
