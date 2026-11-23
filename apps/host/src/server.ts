@@ -128,6 +128,7 @@ import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
+import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
 import { collectNotices, noticesText } from "./notices.js"
 
@@ -1418,6 +1419,34 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "meeting_notes": {
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const abs = path.resolve(root, cmd.file)
+        const rel = path.relative(root, abs)
+        if (rel.startsWith("..") || path.isAbsolute(rel)) throw new CommandError("outside", "The transcript must be in the project.")
+        if (!/\.(txt|vtt|srt|md)$/i.test(abs)) throw new CommandError("not-transcript", "A transcript is a .txt, .vtt, .srt or .md file.")
+        let text: string
+        try {
+          if (fs.statSync(abs).size > 5 * 1024 * 1024) throw new CommandError("too-big", "A transcript can be up to 5 MB.")
+          text = fs.readFileSync(abs, "utf8")
+        } catch (e) {
+          if (e instanceof CommandError) throw e
+          throw new CommandError("missing", "There is no such transcript in the project.")
+        }
+        const file = rel.replace(/\\/g, "/")
+        const x = extractMeeting(file, text)
+        const files = planMeeting(root, file, x)
+        const out = { ...x, files: files.map((f) => ({ file: f.file, exists: f.exists })) }
+        if (!cmd.write) return out
+        const done = await writeMeeting(root, files)
+        await a.audit.record({
+          session: s.id, event: "meeting_notes_written", channel: "desktop", tool: "backlog", cwd: s.cwd, project: s.project, input: { transcript: file, written: done.written, skipped: done.skipped, stories: x.stories.length, decisions: x.decisions.length, actions: x.actions.length },
+          verdict: { outcome: "allow", ruleId: "meeting-notes", reason: `You added a meeting's ${x.stories.length} stories, ${x.decisions.length} decisions and ${x.actions.length} actions to the backlog`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { ...out, ...done }
       }
       case "retention_status": {
         const s = this.#session(cmd.sessionId)
