@@ -129,6 +129,7 @@ import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
 import { sequenceFrom } from "./sequence.js"
+import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
 import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
@@ -174,6 +175,8 @@ export interface HostApp {
   vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches" | "status">
   /** D-080: this computer's key for signing knowledge packs. */
   knowledgeKey?: KnowledgeKey
+  /** E-073: what you accepted, undid and asked to have explained, by area; on this computer only. */
+  skills?: SkillLog
   /** E-092: where the draft industry packs are, where signed ones wait, and where installed ones go. */
   industryPacks?: { draftsDir: string; signedDir: string; packsDir: string; checklistDir: string }
   /** D-094: what each session's processes reached. */
@@ -1117,6 +1120,11 @@ export class HostServer {
       case "prompt": {
         const s = this.#session(cmd.sessionId)
         a.effort?.active(s.project)
+        // E-073: a request for an explanation, by the area of the first project file it names, or the project.
+        if (a.skills && asksToExplain(cmd.text)) {
+          const named = /(?:^|[\s`'"(])((?:[\w.-]+\/)+[\w.-]+\.[A-Za-z]{1,6})\b/.exec(cmd.text)?.[1]
+          a.skills.note("explain", named ? areaOf(findProjectRoot(s.cwd), named) : { language: "Any", area: `${s.project}/(the project)` })
+        }
         // D-059: no turn starts on instructions changed outside Codehouse until you approve the change.
         await s.checkInstructions()
         // C-016: nor is anything sent to a model whose card saying where your words go is stale. Recorded.
@@ -1306,6 +1314,9 @@ export class HostServer {
           channelNow(),
         )
         if (r.ok && view) {
+          // E-073: an agent's edit you accepted, by its language and area.
+          const file = (view.request.input as { file_path?: unknown; notebook_path?: unknown } | undefined)?.file_path ?? (view.request.input as { notebook_path?: unknown } | undefined)?.notebook_path
+          if (a.skills && typeof file === "string" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(view.request.toolName)) a.skills.note("accept", areaOf(findProjectRoot(view.request.cwd), file))
           this.#frictionAt.delete(cmd.requestId)
           if ((cmd.deliberate || typedSevere) && stamp.needsDeliberate(risk)) stamp.deliberate()
           else stamp.approved({ risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) })
@@ -1423,6 +1434,17 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "skills":
+        return { areas: a.skills?.areas() ?? [], suggestions: a.skills?.suggestions() ?? [] }
+      case "skills_delete": {
+        const n = (await a.skills?.delete()) ?? 0
+        await a.audit.record({
+          session: "desktop", event: "skills_deleted", channel: "desktop", tool: "skills", input: { areas: n },
+          verdict: { outcome: "allow", ruleId: "skills", reason: "You deleted the skill growth record", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { deleted: n }
       }
       case "industry_packs": {
         const ip = a.industryPacks
@@ -2750,6 +2772,7 @@ export class HostServer {
         const s = this.#session(cmd.sessionId)
         if (!cmd.confirm) throw new CommandError("not-confirmed", "Undoing needs your confirmation")
         const done = await a.checkpoints.undoFiles(s.cwd, cmd.ref, cmd.paths, s.id, true)
+        for (const p of cmd.paths) a.skills?.note("undo", areaOf(findProjectRoot(s.cwd), p))
         await this.#auditUndo(
           "files_undone",
           s.id,
@@ -2770,6 +2793,7 @@ export class HostServer {
           sessionId: s.id,
           confirm: true,
         })
+        a.skills?.note("undo", areaOf(findProjectRoot(s.cwd), cmd.path))
         await this.#auditUndo(
           "change_undone",
           s.id,

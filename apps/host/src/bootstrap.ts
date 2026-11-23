@@ -177,6 +177,7 @@ import { EffortLog } from "./effort-log.js"
 import { AiRegister } from "./ai-register.js"
 import { ResidencyLog } from "./residency.js"
 import { LegalHolds, retentionDays, type RetentionConfig } from "./retention.js"
+import { SkillLog } from "./skills.js"
 import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
 import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
@@ -1788,6 +1789,8 @@ export function createHost(opts: HostOptions = {}): Host {
     aiRegister,
     residency,
     legalHolds,
+    // E-073: the skill growth record, on this computer only.
+    skills: new SkillLog(path.join(gatehouseDataDir(env), "skills.json")),
     account,
     limits: limitPauser,
     heldOut,

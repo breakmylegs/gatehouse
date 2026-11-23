@@ -40,6 +40,7 @@ import { RetentionPanel } from "../components/RetentionPanel"
 import { MeetingNotesPanel } from "../components/MeetingNotesPanel"
 import { SequencePanel } from "../components/SequencePanel"
 import { IndustryPacksPanel } from "../components/IndustryPacksPanel"
+import { SkillsPanel } from "../components/SkillsPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -470,6 +471,7 @@ function SessionPane({
   const [meetingOpen, setMeetingOpen] = useState(false)
   const [sequenceOpen, setSequenceOpen] = useState(false)
   const [industryOpen, setIndustryOpen] = useState(false)
+  const [skillsOpen, setSkillsOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -789,6 +791,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Meeting notes to backlog...", onSelect: () => setMeetingOpen(true) }]),
     ...(chat ? [] : [{ label: "Sequence diagram from code...", onSelect: () => setSequenceOpen(true) }]),
     { label: "Industry packs...", onSelect: () => setIndustryOpen(true) },
+    { label: "Topics to learn...", onSelect: () => setSkillsOpen(true) },
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1110,6 +1113,11 @@ function SessionPane({
       {industryOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IndustryPacksPanel onClose={() => setIndustryOpen(false)} />
+        </div>
+      ) : null}
+      {skillsOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <SkillsPanel onClose={() => setSkillsOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (
