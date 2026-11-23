@@ -2,6 +2,7 @@ import { useLoadPreset } from "./lib/appearance"
 import { useAppearance } from "./components/SettingsPanels"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { Toaster } from "sonner"
+import { ScreenShareControl } from "./components/ScreenShare"
 import { Announcer } from "./components/Announcer"
 import { CommandDeck } from "./components/CommandDeck"
 import { ExportDialog } from "./components/ExportDialog"
@@ -296,6 +297,8 @@ export function App() {
       {/* T-135: a secret a session asks for, desktop only. */}
       <SecretRequests />
       <Toaster position="bottom-right" theme={theme} closeButton />
+      {/* E-091: screen-share safe mode, for the whole window. */}
+      <ScreenShareControl />
     </>
   )
 }

@@ -92,6 +92,9 @@ internal sealed class MainForm : Form
     private readonly System.Collections.Generic.Dictionary<string, PopoutWindow> popouts =
         new System.Collections.Generic.Dictionary<string, PopoutWindow>();
     private ToolStripMenuItem quickItem;
+    // E-091: screen-share safe mode; while it is on the quick prompt and the pop-out windows are kept out of captures.
+    private ToolStripMenuItem shareItem;
+    private bool screenShare;
     private uint hotkeyMods, hotkeyVk;
     private bool hotkeyOn;
     private const int HotkeyId = 1;
@@ -178,6 +181,9 @@ internal sealed class MainForm : Form
         wingItem = new ToolStripMenuItem("Show requests at the top of the screen", null, delegate { SetWingOn(!wingItem.Checked); });
         wingItem.Checked = !File.Exists(WingOffMarker);
         menu.Items.Add(wingItem);
+        // The page holds the mode (it masks and hides what it shows); the tray only asks it to switch.
+        shareItem = new ToolStripMenuItem("Screen-share safe mode", null, delegate { Tell("screenshare-toggle"); });
+        menu.Items.Add(shareItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Codehouse", null, delegate { Quit(); });
         tray.ContextMenuStrip = menu;
@@ -407,6 +413,7 @@ internal sealed class MainForm : Form
             else if (m != null && m.StartsWith("hotkey:")) SetHotkey(m.Substring("hotkey:".Length));
             else if (m != null && m.StartsWith("popout:")) PopOut(m.Substring("popout:".Length));
             else if (m == "folder-drop") FolderDropped(e);
+            else if (m == "screenshare:on" || m == "screenshare:off") ScreenShare(m == "screenshare:on");
         };
         // Only the window's own loads of its page count: a link the guard cancelled, and opened in your browser, also
         // finishes as a failure (OperationCanceled) and must leave the interface as it is (owner, 18 Nov).
@@ -779,8 +786,21 @@ internal sealed class MainForm : Form
             ShowWindow();
             try { web.CoreWebView2.PostWebMessageAsString("open-session:" + sent); } catch (Exception) { }
         });
+        if (screenShare) CaptureGuard.Exclude(quick.Handle, true);
         try { await quick.Prepare(env, quickUrl); }
         catch (Exception ex) { Remember("[quick] the quick prompt could not load: " + ex.Message); }
+    }
+
+    // ---- screen-share safe mode (E-091) ----
+
+    /// <summary>Keeps the quick prompt and every pop-out window out of screen captures while the mode is on.</summary>
+    private void ScreenShare(bool on)
+    {
+        screenShare = on;
+        if (shareItem != null) shareItem.Checked = on;
+        if (quick != null) CaptureGuard.Exclude(quick.Handle, on);
+        foreach (PopoutWindow p in popouts.Values) CaptureGuard.Exclude(p.Handle, on);
+        Remember("[screenshare] " + (on ? "on: the quick prompt and pop-outs are kept out of captures" : "off"));
     }
 
     // ---- a session in its own window (B16) ----
@@ -799,6 +819,7 @@ internal sealed class MainForm : Form
         string paneUrl = hash < 0 ? url + query : url.Substring(0, hash) + query + url.Substring(hash);
         PopoutWindow w = new PopoutWindow(session, Guard);
         popouts[session] = w;
+        if (screenShare) CaptureGuard.Exclude(w.Handle, true);
         w.FormClosed += delegate
         {
             popouts.Remove(session);

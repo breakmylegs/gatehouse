@@ -162,7 +162,7 @@ export function PushPanel() {
               </span>
               <span className="mt-1 block text-[13px] text-mut">
                 To check it, open{" "}
-                <span className="mono">
+                <span className="mono" data-screen-secret>
                   {(st?.server ?? "https://ntfy.sh").replace(/\/$/, "")}/{st?.topic}
                 </span>{" "}
                 in your phone&apos;s browser: test messages show there.

@@ -1,3 +1,4 @@
+import { holdNotice } from "./lib/screenshare"
 import { readKinds, worthTelling } from "./lib/notifyKinds"
 import { readInit, type SessionMeta } from "./lib/sessionMeta"
 import type { UpdateStatus } from "./lib/update"
@@ -946,6 +947,8 @@ const shown = new Map<string, Notification>()
  * notification, when notifications and this kind are on. Only the session's name goes in it.
  */
 function finished(sessionId: string, durationMs: unknown, s: State): void {
+  // E-091: not urgent, so it waits while you share your screen.
+  if (holdNotice("a session finished")) return
   if (!s.notify || !readKinds().completions) return
   if (typeof document === "undefined" || !worthTelling(durationMs, document.hasFocus())) return
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return
@@ -965,6 +968,7 @@ function finished(sessionId: string, durationMs: unknown, s: State): void {
 }
 
 function queueEmpty(sessionId: string, s: State): void {
+  if (holdNotice("a queue emptied")) return
   const info = s.sessions[sessionId]
   const name = info ? (info.title ?? info.project) : "A session"
   const open = () => {

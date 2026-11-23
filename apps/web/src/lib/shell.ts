@@ -29,6 +29,9 @@ export type ShellMessage =
   // CH-08: a picture of part of the screen, or of the window you were in, from the quick prompt.
   | "capture:region"
   | "capture:window"
+  // E-091: screen-share safe mode on or off: the window keeps the quick prompt and pop-outs out of captures.
+  | "screenshare:on"
+  | "screenshare:off"
   // Mac fork: the wing beside the notch (NotchMac.tsx): its size, hiding it, and a request to open in the window.
   | "notch:hide"
   | `notch:size:${number}:${number}`

@@ -140,5 +140,5 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-079 | Reviewer suggestions | E6 | done | feat/e6a | yes | authors of the touched files, weighted by recency; you and bots left out |
 | E-088 | Daily plan | E6 | done | feat/e6a | yes | Contradicted runs first, then escalations by risk, grants, night failures, reviews, routines |
 | E-090 | Energy and carbon estimate | E6 | done | feat/e6a | yes | job CPU time from the helper's samples x device watts; model energy and carbon not known without figures; labelled estimates |
-| E-091 | Screen-share safe mode | E6 | todo | | |  |
+| E-091 | Screen-share safe mode | E6 | done | feat/e6a | yes | Ctrl+Shift+H and tray; redaction terms masked on screen; chosen sessions hidden; notices held; codes and topics hidden; WDA_EXCLUDEFROMCAPTURE on quick prompt and pop-outs |
 | E-098 | Upgrade rehearsal | E6 | todo | | |  |

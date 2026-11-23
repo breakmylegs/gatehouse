@@ -49,6 +49,8 @@ import { HandoverPackPanel } from "../components/HandoverPackPanel"
 import { ExceptionsPanel } from "../components/ExceptionsPanel"
 import { ReviewersPanel } from "../components/ReviewersPanel"
 import { DailyPlanPanel } from "../components/DailyPlanPanel"
+import { useScreenShare } from "../components/ScreenShare"
+import { hiddenSessions, setHidden } from "../lib/screenshare"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -488,6 +490,10 @@ function SessionPane({
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
   const [reviewersOpen, setReviewersOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
+  // E-091: a session you chose to hide shows nothing of itself while you share your screen.
+  const sharing = useScreenShare()
+  const [hideWhenSharing, setHideWhenSharing] = useState(() => !!session && hiddenSessions().has(session.id))
+  const hiddenNow = sharing && hideWhenSharing
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -815,6 +821,13 @@ function SessionPane({
     { label: "Handover pack...", onSelect: () => setHandoverOpen(true) },
     { label: "Policy exceptions...", onSelect: () => setExceptionsOpen(true) },
     { label: "Today's plan...", onSelect: () => setPlanOpen(true) },
+    {
+      label: hideWhenSharing ? "Show this session while sharing" : "Hide this session while sharing",
+      onSelect: () => {
+        setHidden(session.id, !hideWhenSharing)
+        setHideWhenSharing(!hideWhenSharing)
+      },
+    },
     ...(chat ? [] : [{ label: "Suggest reviewers...", onSelect: () => setReviewersOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
@@ -1363,6 +1376,11 @@ function SessionPane({
                   onClose={closeFind}
                 />
               ) : null}
+              {hiddenNow ? (
+                <p className="m-auto p-6 text-mut" role="status">
+                  This session is hidden while you share your screen. Turn screen-share safe mode off to see it.
+                </p>
+              ) : (
               <BranchSteps.Provider value={{ sessionId: session.id, steps: branchSteps }}>
                 {(() => {
                   // One message as drawn in either list.
@@ -1440,6 +1458,7 @@ function SessionPane({
                   )
                 })()}
               </BranchSteps.Provider>
+              )}
               {atEnd || shownItems.length === 0 ? null : (
                 <button
                   type="button"

@@ -353,6 +353,7 @@ function AddPhone({ onPaired }: { onPaired: () => Promise<void> }) {
           <p className="m-0">Enter this code in the app on your iPhone. It works for 5 minutes.</p>
           <p
             className="mono m-0 text-[32px] font-semibold tracking-[0.2em]"
+            data-screen-secret
             aria-label={`Pairing code ${pairing.code.split("").join(" ")}`}
           >
             {pairing.code}

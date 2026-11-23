@@ -123,3 +123,54 @@ internal static class ScreenCapture
         }
     }
 }
+
+// E-091, screen-share safe mode: a window kept out of screen captures and screen sharing (Windows 10 2004 and later),
+// so what it shows stays off a shared screen. Set on the quick prompt and the pop-out windows while the mode is on.
+internal static class CaptureGuard
+{
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool SetWindowDisplayAffinity(IntPtr hWnd, uint affinity);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetWindowDisplayAffinity(IntPtr hWnd, out uint affinity);
+
+    public const uint WDA_NONE = 0;
+    public const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
+
+    /** Keeps the window out of captures, or lets it be captured again. False when Windows refused. */
+    public static bool Exclude(IntPtr hWnd, bool on)
+    {
+        return hWnd != IntPtr.Zero && SetWindowDisplayAffinity(hWnd, on ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE);
+    }
+
+    /** The window's display affinity as Windows has it now. */
+    public static uint Affinity(IntPtr hWnd)
+    {
+        uint a;
+        return GetWindowDisplayAffinity(hWnd, out a) ? a : uint.MaxValue;
+    }
+}
+
+#if CAPTUREGUARD_CLI
+// For the test: a real window, excluded and then let go, its affinity read back from Windows each time.
+internal static class CaptureGuardCli
+{
+    [STAThread]
+    private static void Main()
+    {
+        using (Form f = new Form())
+        {
+            f.ShowInTaskbar = false;
+            f.StartPosition = FormStartPosition.Manual;
+            f.Location = new Point(-2000, -2000);
+            f.Size = new Size(120, 80);
+            f.Show();
+            bool set = CaptureGuard.Exclude(f.Handle, true);
+            uint on = CaptureGuard.Affinity(f.Handle);
+            CaptureGuard.Exclude(f.Handle, false);
+            uint off = CaptureGuard.Affinity(f.Handle);
+            Console.WriteLine((set ? "set" : "refused") + " " + on.ToString("x") + " " + off.ToString("x"));
+        }
+    }
+}
+#endif
