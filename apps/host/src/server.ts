@@ -26,6 +26,7 @@ import { playbookPrompt, readPlaybooks, verifyPlaybook } from "./playbooks.js"
 import { evaluateGate, parseGate, type GateSources } from "./gates.js"
 import { readRoles, rolePrompt, type Role } from "./roles.js"
 import { advance, dryRun, newRun, readWorkflows, type StepDeps } from "./workflows.js"
+import { morningReport, newNight, order, runNight } from "./night-shift.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
@@ -171,7 +172,9 @@ export interface HostApp {
   /** E-047: workflow runs, saved after each step. */
   workflowRuns?: import("./workflows.js").RunStore
   /** E-049: Codehouse's heavy jobs waiting for memory or CPU. */
-  scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession">
+  scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession" | "run">
+  /** E-054: night runs. */
+  nights?: import("./night-shift.js").NightStore
   /** E-050: the lock table. */
   sessionLocks?: Pick<import("./locks.js").LockTable, "list">
   /** E-043: each project's verified reproductions. */
@@ -253,6 +256,16 @@ function toWire(r: Resolution): WireResolution {
  * passes the guard (Host header, Origin, per-launch token), then the WebSocket carries typed commands in
  * and typed events out. The server holds no logic of its own: each command calls the component that owns it.
  */
+/** E-054: milliseconds until the next HH:MM on this computer's clock. */
+const msUntil = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number) as [number, number]
+  const now = new Date()
+  const at = new Date(now)
+  at.setHours(h, m, 0, 0)
+  if (at <= now) at.setDate(at.getDate() + 1)
+  return at.getTime() - now.getTime()
+}
+
 export class HostServer {
   readonly #opts: HostServerOptions
   readonly #fastify: FastifyInstance
@@ -599,6 +612,31 @@ export class HostServer {
         error: { code: err.code, message: err.message },
       })
     }
+  }
+
+  /** E-054: one night task: a session through the scheduler, its cap as the SDK's spend cap, run until it settles. */
+  async #nightTask(t: import("./night-shift.js").NightTask): Promise<{ sessionId: string; ok: boolean; costUsd: number; why?: string }> {
+    const a = this.#opts.app
+    const start = () => a.manager.start({ cwd: t.folder, mode: "default", ...(t.extreme ? { extreme: true } : {}), ...(t.budgetUsd ? { maxBudgetUsd: t.budgetUsd } : {}) })
+    const s = await (a.scheduler ? a.scheduler.run({ label: `night task ${t.id}`, kind: "session", priority: 3 }, start) : start())
+    // It has settled when it has been idle for a minute (Extreme carries on by itself), or it failed or ended.
+    const ended = await new Promise<"idle" | "error" | "ended">((resolve) => {
+      let timer: NodeJS.Timeout | undefined
+      const onState = (i: { state: string }) => {
+        clearTimeout(timer)
+        if (i.state === "error" || i.state === "ended") return finish(i.state)
+        if (i.state === "idle") timer = setTimeout(() => finish("idle"), 60_000)
+      }
+      const finish = (v: "idle" | "error" | "ended") => {
+        clearTimeout(timer)
+        s.off("state", onState as never)
+        resolve(v)
+      }
+      s.on("state", onState as never)
+    })
+    s.prompt(t.prompt)
+    const costUsd = this.#opts.app.usage?.snapshot().bySession[s.id]?.costUsd ?? 0
+    return ended === "idle" ? { sessionId: s.id, ok: true, costUsd } : { sessionId: s.id, ok: false, costUsd, why: ended === "error" ? "its session failed" : "its session ended" }
   }
 
   /** E-047: a workflow event, recorded against the session it was started from. */
@@ -1253,6 +1291,26 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "night": {
+        // E-054: in dependency order, through the scheduler, each within its cap and the night's budget.
+        const store = a.nights
+        if (!store) throw new CommandError("unavailable", "The night shift is not available here.")
+        if (cmd.step === "report") {
+          const run = store.latest()
+          if (!run) return { report: undefined }
+          return { run: { id: run.id, startedAt: run.startedAt, endedAt: run.endedAt }, report: morningReport(run, (id) => a.manager.get(id)?.info(), (id) => a.broker.list().filter((p) => p.request.sessionId === id).length) }
+        }
+        if (!cmd.tasks?.length || !cmd.budgetUsd) throw new CommandError("invalid", "Queue at least one task, and give the night a budget.")
+        const o = order(cmd.tasks)
+        if ("problem" in o) throw new CommandError("invalid", `The night cannot run: ${o.problem}.`)
+        const run = newNight(cmd.tasks, cmd.budgetUsd)
+        store.save(run)
+        const go = () => void runNight(run, { save: (r) => store.save(r), runTask: (t) => this.#nightTask(t) })
+        const wait = cmd.at ? msUntil(cmd.at) : 0
+        if (wait > 0) setTimeout(go, wait).unref()
+        else go()
+        return { run: { id: run.id }, order: o.order, startsInMs: wait }
       }
       case "workflow": {
         // E-047: validated and dry-run before it starts; every step recorded; resumable after a restart.

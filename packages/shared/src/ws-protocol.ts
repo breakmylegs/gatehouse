@@ -300,6 +300,14 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-048: an evidence gate checked now for a session. */
   /** E-046: the project's roles, or a role's session started in its own worktree with a task (and a result schema). */
   /** E-047: the project's workflows (validated), a dry run, a start, an approval, or the runs. */
+  /** E-054: queue the night's tasks (now or at a time), or read the morning report. */
+  z.object({
+    type: z.literal("night"),
+    step: z.enum(["start", "report"]),
+    budgetUsd: z.number().min(0.5).max(500).optional(),
+    at: z.string().regex(/^\d\d:\d\d$/).optional(),
+    tasks: z.array(z.object({ id: z.string().regex(/^[\w-]{1,40}$/), prompt: z.string().min(1).max(20_000), folder: z.string().min(1).max(500), dependsOn: z.array(z.string().max(40)).max(20).optional(), budgetUsd: z.number().min(0.1).max(500).optional(), extreme: z.boolean().optional() })).max(30).optional(),
+  }),
   z.object({ type: z.literal("workflow"), sessionId: Id, step: z.enum(["list", "dry", "start", "approve", "runs"]), id: z.string().max(120).optional(), task: z.string().max(20_000).optional(), runId: z.string().max(40).optional() }),
   z.object({ type: z.literal("team"), sessionId: Id, step: z.enum(["list", "start"]), role: z.string().max(40).optional(), task: z.string().max(20_000).optional(), resultSchema: z.string().max(20_000).optional() }),
   z.object({ type: z.literal("gate_check"), sessionId: Id, gate: z.unknown() }),
