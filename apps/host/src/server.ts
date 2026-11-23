@@ -28,6 +28,7 @@ import { readRoles, rolePrompt, type Role } from "./roles.js"
 import { advance, dryRun, newRun, readWorkflows, type StepDeps } from "./workflows.js"
 import { morningReport, newNight, order, runNight } from "./night-shift.js"
 import { epicPrompt, STORY_SCHEMA, writeStories, type StoryInput } from "./epic.js"
+import { exportLinks, scanLinks } from "./work-items.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
@@ -176,6 +177,8 @@ export interface HostApp {
   scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession" | "run">
   /** E-054: night runs. */
   nights?: import("./night-shift.js").NightStore
+  /** E-056: work item links, per project. */
+  workItems?: import("./work-items.js").WorkItemStore
   /** E-062: a project's estimate per change from its history (D-100). */
   projectEstimate?: (project: string) => import("./outcomes.js").Estimate | undefined
   /** E-050: the lock table. */
@@ -1294,6 +1297,15 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "work_items": {
+        // E-056: found locally and kept locally; nothing is sent to Azure DevOps or Jira.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        if (!a.workItems) throw new CommandError("unavailable", "Work item links are not available here.")
+        const links = a.workItems.merge(root, await scanLinks(root, s.id, s.cwd))
+        if (cmd.step === "export") return { text: exportLinks(links, cmd.format ?? "csv") }
+        return { links }
       }
       case "epic": {
         // E-062: the session returns the stories as a checked result; Codehouse writes them with stable ids.

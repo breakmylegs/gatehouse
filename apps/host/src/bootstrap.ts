@@ -13,6 +13,7 @@ import { HandoverStore, handoverReply, handoverText } from "./handover.js"
 import { RunStore } from "./workflows.js"
 import { NightStore } from "./night-shift.js"
 import { outcomes } from "./outcomes.js"
+import { WorkItemStore } from "./work-items.js"
 import { applyPricing } from "./model-pricing.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
@@ -1749,6 +1750,7 @@ export function createHost(opts: HostOptions = {}): Host {
     artifacts,
     priceSheets,
     logs,
+    workItems: new WorkItemStore(path.join(gatehouseDataDir(env), "work-items.json")),
     // E-062: the project's estimate per change, from the last 90 days (D-100).
     projectEstimate: (project: string) => {
       const to = Date.now()

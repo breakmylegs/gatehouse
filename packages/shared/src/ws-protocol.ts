@@ -309,6 +309,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
     tasks: z.array(z.object({ id: z.string().regex(/^[\w-]{1,40}$/), prompt: z.string().min(1).max(20_000), folder: z.string().min(1).max(500), dependsOn: z.array(z.string().max(40)).max(20).optional(), budgetUsd: z.number().min(0.1).max(500).optional(), extreme: z.boolean().optional() })).max(30).optional(),
   }),
   /** E-062: ask the session to break an epic into stories, or write its stories into the requirement ledger. */
+  /** E-056: work item ids linked to this session, its commits, evidence packs and stories; or their export. */
+  z.object({ type: z.literal("work_items"), sessionId: Id, step: z.enum(["scan", "export"]), format: z.enum(["csv", "json"]).optional() }),
   z.object({ type: z.literal("epic"), sessionId: Id, step: z.enum(["ask", "write"]), epic: z.string().min(1).max(200), brief: z.string().max(40_000).optional() }),
   z.object({ type: z.literal("workflow"), sessionId: Id, step: z.enum(["list", "dry", "start", "approve", "runs"]), id: z.string().max(120).optional(), task: z.string().max(20_000).optional(), runId: z.string().max(40).optional() }),
   z.object({ type: z.literal("team"), sessionId: Id, step: z.enum(["list", "start"]), role: z.string().max(40).optional(), task: z.string().max(20_000).optional(), resultSchema: z.string().max(20_000).optional() }),
