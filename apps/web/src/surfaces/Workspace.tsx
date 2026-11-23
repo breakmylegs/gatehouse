@@ -46,6 +46,7 @@ import { TutorPanel } from "../components/TutorPanel"
 import { OnboardingPanel } from "../components/OnboardingPanel"
 import { PatternCardsPanel } from "../components/PatternCardsPanel"
 import { HandoverPackPanel } from "../components/HandoverPackPanel"
+import { ExceptionsPanel } from "../components/ExceptionsPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -482,6 +483,7 @@ function SessionPane({
   const [onboardingOpen, setOnboardingOpen] = useState(false)
   const [patternsOpen, setPatternsOpen] = useState(false)
   const [handoverOpen, setHandoverOpen] = useState(false)
+  const [exceptionsOpen, setExceptionsOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -807,6 +809,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Onboarding path...", onSelect: () => setOnboardingOpen(true) }]),
     ...(chat ? [] : [{ label: "How this repository does things...", onSelect: () => setPatternsOpen(true) }]),
     { label: "Handover pack...", onSelect: () => setHandoverOpen(true) },
+    { label: "Policy exceptions...", onSelect: () => setExceptionsOpen(true) },
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1163,6 +1166,11 @@ function SessionPane({
       {handoverOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <HandoverPackPanel onClose={() => setHandoverOpen(false)} />
+        </div>
+      ) : null}
+      {exceptionsOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <ExceptionsPanel onClose={() => setExceptionsOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

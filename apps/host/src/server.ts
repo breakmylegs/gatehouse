@@ -134,6 +134,8 @@ import { changedSince, teachBack } from "./teach-back.js"
 import { tutorPrompt } from "./tutor.js"
 import { cardsMarkdown, patternCards } from "./patterns.js"
 import { handoverMarkdown, makeHandover, openHandover, signHandover } from "./handover-pack.js"
+import { register as exceptionsRegister, registerCsv, reminders as grantReminders } from "./exceptions-register.js"
+import { readGrantLimits, readRememberEntries } from "@gatehouse/policy"
 import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
@@ -822,6 +824,23 @@ export class HostServer {
   /** E-048: each session's latest mutation score. */
   readonly #mutationScores = new Map<string, number>()
 
+  /** E-078: every grant (remembered rules, with who and why) and the year's other exceptions. */
+  exceptions(): ReturnType<typeof exceptionsRegister> {
+    const admin = this.#opts.app.admin
+    const local = admin?.loadOptions.localPath
+    let entries: ReturnType<typeof readRememberEntries> = []
+    try {
+      entries = local ? readRememberEntries(local) : []
+    } catch {
+      entries = []
+    }
+    return exceptionsRegister({
+      entries,
+      limits: local ? readGrantLimits(local) : {},
+      records: admin ? recordsSince(admin.auditDir, Date.now() - 365 * 86_400_000) : [],
+    })
+  }
+
   /** E-061: what the gates of the environment a command promotes to make of it; undefined when it promotes to none. */
   async promotionVerdict(sessionId: string, cwd: string, command: string) {
     const env = promotionFor(readEnvironments(findProjectRoot(cwd)).environments, command)
@@ -1438,6 +1457,10 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "exceptions_register": {
+        const r = this.exceptions()
+        return { ...r, reminders: grantReminders(r.grants), csv: registerCsv(r) }
       }
       case "handover_pack": {
         // E-077: across every project; redacted, then signed with this computer's key.

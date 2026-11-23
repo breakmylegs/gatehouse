@@ -914,7 +914,7 @@ async function escalate(
   }
 
   if (resolution.outcome === "allow" && resolution.remember && resolution.channel === "desktop") {
-    await rememberRule(deps, toolName, finalInput, resolution.rememberFor)
+    await rememberRule(deps, toolName, finalInput, resolution.rememberFor, { why: verdict.reason, channel: auditChannelOf(resolution.channel) })
   }
   return result
 }
@@ -978,6 +978,7 @@ async function rememberRule(
   toolName: string,
   input: Record<string, unknown>,
   rememberFor?: RememberFor,
+  made?: { why: string; channel: ReturnType<typeof auditChannelOf> },
 ): Promise<void> {
   if (!deps.localRulesPath) return
   try {
@@ -1035,6 +1036,21 @@ async function rememberRule(
       grantLimitsFor(rememberFor, deps.cwd),
     )
     deps.log(`remember rule ${added ? "added" : "already present"}: ${id}`)
+    // E-078: who made the grant, how and why, for the policy exceptions register.
+    if (added && made)
+      await deps.audit
+        .record({
+          session: deps.sessionId,
+          event: "grant_made",
+          channel: made.channel,
+          tool: toolName,
+          cwd: deps.cwd,
+          project: deps.project,
+          input: { id, why: made.why, limits: grantLimitsFor(rememberFor, deps.cwd) ?? {} },
+          verdict: { outcome: "allow", ruleId: id, reason: `You remembered a grant: ${made.why}`, risk: 0, decidedBy: made.channel === "phone" ? "human-phone" : "human-desktop", policyHash: deps.policy()?.hash ?? "" },
+          latencyMs: 0,
+        })
+        .catch(() => false)
   } catch (e) {
     deps.log(`remember failed (${(e as Error).message})`)
   }
