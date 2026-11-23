@@ -1418,7 +1418,7 @@ function SessionPane({
             ) : side === "artifacts" ? (
               <ArtifactsPane sessionId={session.id} refresh={artifactSaves} />
             ) : side === "sources" ? (
-              <SourcesPane items={transcript.items} />
+              <SourcesPane items={transcript.items} sessionId={session.id} />
             ) : side === "memory" ? (
               <MemoryGiven entries={memoryGiven} />
             ) : side === "terminal" ? (

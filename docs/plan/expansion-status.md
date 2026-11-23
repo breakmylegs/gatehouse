@@ -127,7 +127,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-082 | Meeting notes to backlog | E5 | done | feat/e5a | yes | decisions, actions, stories with criteria, each to its line; stories into the ledger as drafts; no overwrite |
 | E-083 | Evidence-grounded documents | E5 | done | feat/e5a | yes | each sentence needs a link, file, citation or evidence pack; ungrounded listed and highlighted in the export preview |
 | E-084 | Sequence diagrams from code paths | E5 | done | feat/e5a | yes | Tree-sitter call walk to a depth; Mermaid artifact; unresolved calls drawn and listed |
-| E-087 | Research to decision brief | E5 | todo | | |  |
+| E-087 | Research to decision brief | E5 | done | feat/e5a | yes | brief in a fixed shape from the Sources pane; every option must cite a pane source; failures sent back to fix |
 | E-092 | Signed industry packs | E5 | todo | | | Safe variant only; the List for part is listed |
 | E-073 | Skill growth tracker | E6 | todo | | |  |
 | E-071 | Teach-back check | E6 | todo | | |  |
