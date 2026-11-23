@@ -3047,6 +3047,19 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   background: transparent;
   border: 2px solid var(--c-acc);
 }
+/* O46: a release on a session's timeline is a diamond, ringed when it is the version you run, hollow when newer. */
+.summary-dot[data-kind="release"] {
+  border-radius: 1px;
+  transform: rotate(45deg);
+}
+.summary-node[data-kind="release"] {
+  border-style: dashed;
+  border-color: var(--c-line);
+}
+.summary-node[data-kind="release"][aria-pressed="true"] {
+  border-style: solid;
+  border-color: var(--c-acc);
+}
 
 /* T-045: the offer to compact an idle session, beside the context meter. */
 .ctx-offer {

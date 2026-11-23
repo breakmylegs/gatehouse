@@ -1,15 +1,42 @@
 import { useEffect, useRef, useState } from "react"
 import { api } from "../lib/api"
 
-interface Entry {
+/** One release in the changelog, as the Host reads it (apps/host/src/update/changelog.ts). */
+export interface ReleaseEntry {
   version: string
   date: string
   notes: string
 }
+type Entry = ReleaseEntry
 interface View {
   releases: Entry[]
   readAt?: string
   offline?: boolean
+}
+
+/**
+ * The changelog as the Host keeps it: read from GitHub at most hourly, the last copy when GitHub cannot be reached.
+ * O46: one reader for the changelog in Settings and the release points on a session's Timeline.
+ */
+export function useChangelog(): { view: View | undefined; busy: boolean; load: (fresh: boolean) => Promise<void> } {
+  const [view, setView] = useState<View>()
+  const [busy, setBusy] = useState(false)
+  const load = async (fresh: boolean) => {
+    setBusy(true)
+    const r = await api<View>("GET", `/api/changelog${fresh ? "?fresh=1" : ""}`)
+    setBusy(false)
+    if (r.ok && r.data) setView({ ...r.data, releases: Array.isArray(r.data.releases) ? r.data.releases : [] })
+    else setView({ releases: [], offline: true })
+  }
+  useEffect(() => void load(false), [])
+  return { view, busy, load }
+}
+
+/** How a release stands against the version you run: this one, newer and not installed yet, or older. */
+export function releaseStanding(version: string, current?: string): "current" | "newer" | undefined {
+  if (!current) return undefined
+  if (version === current) return "current"
+  return compareVersions(version, current) > 0 ? "newer" : undefined
 }
 
 /** A release date as the timeline shows it: 6 Nov 2026. */
@@ -40,7 +67,7 @@ const readSeen = () => {
 }
 
 /** A release's notes as plain text in a few shapes (headings, list items, lines); never as HTML. */
-function Notes({ text }: { text: string }) {
+export function ReleaseNotes({ text }: { text: string }) {
   const lines = text.split(/\r?\n/).filter((l) => l.trim())
   if (!lines.length) return <p className="m-0 text-mut">No notes for this release.</p>
   return (
@@ -78,20 +105,11 @@ function Notes({ text }: { text: string }) {
  * update; the last copy read is shown when GitHub cannot be reached.
  */
 export function ChangelogPanel({ current }: { current?: string }) {
-  const [view, setView] = useState<View>()
+  const { view, busy, load } = useChangelog()
   const [picked, setPicked] = useState<string>()
-  const [busy, setBusy] = useState(false)
   // What was new since you last opened it: kept from before this opening, then this opening is noted.
   const [seenBefore] = useState(readSeen)
   const strip = useRef<HTMLOListElement>(null)
-  const load = async (fresh: boolean) => {
-    setBusy(true)
-    const r = await api<View>("GET", `/api/changelog${fresh ? "?fresh=1" : ""}`)
-    setBusy(false)
-    if (r.ok && r.data) setView(r.data)
-    else setView({ releases: [], offline: true })
-  }
-  useEffect(() => void load(false), [])
   useEffect(() => {
     try {
       localStorage.setItem(SEEN_KEY, new Date().toISOString())
@@ -107,9 +125,13 @@ export function ChangelogPanel({ current }: { current?: string }) {
   if (!view) return <p className="m-0 text-mut">Reading the changelog…</p>
   const shown = ordered.find((r) => r.version === picked) ?? ordered.find((r) => r.version === current) ?? ordered.at(-1)
   const at = shown ? ordered.indexOf(shown) : -1
+  const standing = (r: Entry) => {
+    const s = releaseStanding(r.version, current)
+    return s === "current" ? "this version" : s === "newer" ? "not installed yet" : ""
+  }
   const marks = (r: Entry) =>
     [
-      r.version === current ? "this version" : current && compareVersions(r.version, current) > 0 ? "not installed yet" : "",
+      standing(r),
       seenBefore && Date.parse(r.date) > Date.parse(seenBefore) ? "new since you last looked" : "",
     ].filter(Boolean)
   const move = (to: number) => {
@@ -167,7 +189,7 @@ export function ChangelogPanel({ current }: { current?: string }) {
           <h3 className="m-0 text-[14px]">
             {shown.version}, released {releaseDate(shown.date)}
           </h3>
-          <Notes text={shown.notes} />
+          <ReleaseNotes text={shown.notes} />
         </section>
       ) : null}
       <div>
