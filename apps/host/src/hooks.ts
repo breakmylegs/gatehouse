@@ -1,3 +1,4 @@
+import { tutorOverlay } from "./tutor.js"
 import { consumersOf, consumersWords } from "./contract-check.js"
 import { LEASE_MODES, outsideLease, type ScopeLease } from "./scope-lease.js"
 import {
@@ -123,6 +124,8 @@ export interface SessionHookDeps {
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
   mode?: () => string
+  /** E-072: tutor mode: an edit to a file that is not a test is refused here, in every mode. */
+  tutor?: () => boolean
   /** E-061: the environment a command promotes to; in acceptEdits and auto it is asked, and canUseTool checks its gate. */
   promotes?: (command: string) => string | undefined
   /** D-023: the scope lease; in acceptEdits and auto a call outside it is asked. */
@@ -256,6 +259,24 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
             latencyMs: 0,
           })
           return denyOutput(`${reason} (rule ${SECRET_IN_COMMIT_RULE})`)
+        }
+      }
+      // E-072: in tutor mode an edit to a file that is not a test is refused, whatever the mode.
+      if (deps.tutor?.()) {
+        const o = tutorOverlay(input.tool_name, toolInput, deps.projectRoot ?? cwd)
+        if (o?.outcome === "deny") {
+          await deps.audit.record({
+            session: deps.sessionId,
+            event: "floor_deny",
+            channel: "host",
+            tool: input.tool_name,
+            toolUseId: input.tool_use_id,
+            cwd,
+            input: toolInput,
+            verdict: { outcome: "deny", ruleId: o.ruleId, reason: o.reason, risk: 60, decidedBy: "floor", policyHash: policy?.hash ?? "none" },
+            latencyMs: 0,
+          })
+          return denyOutput(`${o.reason} (rule ${o.ruleId})`)
         }
       }
       // The call passed the floor. If it is an edit, take a checkpoint at the start of a burst of edits.

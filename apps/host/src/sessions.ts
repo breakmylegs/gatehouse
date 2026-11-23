@@ -661,6 +661,8 @@ export interface StartSessionOptions {
   localModel?: string
   /** D-084: this session is the breaker of an adversarial pair, trying to break the named session's change. */
   breaker?: { of: string }
+  /** E-072: a tutor session: edits to files that are not tests are denied, and the agent gives hints. */
+  tutor?: boolean
   /** With resume and fork: carry on from this message (its uuid), for Retry and Edit. */
   resumeAt?: string
   /** The session this one replaces in its pane (Retry and Edit). */
@@ -1307,6 +1309,7 @@ export class Session extends EventEmitter<SessionEvents> {
       log: d.log,
       mode: () => this.#mode,
       lease: () => this.#lease,
+      ...(this.#opts.tutor ? { tutor: () => true } : {}),
       promotes: (command: string) => promotionFor(readEnvironments(findProjectRoot(this.cwd)).environments, command)?.name,
       approver: d.approver,
       verdicts: this.#verdicts,
@@ -1422,6 +1425,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // E-029: a server about to start on a port in use goes to a person first.
       ...(d.portHolder ? { portHolder: d.portHolder } : {}),
       ...(this.#opts.role ? { role: () => ({ role: this.#opts.role!, root: findProjectRoot(this.cwd) }) } : {}),
+      ...(this.#opts.tutor ? { tutor: () => true } : {}),
       ...(d.sessionLocks
         ? {
             crossLock: (toolName: string, input: Record<string, unknown>) => {

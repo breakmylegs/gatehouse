@@ -42,6 +42,7 @@ import { SequencePanel } from "../components/SequencePanel"
 import { IndustryPacksPanel } from "../components/IndustryPacksPanel"
 import { SkillsPanel } from "../components/SkillsPanel"
 import { TeachBackPanel } from "../components/TeachBackPanel"
+import { TutorPanel } from "../components/TutorPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -474,6 +475,7 @@ function SessionPane({
   const [industryOpen, setIndustryOpen] = useState(false)
   const [skillsOpen, setSkillsOpen] = useState(false)
   const [teachOpen, setTeachOpen] = useState(false)
+  const [tutorOpen, setTutorOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -795,6 +797,7 @@ function SessionPane({
     { label: "Industry packs...", onSelect: () => setIndustryOpen(true) },
     { label: "Topics to learn...", onSelect: () => setSkillsOpen(true) },
     ...(chat ? [] : [{ label: "Explain the change...", onSelect: () => setTeachOpen(true) }]),
+    ...(chat ? [] : [{ label: "Start a tutor session...", onSelect: () => setTutorOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1126,6 +1129,11 @@ function SessionPane({
       {teachOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <TeachBackPanel sessionId={session.id} onClose={() => setTeachOpen(false)} />
+        </div>
+      ) : null}
+      {tutorOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <TutorPanel sessionId={session.id} onClose={() => setTutorOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

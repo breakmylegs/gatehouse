@@ -131,6 +131,7 @@ import type { ResidencyLog } from "./residency.js"
 import { sequenceFrom } from "./sequence.js"
 import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
 import { changedSince, teachBack } from "./teach-back.js"
+import { tutorPrompt } from "./tutor.js"
 import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
@@ -1435,6 +1436,18 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "tutor_start": {
+        // E-072: in Manual mode, with the tutor overlay; it can only restrict.
+        const s = this.#session(cmd.sessionId)
+        const child = await a.manager.start({ cwd: s.cwd, tutor: true, mode: "default" })
+        await a.audit.record({
+          session: child.id, event: "tutor_started", channel: "desktop", tool: "tutor", cwd: child.cwd, project: child.project, input: { from: s.id, topic: cmd.topic },
+          verdict: { outcome: "allow", ruleId: "tutor-started", reason: "You started a tutor session: the agent gives hints, and may edit only tests.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        child.prompt(tutorPrompt(cmd.topic))
+        return { session: child.info() }
       }
       case "teach_back": {
         // E-071: the change from git and your words; nothing is sent anywhere.

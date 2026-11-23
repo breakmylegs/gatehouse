@@ -131,7 +131,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-092 | Signed industry packs | E5 | done | feat/e5a | yes | safe variant: four draft packs; add-only; sign after review; install needs trusted signatures; sign-off listed for legal |
 | E-073 | Skill growth tracker | E6 | done | feat/e6a | yes | accepts, undos and explanation requests by language and area; suggestions; local and deletable |
 | E-071 | Teach-back check | E6 | done | feat/e6a | yes | every changed module named or listed; deterministic, no model (deviation) |
-| E-072 | Tutor mode | E6 | todo | | |  |
+| E-072 | Tutor mode | E6 | done | feat/e6a | yes | restrict-only overlay: non-test edits denied in canUse and the floor hook; other commands ask; hints; overlay denies now audited |
 | E-074 | Code reading drills | E6 | todo | | |  |
 | E-075 | Onboarding curriculum | E6 | todo | | |  |
 | E-076 | Pattern cards | E6 | todo | | |  |

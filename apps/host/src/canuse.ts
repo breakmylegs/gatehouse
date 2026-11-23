@@ -1,3 +1,4 @@
+import { tutorOverlay } from "./tutor.js"
 import { PORT_CLASH_RULE, portClashReason, serverPort } from "./session-procs.js"
 import { BREAKER_EDIT_RULE, breakerEditReason } from "./adversary.js"
 import { consumersOf, consumersWords } from "./contract-check.js"
@@ -96,6 +97,8 @@ export interface CanUseDeps {
   crossLock?: (toolName: string, input: Record<string, unknown>) => { reason: string } | undefined
   /** E-050: a call went ahead; the session takes what it touched. */
   onCallTaken?: (toolName: string, input: Record<string, unknown>) => void
+  /** E-072: tutor mode: edits to files that are not tests are denied, and commands other than test runs ask. */
+  tutor?: () => boolean
   /** E-061: what a promotion's gates make of a command, when it promotes to an environment. */
   promotion?: (command: string) => Promise<{ ruleId: string; risk: number; reason: string } | undefined>
   iacPlan?: (command: string) => { ruleId: string; risk: number; reason: string; resources: string[] } | undefined
@@ -373,6 +376,12 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         if (o?.outcome === "deny") verdict = { ...verdict, outcome: "deny", ruleId: o.ruleId, reason: o.reason, risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
         else if (o && (verdict.outcome === "allow" || verdict.risk < 50)) verdict = { ...verdict, outcome: "escalate", ruleId: o.ruleId, reason: o.reason, risk: Math.max(verdict.risk, 50), decidedBy: "rules" }
       }
+      // E-072: tutor mode only restricts: a deny stays a deny, an edit to a source file is denied, other commands ask.
+      if (deps.tutor?.() && verdict.outcome !== "deny") {
+        const o = tutorOverlay(toolName, input, deps.projectRoot ?? deps.cwd)
+        if (o?.outcome === "deny") verdict = { ...verdict, outcome: "deny", ruleId: o.ruleId, reason: o.reason, risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+        else if (o && (verdict.outcome === "allow" || verdict.risk < 50)) verdict = { ...verdict, outcome: "escalate", ruleId: o.ruleId, reason: o.reason, risk: Math.max(verdict.risk, 50), decidedBy: "rules" }
+      }
       // E-050: another session's file or port goes to a person, naming that session; never loosened here.
       if (deps.crossLock && verdict.outcome !== "deny") {
         const held = deps.crossLock(toolName, input)
@@ -472,6 +481,21 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         return allow(input, toolUseID)
       }
       if (verdict.outcome === "deny") {
+        // The Approver records its own verdict; a deny an overlay made here (a role, tutor mode, a lock and the like)
+        // is recorded too, so every decision is in the audit log (invariant 13). It is a deny either way.
+        if (verdict.ruleId !== judged.ruleId)
+          await deps.audit.record({
+            session: deps.sessionId,
+            event: "overlay_deny",
+            channel: "host",
+            tool: toolName,
+            toolUseId: toolUseID,
+            cwd: deps.cwd,
+            project: deps.project,
+            input,
+            verdict,
+            latencyMs: 0,
+          })
         return deny(`${verdict.reason} (rule ${verdict.ruleId})`, toolUseID)
       }
       const effects = await effectsFor(deps, toolName, input)
