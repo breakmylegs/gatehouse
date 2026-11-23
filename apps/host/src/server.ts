@@ -24,8 +24,9 @@ import { bisect } from "./bisect.js"
 import { changedFiles, HANDOVER_PROMPT } from "./handover.js"
 import { playbookPrompt, readPlaybooks, verifyPlaybook } from "./playbooks.js"
 import { evaluateGate, parseGate, type GateSources } from "./gates.js"
-import { readRoles, rolePrompt } from "./roles.js"
-import { readSchema, resultInstruction } from "./task-results.js"
+import { readRoles, rolePrompt, type Role } from "./roles.js"
+import { advance, dryRun, newRun, readWorkflows, type StepDeps } from "./workflows.js"
+import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -167,6 +168,8 @@ export interface HostApp {
   logs?: import("./log-capture.js").LogStore
   /** E-052 results a role's session hands off, as E-046 starts them. */
   taskResults?: Pick<import("./task-results.js").TaskResults, "expect">
+  /** E-047: workflow runs, saved after each step. */
+  workflowRuns?: import("./workflows.js").RunStore
   /** E-049: Codehouse's heavy jobs waiting for memory or CPU. */
   scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession">
   /** E-050: the lock table. */
@@ -596,6 +599,76 @@ export class HostServer {
         error: { code: err.code, message: err.message },
       })
     }
+  }
+
+  /** E-047: a workflow event, recorded against the session it was started from. */
+  async #record(s: { id: string; cwd: string; project: string }, event: string, input: Record<string, unknown>): Promise<void> {
+    await this.#opts.app.audit.record({
+      session: s.id, event, channel: "host", tool: "workflow", cwd: s.cwd, project: s.project, input,
+      verdict: { outcome: "allow", ruleId: "workflow", reason: `A workflow step: ${event.replace(/_/g, " ")}.`, risk: 0, decidedBy: "rules", policyHash: "n/a" },
+      latencyMs: 0,
+    })
+  }
+
+  /** E-047: how a workflow's steps run: each its role's session in its own worktree, to the end of its turn. */
+  #stepDeps(s: NonNullable<ReturnType<HostServerOptions["app"]["manager"]["get"]>>, root: string, roles: Role[]): StepDeps {
+    const a = this.#opts.app
+    return {
+      record: (event, detail) => this.#record(s, event, detail),
+      gate: async (sessionId, g) => {
+        const child = a.manager.get(sessionId)
+        return child ? await evaluateGate(g, this.gateSources(child)) : { pass: false, reason: "The step's session is gone, so its gate could not be read." }
+      },
+      runStep: async (step, prompt) => {
+        const role = roles.find((x) => x.name === step.role)
+        if (!role) return { sessionId: "", error: `the role ${step.role} is no longer in roles.yml` }
+        const child = await a.manager.start({ cwd: root, worktree: { about: role.name }, role, mode: "default", ...(role.model ? { model: role.model } : {}), ...(role.effort ? { effort: role.effort } : {}) })
+        // To the end of its turn, or until the session fails or ends.
+        const turn = () =>
+          new Promise<boolean>((resolve) => {
+            const onMessage = (m: { type: string }) => m.type === "result" && finish(true)
+            const onState = (i: { state: string }) => (i.state === "error" || i.state === "ended") && finish(false)
+            const finish = (ok: boolean) => {
+              child.off("message", onMessage as never)
+              child.off("state", onState as never)
+              resolve(ok)
+            }
+            child.on("message", onMessage as never)
+            child.on("state", onState as never)
+          })
+        let ended = turn()
+        child.prompt(`${rolePrompt(role, prompt)}${step.outputs ? resultInstruction(JSON.stringify(step.outputs, null, 2)) : ""}`)
+        if (!(await ended)) return { sessionId: child.id, error: "its session failed or ended before it finished" }
+        if (!step.outputs) return { sessionId: child.id }
+        let r = check(lastJson(child.lastResult()), step.outputs)
+        if (!r.ok) {
+          ended = turn()
+          child.prompt(`Your result did not match the JSON Schema it was asked for:\n- ${r.errors.join("\n- ")}\nGive the result again, as one JSON code block at the end of your message, matching the schema exactly.`)
+          if (!(await ended)) return { sessionId: child.id, error: "its session failed or ended before it finished" }
+          r = check(lastJson(child.lastResult()), step.outputs)
+        }
+        return r.ok ? { sessionId: child.id, result: r.value } : { sessionId: child.id, error: `its result did not match its schema twice: ${r.errors.join("; ")}` }
+      },
+    }
+  }
+
+  /** E-047: after a restart, each workflow that was running goes on from its last completed step. */
+  resumeWorkflows(): number {
+    const a = this.#opts.app
+    if (!a.workflowRuns) return 0
+    let n = 0
+    for (const run of a.workflowRuns.all().filter((r) => r.status === "running")) {
+      const r = readRoles(run.folder)
+      if ("refused" in r) continue
+      const w = readWorkflows(run.folder, r.roles).find((x) => x.id === run.workflow)?.workflow
+      if (!w) continue
+      // Recorded against a stand-in for the session it was started from, which a restart has closed.
+      const owner = { id: `workflow-${run.runId}`, cwd: run.folder, project: path.basename(run.folder) } as unknown as NonNullable<ReturnType<HostServerOptions["app"]["manager"]["get"]>>
+      void this.#record(owner, "workflow_resumed", { run: run.runId, after: run.done.at(-1) ?? "" })
+      void advance(w, run, a.workflowRuns, this.#stepDeps(owner, run.folder, r.roles))
+      n++
+    }
+    return n
   }
 
   /** E-048: each session's latest mutation score. */
@@ -1180,6 +1253,36 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "workflow": {
+        // E-047: validated and dry-run before it starts; every step recorded; resumable after a restart.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const r = readRoles(root)
+        if ("refused" in r) throw new CommandError("refused", `The roles were refused: ${r.refused}.`)
+        const all = readWorkflows(root, r.roles)
+        if (cmd.step === "list") return { workflows: all.map((w) => ({ id: w.id, ...(w.workflow ? { name: w.workflow.name, steps: w.workflow.steps.length } : { problems: w.problems }) })) }
+        if (cmd.step === "runs") return { runs: (a.workflowRuns?.all() ?? []).filter((x) => x.folder.toLowerCase() === root.toLowerCase()).reverse() }
+        if (!a.workflowRuns) throw new CommandError("unavailable", "Workflows are not available here.")
+        if (cmd.step === "approve") {
+          const run = cmd.runId ? a.workflowRuns.get(cmd.runId) : undefined
+          if (!run || run.status !== "waiting-approval") throw new CommandError("invalid", "That run is not waiting for your approval.")
+          const w = all.find((x) => x.id === run.workflow)?.workflow
+          if (!w) throw new CommandError("invalid", "Its workflow is no longer valid in this project.")
+          await this.#record(s, "workflow_approved", { run: run.runId })
+          void advance(w, run, a.workflowRuns, this.#stepDeps(s, root, r.roles))
+          return { run: { ...run, status: "running" } }
+        }
+        const found = all.find((x) => x.id === cmd.id)
+        if (!found) throw new CommandError("not-found", "That workflow is not in this project.")
+        if (!found.workflow) throw new CommandError("invalid", `The workflow is not valid, so it was not started: ${found.problems!.join("; ")}.`)
+        if (cmd.step === "dry") return { plan: dryRun(found.workflow) }
+        if (!cmd.task?.trim()) throw new CommandError("invalid", "Give the workflow its task.")
+        const run = newRun(found.workflow, root, cmd.task.trim())
+        a.workflowRuns.put(run)
+        await this.#record(s, "workflow_started", { run: run.runId, workflow: found.id, steps: found.workflow.steps.length })
+        void advance(found.workflow, run, a.workflowRuns, this.#stepDeps(s, root, r.roles))
+        return { run, plan: dryRun(found.workflow) }
       }
       case "team": {
         // E-046: a role's session in a worktree of its own, its scope an overlay that can only restrict.

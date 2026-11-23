@@ -87,6 +87,9 @@ try {
   await host.start()
   progress("Opening the window")
   const port = await server.start()
+  // E-047: workflows that were running go on from their last completed step.
+  const resumed = server.resumeWorkflows()
+  if (resumed) log(`workflows: ${resumed} resumed after the restart`)
   // O41: Neighbourhood Watch's commands join the server as clients, recorded with the channel cnw.
   void host.cnw.start((socket, via) => server.attachRemote(socket as never, via)).catch((e: Error) => log(`neighbourhood watch did not start: ${e.message}`))
   // Refresh the sign-in state for the header in the background. A failure only leaves it unknown.

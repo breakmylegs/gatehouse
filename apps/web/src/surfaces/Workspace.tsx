@@ -27,6 +27,7 @@ import { ReproPanel } from "../components/ReproPanel"
 import { BisectPanel } from "../components/BisectPanel"
 import { PlaybooksPanel } from "../components/PlaybooksPanel"
 import { TeamPanel } from "../components/TeamPanel"
+import { WorkflowsPanel } from "../components/WorkflowsPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -435,6 +436,7 @@ function SessionPane({
   const [bisectOpen, setBisectOpen] = useState(false)
   const [playbooksOpen, setPlaybooksOpen] = useState(false)
   const [teamOpen, setTeamOpen] = useState(false)
+  const [workflowsOpen, setWorkflowsOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -735,6 +737,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Playbooks...", onSelect: () => setPlaybooksOpen(true) }]),
     // E-046: the project's roles, each its own session in its own worktree.
     ...(chat ? [] : [{ label: "Team...", onSelect: () => setTeamOpen(true) }]),
+    // E-047: workflows of roles, gates and approval points.
+    ...(chat ? [] : [{ label: "Workflows...", onSelect: () => setWorkflowsOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1014,6 +1018,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {workflowsOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <WorkflowsPanel sessionId={session.id} onClose={() => setWorkflowsOpen(false)} />
         </div>
       ) : null}
       {teamOpen ? (

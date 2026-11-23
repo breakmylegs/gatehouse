@@ -106,7 +106,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-053 | Verified playbooks | E4 | done | feat/e4b | yes | playbooks in .codehouse/playbooks; checklist verified against the change (changed, exists, contains, run); unmet listed |
 | E-048 | Evidence gates between steps | E4 | done | feat/e4b | yes | tests, sealed, mutation, a11y (project's axe report) and dod gates; unreadable fails closed; runGatedSteps stops with the reason |
 | E-046 | Role-based agent teams | E4 | done | feat/e4b | yes | roles.yml roles as sessions in their own worktrees; overlay only restricts (role-scope holds, role-tool denies); widening roles refused |
-| E-047 | Workflows as code | E4 | todo | | |  |
+| E-047 | Workflows as code | E4 | done | feat/e4b | yes | workflows of roles, outputs, gates and approval points; validated and dry-run first; saved per step, resumed after a restart |
 | E-054 | Night shift planner and morning report | E4 | todo | | |  |
 | E-062 | Epic decomposition | E5 | todo | | |  |
 | E-056 | Work item linkage | E5 | todo | | | Safe variant only; the List for part is listed |

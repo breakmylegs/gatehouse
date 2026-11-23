@@ -10,6 +10,7 @@ import type { ActionDeps, ActionRequest, ActionResult } from "./codehouse-action
 import { cpuSampler, Scheduler, SchedulerCancelled } from "./scheduler.js"
 import { LockTable } from "./locks.js"
 import { HandoverStore, handoverReply, handoverText } from "./handover.js"
+import { RunStore } from "./workflows.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -1746,6 +1747,7 @@ export function createHost(opts: HostOptions = {}): Host {
     priceSheets,
     logs,
     taskResults,
+    workflowRuns: new RunStore(path.join(gatehouseDataDir(env), "workflow-runs.json")),
     scheduler,
     sessionLocks: lockTable,
     repros: new ReproStore(path.join(gatehouseDataDir(env), "repros.json")),
