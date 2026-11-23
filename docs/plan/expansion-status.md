@@ -105,7 +105,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-055 | Agent handover notes | E4 | done | feat/e4b | yes | write_handover Companion tool (sdk only); named files checked against the change; next session in the folder receives it once |
 | E-053 | Verified playbooks | E4 | done | feat/e4b | yes | playbooks in .codehouse/playbooks; checklist verified against the change (changed, exists, contains, run); unmet listed |
 | E-048 | Evidence gates between steps | E4 | done | feat/e4b | yes | tests, sealed, mutation, a11y (project's axe report) and dod gates; unreadable fails closed; runGatedSteps stops with the reason |
-| E-046 | Role-based agent teams | E4 | todo | | |  |
+| E-046 | Role-based agent teams | E4 | done | feat/e4b | yes | roles.yml roles as sessions in their own worktrees; overlay only restricts (role-scope holds, role-tool denies); widening roles refused |
 | E-047 | Workflows as code | E4 | todo | | |  |
 | E-054 | Night shift planner and morning report | E4 | todo | | |  |
 | E-062 | Epic decomposition | E5 | todo | | |  |

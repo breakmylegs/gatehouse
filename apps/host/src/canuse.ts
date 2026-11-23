@@ -31,6 +31,7 @@ import { canonicalize, type Effects, type Touch, type Verdict } from "@gatehouse
 import { auditChannelOf, type Broker, type Resolution } from "./broker.js"
 import { effectsOf, touchesOf, UNKNOWN_EFFECTS } from "./effects.js"
 import { CROSS_LOCK_RULE } from "./locks.js"
+import { roleOverlay } from "./roles.js"
 import type { GrantUses } from "./grant-uses.js"
 import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import type { CheckpointManager } from "./checkpoints.js"
@@ -89,6 +90,8 @@ export interface CanUseDeps {
   /** E-029: who listens on a port now, for a command that would start a server on it. */
   portHolder?: (port: number) => Promise<string | undefined>
   /** E-018: what an infrastructure apply meets from the plan it applies (or that no plan was seen). */
+  /** E-046: the session's role, an overlay that can only restrict. */
+  role?: () => { role: import("./roles.js").Role; root: string } | undefined
   /** E-050: who else holds the file an edit writes or the port a command would serve on, and their name. */
   crossLock?: (toolName: string, input: Record<string, unknown>) => { reason: string } | undefined
   /** E-050: a call went ahead; the session takes what it touched. */
@@ -360,6 +363,13 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         const port = serverPort(input.command)
         const holder = port === undefined ? undefined : await deps.portHolder(port).catch(() => undefined)
         if (port !== undefined && holder) verdict = { ...verdict, outcome: "escalate", ruleId: PORT_CLASH_RULE, reason: portClashReason(port, holder), risk: Math.max(verdict.risk, 30), decidedBy: "rules" }
+      }
+      // E-046: the role's overlay: a tool it may not use is denied, an edit outside its paths waits; never an allow.
+      const role = deps.role?.()
+      if (role && verdict.outcome !== "deny") {
+        const o = roleOverlay(role.role, toolName, input, role.root, deps.cwd)
+        if (o?.outcome === "deny") verdict = { ...verdict, outcome: "deny", ruleId: o.ruleId, reason: o.reason, risk: Math.max(verdict.risk, 60), decidedBy: "rules" }
+        else if (o && (verdict.outcome === "allow" || verdict.risk < 50)) verdict = { ...verdict, outcome: "escalate", ruleId: o.ruleId, reason: o.reason, risk: Math.max(verdict.risk, 50), decidedBy: "rules" }
       }
       // E-050: another session's file or port goes to a person, naming that session; never loosened here.
       if (deps.crossLock && verdict.outcome !== "deny") {

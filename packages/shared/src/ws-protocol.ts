@@ -298,6 +298,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("handover_ask"), sessionId: Id }),
   /** E-053: the project's playbooks: list them, start one, or verify its checklist against the change. */
   /** E-048: an evidence gate checked now for a session. */
+  /** E-046: the project's roles, or a role's session started in its own worktree with a task (and a result schema). */
+  z.object({ type: z.literal("team"), sessionId: Id, step: z.enum(["list", "start"]), role: z.string().max(40).optional(), task: z.string().max(20_000).optional(), resultSchema: z.string().max(20_000).optional() }),
   z.object({ type: z.literal("gate_check"), sessionId: Id, gate: z.unknown() }),
   z.object({ type: z.literal("playbooks"), sessionId: Id, step: z.enum(["list", "start", "verify"]), id: z.string().max(120).optional() }),
   z.object({ type: z.literal("stop_process"), sessionId: Id, pid: z.number().int().min(1), confirm: z.boolean() }),

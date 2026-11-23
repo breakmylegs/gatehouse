@@ -1745,6 +1745,7 @@ export function createHost(opts: HostOptions = {}): Host {
     artifacts,
     priceSheets,
     logs,
+    taskResults,
     scheduler,
     sessionLocks: lockTable,
     repros: new ReproStore(path.join(gatehouseDataDir(env), "repros.json")),

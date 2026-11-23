@@ -598,6 +598,8 @@ export interface SessionDeps {
 
 export interface StartSessionOptions {
   cwd: string
+  /** E-046: the role this session plays on a team, an overlay that can only restrict. */
+  role?: import("./roles.js").Role
   model?: string
   mode?: SessionMode
   effort?: Effort
@@ -1405,6 +1407,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.breaker ? { breaker: true } : {}),
       // E-029: a server about to start on a port in use goes to a person first.
       ...(d.portHolder ? { portHolder: d.portHolder } : {}),
+      ...(this.#opts.role ? { role: () => ({ role: this.#opts.role!, root: findProjectRoot(this.cwd) }) } : {}),
       ...(d.sessionLocks
         ? {
             crossLock: (toolName: string, input: Record<string, unknown>) => {

@@ -24,6 +24,8 @@ import { bisect } from "./bisect.js"
 import { changedFiles, HANDOVER_PROMPT } from "./handover.js"
 import { playbookPrompt, readPlaybooks, verifyPlaybook } from "./playbooks.js"
 import { evaluateGate, parseGate, type GateSources } from "./gates.js"
+import { readRoles, rolePrompt } from "./roles.js"
+import { readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -163,6 +165,8 @@ export interface HostApp {
   /** E-036: a command run as a Codehouse action for a session (judged, no credentials, at its level). */
   /** E-038: the project log store, and whether the rules allow reading a file by themselves. */
   logs?: import("./log-capture.js").LogStore
+  /** E-052 results a role's session hands off, as E-046 starts them. */
+  taskResults?: Pick<import("./task-results.js").TaskResults, "expect">
   /** E-049: Codehouse's heavy jobs waiting for memory or CPU. */
   scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession">
   /** E-050: the lock table. */
@@ -1176,6 +1180,28 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "team": {
+        // E-046: a role's session in a worktree of its own, its scope an overlay that can only restrict.
+        const s = this.#session(cmd.sessionId)
+        const r = readRoles(findProjectRoot(s.cwd))
+        if ("refused" in r) throw new CommandError("refused", `The roles were refused: ${r.refused}.`)
+        if (cmd.step === "list") return { roles: r.roles }
+        const role = r.roles.find((x) => x.name === cmd.role)
+        if (!role) throw new CommandError("not-found", "That role is not in this project's roles.yml.")
+        if (!cmd.task?.trim()) throw new CommandError("invalid", "Give the role its task.")
+        const shape = cmd.resultSchema ? readSchema(cmd.resultSchema) : undefined
+        if (typeof shape === "string") throw new CommandError("invalid", `The result schema is not usable: ${shape}`)
+        const child = await a.manager.start({ cwd: s.cwd, worktree: { about: role.name }, role, mode: "default", ...(role.model ? { model: role.model } : {}), ...(role.effort ? { effort: role.effort } : {}) })
+        if (shape) a.taskResults?.expect(child.id, shape.schema)
+        await a.audit.record({
+          session: child.id, event: "role_started", channel: "desktop", tool: "team", cwd: child.cwd, project: child.project,
+          input: { role: role.name, from: s.id, ...(role.paths ? { paths: role.paths } : {}), ...(role.readOnly ? { readOnly: true } : {}) },
+          verdict: { outcome: "allow", ruleId: "role-started", reason: `You started the ${role.name} role, in a worktree of its own.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        child.prompt(`${rolePrompt(role, cmd.task)}${shape ? resultInstruction(shape.text) : ""}`)
+        return { session: child.info() }
       }
       case "gate_check": {
         // E-048: a gate checked now; what cannot be read fails closed.
