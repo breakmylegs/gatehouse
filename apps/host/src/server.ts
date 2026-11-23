@@ -127,6 +127,7 @@ import {
 import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
+import { collectNotices, noticesText } from "./notices.js"
 
 /** D-021: how long the friction holds a High approval back before the deliberate one. */
 const FRICTION_WAIT_MS = 2000
@@ -1392,6 +1393,25 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "third_party_notices": {
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const n = collectNotices(root)
+        const text = noticesText(s.project, n)
+        let written: string | undefined
+        if (cmd.write && !n.none) {
+          // Your action, from this window: one file at the project's root, written whole.
+          const file = path.join(root, "THIRD-PARTY-NOTICES.txt")
+          await writeFileAtomic(file, text)
+          written = "THIRD-PARTY-NOTICES.txt"
+          await a.audit.record({
+            session: s.id, event: "notices_written", channel: "desktop", tool: "release", cwd: s.cwd, project: s.project, input: { file: written, packages: n.entries.length, missing: n.missing.length },
+            verdict: { outcome: "allow", ruleId: "third-party-notices", reason: `You wrote the third-party notices (${n.entries.length} packages, ${n.missing.length} with something missing)`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+            latencyMs: 0,
+          })
+        }
+        return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
       }
       case "ai_register": {
         const s = this.#session(cmd.sessionId)

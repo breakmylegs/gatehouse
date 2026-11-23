@@ -312,6 +312,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-056: work item ids linked to this session, its commits, evidence packs and stories; or their export. */
   /** E-057: the definition of done for this session, or an item ticked or unticked by hand. */
   /** E-058: the release readiness report for the project's change. */
+  /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
+  z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
   /** E-069: the AI system register, of the session's project or of all of them. */
   z.object({ type: z.literal("ai_register"), sessionId: Id, all: z.boolean().optional() }),
   /** E-063: you are working in this session now (the window sends it at most every half minute). */

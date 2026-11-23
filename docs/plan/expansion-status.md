@@ -117,7 +117,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-061 | Environment promotion gate | E5 | done | feat/e5a | yes | promotion-gate 90 for production; production-promotion 80 even when passing; hook asks in Auto; T163 |
 | E-063 | Effort and billing log | E5 | done | feat/e5a | yes | local effort.json; CSV with totals; deletable; no network |
 | E-069 | AI system register | E5 | done | feat/e5a | yes | per project, model, purpose; classification; card or no card; first and last use |
-| E-070 | Third-party notices generator | E5 | todo | | |  |
+| E-070 | Third-party notices generator | E5 | done | feat/e5a | yes | npm lockfile packages, licences and notice texts; missing listed; written by you |
 | E-068 | Data residency evidence | E5 | todo | | |  |
 | E-067 | DPIA draft | E5 | todo | | |  |
 | E-065 | DORA and NIS2 evidence mapping | E5 | todo | | |  |

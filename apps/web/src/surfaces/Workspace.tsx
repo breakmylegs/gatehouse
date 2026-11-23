@@ -35,6 +35,7 @@ import { DodPanel } from "../components/DodPanel"
 import { ReadinessPanel } from "../components/ReadinessPanel"
 import { EffortPanel } from "../components/EffortPanel"
 import { AiRegisterPanel } from "../components/AiRegisterPanel"
+import { NoticesPanel } from "../components/NoticesPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -460,6 +461,7 @@ function SessionPane({
   const [readyOpen, setReadyOpen] = useState(false)
   const [effortOpen, setEffortOpen] = useState(false)
   const [registerOpen, setRegisterOpen] = useState(false)
+  const [noticesOpen, setNoticesOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -774,6 +776,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Release readiness...", onSelect: () => setReadyOpen(true) }]),
     { label: "Effort and billing...", onSelect: () => setEffortOpen(true) },
     { label: "AI system register...", onSelect: () => setRegisterOpen(true) },
+    ...(chat ? [] : [{ label: "Third-party notices...", onSelect: () => setNoticesOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1070,6 +1073,11 @@ function SessionPane({
       {registerOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <AiRegisterPanel sessionId={session.id} project={session.project} onClose={() => setRegisterOpen(false)} />
+        </div>
+      ) : null}
+      {noticesOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <NoticesPanel sessionId={session.id} onClose={() => setNoticesOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (
