@@ -22,12 +22,27 @@ export const openExport = (what: ExportWhat) =>
   window.dispatchEvent(new CustomEvent<ExportWhat>(EXPORT_EVENT, { detail: what }))
 const EXPORT_EVENT = "codeh:export"
 
-type Format = "md" | "html" | "pdf"
+type Format = "md" | "html" | "pdf" | "docx" | "pptx" | "xlsx"
 const FORMATS: Array<{ id: Format; label: string }> = [
   { id: "md", label: "Markdown (.md)" },
   { id: "html", label: "Web page (.html)" },
   { id: "pdf", label: "PDF, through the print window" },
+  // E-081: made by the Host from the text shown, marked as AI-generated.
+  { id: "docx", label: "Word (.docx)" },
+  { id: "pptx", label: "PowerPoint (.pptx)" },
+  { id: "xlsx", label: "Excel (.xlsx), its tables" },
 ]
+const OFFICE = new Set<Format>(["docx", "pptx", "xlsx"])
+
+/** Saves a file the Host made, sent as base64. */
+function downloadBytes(name: string, base64: string, mime: string): void {
+  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(new Blob([bytes], { type: mime }))
+  a.download = name
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+}
 
 /** A standalone page of the redacted Markdown, for HTML and for printing to PDF. */
 export function htmlPage(title: string, markdown: string): string {
@@ -61,6 +76,9 @@ function printPage(html: string): void {
 interface Preview {
   text: string
   masked: number
+  /** E-081: an Office file the Host made, as base64 (an older Host sends none). */
+  file?: string
+  mime?: string
   /** E-086: writing-rule corrections made to the prose (an older Host sends none). */
   changes?: Array<{ from: string; to: string; count: number }>
   banned?: string[]
@@ -186,7 +204,13 @@ export function ExportDialog() {
       return
     }
     const name = exportName(what.title, Date.now())
-    if (format === "md") download(name, r.data.text, "text/markdown")
+    if (OFFICE.has(format)) {
+      if (!r.data.file || !r.data.mime) {
+        setError("This version of Codehouse's Host cannot make Office files. Restart Codehouse after updating.")
+        return
+      }
+      downloadBytes(name.replace(/\.md$/, `.${format}`), r.data.file, r.data.mime)
+    } else if (format === "md") download(name, r.data.text, "text/markdown")
     else if (format === "html")
       download(name.replace(/\.md$/, ".html"), htmlPage(what.title, r.data.text), "text/html")
     else printPage(htmlPage(what.title, r.data.text))
@@ -218,6 +242,7 @@ export function ExportDialog() {
               : preview.masked
                 ? `${preview.masked} ${preview.masked === 1 ? "thing was" : "things were"} masked: words on your redaction list and anything that looks like a secret. This is exactly what will be saved.`
                 : "Nothing needed masking. This is exactly what will be saved."}
+          {preview && OFFICE.has(format) ? " The Office file starts with a line, and carries in its properties, that it is AI-generated." : ""}
         </p>
         <WritingChanges changes={preview?.changes ?? []} banned={preview?.banned ?? []} />
         <pre

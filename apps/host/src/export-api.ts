@@ -3,10 +3,11 @@ import { redactString } from "@gatehouse/policy"
 import type { GatehouseConfig } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 import { correctText, mergeRules, projectRules, readRules } from "./writing-rules.js"
+import { OFFICE_MIME, officeFile } from "./office.js"
 
 /** The most text one export sends to be redacted. */
 export const MAX_EXPORT_CHARS = 20_000_000
-const FORMATS = new Set(["md", "html", "pdf"])
+const FORMATS = new Set(["md", "html", "pdf", "docx", "pptx", "xlsx"])
 
 const bad = (reply: FastifyReply, status: number, error: string) =>
   reply.code(status).send({ error })
@@ -26,7 +27,7 @@ export function registerExportRoutes(
     const format = typeof b.format === "string" ? b.format : ""
     if (text === undefined || text.length > MAX_EXPORT_CHARS)
       return bad(reply, 400, "Send the conversation as text, at most 20 million characters.")
-    if (!FORMATS.has(format)) return bad(reply, 400, "The format is md, html or pdf.")
+    if (!FORMATS.has(format)) return bad(reply, 400, "The format is md, html, pdf, docx, pptx or xlsx.")
     const terms = ctx.config().redactTerms ?? []
     const redacted = redactString(text, { terms })
     const count = (s: string) => s.split("[REDACTED:").length - 1
@@ -62,6 +63,12 @@ export function registerExportRoutes(
     })
     // Nothing leaves that the audit could not record.
     if (!written) return bad(reply, 503, "The export could not be recorded, so it was not made.")
+    // E-081: an Office file is made here, from exactly the text the preview showed, with the AI-generated mark.
+    if (format in OFFICE_MIME) {
+      const f = format as keyof typeof OFFICE_MIME
+      const title = typeof b.title === "string" && b.title.trim() ? b.title.slice(0, 200) : "Export"
+      return { text: out, masked, changes, banned, file: officeFile(f, title, out).toString("base64"), mime: OFFICE_MIME[f] }
+    }
     return { text: out, masked, changes, banned }
   })
 }
