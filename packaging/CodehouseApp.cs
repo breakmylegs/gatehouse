@@ -184,6 +184,8 @@ internal sealed class MainForm : Form
         // The page holds the mode (it masks and hides what it shows); the tray only asks it to switch.
         shareItem = new ToolStripMenuItem("Screen-share safe mode", null, delegate { Tell("screenshare-toggle"); });
         menu.Items.Add(shareItem);
+        // E-096: start again in safe mode (nothing restored or started, the banner says why); leaving it is on the desktop.
+        menu.Items.Add("Start in safe mode", null, delegate { Restart(true); });
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Quit Codehouse", null, delegate { Quit(); });
         tray.ContextMenuStrip = menu;
@@ -994,13 +996,18 @@ internal sealed class MainForm : Form
     /// Restart now, after a setting that needs it: a fresh Codehouse starts, waits for this one to close (--after), and
     /// opens as usual. If it cannot start, this one keeps running and says why.
     /// </summary>
-    private void Restart()
+    private void Restart() { Restart(false); }
+
+    /// <summary>E-096: with safe, the new Codehouse starts in safe mode; without it, never, whatever this one was started with.</summary>
+    private void Restart(bool safe)
     {
         try
         {
             string args = "--after " + Process.GetCurrentProcess().Id + (withRelay ? " --relay " + relayArgs : "");
             ProcessStartInfo psi = new ProcessStartInfo(Application.ExecutablePath, args);
             psi.UseShellExecute = false;
+            if (safe) psi.EnvironmentVariables["GATEHOUSE_SAFE_MODE"] = "1";
+            else psi.EnvironmentVariables.Remove("GATEHOUSE_SAFE_MODE");
             psi.WorkingDirectory = Path.GetDirectoryName(Application.ExecutablePath);
             Process.Start(psi);
             Quit();
