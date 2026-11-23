@@ -25,7 +25,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | C-012 | Policy dry run | before E4 | built | | | From the Frontier status |
 | D-030 | Lineage git notes under refs/notes/codehouse | before E4 | built | | | From the Frontier status |
 | C-016 | Verified data-boundary cards per model | before E5 | built | | | From the Frontier status |
-| C-059 | XLSX attachments | before E5 | see frontier-status | | | From the Frontier status |
+| C-059 | XLSX attachments | before E5 | done | feat/e5a | yes | Node zlib reader in a worker with limits; macros never read; chat project .xlsx gets a Markdown copy |
 | D-033 | Requirement ledger | before E5 | built | | | From the Frontier status |
 | D-051 | Personal data flow map | before E5 | built | | | From the Frontier status |
 | D-055 | Licence policy | before E5 | built safe variant | | | From the Frontier status |

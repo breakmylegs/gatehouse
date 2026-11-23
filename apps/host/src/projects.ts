@@ -1,3 +1,4 @@
+import { readXlsxIsolated, workbookMarkdown } from "./xlsx-read.js"
 import fs from "node:fs"
 import path from "node:path"
 import { writeFileAtomic } from "@gatehouse/shared/node"
@@ -211,6 +212,14 @@ export class ProjectStore {
       )
     fs.mkdirSync(path.join(folder, "knowledge"), { recursive: true })
     await writeFileAtomic(path.join(folder, "knowledge", f), data)
+    // C-059: a workbook gets a Markdown copy beside it for Claude to read, made in a worker; macros are never read.
+    if (/\.xlsx$/i.test(f)) {
+      const md = await readXlsxIsolated(data).then(
+        (wb) => workbookMarkdown(f, wb),
+        (e: Error) => `# ${f}\n\nCodehouse could not read this workbook: ${e.message}.\n`,
+      )
+      await writeFileAtomic(path.join(folder, "knowledge", `${f}.md`), md)
+    }
     return { name: f, size: data.length }
   }
 
@@ -221,6 +230,8 @@ export class ProjectStore {
     if (!fs.existsSync(at))
       throw new ProjectError("missing", "There is no such file in the project.")
     fs.rmSync(at, { force: true })
+    // C-059: and a workbook's Markdown copy with it.
+    if (/\.xlsx$/i.test(f)) fs.rmSync(`${at}.md`, { force: true })
   }
 
   /**
