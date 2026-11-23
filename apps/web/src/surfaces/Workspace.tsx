@@ -24,6 +24,7 @@ import { LogsPanel } from "../components/LogsPanel"
 import { TracesPanel } from "../components/TracesPanel"
 import { ProfilePanel } from "../components/ProfilePanel"
 import { ReproPanel } from "../components/ReproPanel"
+import { BisectPanel } from "../components/BisectPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -429,6 +430,7 @@ function SessionPane({
   const [tracesOpen, setTracesOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [reproOpen, setReproOpen] = useState(false)
+  const [bisectOpen, setBisectOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -722,6 +724,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Profile...", onSelect: () => setProfileOpen(true) }]),
     // E-043: a reproduction test, confirmed failing before the fix and passing after, then locked.
     ...(chat ? [] : [{ label: "Reproduce a bug...", onSelect: () => setReproOpen(true) }]),
+    // E-044: git bisect in a scratch worktree.
+    ...(chat ? [] : [{ label: "Find the bad commit...", onSelect: () => setBisectOpen(true) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
     // E-025: the tools this computer has against what the project asks for.
@@ -1000,6 +1004,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {bisectOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <BisectPanel sessionId={session.id} onClose={() => setBisectOpen(false)} />
         </div>
       ) : null}
       {reproOpen ? (

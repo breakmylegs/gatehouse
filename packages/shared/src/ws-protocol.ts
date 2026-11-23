@@ -323,6 +323,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-042: a command run once with heap snapshots taken while it works, and what kept growing. */
   /** E-043: ask Claude for a reproduction test, confirm it fails before the fix, then that it passes after (it is locked). */
   z.object({ type: z.literal("repro"), sessionId: Id, step: z.enum(["ask", "before", "after", "list"]), bug: z.string().max(4000).optional(), file: z.string().max(500).optional(), command: z.string().max(2000).optional() }),
+  /** E-044: git bisect between two commits with a check command, in a scratch worktree. */
+  z.object({ type: z.literal("bisect"), sessionId: Id, good: z.string().min(1).max(200), bad: z.string().min(1).max(200), check: z.string().min(1).max(2000) }),
   z.object({ type: z.literal("leak_check"), sessionId: Id, command: z.string().min(1).max(2000) }),
   /** E-045: the crashes the project left (reports, .NET output, crash codes), or one run with crash reports on. */
   z.object({ type: z.literal("crash_summary"), sessionId: Id, command: z.string().min(1).max(2000).optional(), dump: z.string().max(500).optional() }),

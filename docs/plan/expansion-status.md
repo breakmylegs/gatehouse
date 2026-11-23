@@ -99,7 +99,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-042 | Memory leak detector | E4 | done | feat/e4a | yes | heap snapshots by a preload; constructors that keep growing reported |
 | E-045 | Crash summary | E4 | done | feat/e4b | yes | Node reports, .NET unhandled exceptions and Windows crash codes, frames source-mapped; a run with report flags; dotnet-dump when present |
 | E-043 | Verified reproduction recipes | E4 | done | feat/e4b | yes | reproduction accepted only if it fails before the fix, same test must pass after, then locked (D-007) |
-| E-044 | Bisect assistant | E4 | todo | | |  |
+| E-044 | Bisect assistant | E4 | done | feat/e4b | yes | git bisect in a scratch worktree as Codehouse actions; first bad commit with its session note; links removed first |
 | E-049 | Resource-aware scheduler | E4 | todo | | |  |
 | E-050 | Cross-session locks | E4 | todo | | |  |
 | E-055 | Agent handover notes | E4 | todo | | |  |

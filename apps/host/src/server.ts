@@ -9,7 +9,7 @@ import { projectSchemaDiff } from "./schema-diff.js"
 import { findMigrations, rehearse } from "./migration-rehearsal.js"
 import { explainAll, gitOut, queriesIn } from "./query-plan.js"
 import { generateFixtures, scanFixtures } from "./fixtures.js"
-import { IAC_PARSERS, iacFormat, lintIac } from "@gatehouse/policy"
+import { findProjectRoot, IAC_PARSERS, iacFormat, lintIac } from "@gatehouse/policy"
 import { probe, readSpec } from "./conformance-probe.js"
 import { mocksFrom } from "./mock-gen.js"
 import { lintApi } from "./api-lint.js"
@@ -20,6 +20,7 @@ import { profileDotnet, profileNode, profileSummary } from "./profiler.js"
 import { findLeaks, leakSummary } from "./leak-detector.js"
 import { crashText, dotnetDumpCommand, readDotnetCrashes, runWithCrashReports, summariseCrashes } from "./crash-summary.js"
 import { confirmFails, confirmPasses, reproPrompt } from "./repro.js"
+import { bisect } from "./bisect.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -1294,6 +1295,23 @@ export class HostServer {
             latencyMs: 0,
           })
         })
+      }
+      case "bisect": {
+        // E-044: a scratch worktree; git bisect and the check as Codehouse actions; links removed first on the way out.
+        const s = this.#session(cmd.sessionId)
+        const run = a.runAction
+        if (!run) throw new CommandError("unavailable", "Codehouse actions are not available here.")
+        const r = await bisect(findProjectRoot(s.cwd), cmd.good, cmd.bad, cmd.check, async (command, cwd) => {
+          const x = await run(s.id, command, cwd, "finding the first bad commit")
+          return { ran: !x.refused, exitCode: x.exitCode, output: x.output, ...(x.refused ? { refused: x.refused } : {}) }
+        })
+        await a.audit.record({
+          session: s.id, event: "bisect_run", channel: "desktop", tool: "bisect", cwd: s.cwd, project: s.project,
+          input: { good: cmd.good, bad: cmd.bad, ...(r.first ? { first: r.first.sha } : {}), steps: r.steps },
+          verdict: { outcome: "allow", ruleId: "bisect", reason: r.first ? `The first bad commit is ${r.first.sha.slice(0, 10)}.` : `No first bad commit: ${r.notFound}`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return r
       }
       case "leak_check": {
         // E-042: a preload writes heap snapshots; no inspector port is opened; the folder is deleted afterwards.
