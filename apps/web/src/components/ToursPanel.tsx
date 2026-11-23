@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { api } from "../lib/api"
 import { send } from "../store"
+import { makeDrills } from "../lib/drills"
+import { Drills } from "./Drills"
 
 interface Step {
   title: string
@@ -25,6 +27,7 @@ export function ToursPanel({ sessionId, onOpen, onClose }: { sessionId: string; 
   const [tours, setTours] = useState<Tour[]>()
   const [error, setError] = useState<string>()
   const [topic, setTopic] = useState("")
+  const [drilling, setDrilling] = useState(false)
   useEffect(() => {
     void api<{ tours: Tour[] }>("GET", `/api/tours?session=${encodeURIComponent(sessionId)}`).then((r) =>
       r.ok && r.data ? setTours(r.data.tours) : setError(r.error ?? "The tours could not be read"),
@@ -76,6 +79,14 @@ export function ToursPanel({ sessionId, onOpen, onClose }: { sessionId: string; 
           </div>
         ))
       )}
+      {tours?.length ? (
+        <div className="grid gap-1 border-t border-line pt-2">
+          <button type="button" className="btn !min-h-7 justify-self-start" onClick={() => setDrilling(!drilling)}>
+            {drilling ? "Hide the drills" : "Practise: code reading drills"}
+          </button>
+          {drilling ? <Drills drills={makeDrills(tours)} onOpen={onOpen} /> : null}
+        </div>
+      ) : null}
       <form
         className="flex flex-wrap items-end gap-2 border-t border-line pt-2"
         onSubmit={(e) => {
