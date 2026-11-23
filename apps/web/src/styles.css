@@ -3039,6 +3039,14 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   border-radius: 50%;
   background: var(--c-acc);
 }
+/* O44: the changelog's points use the same strip; the version you run is ringed, newer ones are hollow. */
+.summary-dot[data-mark="current"] {
+  box-shadow: 0 0 0 3px var(--c-s1, transparent), 0 0 0 5px var(--c-acc);
+}
+.summary-dot[data-mark="newer"] {
+  background: transparent;
+  border: 2px solid var(--c-acc);
+}
 
 /* T-045: the offer to compact an idle session, beside the context meter. */
 .ctx-offer {
