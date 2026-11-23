@@ -32,6 +32,7 @@ import { NightPanel } from "../components/NightPanel"
 import { EpicPanel } from "../components/EpicPanel"
 import { WorkItemsPanel } from "../components/WorkItemsPanel"
 import { DodPanel } from "../components/DodPanel"
+import { ReadinessPanel } from "../components/ReadinessPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -445,6 +446,7 @@ function SessionPane({
   const [epicOpen, setEpicOpen] = useState(false)
   const [itemsOpen, setItemsOpen] = useState(false)
   const [dodOpen, setDodOpen] = useState(false)
+  const [readyOpen, setReadyOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -755,6 +757,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Work items...", onSelect: () => setItemsOpen(true) }]),
     // E-057: the project's definition of done, ticked by hand where only a person can check.
     ...(chat ? [] : [{ label: "Definition of done...", onSelect: () => setDodOpen(true) }]),
+    // E-058: whether the change is ready to release.
+    ...(chat ? [] : [{ label: "Release readiness...", onSelect: () => setReadyOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1034,6 +1038,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {readyOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <ReadinessPanel sessionId={session.id} onClose={() => setReadyOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

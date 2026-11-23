@@ -311,6 +311,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-062: ask the session to break an epic into stories, or write its stories into the requirement ledger. */
   /** E-056: work item ids linked to this session, its commits, evidence packs and stories; or their export. */
   /** E-057: the definition of done for this session, or an item ticked or unticked by hand. */
+  /** E-058: the release readiness report for the project's change. */
+  z.object({ type: z.literal("release_readiness"), sessionId: Id, candidate: z.string().max(120).optional() }),
   z.object({ type: z.literal("dod"), sessionId: Id, step: z.enum(["status", "tick", "untick"]), item: z.string().max(300).optional() }),
   z.object({ type: z.literal("work_items"), sessionId: Id, step: z.enum(["scan", "export"]), format: z.enum(["csv", "json"]).optional() }),
   z.object({ type: z.literal("epic"), sessionId: Id, step: z.enum(["ask", "write"]), epic: z.string().min(1).max(200), brief: z.string().max(40_000).optional() }),

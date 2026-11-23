@@ -29,7 +29,9 @@ import { advance, dryRun, newRun, readWorkflows, type StepDeps } from "./workflo
 import { morningReport, newNight, order, runNight } from "./night-shift.js"
 import { epicPrompt, STORY_SCHEMA, writeStories, type StoryInput } from "./epic.js"
 import { exportLinks, scanLinks } from "./work-items.js"
-import { dodItems, readDod } from "./dod.js"
+import { dodItems, dodStatus, readDod } from "./dod.js"
+import { readiness, readinessMarkdown, type ReadinessInput } from "./release-readiness.js"
+import { sessionNotes } from "./slsa.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
@@ -150,7 +152,7 @@ export interface HostApp {
   /** D-012: a fuzz pass's runs, as Codehouse actions. */
   fuzzExec?: (sessionId: string) => import("./fuzz.js").FuzzExec
   /** D-071: the managed vulnerability snapshot, for an upgrade's admission checks. */
-  vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches">
+  vulnSnapshot?: Pick<import("./vuln-snapshot.js").VulnSnapshot, "matches" | "status">
   /** D-080: this computer's key for signing knowledge packs. */
   knowledgeKey?: KnowledgeKey
   /** D-094: what each session's processes reached. */
@@ -621,6 +623,56 @@ export class HostServer {
         error: { code: err.code, message: err.message },
       })
     }
+  }
+
+  /** E-058: what a release readiness report reads, for a session's project. */
+  async #readinessInput(s: NonNullable<ReturnType<HostServerOptions["app"]["manager"]["get"]>>, root: string): Promise<ReadinessInput> {
+    const a = this.#opts.app
+    const pending = a.broker.list().filter((p) => p.request.project === s.project).map((p) => ({ risk: p.request.verdict.risk, ruleId: p.request.verdict.ruleId, toolName: p.request.toolName, reason: p.request.verdict.reason }))
+    const sources = this.gateSources(s)
+    const sealed = a.heldOut && (await a.heldOut.summary(s.project).catch(() => ({ count: 0 }))).count > 0 ? await sources.sealedPass().catch(() => false) : undefined
+    // The candidate's own commits: since it left the default branch.
+    const base = ((await gitOut(root, ["merge-base", "HEAD", "origin/HEAD"])) ?? (await gitOut(root, ["merge-base", "HEAD", "main"])) ?? "").trim()
+    const range = base ? `${base}..HEAD` : "-50"
+    const commits = ((await gitOut(root, ["log", "--format=%H", range])) ?? "").split("\n").filter(Boolean)
+    const withPack = new Set(sessionNotes(root, range).filter((n) => n.evidence).map((n) => n.commit))
+    // Dependencies, from the lockfiles at the project's root.
+    const LOCKS = ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock", "Pipfile.lock", "Cargo.lock", "go.sum", "composer.lock", "packages.lock.json", "Gemfile.lock"]
+    const changes = LOCKS.flatMap((f) => {
+      try {
+        return lockfileChanges(f, undefined, fs.readFileSync(path.join(root, f), "utf8"))
+      } catch {
+        return []
+      }
+    })
+    const snap = a.vulnSnapshot
+    const vulnerabilities = snap && snap.status().state === "ok" ? snap.matches(changes).map((m) => `${m.ecosystem}:${m.name}@${m.version} (${m.ids.slice(0, 3).join(", ")})`) : undefined
+    let licences: string[] | undefined
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as { dependencies?: Record<string, string> }
+      const direct = Object.keys(pkg.dependencies ?? {}).map((name) => ({ ecosystem: "npm" as const, name, via: "package.json" }))
+      const allowed = a.policy()?.managedLicences ?? a.admin?.config().allowedLicences ?? DEFAULT_LICENCES
+      licences = direct.length ? licenceFindings(direct.slice(0, 300), [root], allowed).map((f) => f.reason) : undefined
+    } catch {
+      licences = undefined
+    }
+    const reportFile = path.join(root, ".codehouse", "a11y.json")
+    const a11y = fs.existsSync(reportFile) ? await evaluateGate({ a11y: { report: ".codehouse/a11y.json", ...(fs.existsSync(path.join(root, ".codehouse", "a11y-baseline.json")) ? { baseline: ".codehouse/a11y-baseline.json" } : {}) } }, sources) : undefined
+    const dodPlan = readDod(root)
+    const run = a.runAction
+    const dod = dodPlan
+      ? dodStatus(
+          await dodItems(root, dodPlan, a.dodTicks?.of(s.id) ?? new Set(), {
+            changed: (await changedFiles(root)) ?? new Set<string>(),
+            run: async (command, cwd) => {
+              if (!run) return { ran: false, exitCode: null, refused: "Codehouse actions are not available here" }
+              const x = await run(s.id, command, cwd, "checking the definition of done for a release")
+              return { ran: !x.refused, exitCode: x.exitCode, ...(x.refused ? { refused: x.refused } : {}) }
+            },
+          }),
+        )
+      : undefined
+    return { pending, ...(sealed !== undefined ? { sealed } : {}), evidence: { commits: commits.length, withPack: commits.filter((c) => withPack.has(c)).length }, ...(vulnerabilities ? { vulnerabilities } : {}), ...(licences ? { licences } : {}), ...(a11y ? { a11y } : {}), ...(dod ? { dod } : {}) }
   }
 
   /** E-054: one night task: a session through the scheduler, its cap as the SDK's spend cap, run until it settles. */
@@ -1300,6 +1352,20 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "release_readiness": {
+        // E-058: read only, apart from the sealed checks and the definition of done's commands, run as Codehouse actions.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const r = readiness(await this.#readinessInput(s, root))
+        const candidate = cmd.candidate?.trim() || `${s.project} at ${((await gitOut(root, ["rev-parse", "--short", "HEAD"])) ?? "").trim() || "HEAD"}`
+        await a.audit.record({
+          session: s.id, event: "release_readiness", channel: "desktop", tool: "release", cwd: s.cwd, project: s.project,
+          input: { candidate, ready: r.ready, blocks: r.sections.filter((x) => x.state === "blocks").map((x) => x.name) },
+          verdict: { outcome: "allow", ruleId: "release-readiness", reason: r.ready ? `${candidate} is ready.` : `${candidate} is not ready: ${r.reasons.join(" ")}`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { ...r, candidate, markdown: readinessMarkdown(r, candidate) }
       }
       case "dod": {
         // E-057: ticks are the desktop's alone, recorded; the status reads the change and runs the item's commands.

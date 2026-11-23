@@ -111,7 +111,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-062 | Epic decomposition | E5 | done | feat/e5a | yes | stories from a brief as a checked result, written to docs/requirements with stable ids, dependencies by id, D-100 estimates |
 | E-056 | Work item linkage | E5 | done | feat/e5a | yes | AB# and Jira ids from branch, commits, notes and ledger linked to session, commits, evidence and stories; local; CSV/JSON export |
 | E-057 | Definition of done checklist | E5 | done | feat/e5a | yes | .codehouse/dod.yml checked automatically where possible, ticked by hand otherwise; every claim of done shows its status |
-| E-058 | Release readiness report | E5 | todo | | |  |
+| E-058 | Release readiness report | E5 | done | feat/e5a | yes | escalations, sealed checks, evidence packs, vulnerabilities, licences, accessibility and DoD; a Severe escalation blocks with its reason |
 | E-059 | Change record and CAB pack | E5 | todo | | |  |
 | E-060 | Backout plan verification | E5 | todo | | |  |
 | E-061 | Environment promotion gate | E5 | todo | | |  |
