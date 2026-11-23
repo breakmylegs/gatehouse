@@ -23,6 +23,7 @@ import { confirmFails, confirmPasses, reproPrompt } from "./repro.js"
 import { bisect } from "./bisect.js"
 import { changedFiles, HANDOVER_PROMPT } from "./handover.js"
 import { playbookPrompt, readPlaybooks, verifyPlaybook } from "./playbooks.js"
+import { evaluateGate, parseGate, type GateSources } from "./gates.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -593,6 +594,46 @@ export class HostServer {
     }
   }
 
+  /** E-048: each session's latest mutation score. */
+  readonly #mutationScores = new Map<string, number>()
+
+  /** E-048: the evidence a gate reads for a session; anything that cannot be had is undefined, and the gate fails closed. */
+  gateSources(s: NonNullable<ReturnType<HostServerOptions["app"]["manager"]["get"]>>): GateSources {
+    const a = this.#opts.app
+    const root = findProjectRoot(s.cwd)
+    return {
+      testsVerified: async () => {
+        const last = [...(s.info().claims ?? [])].reverse().find((c) => c.kind === "tests" || c.kind === "fixed")
+        return last ? last.outcome === "verified" : undefined
+      },
+      sealedPass: async () => (a.heldOut ? (await runHeldOutFor(s, a.heldOut, a.audit, "you", a.heldOutExec?.(s.id))).ok : undefined),
+      mutationScore: async () => this.#mutationScores.get(s.id),
+      readFile: (rel) => {
+        const abs = path.resolve(root, rel)
+        const r = path.relative(root, abs)
+        if (r.startsWith("..") || path.isAbsolute(r)) return undefined
+        try {
+          return fs.readFileSync(abs, "utf8")
+        } catch {
+          return undefined
+        }
+      },
+      dodItems: async (id) => {
+        const p = readPlaybooks(root).find((x) => x.id === id)
+        if (!p) return undefined
+        const run = a.runAction
+        return await verifyPlaybook(root, p, {
+          changed: (await changedFiles(root)) ?? new Set<string>(),
+          run: async (command, cwd) => {
+            if (!run) return { ran: false, exitCode: null, refused: "Codehouse actions are not available here" }
+            const x = await run(s.id, command, cwd, `checking the definition of done "${p.name}"`)
+            return { ran: !x.refused, exitCode: x.exitCode, ...(x.refused ? { refused: x.refused } : {}) }
+          },
+        })
+      },
+    }
+  }
+
   #session(id: string) {
     const s = this.#opts.app.manager.get(id)
     if (!s) throw new CommandError("unknown-session", "There is no such session")
@@ -1121,6 +1162,8 @@ export class HostServer {
           sandbox: path.join(os.tmpdir(), `codeh-mutants-${s.id}-${Date.now().toString(36)}`),
           ...(threshold !== undefined ? { threshold } : {}),
         })
+        // E-048: the latest mutation score, for a gate that asks for one.
+        if (report.score !== undefined) this.#mutationScores.set(s.id, report.score)
         await a.audit.record({
           session: s.id,
           event: "mutation_run",
@@ -1133,6 +1176,13 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "gate_check": {
+        // E-048: a gate checked now; what cannot be read fails closed.
+        const s = this.#session(cmd.sessionId)
+        const g = parseGate(cmd.gate)
+        if ("error" in g) throw new CommandError("invalid", `That gate is ${g.error}.`)
+        return await evaluateGate(g, this.gateSources(s))
       }
       case "playbooks": {
         // E-053: read only, apart from the checklist's commands, which run as Codehouse actions.

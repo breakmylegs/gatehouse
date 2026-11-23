@@ -297,6 +297,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-055: ask the session for a handover note now. */
   z.object({ type: z.literal("handover_ask"), sessionId: Id }),
   /** E-053: the project's playbooks: list them, start one, or verify its checklist against the change. */
+  /** E-048: an evidence gate checked now for a session. */
+  z.object({ type: z.literal("gate_check"), sessionId: Id, gate: z.unknown() }),
   z.object({ type: z.literal("playbooks"), sessionId: Id, step: z.enum(["list", "start", "verify"]), id: z.string().max(120).optional() }),
   z.object({ type: z.literal("stop_process"), sessionId: Id, pid: z.number().int().min(1), confirm: z.boolean() }),
   /** D-084: a second model tries to break this session's change, in a worktree of its own. */
