@@ -2,6 +2,7 @@ import { breakerFindings } from "./adversary.js"
 import { lockdownHint } from "./lockdown.js"
 import { outputText } from "./iac-plans.js"
 import { lockReason } from "./locks.js"
+import { promotionFor, readEnvironments, PROMOTION_GATE_RULE, type PromotionVerdict } from "./promotion.js"
 import { HANDOVER_HABIT } from "./handover.js"
 import { dodText } from "./dod.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
@@ -521,6 +522,8 @@ export interface SessionDeps {
   /** E-050: the Host's lock table, and a session's name for a lock's reason. */
   sessionLocks?: import("./locks.js").LockTable
   sessionName?: (id: string) => string
+  /** E-061: how the server judges a promotion with a session's evidence (set once the server is up). */
+  promotionGate?: (sessionId: string, cwd: string, command: string) => Promise<PromotionVerdict | undefined>
   /** E-057: the project's definition of done for a session, when it has one. */
   dodFor?: (cwd: string, sessionId: string) => Promise<import("./dod.js").DodStatus | undefined>
   /** E-055: the last session's handover note for a folder, given to a new session once. */
@@ -1297,6 +1300,7 @@ export class Session extends EventEmitter<SessionEvents> {
       log: d.log,
       mode: () => this.#mode,
       lease: () => this.#lease,
+      promotes: (command: string) => promotionFor(readEnvironments(findProjectRoot(this.cwd)).environments, command)?.name,
       approver: d.approver,
       verdicts: this.#verdicts,
       onWritten: (file) => {
@@ -1420,6 +1424,12 @@ export class Session extends EventEmitter<SessionEvents> {
           }
         : {}),
       ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd), iacBlast: (command: string) => d.iacPlans!.blastFor(this.id, command, this.cwd), iacCost: (command: string) => d.iacPlans!.costFor(this.id, command, this.cwd, d.priceSheet?.()) } : {}),
+      // E-061: a promotion's gate; with no server to read the evidence, it cannot pass.
+      promotion: async (command: string) => {
+        if (d.promotionGate) return await d.promotionGate(this.id, this.cwd, command)
+        const e = promotionFor(readEnvironments(findProjectRoot(this.cwd)).environments, command)
+        return e ? { ruleId: PROMOTION_GATE_RULE, risk: e.production ? 90 : 70, reason: `A promotion to ${e.name}, whose gate cannot be checked here.` } : undefined
+      },
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,
       onPlanApproved: (plan) => void this.#leaseFromPlan(plan),
@@ -3245,6 +3255,11 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     this.#sessions.set(session.id, session)
     this.emit("session", session.info())
     return session
+  }
+
+  /** E-061: how the server judges a promotion's gate, with the session's evidence. */
+  setPromotionGate(fn: NonNullable<SessionDeps["promotionGate"]>): void {
+    this.#deps.promotionGate = fn
   }
 
   get(id: string): Session | undefined {

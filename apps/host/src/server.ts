@@ -33,6 +33,7 @@ import { dodItems, dodStatus, readDod } from "./dod.js"
 import { readiness, readinessMarkdown, type ReadinessInput } from "./release-readiness.js"
 import { sessionNotes } from "./slsa.js"
 import { verifyBackout } from "./backout.js"
+import { judgePromotion, promotionFor, readEnvironments, PROMOTION_GATE_RULE } from "./promotion.js"
 import { cabPack, changeRecord } from "./change-record.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
@@ -294,6 +295,8 @@ export class HostServer {
 
   constructor(opts: HostServerOptions) {
     this.#opts = opts
+    // E-061: a promotion's gate reads the session's evidence, which the server holds.
+    opts.app.manager?.setPromotionGate?.((id, cwd, command) => this.promotionVerdict(id, cwd, command))
     this.#fastify = Fastify({ logger: false, bodyLimit: 1_048_576, trustProxy: false })
   }
 
@@ -793,6 +796,15 @@ export class HostServer {
 
   /** E-048: each session's latest mutation score. */
   readonly #mutationScores = new Map<string, number>()
+
+  /** E-061: what the gates of the environment a command promotes to make of it; undefined when it promotes to none. */
+  async promotionVerdict(sessionId: string, cwd: string, command: string) {
+    const env = promotionFor(readEnvironments(findProjectRoot(cwd)).environments, command)
+    if (!env) return undefined
+    const s = this.#opts.app.manager.get(sessionId)
+    if (!s) return { ruleId: PROMOTION_GATE_RULE, risk: env.production ? 90 : 70, reason: `A promotion to ${env.name}, whose gate could not be read (the session is gone).` }
+    return await judgePromotion(env, this.gateSources(s))
+  }
 
   /** E-048: the evidence a gate reads for a session; anything that cannot be had is undefined, and the gate fails closed. */
   gateSources(s: NonNullable<ReturnType<HostServerOptions["app"]["manager"]["get"]>>): GateSources {

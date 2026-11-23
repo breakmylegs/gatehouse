@@ -114,7 +114,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-058 | Release readiness report | E5 | done | feat/e5a | yes | escalations, sealed checks, evidence packs, vulnerabilities, licences, accessibility and DoD; a Severe escalation blocks with its reason |
 | E-059 | Change record and CAB pack | E5 | done | feat/e5a | yes | fields from evidence or Needs your input; CAB pack |
 | E-060 | Backout plan verification | E5 | done | feat/e5a | yes | scratch-worktree revert, tests and down migrations; conflict not reversible |
-| E-061 | Environment promotion gate | E5 | todo | | |  |
+| E-061 | Environment promotion gate | E5 | done | feat/e5a | yes | promotion-gate 90 for production; production-promotion 80 even when passing; hook asks in Auto; T163 |
 | E-063 | Effort and billing log | E5 | todo | | |  |
 | E-069 | AI system register | E5 | todo | | |  |
 | E-070 | Third-party notices generator | E5 | todo | | |  |

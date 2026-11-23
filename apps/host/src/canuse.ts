@@ -96,6 +96,8 @@ export interface CanUseDeps {
   crossLock?: (toolName: string, input: Record<string, unknown>) => { reason: string } | undefined
   /** E-050: a call went ahead; the session takes what it touched. */
   onCallTaken?: (toolName: string, input: Record<string, unknown>) => void
+  /** E-061: what a promotion's gates make of a command, when it promotes to an environment. */
+  promotion?: (command: string) => Promise<{ ruleId: string; risk: number; reason: string } | undefined>
   iacPlan?: (command: string) => { ruleId: string; risk: number; reason: string; resources: string[] } | undefined
   /** E-024: what depends on what an apply's plan deletes or replaces, for the card. */
   iacBlast?: (command: string) => import("@gatehouse/shared").Blast[] | undefined
@@ -380,6 +382,11 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
       if (deps.iacPlan && verdict.outcome !== "deny" && (toolName === "Bash" || toolName === "PowerShell") && typeof input.command === "string") {
         const f = deps.iacPlan(input.command)
         if (f && (verdict.outcome === "allow" || f.risk >= verdict.risk)) verdict = { ...verdict, outcome: "escalate", ruleId: f.ruleId, reason: f.reason, risk: Math.max(verdict.risk, f.risk), decidedBy: "rules" }
+      }
+      // E-061: a promotion goes to a person unless its environment's gates pass, and to production always; never loosened here.
+      if (deps.promotion && verdict.outcome !== "deny" && (toolName === "Bash" || toolName === "PowerShell") && typeof input.command === "string") {
+        const p = await deps.promotion(input.command).catch((e: Error) => ({ ruleId: "promotion-gate", risk: 90, reason: `A promotion's gate could not be checked: ${e.message}.` }))
+        if (p && (verdict.outcome === "allow" || p.risk >= verdict.risk)) verdict = { ...verdict, outcome: "escalate", ruleId: p.ruleId, reason: p.reason, risk: Math.max(verdict.risk, p.risk), decidedBy: "rules" }
       }
       // D-084: a breaker tries to break a change, not to change it: any edit goes to a person, whatever the rules said.
       if (deps.breaker && verdict.outcome !== "deny" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(toolName))

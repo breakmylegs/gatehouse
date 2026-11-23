@@ -123,6 +123,8 @@ export interface SessionHookDeps {
   decided: Set<string>
   /** The session's permission mode now. In acceptEdits and auto the hook asks the Approver too. */
   mode?: () => string
+  /** E-061: the environment a command promotes to; in acceptEdits and auto it is asked, and canUseTool checks its gate. */
+  promotes?: (command: string) => string | undefined
   /** D-023: the scope lease; in acceptEdits and auto a call outside it is asked. */
   lease?: () => ScopeLease | undefined
   /** The Approver, for the modes in which Claude Code would otherwise decide alone. */
@@ -273,6 +275,16 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
       if (lease) {
         const why = outsideLease(lease, deps.projectRoot ?? cwd, cwd, input.tool_name, toolInput)
         if (why) return askOutput(`Codehouse asks about this even in ${mode === "auto" ? "Auto" : "Accept edits"} mode: ${why}`)
+      }
+      // E-061: and so is a promotion to an environment, whose gate canUseTool checks.
+      if (SELF_APPROVING_MODES.has(mode) && deps.promotes && (input.tool_name === "Bash" || input.tool_name === "PowerShell") && typeof toolInput.command === "string") {
+        let env: string | undefined
+        try {
+          env = deps.promotes(toolInput.command)
+        } catch {
+          env = "an environment (the environments could not be read)"
+        }
+        if (env) return askOutput(`Codehouse asks about this even in ${mode === "auto" ? "Auto" : "Accept edits"} mode: it promotes to ${env}, whose gate is checked first.`)
       }
       // D-059: and so is a change to what the project tells Claude.
       if (SELF_APPROVING_MODES.has(mode) && deps.instructions) {
