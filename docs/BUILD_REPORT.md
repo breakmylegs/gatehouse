@@ -2139,3 +2139,29 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 - Keyboard and screen readers: the points are one tab stop, moved between with the arrow keys, Home and End, across summaries and releases; each release's name says its version, date and standing; the notes are a live region with a heading. Help text: the Timeline line in Help.
 - Impeccable (`npx impeccable detect` on the .tsx): no anti-patterns; advisories only for the 13px text the panels already use. No Intent check is defined in the repository, so none was run.
 - Tests: `apps/web/test/timeline-releases.test.tsx` (releases among the summaries in time order and outside the session left out; their own shape and label; the version you run marked; notes as text with markup never drawn; Update now installs the newest, and is not offered for the version you run or when the copy cannot install; one tab stop with the arrow keys, Home and End; no changelog copy). Regression: `summary-timeline.test.tsx`, `changelog.test.tsx`. Eleven breaks, all caught.
+
+### G26 Sandbox: the outgoing-connection proxy (feat/e6a, the safe variant)
+
+- `apps/host/src/egress-proxy.ts`: when switched on in Settings, Connectors, Sandbox (off by default, the 9 Nov connector rule), a session starts with HTTP_PROXY and HTTPS_PROXY pointing at a proxy on 127.0.0.1. Only the hosts on your allow list get through: `example.com` for that host, `*.example.com` for its subdomains, and a `:port` for any port other than 80 and 443. If you name an upstream proxy (an http:// address with no user name or password), everything let through goes by it. Each refusal is audited as `egress_blocked`, with the session, host, port and reason.
+- Invariant 7, as a proxy keeps it:
+  - It listens on 127.0.0.1 only.
+  - Each session gets its own random token as the proxy password. Only its hash is kept, and it stops working when the session closes.
+  - A request with an Origin header is refused, and so is one that is neither a CONNECT nor a full URL. That is everything a page rebinding a name to 127.0.0.1 can send, so this stands in for the Host check.
+  - HTTPS is only tunnelled, never read.
+- Claude Code's own hosts (anthropic.com, claude.ai, claude.com and their subdomains) and this computer go round it by NO_PROXY, so a list cannot cut a session off from its model.
+- The setting applies live: the proxy reads it on each connection, and new sessions pick it up. A session started while it was off goes direct until it restarts. One started while it was on is refused everything once it is switched off, until it restarts. Both are said beside the setting.
+- **Deviation, and what it is not:** G26 also asked for writes outside the workspace to be denied at the OS level, and for an unlisted host to be unreachable whatever the program does. That needs a restricted token or an AppContainer launch, which is native code beyond what this laptop allows without an administrator (no firewall rules, Windows Sandbox or WSL). The proxy stops tools that honour the proxy settings (git, npm, curl, pip, most SDKs, and Claude Code's WebFetch), not a program that opens its own sockets. Writes outside the workspace stay with the floor and the policy, as before. G26 stays open for that part.
+- Tests: `apps/host/test/egress-proxy.test.ts`. It covers:
+  - the allow list's matching
+  - the upstream address, with credentials refused
+  - off by default, with no variables and nothing listening
+  - the session variables and NO_PROXY
+  - a CONNECT to an allowed host and a refusal audited with its session
+  - no token, a wrong token, and a closed session's token
+  - an Origin header and an origin-form request
+  - plain http:// forwarding without the proxy's token
+  - by the upstream proxy, refused when it says no or carries a password
+  - refused once switched off
+  - a real session pointed at it and released on close
+
+  Threat model T165. Eighteen breaks, all caught (one missed at first: listening on every interface; a test of the address added).

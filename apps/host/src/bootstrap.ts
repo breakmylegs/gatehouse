@@ -186,6 +186,7 @@ import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
 import { GitHubSource } from "./update/source.js"
 import { ChangelogStore } from "./update/changelog.js"
+import { EgressProxy } from "./egress-proxy.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -611,7 +612,33 @@ export function createHost(opts: HostOptions = {}): Host {
         latencyMs: 0,
       }),
   })
+  // G26: the outgoing-connection proxy, listening only once it is on and a session starts; each refusal audited.
+  const egressProxy = new EgressProxy({
+    settings: () => config.sandbox,
+    log,
+    onBlocked: (b) =>
+      void audit.record({
+        session: b.sessionId,
+        event: "egress_blocked",
+        channel: "host",
+        tool: "egress-proxy",
+        input: { host: b.host, port: b.port, reason: b.reason },
+        verdict: {
+          outcome: "deny",
+          ruleId: "egress-proxy",
+          reason:
+            b.reason === "not-allowed"
+              ? `A connection to ${b.host}:${b.port} was refused: it is not on the allow list in Settings, Sandbox.`
+              : `A connection to ${b.host}:${b.port} was refused: the upstream proxy could not be used.`,
+          risk: 0,
+          decidedBy: "rules",
+          policyHash: store.current?.hash ?? "",
+        },
+        latencyMs: 0,
+      }),
+  })
   const deps: SessionDeps = {
+    egress: egressProxy,
     governor,
     defaultResources: () => (power.onBattery ? "low" : undefined),
     queryFn,
@@ -2470,6 +2497,7 @@ export function createHost(opts: HostOptions = {}): Host {
       await notices.flush(true).catch(() => undefined)
       phone.stop()
       await manager.closeAll()
+      await egressProxy.stop()
       await usage.flush()
       await approverProcess?.stop()
       store.close()

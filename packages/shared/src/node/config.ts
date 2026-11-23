@@ -179,6 +179,18 @@ function build(loose: boolean) {
       .object({ deviceWatts: z.number().positive().max(2000).optional(), modelWhPer1kTokens: z.number().min(0).max(1000).optional(), gridGramsPerKwh: z.number().min(0).max(2000).optional() })
       .passthrough()
       .optional(),
+    /**
+     * G26: the outgoing-connection proxy a session's commands are pointed at, on 127.0.0.1; off unless switched on.
+     * Only the hosts allowed go through, by the upstream proxy when one is named (no user name or password).
+     */
+    sandbox: z
+      .object({
+        egressProxy: z.boolean().optional(),
+        allow: z.array(z.string().max(260)).max(500).optional(),
+        upstream: z.string().max(300).optional(),
+      })
+      .passthrough()
+      .optional(),
     /** E-040: the local OTLP trace receiver on 127.0.0.1, off unless switched on; its port (absent: 4318). */
     traceReceiver: z.object({ enabled: z.boolean().optional(), port: z.number().int().min(1024).max(65535).optional() }).passthrough().optional(),
     /** E-026: heavy checks in a Podman container (no network, project read-only). Off unless switched on. */

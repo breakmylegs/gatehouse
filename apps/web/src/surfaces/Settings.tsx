@@ -112,6 +112,7 @@ interface Config {
   extremeRiskLimit?: number
   logRetentionDays?: number
   traceReceiver?: { enabled?: boolean; port?: number }
+  sandbox?: { egressProxy?: boolean; allow?: string[]; upstream?: string }
   titleByClaude?: boolean
   forges?: { github?: boolean }
   containerRuns?: { enabled?: boolean; image?: string }
@@ -243,6 +244,10 @@ interface Values {
   /** E-040: the local trace receiver, and its port. */
   traces: boolean
   tracePort: string
+  /** G26: the outgoing-connection proxy, its allow list (a host to a line) and an upstream proxy. */
+  egress: boolean
+  egressAllow: string
+  egressUpstream: string
   /** What every session is told at its start. */
   instr: string
   /** What Claude should call you, and your work (Profile). */
@@ -338,6 +343,9 @@ export function valuesOf(d: SettingsData): Values {
     logDays: String(c.logRetentionDays ?? 7),
     traces: c.traceReceiver?.enabled === true,
     tracePort: String(c.traceReceiver?.port ?? 4318),
+    egress: c.sandbox?.egressProxy === true,
+    egressAllow: (c.sandbox?.allow ?? []).join("\n"),
+    egressUpstream: c.sandbox?.upstream ?? "",
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
@@ -471,6 +479,22 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     const tr = { ...rest, ...(v.traces ? { enabled: true } : {}), ...(Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4318 ? { port } : {}) }
     if (Object.keys(tr).length) body.traceReceiver = tr
     else delete body.traceReceiver
+  }
+  // G26: anything else a newer version keeps in sandbox stays.
+  {
+    const { egressProxy: _e, allow: _a, upstream: _u, ...rest } = (d.saved.sandbox as Record<string, unknown> | undefined) ?? {}
+    const allow = v.egressAllow
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+    const sb = {
+      ...rest,
+      ...(v.egress ? { egressProxy: true } : {}),
+      ...(allow.length ? { allow } : {}),
+      ...(v.egressUpstream.trim() ? { upstream: v.egressUpstream.trim() } : {}),
+    }
+    if (Object.keys(sb).length) body.sandbox = sb
+    else delete body.sandbox
   }
   if (v.logDays === "7") delete body.logRetentionDays
   else body.logRetentionDays = Number(v.logDays)
@@ -684,6 +708,9 @@ export const DEFAULT_VALUES: Values = {
   logDays: "7",
   traces: false,
   tracePort: "4318",
+  egress: false,
+  egressAllow: "",
+  egressUpstream: "",
   instr: "",
   callMe: "",
   work: "",
@@ -2161,6 +2188,31 @@ export function Settings() {
                 Off until you switch it on, and it starts with Codehouse. It listens on 127.0.0.1 only, takes OTLP JSON
                 only with a project&apos;s own token (made in the session&apos;s Traces panel), never from a web page, up
                 to 4 MB a request, and redacts attributes before keeping them.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Sandbox" gap="gap-2" changed={differs(v, ["egress", "egressAllow", "egressUpstream"])}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.egress} onChange={(e) => change({ egress: e.target.checked }, "Sandbox")} />
+                Send sessions&apos; outgoing connections through Codehouse, to the hosts listed only
+              </label>
+              <Field label="Hosts let through, one to a line" help="example.com for that host, *.example.com for its subdomains, and :8080 after it for a port other than 80 and 443.">
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.egressAllow}
+                  placeholder={"registry.npmjs.org\ngithub.com\n*.githubusercontent.com"}
+                  onChange={(e) => change({ egressAllow: e.target.value }, "Sandbox")}
+                />
+              </Field>
+              <Field label="Upstream proxy (optional)" help="An http:// address such as http://proxy.example:8080, without a user name or password. Every connection let through goes by it.">
+                <input className="field mono" value={v.egressUpstream} onChange={(e) => change({ egressUpstream: e.target.value }, "Sandbox")} />
+              </Field>
+              <p className="m-0 text-xs text-mut">
+                Off until you switch it on. A session started while it is on has its commands pointed at a proxy on
+                127.0.0.1 with its own token; a host not listed is refused and recorded in the audit log. Claude&apos;s own
+                connection to Anthropic goes round it. It stops tools that use the usual proxy settings, not a program that
+                ignores them. A session started before you switch it on goes direct until it starts again; one started
+                while it was on is refused everything once you switch it off, until it starts again.
               </p>
             </Group>
 

@@ -456,6 +456,8 @@ export const START_TIMEOUT_MS = 300_000
 
 export interface SessionDeps {
   queryFn: QueryFn
+  /** G26: the outgoing-connection proxy, when on: the variables that point a session at it, with its own token. */
+  egress?: { envFor(sessionId: string): Promise<Record<string, string> | undefined>; release(sessionId: string): void }
   /** Your title, pin and archive for a Claude Code session id. Absent where they are not kept. */
   sessionMeta?: (sdkSessionId: string | undefined) => {
     title?: string
@@ -1532,7 +1534,11 @@ export class Session extends EventEmitter<SessionEvents> {
       // Mac fork: without Codehouse.app's own settings (env-mac.ts), and with the folder's direnv .envrc (direnv-mac.ts).
       env: await withDirenvMac(
         this.cwd,
-        withoutMacAppEnv(d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env)),
+        {
+          ...withoutMacAppEnv(d.accounts ? d.accounts.env(this.#account) : sanitiseEnv(process.env)),
+          // G26: when the proxy is on, the session's commands go by it, with this session's own token.
+          ...(await d.egress?.envFor(this.id)),
+        },
         d.log,
       ),
       canUseTool: canUse,
@@ -2940,6 +2946,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   async close(): Promise<void> {
     this.#stuck.stop()
+    // G26: its proxy token stops working.
+    this.#deps.egress?.release(this.id)
     clearInterval(this.#deadmanTimer)
     this.#deps.broker.cancelSession(this.id, "The session was closed")
     this.#input.end()

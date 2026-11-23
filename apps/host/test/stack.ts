@@ -38,6 +38,8 @@ export interface StackOptions {
   judgeClaim?: SessionDeps["judgeClaim"]
   /** T-067: the organisation's managed settings the sessions see, read each time. */
   managed?: () => ManagedSettings | undefined
+  /** G26: the outgoing-connection proxy, for a test of it. */
+  egress?: SessionDeps["egress"]
   /** D-025: a shorter dead-man minute and look, for tests. */
   deadman?: { minuteMs: number; lookMs: number }
 }
@@ -180,6 +182,7 @@ export async function buildStack(opts: StackOptions = {}): Promise<Stack> {
   const hooks: Stack["hooks"] = {}
   const deps: SessionDeps = {
     ...(opts.locks ? { locks: opts.locks } : {}),
+    ...(opts.egress ? { egress: opts.egress } : {}),
     ...(opts.instructions ? { instructions: opts.instructions } : {}),
     ...(opts.codehouseAction ? { codehouseAction: opts.codehouseAction } : {}),
     ...(opts.judgeClaim ? { judgeClaim: opts.judgeClaim } : {}),

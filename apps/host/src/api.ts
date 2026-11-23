@@ -2442,6 +2442,8 @@ const DAY = 86_400_000
 /** Settings the Host reads at the moment it uses them. */
 const LIVE_SETTINGS = [
   "expectedOrg",
+  // G26: read on each connection the proxy is asked for, and when a session starts.
+  "sandbox",
   "redactTerms",
   // E-086: read each time an export is made or a commit checked.
   "writingRules",

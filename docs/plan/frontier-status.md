@@ -18,7 +18,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 |---|---|---|---|---|
 | G27 | Undo outside git | built | slice/G27-undo-outside-git | BUILD_REPORT "Backlog G27" |
 | G28 | Install guard | done | | Folds into D-053, D-054, D-057, D-063, D-064 (registry and OSV connectors per conflict 1); done through D-053, D-054, D-057, D-063 and D-064, all built |
-| G26 | Sandbox | todo | | Egress proxy on 127.0.0.1 with an allow-list, optional upstream proxy; relates to D-094 |
+| G26 | Sandbox | built in part | | Egress proxy on 127.0.0.1 with an allow-list, optional upstream proxy; relates to D-094; the egress proxy built (safe variant, BUILD_REPORT G26); a restricted token or AppContainer is left, needing native code |
 | G38 | Test explorer | todo | | Connectors to the project's own runners (Vitest, Jest, pytest, dotnet) |
 | G7 | XLSX in chats | done | | Node built-ins only, no library; done as C-059 (xlsx-read.ts) |
 | G9 | Voice | built | feat/pkg1 | Whisper-compatible server through 127.0.0.1 (ADR 0010), Windows voice typing kept (T-136) |
