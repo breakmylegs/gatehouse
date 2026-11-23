@@ -176,6 +176,7 @@ import { localDay, UsageStore } from "./usage.js"
 import { EffortLog } from "./effort-log.js"
 import { AiRegister } from "./ai-register.js"
 import { ResidencyLog } from "./residency.js"
+import { LegalHolds, retentionDays, type RetentionConfig } from "./retention.js"
 import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
 import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
@@ -367,6 +368,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const aiRegister = new AiRegister(path.join(gatehouseDataDir(env), "ai-register.json"))
   // E-068: where each session's words went, and the region its card states.
   const residency = new ResidencyLog(path.join(gatehouseDataDir(env), "residency.json"))
+  // E-066: legal holds suspend deletion; retention follows each project's classification.
+  const legalHolds = new LegalHolds(path.join(gatehouseDataDir(env), "legal-holds.json"))
   // G27: undo points for a folder outside git, kept in Codehouse's data folder, never in the folder itself.
   useShadowCheckpoints(path.join(gatehouseDataDir(env), "undo"))
   const checkpoints = new CheckpointManager({
@@ -963,7 +966,12 @@ export function createHost(opts: HostOptions = {}): Host {
   const mcpRunner = new McpRunner({ store: builtServers, limitsExe: () => limitsExe, env, log })
   deps.builtBridge = (name) => bridgeFor(mcpRunner, name)
   // E-038: what Codehouse's own commands print, kept per project (redacted) for the log viewer.
-  const logs = new LogStore(path.join(gatehouseDataDir(env), "logs"), (t) => redactString(t, { terms: config.redactTerms }), () => config.logRetentionDays ?? 7)
+  const logs = new LogStore(
+    path.join(gatehouseDataDir(env), "logs"),
+    (t) => redactString(t, { terms: config.redactTerms }),
+    (project) => retentionDays(config as RetentionConfig, "logs", project),
+    (project) => legalHolds.held(project, "logs"),
+  )
   // E-040: the local trace receiver, per-project tokens kept as hashes; started below when Settings switch it on.
   const traceTokens = new TraceTokens(path.join(gatehouseDataDir(env), "trace-tokens.json"))
   const traces = new TraceStore()
@@ -1547,11 +1555,15 @@ export function createHost(opts: HostOptions = {}): Host {
     audit,
     version: () => updates.status().current,
     retentionDays: () => config.evidence?.retentionDays ?? 90,
+    retentionFor: (project) => retentionDays(config as RetentionConfig, "evidence", project),
+    held: (project) => legalHolds.held(project, "evidence"),
     log,
     // D-049: the project's benchmarks, as a Codehouse action, for the performance budgets a change touches.
     benchExec: (id) => actionFor(id, "this project's performance budgets"),
   })
-  evidence.prune()
+  void evidence.prune()
+  // E-066: and once a day while Codehouse runs, so a pack goes when its retention passes, unless a hold keeps it.
+  setInterval(() => void evidence.prune(), 86_400_000).unref()
   deps.evidence = evidence
   // D-029: the audit chain's head, signed once a day and on demand, kept apart from the log.
   const anchors = new AnchorService({
@@ -1770,6 +1782,7 @@ export function createHost(opts: HostOptions = {}): Host {
     effort,
     aiRegister,
     residency,
+    legalHolds,
     account,
     limits: limitPauser,
     heldOut,

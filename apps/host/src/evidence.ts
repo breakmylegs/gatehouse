@@ -249,7 +249,12 @@ export class EvidenceStore {
    * Removes what is older than the retention. Only regular files directly in the folder are touched: a link or a
    * junction is never followed, so nothing outside the folder can be removed through one.
    */
-  prune(days: number, now = Date.now()): number {
+  prune(
+    days: number | ((project: string | undefined) => number),
+    now = Date.now(),
+    // E-066: a legal hold keeps a pack past its retention; each removal is told, for the audit.
+    o: { held?: (project: string | undefined) => boolean; onRemoved?: (file: string, project: string | undefined, ageDays: number) => void; onHeld?: (file: string, project: string | undefined) => void } = {},
+  ): number {
     if (!fs.existsSync(this.#dir) || fs.lstatSync(this.#dir).isSymbolicLink()) return 0
     let removed = 0
     for (const f of fs.readdirSync(this.#dir)) {
@@ -257,9 +262,24 @@ export class EvidenceStore {
       const p = path.join(this.#dir, f)
       const st = fs.lstatSync(p)
       if (!st.isFile() || st.isSymbolicLink()) continue
-      if (now - st.mtimeMs > days * 86_400_000) {
+      let project: string | undefined
+      if (typeof days === "function" || o.held) {
+        try {
+          const v = JSON.parse(fs.readFileSync(p, "utf8")) as { project?: unknown }
+          project = typeof v.project === "string" ? v.project : undefined
+        } catch {
+          project = undefined
+        }
+      }
+      const keep = typeof days === "function" ? days(project) : days
+      if (now - st.mtimeMs > keep * 86_400_000) {
+        if (o.held?.(project)) {
+          o.onHeld?.(f, project)
+          continue
+        }
         fs.rmSync(p, { force: true })
         removed++
+        o.onRemoved?.(f, project, Math.floor((now - st.mtimeMs) / 86_400_000))
       }
     }
     return removed
@@ -284,6 +304,9 @@ export interface EvidenceDeps {
   audit: Pick<HostAudit, "record">
   version: () => string
   retentionDays: () => number
+  /** E-066: the retention by the pack's project's classification, and whether a legal hold keeps it. */
+  retentionFor?: (project: string | undefined) => number
+  held?: (project: string | undefined) => boolean
   log: (line: string) => void
   /** D-049: runs the project's benchmarks for a session, as a Codehouse action (the rules, a job, the kill switch). */
   benchExec?: (sessionId: string) => HeldOutExec
@@ -431,13 +454,28 @@ export class EvidenceService {
     return { sha, pack }
   }
 
-  /** Removes packs older than the retention (90 days by default). */
-  prune(): void {
+  /** Removes packs older than the retention (90 days by default; E-066: by classification), except those held. */
+  async prune(now = Date.now()): Promise<number> {
+    const removed: Array<{ file: string; project: string | undefined; ageDays: number }> = []
+    let held = 0
     try {
-      const n = this.store.prune(this.#o.retentionDays())
-      if (n) this.#o.log(`evidence: ${n} file(s) older than ${this.#o.retentionDays()} days removed`)
+      const n = this.store.prune(this.#o.retentionFor ?? this.#o.retentionDays(), now, {
+        ...(this.#o.held ? { held: this.#o.held } : {}),
+        onRemoved: (file, project, ageDays) => removed.push({ file, project, ageDays }),
+        onHeld: () => held++,
+      })
+      if (n) this.#o.log(`evidence: ${n} file(s) past their retention removed`)
+      if (held) this.#o.log(`evidence: ${held} file(s) past their retention kept under a legal hold`)
+      for (const r of removed)
+        await this.#o.audit.record({
+          session: "host", event: "retention_deleted", channel: "host", tool: "retention", ...(r.project ? { project: r.project } : {}), input: { kind: "evidence", file: r.file, ageDays: r.ageDays },
+          verdict: { outcome: "allow", ruleId: "retention", reason: `An evidence file ${r.ageDays} days old was past its retention${r.project ? ` for ${r.project}` : ""}, and no legal hold covered it`, risk: 0, decidedBy: "rules", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+      return n
     } catch (e) {
       this.#o.log(`evidence: old packs could not be removed (${(e as Error).message.slice(0, 120)})`)
+      return 0
     }
   }
 }

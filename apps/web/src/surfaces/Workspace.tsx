@@ -36,6 +36,7 @@ import { ReadinessPanel } from "../components/ReadinessPanel"
 import { EffortPanel } from "../components/EffortPanel"
 import { AiRegisterPanel } from "../components/AiRegisterPanel"
 import { NoticesPanel } from "../components/NoticesPanel"
+import { RetentionPanel } from "../components/RetentionPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -462,6 +463,7 @@ function SessionPane({
   const [effortOpen, setEffortOpen] = useState(false)
   const [registerOpen, setRegisterOpen] = useState(false)
   const [noticesOpen, setNoticesOpen] = useState(false)
+  const [retentionOpen, setRetentionOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -777,6 +779,7 @@ function SessionPane({
     { label: "Effort and billing...", onSelect: () => setEffortOpen(true) },
     { label: "AI system register...", onSelect: () => setRegisterOpen(true) },
     ...(chat ? [] : [{ label: "Third-party notices...", onSelect: () => setNoticesOpen(true) }]),
+    { label: "Retention and legal hold...", onSelect: () => setRetentionOpen(true) },
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1078,6 +1081,11 @@ function SessionPane({
       {noticesOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <NoticesPanel sessionId={session.id} onClose={() => setNoticesOpen(false)} />
+        </div>
+      ) : null}
+      {retentionOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <RetentionPanel sessionId={session.id} onClose={() => setRetentionOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

@@ -314,6 +314,10 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-058: the release readiness report for the project's change. */
   /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
   z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
+  /** E-066: how long the project's things are kept, and the legal holds; a hold is placed and released on the desktop only. */
+  z.object({ type: z.literal("retention_status"), sessionId: Id }),
+  z.object({ type: z.literal("legal_hold_place"), sessionId: Id, reason: z.string().min(1).max(500), all: z.boolean().optional() }),
+  z.object({ type: z.literal("legal_hold_release"), sessionId: Id, holdId: z.string().min(1).max(40) }),
   /** E-068: the data residency statement of the session's project, for a period (YYYY-MM-DD, both included). */
   z.object({ type: z.literal("residency_statement"), sessionId: Id, from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
   /** E-069: the AI system register, of the session's project or of all of them. */

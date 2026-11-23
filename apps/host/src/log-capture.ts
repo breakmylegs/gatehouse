@@ -101,7 +101,9 @@ export class LogStore {
   constructor(
     readonly dir: string,
     private readonly redact: (s: string) => string,
-    private readonly retentionDays: () => number = () => 7,
+    private readonly retentionDays: (project: string) => number = () => 7,
+    /** E-066: a legal hold on the project keeps its lines past their retention. */
+    private readonly held: (project: string) => boolean = () => false,
   ) {}
 
   #file(project: string) {
@@ -138,7 +140,8 @@ export class LogStore {
     } catch {
       return
     }
-    const cut = Date.now() - this.retentionDays() * 86_400_000
+    if (this.held(project)) return
+    const cut = Date.now() - this.retentionDays(project) * 86_400_000
     const kept = lines.filter((l) => {
       try {
         return Date.parse((JSON.parse(l) as LogEntry).at) >= cut

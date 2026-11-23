@@ -128,6 +128,7 @@ import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
+import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
 import { collectNotices, noticesText } from "./notices.js"
 
 /** D-021: how long the friction holds a High approval back before the deliberate one. */
@@ -147,6 +148,8 @@ export interface HostApp {
   aiRegister?: AiRegister
   /** E-068: where each session's words went, and the region. */
   residency?: ResidencyLog
+  /** E-066: the legal holds. */
+  legalHolds?: LegalHolds
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
@@ -1415,6 +1418,39 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "retention_status": {
+        const s = this.#session(cmd.sessionId)
+        const c = (a.admin?.config() ?? {}) as RetentionConfig
+        return {
+          project: s.project,
+          classification: classificationOf(c.dataClassification, s.project),
+          days: Object.fromEntries(RETENTION_KINDS.map((k) => [k, retentionDays(c, k, s.project)])),
+          holds: (a.legalHolds?.list() ?? []).filter((h) => h.project === undefined || h.project.toLowerCase() === s.project.toLowerCase()),
+        }
+      }
+      case "legal_hold_place": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.legalHolds) throw new CommandError("unavailable", "Legal holds are not kept here")
+        const hold = await a.legalHolds.place({ ...(cmd.all ? {} : { project: s.project }), reason: cmd.reason })
+        await a.audit.record({
+          session: s.id, event: "legal_hold_placed", channel: "desktop", tool: "retention", cwd: s.cwd, project: s.project, input: { hold: hold.id, all: cmd.all === true, reason: cmd.reason },
+          verdict: { outcome: "allow", ruleId: "legal-hold", reason: `You placed a legal hold on ${cmd.all ? "every project" : s.project}: ${cmd.reason}`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return hold
+      }
+      case "legal_hold_release": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.legalHolds) throw new CommandError("unavailable", "Legal holds are not kept here")
+        const gone = await a.legalHolds.release(cmd.holdId)
+        if (!gone) throw new CommandError("unknown-hold", "That legal hold is not there any more")
+        await a.audit.record({
+          session: s.id, event: "legal_hold_released", channel: "desktop", tool: "retention", cwd: s.cwd, project: s.project, input: { hold: gone.id, project: gone.project ?? "(every project)", reason: gone.reason },
+          verdict: { outcome: "allow", ruleId: "legal-hold", reason: `You released the legal hold on ${gone.project ?? "every project"} (${gone.reason})`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { released: gone.id }
       }
       case "residency_statement": {
         const s = this.#session(cmd.sessionId)
