@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify"
-import { redactString } from "@gatehouse/policy"
+import { findProjectRoot, redactString } from "@gatehouse/policy"
+import { grounding } from "./grounding.js"
 import type { GatehouseConfig } from "@gatehouse/shared/node"
 import type { HostAudit } from "./hostaudit.js"
 import { correctText, mergeRules, projectRules, readRules } from "./writing-rules.js"
@@ -38,8 +39,11 @@ export function registerExportRoutes(
     const session = typeof b.session === "string" ? b.session : ""
     const rules = mergeRules(readRules(ctx.config().writingRules), projectRules(session ? ctx.sessionCwd?.(session) : undefined))
     const { text: out, changes, banned } = correctText(redacted, rules)
+    // E-083: each sentence of the prose without a source, highlighted in the preview and listed before the export.
+    const cwd = session ? ctx.sessionCwd?.(session) : undefined
+    const ungrounded = grounding(out, cwd ? { root: findProjectRoot(cwd) } : {}).ungrounded
     // The preview is not an export: only saving is recorded, with the format chosen.
-    if (b.preview === true) return { text: out, masked, changes, banned }
+    if (b.preview === true) return { text: out, masked, changes, banned, ungrounded }
     const written = await ctx.audit.record({
       session: typeof b.session === "string" && b.session ? b.session : "desktop",
       event: "conversation_exported",

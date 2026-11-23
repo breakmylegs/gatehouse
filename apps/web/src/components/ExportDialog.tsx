@@ -79,6 +79,8 @@ interface Preview {
   /** E-081: an Office file the Host made, as base64 (an older Host sends none). */
   file?: string
   mime?: string
+  /** E-083: sentences without a source, with their lines (an older Host sends none). */
+  ungrounded?: Array<{ line: number; sentence: string }>
   /** E-085: a workbook's formulas and their checks. */
   formulas?: { verified: number; notVerified: number; mismatches: string[] }
   /** E-086: writing-rule corrections made to the prose (an older Host sends none). */
@@ -112,6 +114,36 @@ export function WritingChanges({ changes, banned }: { changes: NonNullable<Previ
         </span>
       ) : null}
     </div>
+  )
+}
+
+/** E-083: the preview's text with each ungrounded sentence marked on its line. */
+export function Highlighted({ text, marks }: { text: string; marks: Array<{ line: number; sentence: string }> }) {
+  if (!marks.length) return <>{text}</>
+  const byLine = new Map<number, string[]>()
+  for (const m of marks) byLine.set(m.line, [...(byLine.get(m.line) ?? []), m.sentence])
+  return (
+    <>
+      {text.split("\n").map((line, i) => {
+        const want = byLine.get(i + 1)
+        const end = i < text.split("\n").length - 1 ? "\n" : ""
+        if (!want) return <span key={i}>{line + end}</span>
+        const parts: Array<string | { mark: string }> = []
+        let rest = line
+        for (const s of want) {
+          const at = rest.indexOf(s)
+          if (at < 0) continue
+          parts.push(rest.slice(0, at), { mark: s })
+          rest = rest.slice(at + s.length)
+        }
+        parts.push(rest + end)
+        return (
+          <span key={i}>
+            {parts.map((p, j) => (typeof p === "string" ? p : <mark key={j} title="No source: a link, a file, a citation or an evidence pack">{p.mark}</mark>))}
+          </span>
+        )
+      })}
+    </>
   )
 }
 
@@ -252,12 +284,26 @@ export function ExportDialog() {
           {preview && OFFICE.has(format) ? " The Office file starts with a line, and carries in its properties, that it is AI-generated." : ""}
         </p>
         <WritingChanges changes={preview?.changes ?? []} banned={preview?.banned ?? []} />
+        {preview?.ungrounded?.length ? (
+          <details className="text-[13px]">
+            <summary className="cursor-pointer font-semibold text-warn">
+              {preview.ungrounded.length} {preview.ungrounded.length === 1 ? "sentence has" : "sentences have"} no source (a link, a file, a citation or an evidence pack), highlighted below
+            </summary>
+            <ul className="m-0 max-h-32 overflow-auto pl-5">
+              {preview.ungrounded.map((u) => (
+                <li key={`${u.line}:${u.sentence}`}>
+                  Line {u.line}: {u.sentence}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         <pre
           className="cmd min-h-0 overflow-auto text-[12.5px]"
           aria-label="What will be saved"
           tabIndex={0}
         >
-          {preview?.text ?? ""}
+          {preview ? <Highlighted text={preview.text} marks={preview.ungrounded ?? []} /> : ""}
         </pre>
         <div className="flex flex-wrap items-center gap-3">
           <fieldset className="m-0 flex flex-wrap gap-3 border-0 p-0">
