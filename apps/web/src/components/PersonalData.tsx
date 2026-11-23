@@ -13,6 +13,8 @@ interface DataMap {
   fields: Array<{ name: string; category: string; places: number }>
   flows: Array<{ field: string; sink: string; file: string; line: number }>
   markdown: string
+  /** E-067: the DPIA drafted from the map. */
+  dpia?: string
 }
 const TO: Record<string, string> = { log: "a log", storage: "storage", network: "a network call" }
 
@@ -69,6 +71,20 @@ export function PersonalData() {
             }
           >
             Copy the draft for legal review
+          </button>
+        ) : null}
+        {map?.dpia ? (
+          <button
+            type="button"
+            className="btn"
+            onClick={() =>
+              void navigator.clipboard
+                .writeText(map.dpia!)
+                .then(() => toast.success("Copied the DPIA draft for legal review", { id: "pii" }))
+                .catch(() => toast.error("It could not be copied", { id: "pii" }))
+            }
+          >
+            Copy the DPIA draft
           </button>
         ) : null}
       </div>

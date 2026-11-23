@@ -7,6 +7,7 @@ import { claimCalibration, failureTaxonomy } from "./failure-taxonomy.js"
 import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
+import { dpiaDraft } from "./dpia.js"
 import { deadCode } from "./dead-code.js"
 import { measuredTime, outcomes } from "./outcomes.js"
 import { stakeholderSummary } from "./stakeholder-summary.js"
@@ -2576,7 +2577,8 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const root = ctx.sessionCwd?.(id)
     if (!root) return reply.code(404).send({ error: "That session is not running." })
     const map = personalDataMap(root, await listFiles(root).catch(() => [] as string[]))
-    return { ...map, markdown: legalDraft(map) }
+    // E-067: and the DPIA drafted from it, for legal review.
+    return { ...map, markdown: legalDraft(map), dpia: dpiaDraft(path.basename(root), map) }
   })
 
   // D-068: dead code in a session's project, with static and coverage evidence and removal in small slices.
