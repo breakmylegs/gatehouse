@@ -30,6 +30,7 @@ import {
 import { canonicalize, type Effects, type Touch, type Verdict } from "@gatehouse/shared"
 import { auditChannelOf, type Broker, type Resolution } from "./broker.js"
 import { effectsOf, touchesOf, UNKNOWN_EFFECTS } from "./effects.js"
+import { CROSS_LOCK_RULE } from "./locks.js"
 import type { GrantUses } from "./grant-uses.js"
 import type { RememberFor } from "@gatehouse/shared/ws-protocol"
 import type { CheckpointManager } from "./checkpoints.js"
@@ -88,6 +89,10 @@ export interface CanUseDeps {
   /** E-029: who listens on a port now, for a command that would start a server on it. */
   portHolder?: (port: number) => Promise<string | undefined>
   /** E-018: what an infrastructure apply meets from the plan it applies (or that no plan was seen). */
+  /** E-050: who else holds the file an edit writes or the port a command would serve on, and their name. */
+  crossLock?: (toolName: string, input: Record<string, unknown>) => { reason: string } | undefined
+  /** E-050: a call went ahead; the session takes what it touched. */
+  onCallTaken?: (toolName: string, input: Record<string, unknown>) => void
   iacPlan?: (command: string) => { ruleId: string; risk: number; reason: string; resources: string[] } | undefined
   /** E-024: what depends on what an apply's plan deletes or replaces, for the card. */
   iacBlast?: (command: string) => import("@gatehouse/shared").Blast[] | undefined
@@ -355,6 +360,11 @@ export function createCanUseTool(deps: CanUseDeps): CanUseTool {
         const port = serverPort(input.command)
         const holder = port === undefined ? undefined : await deps.portHolder(port).catch(() => undefined)
         if (port !== undefined && holder) verdict = { ...verdict, outcome: "escalate", ruleId: PORT_CLASH_RULE, reason: portClashReason(port, holder), risk: Math.max(verdict.risk, 30), decidedBy: "rules" }
+      }
+      // E-050: another session's file or port goes to a person, naming that session; never loosened here.
+      if (deps.crossLock && verdict.outcome !== "deny") {
+        const held = deps.crossLock(toolName, input)
+        if (held) verdict = { ...verdict, outcome: "escalate", ruleId: CROSS_LOCK_RULE, reason: held.reason, risk: Math.max(verdict.risk, 50), decidedBy: "rules" }
       }
       // E-018: an apply inherits the strictest finding of its plan, naming each resource; never loosened here.
       if (deps.iacPlan && verdict.outcome !== "deny" && (toolName === "Bash" || toolName === "PowerShell") && typeof input.command === "string") {

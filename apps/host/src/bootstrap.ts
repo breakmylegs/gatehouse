@@ -8,6 +8,7 @@ import { LogStore } from "./log-capture.js"
 import { ReproStore } from "./repro.js"
 import type { ActionDeps, ActionRequest, ActionResult } from "./codehouse-action.js"
 import { cpuSampler, Scheduler, SchedulerCancelled } from "./scheduler.js"
+import { LockTable } from "./locks.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -395,6 +396,7 @@ export function createHost(opts: HostOptions = {}): Host {
     log,
   })
 
+  const lockTable = new LockTable()
   const queryFn: QueryFn = opts.queryFn ?? (query as unknown as QueryFn)
   const probeOptions = (probeEnv: Record<string, string | undefined>): Options => ({
     cwd: process.cwd(),
@@ -993,6 +995,12 @@ export function createHost(opts: HostOptions = {}): Host {
   if (process.platform === "win32") deps.portHolder = (port) => portHolder(port, windowsSnapshot)
   // E-018: the infrastructure plans each session shows, for the applies that follow.
   deps.iacPlans = new IacPlans()
+  // E-050: files, ports and named resources held by one session; another's use goes to a person.
+  deps.sessionLocks = lockTable
+  deps.sessionName = (id) => {
+    const i = manager.get(id)?.info()
+    return i ? `${i.title ?? i.project}` : "a session that has ended"
+  }
   // E-019: a price sheet signed with the key in the managed folder, for an apply's monthly change.
   const priceSheets = new PriceSheets(managedPolicyDir(env), gatehouseDataDir(env))
   deps.priceSheet = () => priceSheets.sheet()
@@ -1711,6 +1719,7 @@ export function createHost(opts: HostOptions = {}): Host {
     priceSheets,
     logs,
     scheduler,
+    sessionLocks: lockTable,
     repros: new ReproStore(path.join(gatehouseDataDir(env), "repros.json")),
     traces: { tokens: traceTokens, store: traces, port: () => (traceServer?.address() as { port?: number } | null)?.port ?? config.traceReceiver?.port ?? 4318, on: () => !!traceServer },
     // E-038: a listed log file is read only when the rules allow reading it by themselves.

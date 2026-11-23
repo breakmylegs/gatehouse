@@ -162,6 +162,8 @@ export interface HostApp {
   logs?: import("./log-capture.js").LogStore
   /** E-049: Codehouse's heavy jobs waiting for memory or CPU. */
   scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession">
+  /** E-050: the lock table. */
+  sessionLocks?: Pick<import("./locks.js").LockTable, "list">
   /** E-043: each project's verified reproductions. */
   repros?: import("./repro.js").ReproStore
   /** E-040: the trace receiver's tokens and spans, its port and whether it is on. */
@@ -1130,6 +1132,8 @@ export class HostServer {
         })
         return report
       }
+      case "locks_list":
+        return { locks: a.sessionLocks?.list() ?? [] }
       case "scheduler_status":
         return { waiting: a.scheduler?.waiting() ?? [] }
       case "session_processes": {

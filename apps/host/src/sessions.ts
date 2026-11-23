@@ -1,6 +1,7 @@
 import { breakerFindings } from "./adversary.js"
 import { lockdownHint } from "./lockdown.js"
 import { outputText } from "./iac-plans.js"
+import { lockReason } from "./locks.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
 import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
@@ -515,6 +516,9 @@ export interface SessionDeps {
   portHolder?: (port: number) => Promise<string | undefined>
   /** E-018: the infrastructure plans sessions have shown, for the applies that follow. */
   iacPlans?: import("./iac-plans.js").IacPlans
+  /** E-050: the Host's lock table, and a session's name for a lock's reason. */
+  sessionLocks?: import("./locks.js").LockTable
+  sessionName?: (id: string) => string
   /** E-019: the signed price sheet, when there is one. */
   priceSheet?: () => import("./price-sheet.js").PriceSheet | undefined
   /** D-084: a breaker's test runs: the project's test command, as a Codehouse action in its worktree. */
@@ -1143,6 +1147,8 @@ export class Session extends EventEmitter<SessionEvents> {
     if (this.#state === "error") return
     this.#state = state
     this.#activeAt = new Date().toISOString()
+    // E-050: a session that has ended (or failed for good) holds nothing.
+    if (state === "ended" || state === "error") this.#deps.sessionLocks?.releaseSession(this.id)
     this.emit("state", this.info())
   }
 
@@ -1278,6 +1284,8 @@ export class Session extends EventEmitter<SessionEvents> {
       verdicts: this.#verdicts,
       onWritten: (file) => {
         this.#written.add(writtenKey(file, this.cwd))
+        // E-050: a file this session wrote is its own until it ends.
+        d.sessionLocks?.acquire(this.id, "file", d.sessionLocks.fileName(file, this.cwd))
         // D-008: a regression Claude was asked to write is locked once it is there.
         void this.#pins
           .noteWritten(file)
@@ -1288,6 +1296,7 @@ export class Session extends EventEmitter<SessionEvents> {
       untrustedFiles: () => d.config().untrustedFiles ?? UNTRUSTED_FILES,
       onSelfApproved: (verdict) => void this.#spendRisk(verdict.risk, "self-approved"),
       ...(d.iacPlans ? { onCommandOutput: (output: unknown) => d.iacPlans!.seen(this.id, outputText(output)) } : {}),
+      ...(d.sessionLocks ? { onCommandStarted: (input: Record<string, unknown>) => d.sessionLocks!.tookCall(this.id, "Bash", input) } : {}),
       ...(d.evidence ? { onCommandEnded: (id: string, error: string | undefined) => (error === undefined ? d.evidence!.results.succeeded(id) : d.evidence!.results.failed(id, error)) } : {}),
       onCommitted: (cwd) => {
         // E-086: the agent's commit message, checked against the writing rules and never rewritten.
@@ -1384,6 +1393,14 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(this.#opts.breaker ? { breaker: true } : {}),
       // E-029: a server about to start on a port in use goes to a person first.
       ...(d.portHolder ? { portHolder: d.portHolder } : {}),
+      ...(d.sessionLocks
+        ? {
+            crossLock: (toolName: string, input: Record<string, unknown>) => {
+              const l = d.sessionLocks!.holderFor(this.id, toolName, input, this.cwd)
+              return l ? { reason: lockReason(l, d.sessionName?.(l.sessionId) ?? l.sessionId) } : undefined
+            },
+          }
+        : {}),
       ...(d.iacPlans ? { iacPlan: (command: string) => d.iacPlans!.forCommand(this.id, command, this.cwd), iacBlast: (command: string) => d.iacPlans!.blastFor(this.id, command, this.cwd), iacCost: (command: string) => d.iacPlans!.costFor(this.id, command, this.cwd, d.priceSheet?.()) } : {}),
       // D-023: the scope lease, and a plan approved to set it from.
       lease: () => this.#lease,

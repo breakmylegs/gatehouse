@@ -18,7 +18,10 @@ export function ProcessesPanel({ sessionId, onClose }: { sessionId: string; onCl
     void send({ type: "session_processes", sessionId }).then((r) => setProcs(r.ok ? (r.data as { processes: Proc[] }).processes : []))
     // E-049: Codehouse's own jobs waiting for memory or CPU, and why.
     void send({ type: "scheduler_status" }).then((r) => r.ok && setWaiting((r.data as { waiting: typeof waiting }).waiting))
+    // E-050: the files and ports each session holds.
+    void send({ type: "locks_list" }).then((r) => r.ok && setLocks((r.data as { locks: typeof locks }).locks))
   }
+  const [locks, setLocks] = useState<Array<{ kind: string; name: string; sessionId: string }>>([])
   useEffect(load, [sessionId])
   async function stop(pid: number) {
     const r = await send({ type: "stop_process", sessionId, pid, confirm: true })
@@ -40,6 +43,17 @@ export function ProcessesPanel({ sessionId, onClose }: { sessionId: string; onCl
           Close
         </button>
       </div>
+      {locks.length ? (
+        <div className="grid gap-0.5">
+          <strong>Held by sessions</strong>
+          {locks.map((l) => (
+            <span key={`${l.kind}:${l.name}`} className="break-words">
+              {l.kind === "port" ? `port ${l.name}` : <span className="mono">{l.name}</span>}{" "}
+              <span className="text-mut">({l.sessionId === sessionId ? "this session" : "another session"})</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
       {waiting.length ? (
         <div className="grid gap-0.5">
           <strong>Waiting to start</strong>

@@ -101,7 +101,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-043 | Verified reproduction recipes | E4 | done | feat/e4b | yes | reproduction accepted only if it fails before the fix, same test must pass after, then locked (D-007) |
 | E-044 | Bisect assistant | E4 | done | feat/e4b | yes | git bisect in a scratch worktree as Codehouse actions; first bad commit with its session note; links removed first |
 | E-049 | Resource-aware scheduler | E4 | done | feat/e4b | yes | heavy jobs wait for memory and CPU (only with the governor on), reasons shown; approvals, kill switch and Stop never delayed |
-| E-050 | Cross-session locks | E4 | todo | | |  |
+| E-050 | Cross-session locks | E4 | done | feat/e4b | yes | files and ports held per session; another session's edit or server escalates (cross-session-lock), released on end |
 | E-055 | Agent handover notes | E4 | todo | | |  |
 | E-053 | Verified playbooks | E4 | todo | | |  |
 | E-048 | Evidence gates between steps | E4 | todo | | |  |
