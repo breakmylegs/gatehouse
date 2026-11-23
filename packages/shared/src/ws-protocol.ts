@@ -314,6 +314,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-058: the release readiness report for the project's change. */
   /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
   z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
+  /** E-077: a signed handover pack across your projects, and checking one you were given. */
+  z.object({ type: z.literal("handover_pack"), by: z.string().min(1).max(120), note: z.string().max(4000) }),
+  z.object({ type: z.literal("handover_open"), signed: z.unknown() }),
   /** E-076: the project's pattern cards; saved to .codehouse/patterns.md when asked. */
   z.object({ type: z.literal("pattern_cards"), sessionId: Id, save: z.boolean().optional() }),
   /** E-072: a tutor session on this one's project, about what you want to learn. */

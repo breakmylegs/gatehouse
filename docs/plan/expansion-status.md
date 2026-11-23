@@ -135,7 +135,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-074 | Code reading drills | E6 | done | feat/e6a | yes | questions from checked tour steps, each linked to its code, each answer explained |
 | E-075 | Onboarding curriculum | E6 | done | feat/e6a | yes | tours, terms, drills, starter tasks in order, each linked; progress per project persists |
 | E-076 | Pattern cards | E6 | done | feat/e6a | yes | errors, logging, configuration, tests from the code; two or more real examples; saved for agents |
-| E-077 | Personal handover packs | E6 | todo | | |  |
+| E-077 | Personal handover packs | E6 | done | feat/e6a | yes | sessions, pending, grants expiring in a week, routines, summary; redacted; Ed25519-signed; tampering refused |
 | E-078 | Policy exceptions register | E6 | todo | | |  |
 | E-079 | Reviewer suggestions | E6 | todo | | |  |
 | E-088 | Daily plan | E6 | todo | | |  |

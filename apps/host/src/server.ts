@@ -133,6 +133,7 @@ import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
 import { changedSince, teachBack } from "./teach-back.js"
 import { tutorPrompt } from "./tutor.js"
 import { cardsMarkdown, patternCards } from "./patterns.js"
+import { handoverMarkdown, makeHandover, openHandover, signHandover } from "./handover-pack.js"
 import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
@@ -1437,6 +1438,35 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "handover_pack": {
+        // E-077: across every project; redacted, then signed with this computer's key.
+        if (!a.knowledgeKey) throw new CommandError("unavailable", "Handover packs are not available here.")
+        const key = a.knowledgeKey
+        const terms = a.admin?.config().redactTerms ?? []
+        const pack = makeHandover({
+          by: cmd.by,
+          note: cmd.note,
+          sessions: a.manager.list().map((s) => ({ id: s.id, project: s.project, title: (s as { title?: string }).title ?? s.project, state: String(s.state), mode: String((s as { mode?: string }).mode ?? "") })),
+          pending: a.broker.list().map((p) => ({ id: p.request.id, project: p.request.project, tool: p.request.toolName, risk: p.request.verdict.risk, reason: p.request.verdict.reason, waitingSince: String((p.request as { createdAt?: string }).createdAt ?? "") })),
+          grants: (a.policy()?.rules.allow ?? []).filter((r) => r.id.startsWith("remember-")).map((r) => ({ id: r.id, reason: r.message ?? r.commands?.join(" ") ?? r.id, ...(typeof (r as { notAfter?: number }).notAfter === "number" ? { notAfter: (r as { notAfter?: number }).notAfter } : {}) })),
+          routines: (a.admin?.routines?.list() ?? []).map((r) => ({ id: r.id, name: r.name, project: path.basename(r.folder), when: r.once ?? (r.trigger ? `on ${r.trigger.kind}` : `${r.time} on ${r.days.join(", ")}`), enabled: r.enabled })),
+          redact: (t) => redactString(t, { terms }),
+        })
+        const signed = await signHandover(pack, (b) => key.signBytes(b))
+        await a.audit.record({
+          session: "desktop", event: "handover_pack_made", channel: "desktop", tool: "handover", input: { sessions: pack.sessions.length, pending: pack.pending.length, grants: pack.grants.length, routines: pack.routines.length },
+          verdict: { outcome: "allow", ruleId: "handover-pack", reason: "You made a signed handover pack across your projects", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { signed, markdown: handoverMarkdown(pack) }
+      }
+      case "handover_open": {
+        // The signature must hold; whether the key is one you trust is said, not required.
+        const r = openHandover(cmd.signed)
+        if (!r.ok) throw new CommandError("refused", r.why)
+        const pub = (cmd.signed as { publicKey?: string }).publicKey?.trim()
+        return { markdown: handoverMarkdown(r.pack), trustedKey: (a.admin?.config().rulePackKeys ?? []).some((k) => k.trim() === pub) }
       }
       case "pattern_cards": {
         const s = this.#session(cmd.sessionId)
