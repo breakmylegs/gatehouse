@@ -128,6 +128,7 @@ import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
+import { sequenceFrom } from "./sequence.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
 import { collectNotices, noticesText } from "./notices.js"
@@ -1419,6 +1420,21 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "sequence_diagram": {
+        // E-084: read from the code with Tree-sitter; nothing is run.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const files = await listFiles(root).catch(() => [] as string[])
+        let seq: Awaited<ReturnType<typeof sequenceFrom>>
+        try {
+          seq = await sequenceFrom(root, files, cmd.entry, cmd.depth ?? 3)
+        } catch (e) {
+          throw new CommandError("no-entry", (e as Error).message)
+        }
+        const name = cmd.entry.split("#")[1] ?? cmd.entry
+        const artifact = a.artifacts ? await a.artifacts.save(s.id, `Sequence: ${name}`, "mermaid", seq.mermaid) : undefined
+        return { ...seq, ...(artifact ? { artifact: { id: artifact.id, version: artifact.version.version } } : {}) }
       }
       case "meeting_notes": {
         const s = this.#session(cmd.sessionId)

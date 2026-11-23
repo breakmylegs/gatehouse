@@ -314,6 +314,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-058: the release readiness report for the project's change. */
   /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
   z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
+  /** E-084: the calls from an entry point (file#function or file#Class.method), as a sequence diagram. */
+  z.object({ type: z.literal("sequence_diagram"), sessionId: Id, entry: z.string().min(3).max(400), depth: z.number().int().min(1).max(8).optional() }),
   /** E-082: a meeting transcript in the project, read into decisions, actions and stories; written to the backlog when asked. */
   z.object({ type: z.literal("meeting_notes"), sessionId: Id, file: z.string().min(1).max(400), write: z.boolean().optional() }),
   /** E-066: how long the project's things are kept, and the legal holds; a hold is placed and released on the desktop only. */
