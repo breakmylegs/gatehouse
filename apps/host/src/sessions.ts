@@ -3,6 +3,7 @@ import { lockdownHint } from "./lockdown.js"
 import { outputText } from "./iac-plans.js"
 import { lockReason } from "./locks.js"
 import { HANDOVER_HABIT } from "./handover.js"
+import { dodText } from "./dod.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
 import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
@@ -368,7 +369,7 @@ export interface SessionInfo {
   /** D-025: the dead-man timer, when on. */
   deadman?: { minutes: number; lastHeardFrom: string }
   /** D-009: claims that the work is done, as checked, newest last. */
-  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean }>
+  claims?: Array<{ kind: string; quote: string; outcome: "verified" | "contradicted" | "unverified"; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean; dod?: { met: number; total: number; unmet: string[] } }>
   /** D-008: counterexamples found by the session's test runs, offered to pin as locked regression tests. */
   counterexamples?: Array<{ id: string; framework: string; example: string; writesItself: boolean; test?: string }>
   /** Extreme approval carrying on by itself: turns and spend since your last message, and why it stopped. */
@@ -520,6 +521,8 @@ export interface SessionDeps {
   /** E-050: the Host's lock table, and a session's name for a lock's reason. */
   sessionLocks?: import("./locks.js").LockTable
   sessionName?: (id: string) => string
+  /** E-057: the project's definition of done for a session, when it has one. */
+  dodFor?: (cwd: string, sessionId: string) => Promise<import("./dod.js").DodStatus | undefined>
   /** E-055: the last session's handover note for a folder, given to a new session once. */
   handoverFor?: (folder: string, sessionId: string) => string | undefined
   /** E-019: the signed price sheet, when there is one. */
@@ -2058,7 +2061,7 @@ export class Session extends EventEmitter<SessionEvents> {
   /** D-009: the turn's shell commands, kept from its start. */
   #turnCommands: string[] = []
   /** D-009: the claims checked in this session, newest last. */
-  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean }> = []
+  #claims: Array<{ kind: ClaimKind; quote: string; outcome: ClaimOutcome; why: string; command?: string; seed?: number; runs?: Array<{ seed: number; passed: boolean }>; flaky?: boolean; dod?: import("./dod.js").DodStatus }> = []
 
   /**
    * D-009: each claim in a reply is stamped Verified, Contradicted or Unverified, by running what it rests on again as a
@@ -2159,6 +2162,8 @@ export class Session extends EventEmitter<SessionEvents> {
         outcome = "contradicted"
         why = `${why}; but the contract probe found ${this.#contract.mismatches.length} mismatch(es) with the spec: ${this.#contract.mismatches.slice(0, 3).join("; ")}`
       }
+      const dod = await this.#deps.dodFor?.(this.cwd, this.id).catch(() => undefined)
+      if (dod?.unmet.length) why = `${why}. ${dodText(dod)}`
       const entry = {
         kind: c.kind,
         quote: c.quote,
@@ -2169,6 +2174,8 @@ export class Session extends EventEmitter<SessionEvents> {
         ...(tries ? { runs: tries } : {}),
         ...(flaky ? { flaky: true } : {}),
         ...(judged ? { judge: judged } : {}),
+        // E-057: every claim of done shows the definition of done.
+        ...(dod ? { dod } : {}),
       }
       this.#claims = [...this.#claims, entry].slice(-10)
       await this.#deps.audit

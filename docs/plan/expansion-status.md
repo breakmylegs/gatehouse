@@ -110,7 +110,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-054 | Night shift planner and morning report | E4 | done | feat/e4b | yes | night tasks in dependency order through the scheduler, each capped; night budget stops it; morning report of status, evidence, cost, decisions |
 | E-062 | Epic decomposition | E5 | done | feat/e5a | yes | stories from a brief as a checked result, written to docs/requirements with stable ids, dependencies by id, D-100 estimates |
 | E-056 | Work item linkage | E5 | done | feat/e5a | yes | AB# and Jira ids from branch, commits, notes and ledger linked to session, commits, evidence and stories; local; CSV/JSON export |
-| E-057 | Definition of done checklist | E5 | todo | | |  |
+| E-057 | Definition of done checklist | E5 | done | feat/e5a | yes | .codehouse/dod.yml checked automatically where possible, ticked by hand otherwise; every claim of done shows its status |
 | E-058 | Release readiness report | E5 | todo | | |  |
 | E-059 | Change record and CAB pack | E5 | todo | | |  |
 | E-060 | Backout plan verification | E5 | todo | | |  |

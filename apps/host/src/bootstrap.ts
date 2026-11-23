@@ -14,6 +14,9 @@ import { RunStore } from "./workflows.js"
 import { NightStore } from "./night-shift.js"
 import { outcomes } from "./outcomes.js"
 import { WorkItemStore } from "./work-items.js"
+import { DodTicks, dodItems, dodStatus, readDod } from "./dod.js"
+import { findProjectRoot } from "@gatehouse/policy"
+import { changedFiles } from "./handover.js"
 import { applyPricing } from "./model-pricing.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
@@ -403,6 +406,7 @@ export function createHost(opts: HostOptions = {}): Host {
   })
 
   const lockTable = new LockTable()
+  const dodTicks = new DodTicks()
   const handovers = new HandoverStore(path.join(gatehouseDataDir(env), "handovers.json"))
   const queryFn: QueryFn = opts.queryFn ?? (query as unknown as QueryFn)
   const probeOptions = (probeEnv: Record<string, string | undefined>): Options => ({
@@ -1016,6 +1020,20 @@ export function createHost(opts: HostOptions = {}): Host {
   if (process.platform === "win32") deps.portHolder = (port) => portHolder(port, windowsSnapshot)
   // E-018: the infrastructure plans each session shows, for the applies that follow.
   deps.iacPlans = new IacPlans()
+  // E-057: the project's definition of done, for every claim of done; what only a person can check is ticked by hand.
+  deps.dodFor = async (cwd, sessionId) => {
+    const root = findProjectRoot(cwd)
+    const dod = readDod(root)
+    if (!dod) return undefined
+    const items = await dodItems(root, dod, dodTicks.of(sessionId), {
+      changed: (await changedFiles(root)) ?? new Set<string>(),
+      run: async (command, at) => {
+        const r = await actionFor(sessionId, "checking the definition of done")(command, at, 10 * 60_000)
+        return { ran: !r.refused, exitCode: r.exitCode, ...(r.refused ? { refused: r.refused } : {}) }
+      },
+    })
+    return dodStatus(items)
+  }
   // E-055: the next coding session in a folder receives the last session's handover note, once, recorded.
   deps.handoverFor = (folder, sessionId) => {
     const n = handovers.takeFor(folder, sessionId)
@@ -1750,6 +1768,7 @@ export function createHost(opts: HostOptions = {}): Host {
     artifacts,
     priceSheets,
     logs,
+    dodTicks,
     workItems: new WorkItemStore(path.join(gatehouseDataDir(env), "work-items.json")),
     // E-062: the project's estimate per change, from the last 90 days (D-100).
     projectEstimate: (project: string) => {

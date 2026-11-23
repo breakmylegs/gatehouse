@@ -29,6 +29,7 @@ import { advance, dryRun, newRun, readWorkflows, type StepDeps } from "./workflo
 import { morningReport, newNight, order, runNight } from "./night-shift.js"
 import { epicPrompt, STORY_SCHEMA, writeStories, type StoryInput } from "./epic.js"
 import { exportLinks, scanLinks } from "./work-items.js"
+import { dodItems, readDod } from "./dod.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
@@ -179,6 +180,8 @@ export interface HostApp {
   nights?: import("./night-shift.js").NightStore
   /** E-056: work item links, per project. */
   workItems?: import("./work-items.js").WorkItemStore
+  /** E-057: definition of done items ticked by hand, per session. */
+  dodTicks?: import("./dod.js").DodTicks
   /** E-062: a project's estimate per change from its history (D-100). */
   projectEstimate?: (project: string) => import("./outcomes.js").Estimate | undefined
   /** E-050: the lock table. */
@@ -1297,6 +1300,32 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "dod": {
+        // E-057: ticks are the desktop's alone, recorded; the status reads the change and runs the item's commands.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const dod = readDod(root)
+        if (!dod) return { items: undefined }
+        if (cmd.step !== "status") {
+          if (!cmd.item || !a.dodTicks) throw new CommandError("invalid", "Name the item.")
+          a.dodTicks.tick(s.id, cmd.item, cmd.step === "tick")
+          await a.audit.record({
+            session: s.id, event: cmd.step === "tick" ? "dod_ticked" : "dod_unticked", channel: "desktop", tool: "dod", cwd: s.cwd, project: s.project, input: { item: cmd.item },
+            verdict: { outcome: "allow", ruleId: "dod", reason: `You ${cmd.step === "tick" ? "ticked" : "unticked"} "${cmd.item}" in the definition of done.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+            latencyMs: 0,
+          })
+        }
+        const run = a.runAction
+        const items = await dodItems(root, dod, a.dodTicks?.of(s.id) ?? new Set(), {
+          changed: (await changedFiles(root)) ?? new Set<string>(),
+          run: async (command, cwd) => {
+            if (!run) return { ran: false, exitCode: null, refused: "Codehouse actions are not available here" }
+            const x = await run(s.id, command, cwd, "checking the definition of done")
+            return { ran: !x.refused, exitCode: x.exitCode, ...(x.refused ? { refused: x.refused } : {}) }
+          },
+        })
+        return { items }
       }
       case "work_items": {
         // E-056: found locally and kept locally; nothing is sent to Azure DevOps or Jira.

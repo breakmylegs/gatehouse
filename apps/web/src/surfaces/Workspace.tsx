@@ -31,6 +31,7 @@ import { WorkflowsPanel } from "../components/WorkflowsPanel"
 import { NightPanel } from "../components/NightPanel"
 import { EpicPanel } from "../components/EpicPanel"
 import { WorkItemsPanel } from "../components/WorkItemsPanel"
+import { DodPanel } from "../components/DodPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -443,6 +444,7 @@ function SessionPane({
   const [nightOpen, setNightOpen] = useState(false)
   const [epicOpen, setEpicOpen] = useState(false)
   const [itemsOpen, setItemsOpen] = useState(false)
+  const [dodOpen, setDodOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -751,6 +753,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Break down an epic...", onSelect: () => setEpicOpen(true) }]),
     // E-056: Azure DevOps and Jira ids linked to the session, its commits and stories.
     ...(chat ? [] : [{ label: "Work items...", onSelect: () => setItemsOpen(true) }]),
+    // E-057: the project's definition of done, ticked by hand where only a person can check.
+    ...(chat ? [] : [{ label: "Definition of done...", onSelect: () => setDodOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1030,6 +1034,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {dodOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <DodPanel sessionId={session.id} onClose={() => setDodOpen(false)} />
         </div>
       ) : null}
       {itemsOpen ? (
