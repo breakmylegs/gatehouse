@@ -83,6 +83,18 @@ export function UpdatesPanel() {
           {u.error}
         </p>
       ) : null}
+      {u.rehearsal?.state === "failed" && u.phase === "ready" && u.ready === u.rehearsal.version ? (
+        <div className="grid gap-2" role="alert">
+          <p className="m-0 text-sm font-semibold">
+            Codehouse stays on {u.current}: version {u.rehearsal.version} was tried against a copy of your settings and policy first, and {u.rehearsal.why}.
+          </p>
+          <div>
+            <button className="btn" onClick={() => void updateCall("POST", "/api/update/apply-anyway", { version: u.rehearsal!.version })}>
+              Switch to {u.rehearsal.version} anyway
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <label htmlFor={intervalId} className="grid gap-1 text-sm">
         Look for a new version

@@ -506,7 +506,7 @@ describe("the update service", () => {
   })
   afterAll(async () => gh.close())
 
-  function service(o: { installed?: string | false; settings?: Partial<UpdateSettings> } = {}) {
+  function service(o: { installed?: string | false; settings?: Partial<UpdateSettings>; rehearse?: (staged: string) => Promise<{ state: "passed" | "failed" | "skipped"; why: string }> } = {}) {
     const base = path.join(root, `svc${n++}`)
     const installDir = path.join(base, "Programs", "Codehouse")
     if (o.installed !== false) makeBuild(installDir, { app: "a1" })
@@ -534,6 +534,7 @@ describe("the update service", () => {
         },
         log: () => undefined,
         firstCheckDelayMs: 3_600_000,
+        ...(o.rehearse ? { rehearse: o.rehearse } : {}),
       })
       return svc
     }
@@ -580,6 +581,67 @@ describe("the update service", () => {
     const st = await svc.check()
     expect(st).toMatchObject({ kind: "source", canInstall: false, current: "1.0.0-source" })
     await expect(svc.prepare("1.0.6")).rejects.toThrow(/source folder/)
+  })
+
+  it("E-098: stays on this version when the new one's rehearsal fails, and switches only when you choose to anyway", async () => {
+    await publish(gh, "1.0.6", { app: "a6" })
+    const seen: string[] = []
+    const s = service({
+      settings: { downloadInBackground: true },
+      rehearse: async (staged) => {
+        seen.push(staged)
+        return { state: "failed", why: "policy: rules.local.yaml is not valid YAML" }
+      },
+    })
+    const svc = await s.make()
+    const ready = new Promise<void>((r) => svc.on("status", (st) => st.phase === "ready" && r()))
+    await svc.check()
+    await ready
+    let handed = false
+    svc.on("apply", () => {
+      handed = true
+    })
+    await expect(svc.apply("1.0.6")).rejects.toThrow(/stays on 1\.0\.1: the rehearsal of 1\.0\.6 failed \(policy: rules\.local\.yaml is not valid YAML\)/)
+    expect(handed).toBe(false)
+    expect(seen).toEqual([`${s.installDir}.next`])
+    expect(svc.status()).toMatchObject({ phase: "ready", ready: "1.0.6", rehearsal: { version: "1.0.6", state: "failed" } })
+    // Update now meets the same failure, and the version stays ready.
+    await svc.install("1.0.6").catch(() => undefined)
+    expect(handed).toBe(false)
+    expect(svc.status().phase).toBe("ready")
+    await svc.apply("1.0.6", true)
+    expect(handed).toBe(true)
+    expect(s.audited.map((a) => a.event)).toEqual(expect.arrayContaining(["update_rehearsed", "update_switched_anyway"]))
+  })
+
+  it("E-098: Update now, chosen before the version is ready, keeps it ready when the rehearsal fails", async () => {
+    await publish(gh, "1.0.6", { app: "a6" })
+    const s = service({ rehearse: async () => ({ state: "failed", why: "canaries: floor" }) })
+    const svc = await s.make()
+    let handed = false
+    svc.on("apply", () => {
+      handed = true
+    })
+    await svc.check()
+    const settled = new Promise<void>((r) => svc.on("status", (st) => st.phase !== "preparing" && /stays on|failed/.test(st.error ?? "") && r()))
+    await svc.install("1.0.6")
+    await settled
+    expect(handed).toBe(false)
+    expect(svc.status()).toMatchObject({ phase: "ready", ready: "1.0.6", error: expect.stringMatching(/stays on 1\.0\.1/) })
+  })
+
+  it("E-098: switches when the rehearsal passes, or when the release predates rehearsals", async () => {
+    await publish(gh, "1.0.6", { app: "a6" })
+    for (const state of ["passed", "skipped"] as const) {
+      const s = service({ settings: { downloadInBackground: true }, rehearse: async () => ({ state, why: state }) })
+      const svc = await s.make()
+      const ready = new Promise<void>((r) => svc.on("status", (st) => st.phase === "ready" && r()))
+      await svc.check()
+      await ready
+      const handed = new Promise<boolean>((r) => svc.once("apply", () => r(true)))
+      await svc.apply("1.0.6")
+      expect(await handed).toBe(true)
+    }
   })
 
   it("prepares in the background when allowed, then hands over to Codehouse-Update.exe with a plan", async () => {

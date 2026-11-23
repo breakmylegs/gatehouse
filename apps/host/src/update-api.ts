@@ -37,6 +37,8 @@ export function registerUpdateRoutes(app: FastifyInstance, ctx: AdminContext): v
     ["prepare", (v: string) => u.prepare(v)],
     ["install", (v: string) => u.install(v)],
     ["apply", (v: string) => u.apply(v)],
+    // E-098: after a failed rehearsal, your choice to switch anyway (audited).
+    ["apply-anyway", (v: string) => u.apply(v, true)],
     ["skip", (v: string) => u.skip(v)],
     ["unskip", (v: string) => u.unskip(v)],
   ] as const)

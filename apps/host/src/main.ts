@@ -12,6 +12,11 @@ import { fileLog } from "./host-log.js"
 import { HostServer } from "./server.js"
 
 const env = process.env
+// E-098: started as the rehearsal of an upgrade: nothing is started, the steps are checked, and the process ends.
+if (env.GATEHOUSE_REHEARSE === "1") {
+  const { rehearseAndReport } = await import("./rehearse-run.js")
+  process.exit(await rehearseAndReport(env))
+}
 const logFile = fileLog(path.join(gatehouseDataDir(env), "host.log"))
 const log = (line: string) => {
   process.stderr.write(`[host] ${line}\n`)

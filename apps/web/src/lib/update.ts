@@ -23,6 +23,8 @@ export interface UpdateStatus {
   error?: string
   ready?: string
   applyWhenReady?: string
+  /** E-098: the last rehearsal of a version before switching to it (an older Host sends none). */
+  rehearsal?: { version: string; state: "passed" | "failed" | "skipped"; why: string }
   lastResult?: {
     ok: boolean
     mode?: string

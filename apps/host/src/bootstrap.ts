@@ -180,6 +180,7 @@ import { LegalHolds, retentionDays, type RetentionConfig } from "./retention.js"
 import { SkillLog } from "./skills.js"
 import { OnboardingProgress } from "./onboarding.js"
 import { EnergyLog } from "./energy.js"
+import { rehearse } from "./rehearsal.js"
 import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
 import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
@@ -1400,6 +1401,15 @@ export function createHost(opts: HostOptions = {}): Host {
     },
     log,
     tokenSet: () => updateToken.get() !== undefined,
+    // E-098: the staged release, started against a synthetic copy of your settings and policy, before switching.
+    rehearse: (staged: string) =>
+      rehearse(staged, {
+        configFile: configPath(env),
+        localRules,
+        userRules: loadOptions.userRulesPath,
+        overlayDir: loadOptions.overlayDir,
+        packsDir: loadOptions.sharedPacksDir,
+      }),
   }
   // Mac fork (owner, 18 Nov): Codehouse.app updates itself from the Mac's own releases (service-mac.ts).
   const macApp = env.GATEHOUSE_MAC_APP_PATH && env.GATEHOUSE_MAC_APP_VERSION ? env.GATEHOUSE_MAC_APP_PATH : undefined

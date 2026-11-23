@@ -62,6 +62,8 @@ export interface UpdateStatus {
    * folder: Codehouse closes, its installer runs by itself, and Codehouse opens again there.
    */
   moveOver?: { phase: "waiting" | "preparing" | "applying" | "failed"; error?: string }
+  /** E-098: the last rehearsal of a version before switching to it. */
+  rehearsal?: { version: string; state: "passed" | "failed" | "skipped"; why: string }
 }
 
 /** The folder a copy that arrived by an old route moves into, beside the one it is in. */
@@ -84,7 +86,12 @@ export interface UpdateServiceOptions {
   firstCheckDelayMs?: number
   stage?: typeof stageRelease
   now?: () => Date
+  /** E-098: rehearses the staged release against a synthetic data folder before Codehouse switches to it. */
+  rehearse?: (staged: string) => Promise<{ state: "passed" | "failed" | "skipped"; why: string }>
 }
+
+/** E-098: the new version's rehearsal failed, so Codehouse stays where it is; the version stays ready to switch anyway. */
+export class RehearsalFailed extends Error {}
 
 export class UpdateService extends EventEmitter<{
   status: [UpdateStatus]
@@ -104,6 +111,7 @@ export class UpdateService extends EventEmitter<{
   #ready: string | undefined
   #lastResult: UpdateResult | undefined
   #applyWhenReady: string | undefined
+  #rehearsal: UpdateStatus["rehearsal"]
   #why: string | undefined
   #busy: Promise<unknown> = Promise.resolve()
   #moveOver: UpdateStatus["moveOver"]
@@ -218,6 +226,7 @@ export class UpdateService extends EventEmitter<{
       ...(this.#error ? { error: this.#error } : {}),
       ...(this.#ready ? { ready: this.#ready } : {}),
       ...(this.#applyWhenReady ? { applyWhenReady: this.#applyWhenReady } : {}),
+      ...(this.#rehearsal ? { rehearsal: this.#rehearsal } : {}),
       ...(this.#lastResult ? { lastResult: this.#lastResult } : {}),
       ...(this.#moveOver ? { moveOver: this.#moveOver } : {}),
     }
@@ -377,14 +386,23 @@ export class UpdateService extends EventEmitter<{
     try {
       await this.apply(version)
     } catch (e) {
+      // A rehearsal that failed leaves the version ready, for you to switch to anyway.
+      if (e instanceof RehearsalFailed) {
+        this.#error = e.message
+        this.#changed()
+        return
+      }
       this.#phase = "failed"
       this.#error = (e as Error).message
       this.#changed()
     }
   }
 
-  /** Switches to the version that is ready. Codehouse closes and Codehouse-Update.exe takes over. */
-  async apply(version: string): Promise<UpdateStatus> {
+  /**
+   * Switches to the version that is ready. Codehouse closes and Codehouse-Update.exe takes over. E-098: it is rehearsed
+   * first, and a failed rehearsal keeps you on this version unless you switch anyway.
+   */
+  async apply(version: string, anyway = false): Promise<UpdateStatus> {
     if (this.#why) throw new UpdateError(this.#why)
     if (this.#phase !== "ready" || this.#ready !== version)
       throw new UpdateError(`Version ${version} is not ready yet.`)
@@ -393,6 +411,14 @@ export class UpdateService extends EventEmitter<{
       throw new UpdateError(
         "The new version has no Codehouse-Update.exe, so it cannot be switched to.",
       )
+    if (this.#o.rehearse && !anyway) {
+      const r = await this.#o.rehearse(this.#staged as string).catch((e: Error) => ({ state: "failed" as const, why: `the rehearsal could not run: ${e.message}` }))
+      this.#rehearsal = { version, state: r.state, why: r.why }
+      await this.#o.audit("update_rehearsed", { version, state: r.state, why: r.why }).catch(() => undefined)
+      this.#changed()
+      if (r.state === "failed") throw new RehearsalFailed(`Codehouse stays on ${this.current}: the rehearsal of ${version} failed (${r.why}). You can switch anyway.`)
+    } else if (anyway) await this.#o.audit("update_switched_anyway", { version, rehearsal: this.#rehearsal?.state ?? "not run" }).catch(() => undefined)
+    this.#error = undefined
     await this.#handOver(updater, "apply", this.#staged as string, version)
     return this.status()
   }
@@ -648,7 +674,7 @@ export interface Updates {
   check(): Promise<UpdateStatus>
   prepare(version: string): Promise<UpdateStatus>
   install(version: string): Promise<UpdateStatus>
-  apply(version: string): Promise<UpdateStatus>
+  apply(version: string, anyway?: boolean): Promise<UpdateStatus>
   rollback(): Promise<UpdateStatus>
   moveOver(): Promise<UpdateStatus>
   markStarted(pid: number): void

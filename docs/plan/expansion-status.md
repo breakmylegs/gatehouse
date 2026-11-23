@@ -141,4 +141,4 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-088 | Daily plan | E6 | done | feat/e6a | yes | Contradicted runs first, then escalations by risk, grants, night failures, reviews, routines |
 | E-090 | Energy and carbon estimate | E6 | done | feat/e6a | yes | job CPU time from the helper's samples x device watts; model energy and carbon not known without figures; labelled estimates |
 | E-091 | Screen-share safe mode | E6 | done | feat/e6a | yes | Ctrl+Shift+H and tray; redaction terms masked on screen; chosen sessions hidden; notices held; codes and topics hidden; WDA_EXCLUDEFROMCAPTURE on quick prompt and pop-outs |
-| E-098 | Upgrade rehearsal | E6 | todo | | |  |
+| E-098 | Upgrade rehearsal | E6 | done | feat/e6a | yes | synthetic settings and policy copy; new version loads policy, runs canaries, plans a restore; failure keeps you, with switch anyway; real folder untouched |
