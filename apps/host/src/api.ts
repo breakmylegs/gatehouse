@@ -240,6 +240,8 @@ export interface AdminContext {
   /** E-065: the AI system register and the residency record, for the DORA and NIS2 index. */
   aiRegister?: Pick<import("./ai-register.js").AiRegister, "list">
   residency?: Pick<import("./residency.js").ResidencyLog, "sessions">
+  /** E-075: onboarding progress, per project. */
+  onboarding?: import("./onboarding.js").OnboardingProgress
   /** T-113: the ports a running session's processes listen on. */
   sessionPorts?: (sessionId: string) => Promise<Listening[]>
   /** T-080: pull requests watched for sessions. */

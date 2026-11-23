@@ -1,5 +1,8 @@
 import { drift, makeManifest, saveManifest } from "./env-manifest.js"
 import { checkTour, readTours } from "./tours.js"
+import { curriculum, starterTasks, type OnboardingProgress } from "./onboarding.js"
+import { glossary } from "./glossary.js"
+import { listFiles as listProjectFiles } from "./mutation.js"
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
@@ -64,6 +67,8 @@ const bad = (reply: FastifyReply, status: number, error: string) =>
 export interface FilesDeps {
   /** The working folder of a running session. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** E-075: onboarding progress, per project. */
+  onboarding?: OnboardingProgress
   /** Whether the session wrote or edited the file at this full path (it may be outside its folder). */
   sessionWrote?: (sessionId: string, absPath: string) => boolean
   /** Opens Explorer with the file selected. Injected so tests never open a window. */
@@ -318,6 +323,32 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     } catch (e) {
       return reply.code(409).send({ error: (e as Error).message })
     }
+  })
+
+  // E-075: the project's onboarding path (tours, terms, drills, starter tasks), each step linked, with your progress.
+  app.get("/api/onboarding", async (req, reply) => {
+    const root = rootOf(req.query as Record<string, unknown>)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      const r = real(root)
+      const index = await indexFor(r, false)
+      const tours = readTours(r).tours.map((t) => ({ tour: t, steps: checkTour(t, (n) => index.symbols(n, 50)) }))
+      const terms = glossary(r, await listProjectFiles(r).catch(() => [] as string[])).terms
+      const steps = curriculum({ tours, terms, starter: starterTasks(r), exists: (f) => fs.existsSync(path.join(r, f)) })
+      return { project: path.basename(r), steps, done: ctx.onboarding?.done(path.basename(r)) ?? {} }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/onboarding/progress", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    if (typeof b.step !== "string" || !b.step || b.step.length > 120 || typeof b.done !== "boolean") return reply.code(400).send({ error: "Name the step, and whether it is done." })
+    if (!ctx.onboarding) return reply.code(409).send({ error: "Onboarding progress is not kept here." })
+    const project = path.basename(real(root))
+    await ctx.onboarding.mark(project, b.step, b.done)
+    return { done: ctx.onboarding.done(project) }
   })
 
   // C-043: a second model reviews the session's change, through the runtime or gateway on this computer; the last
