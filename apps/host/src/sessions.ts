@@ -551,6 +551,8 @@ export interface SessionDeps {
   approver: ApproverClient
   kill: HostKillSwitch
   usage: UsageStore
+  /** E-063: the effort and billing log. */
+  effort?: import("./effort-log.js").EffortLog
   checkpoints: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
@@ -1775,6 +1777,7 @@ export class Session extends EventEmitter<SessionEvents> {
         void this.#recheckMutant(task)
       }
       this.#deps.usage.record(this.id, this.project, m)
+      this.#deps.effort?.turn(this.id, this.project, m)
       // E-052: the turn's final words, kept before it goes idle so a waiting session reads this turn's result.
       if (typeof m.result === "string") this.#lastResult = m.result
       this.#running = false

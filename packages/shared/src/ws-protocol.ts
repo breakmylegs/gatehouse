@@ -312,6 +312,11 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-056: work item ids linked to this session, its commits, evidence packs and stories; or their export. */
   /** E-057: the definition of done for this session, or an item ticked or unticked by hand. */
   /** E-058: the release readiness report for the project's change. */
+  /** E-063: you are working in this session now (the window sends it at most every half minute). */
+  z.object({ type: z.literal("effort_active"), sessionId: Id }),
+  /** E-063: the effort and billing log as CSV, of the session's project or of all of them. */
+  z.object({ type: z.literal("effort_export"), sessionId: Id, all: z.boolean().optional() }),
+  z.object({ type: z.literal("effort_delete"), sessionId: Id, all: z.boolean().optional() }),
   /** E-060: prove the project's change can be backed out, in a scratch worktree. */
   z.object({ type: z.literal("backout_check"), sessionId: Id }),
   /** E-059: an ITIL change record and CAB pack drafted from the evidence. */

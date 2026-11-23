@@ -125,6 +125,7 @@ import {
   type SessionManager,
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
+import type { EffortLog } from "./effort-log.js"
 
 /** D-021: how long the friction holds a High approval back before the deliberate one. */
 const FRICTION_WAIT_MS = 2000
@@ -137,6 +138,8 @@ export interface HostApp {
   kill: HostKillSwitch
   checkpoints: CheckpointManager
   usage: UsageStore
+  /** E-063: the effort and billing log, kept on this computer. */
+  effort?: EffortLog
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
@@ -1098,6 +1101,7 @@ export class HostServer {
         return { cleared: true }
       case "prompt": {
         const s = this.#session(cmd.sessionId)
+        a.effort?.active(s.project)
         // D-059: no turn starts on instructions changed outside Codehouse until you approve the change.
         await s.checkInstructions()
         // C-016: nor is anything sent to a model whose card saying where your words go is stale. Recorded.
@@ -1385,6 +1389,27 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "effort_active": {
+        a.effort?.active(this.#session(cmd.sessionId).project)
+        return { ok: true }
+      }
+      case "effort_export": {
+        // E-063: to this window only; the log is never sent anywhere else.
+        const s = this.#session(cmd.sessionId)
+        if (!a.effort) throw new CommandError("unavailable", "The effort log is not kept here")
+        return { csv: a.effort.csv(cmd.all ? {} : { project: s.project }) }
+      }
+      case "effort_delete": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.effort) throw new CommandError("unavailable", "The effort log is not kept here")
+        const days = await a.effort.delete(cmd.all ? undefined : s.project)
+        await a.audit.record({
+          session: s.id, event: "effort_log_deleted", channel: "desktop", tool: "effort", cwd: s.cwd, project: s.project, input: { all: cmd.all === true, days },
+          verdict: { outcome: "allow", ruleId: "effort-log", reason: `You deleted the effort log of ${cmd.all ? "every project" : s.project}`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { days }
       }
       case "backout_check": {
         // E-060: a scratch worktree; the tests after the revert run as a Codehouse action; your tree is never touched.

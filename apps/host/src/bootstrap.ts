@@ -173,6 +173,7 @@ import { TerminalManager } from "./terminal.js"
 import { SessionHistory, type SessionSdk } from "./history.js"
 import { SessionMetaStore } from "./session-meta.js"
 import { localDay, UsageStore } from "./usage.js"
+import { EffortLog } from "./effort-log.js"
 import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
 import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
@@ -358,6 +359,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const approverTimeout = (): number =>
     store.current?.rules.defaults?.judge?.enabled === true ? 35_000 : APPROVER_TIMEOUT_MS
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
+  // E-063: your active time, the agent's time and the cost, by project and day; on this computer only.
+  const effort = new EffortLog(path.join(gatehouseDataDir(env), "effort.json"))
   // G27: undo points for a folder outside git, kept in Codehouse's data folder, never in the folder itself.
   useShadowCheckpoints(path.join(gatehouseDataDir(env), "undo"))
   const checkpoints = new CheckpointManager({
@@ -657,6 +660,7 @@ export function createHost(opts: HostOptions = {}): Host {
     approver: undefined as unknown as ApproverClient,
     kill,
     usage,
+    effort,
     checkpoints,
     grants,
     // C-015: each project's cap, from its record.
@@ -1754,6 +1758,7 @@ export function createHost(opts: HostOptions = {}): Host {
     kill,
     checkpoints,
     usage,
+    effort,
     account,
     limits: limitPauser,
     heldOut,

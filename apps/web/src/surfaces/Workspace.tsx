@@ -33,6 +33,7 @@ import { EpicPanel } from "../components/EpicPanel"
 import { WorkItemsPanel } from "../components/WorkItemsPanel"
 import { DodPanel } from "../components/DodPanel"
 import { ReadinessPanel } from "../components/ReadinessPanel"
+import { EffortPanel } from "../components/EffortPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -204,6 +205,15 @@ const SLASH: Array<{ cmd: string; help: string }> = [
 ]
 
 /** The workspace: one session, or up to four side by side (two by two when four), each with its own everything. */
+const lastActive = new Map<string, number>()
+/** E-063: tells the Host you are working in a session, at most every half minute, for the effort log. */
+function noteActive(sessionId: string) {
+  const now = Date.now()
+  if (now - (lastActive.get(sessionId) ?? 0) < 30_000) return
+  lastActive.set(sessionId, now)
+  void send({ type: "effort_active", sessionId })
+}
+
 export function Workspace() {
   const sessions = useStore((s) => s.sessions)
   const storePanes = useStore((s) => s.panes)
@@ -447,6 +457,7 @@ function SessionPane({
   const [itemsOpen, setItemsOpen] = useState(false)
   const [dodOpen, setDodOpen] = useState(false)
   const [readyOpen, setReadyOpen] = useState(false)
+  const [effortOpen, setEffortOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -759,6 +770,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Definition of done...", onSelect: () => setDodOpen(true) }]),
     // E-058: whether the change is ready to release.
     ...(chat ? [] : [{ label: "Release readiness...", onSelect: () => setReadyOpen(true) }]),
+    { label: "Effort and billing...", onSelect: () => setEffortOpen(true) },
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -805,7 +817,9 @@ function SessionPane({
   return (
     <div
       ref={paneRef}
+      onPointerDown={() => noteActive(session.id)}
       onKeyDown={(e) => {
+        noteActive(session.id)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
           e.preventDefault()
           setFinding(true)
@@ -1043,6 +1057,11 @@ function SessionPane({
       {readyOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <ReadinessPanel sessionId={session.id} onClose={() => setReadyOpen(false)} />
+        </div>
+      ) : null}
+      {effortOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <EffortPanel sessionId={session.id} project={session.project} onClose={() => setEffortOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (
