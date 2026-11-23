@@ -322,6 +322,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("profile_run"), sessionId: Id, command: z.string().min(1).max(2000) }),
   /** E-042: a command run once with heap snapshots taken while it works, and what kept growing. */
   z.object({ type: z.literal("leak_check"), sessionId: Id, command: z.string().min(1).max(2000) }),
+  /** E-045: the crashes the project left (reports, .NET output, crash codes), or one run with crash reports on. */
+  z.object({ type: z.literal("crash_summary"), sessionId: Id, command: z.string().min(1).max(2000).optional(), dump: z.string().max(500).optional() }),
   z.object({ type: z.literal("trace_tree"), sessionId: Id, traceId: z.string().regex(/^[0-9a-f]{32}$/) }),
   z.object({ type: z.literal("trace_token"), sessionId: Id }),
   z.object({

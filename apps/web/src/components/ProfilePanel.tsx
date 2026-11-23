@@ -44,6 +44,15 @@ export function ProfilePanel({ sessionId, onClose }: { sessionId: string; onClos
   const [r, setR] = useState<Reply>()
   const [error, setError] = useState<string>()
   const [leaks, setLeaks] = useState<{ snapshots: number; growth: Array<{ name: string; counts: number[]; bytes: number[] }>; summary: string }>()
+  const [crashes, setCrashes] = useState<{ exitCode?: number | null; crashes: Array<{ kind: string; what: string; from: string; text: string }> }>()
+  async function crashSummary(withCommand: boolean) {
+    setBusy(true)
+    setError(undefined)
+    const x = await send({ type: "crash_summary", sessionId, ...(withCommand ? { command: command.trim() } : {}) })
+    setBusy(false)
+    if (x.ok) setCrashes(x.data as NonNullable<typeof crashes>)
+    else setError(x.error?.message ?? "No crash summary")
+  }
   async function lookForLeaks() {
     setBusy(true)
     setError(undefined)
@@ -80,12 +89,34 @@ export function ProfilePanel({ sessionId, onClose }: { sessionId: string; onClos
         <button type="button" className="btn !min-h-7" disabled={busy || !command.trim()} onClick={() => void lookForLeaks()}>
           Look for leaks
         </button>
+        <button type="button" className="btn !min-h-7" disabled={busy || !command.trim()} onClick={() => void crashSummary(true)}>
+          Run with crash reports
+        </button>
+        <button type="button" className="btn !min-h-7" disabled={busy} onClick={() => void crashSummary(false)}>
+          Crashes found
+        </button>
       </div>
       <p className="m-0 text-xs text-mut">
         It runs as a Codehouse action, judged by your rules first, with Node&apos;s CPU profiler writing a file. No inspector
         port is opened, and any --inspect in NODE_OPTIONS is taken out.
       </p>
       {error ? <p className="m-0">{error}</p> : null}
+      {crashes ? (
+        <div className="grid gap-1">
+          {/* E-045: how it ended, from Node's reports, .NET output and Windows crash codes, frames mapped to source. */}
+          {crashes.exitCode !== undefined ? <p className="m-0 text-mut">It ended with code {String(crashes.exitCode)}.</p> : null}
+          {!crashes.crashes.length ? <p className="m-0 text-mut">No crash found.</p> : null}
+          {crashes.crashes.map((c, i) => (
+            <div key={i} className="grid gap-0.5">
+              <pre className="mono m-0 whitespace-pre-wrap break-words">{c.text}</pre>
+              <span className="text-xs text-mut">From {c.from}.</span>
+              <button type="button" className="btn !min-h-7 justify-self-start" onClick={() => tell(`Codehouse found this crash. Find the cause and fix it, with a test that fails first.\n\n${c.text}`)}>
+                Ask Claude to fix
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {leaks ? (
         <div className="grid gap-1">
           {/* E-042: heap snapshots while it worked; what kept growing. */}

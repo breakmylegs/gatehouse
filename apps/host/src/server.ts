@@ -18,6 +18,7 @@ import { checkDrift, findGenerators, hasDrift } from "./client-drift.js"
 import { fixTask, triage } from "./error-triage.js"
 import { profileDotnet, profileNode, profileSummary } from "./profiler.js"
 import { findLeaks, leakSummary } from "./leak-detector.js"
+import { crashText, dotnetDumpCommand, readDotnetCrashes, runWithCrashReports, summariseCrashes } from "./crash-summary.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -1270,6 +1271,31 @@ export class HostServer {
         })
         if ("notChecked" in r) throw new CommandError("not-checked", `It was not checked: ${r.notChecked}.`)
         return { ...r, summary: leakSummary(cmd.command, r) }
+      }
+      case "crash_summary": {
+        // E-045: read only, or one Codehouse action with Node's report flags (files only, nothing listens).
+        const s = this.#session(cmd.sessionId)
+        const run = a.runAction
+        if (cmd.dump) {
+          const dump = path.resolve(s.cwd, cmd.dump)
+          const rel = path.relative(s.cwd, dump)
+          if (rel.startsWith("..") || path.isAbsolute(rel)) throw new CommandError("outside", "The dump must be a file in the project.")
+          if (!run || !findOnPath("dotnet-dump", process.env)) throw new CommandError("unavailable", "dotnet-dump is not on this computer.")
+          const x = await run(s.id, dotnetDumpCommand(dump), s.cwd, "reading a .NET crash dump")
+          if (x.refused) throw new CommandError("not-run", `dotnet-dump was not run: ${x.refused}.`)
+          return { crashes: readDotnetCrashes(s.cwd, x.output, "dump"), output: x.output.slice(-20_000) }
+        }
+        if (cmd.command) {
+          if (!run) throw new CommandError("unavailable", "Codehouse actions are not available here.")
+          const r = await runWithCrashReports(s.cwd, cmd.command, async (command, cwd, env) => {
+            const x = await run(s.id, command, cwd, "running it once with crash reports on", env)
+            return { ran: !x.refused, exitCode: x.exitCode, output: x.output, ...(x.refused ? { refused: x.refused } : {}) }
+          })
+          if ("notRun" in r) throw new CommandError("not-run", `It was not run: ${r.notRun}.`)
+          return { exitCode: r.exitCode, crashes: r.crashes.map((c) => ({ ...c, text: crashText(c) })) }
+        }
+        const logText = a.logs ? a.logs.query(s.cwd, { limit: 5000 }).reverse().map((e) => e.message).join("\n") : ""
+        return { crashes: summariseCrashes(s.cwd, logText).map((c) => ({ ...c, text: crashText(c) })) }
       }
       case "traces_list": {
         const s = this.#session(cmd.sessionId)
