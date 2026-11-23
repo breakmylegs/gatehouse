@@ -120,7 +120,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-070 | Third-party notices generator | E5 | done | feat/e5a | yes | npm lockfile packages, licences and notice texts; missing listed; written by you |
 | E-068 | Data residency evidence | E5 | done | feat/e5a | yes | endpoint and card region per session, or not known; local none; D-094 addresses; statement per project and period |
 | E-067 | DPIA draft | E5 | done | feat/e5a | yes | every mapped flow in processing and risks; DRAFT FOR LEGAL REVIEW; needs-input sections |
-| E-065 | DORA and NIS2 evidence mapping | E5 | todo | | |  |
+| E-065 | DORA and NIS2 evidence mapping | E5 | done | feat/e5a | yes | 20 DORA and NIS2 areas; audit records, packs, policy, controls, register, residency; gaps named |
 | E-066 | Retention and legal hold | E5 | todo | | | Safe variant only; the List for part is listed |
 | E-081 | Office files with redaction preview | E5 | todo | | |  |
 | E-085 | Formula-first spreadsheets | E5 | todo | | |  |

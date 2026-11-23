@@ -4,6 +4,7 @@ import { Outcomes } from "../components/Outcomes"
 import { MeasuredTime } from "../components/MeasuredTime"
 import { Hotspots } from "../components/Hotspots"
 import { PersonalData } from "../components/PersonalData"
+import { ComplianceIndex } from "../components/ComplianceIndex"
 import { DeadCode } from "../components/DeadCode"
 import { Lessons } from "../components/Lessons"
 import { ContextEfficiency } from "../components/ContextEfficiency"
@@ -267,6 +268,7 @@ export function Insights() {
       <MeasuredTime days={days} />
       <Hotspots />
       <PersonalData />
+      <ComplianceIndex days={days} />
       <DeadCode />
       <Lessons />
       <ContextEfficiency />

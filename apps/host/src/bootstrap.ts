@@ -1933,6 +1933,8 @@ export function createHost(opts: HostOptions = {}): Host {
       log,
       phone,
       usage,
+      aiRegister,
+      residency,
       pickFolder: (start) => {
         if (process.platform === "darwin") return pickFolderWithMac(start) // Mac fork
         const exe = helper()

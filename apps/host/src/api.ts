@@ -8,6 +8,10 @@ import { hotspots } from "./hotspots.js"
 import { listFiles } from "./mutation.js"
 import { legalDraft, personalDataMap } from "./personal-data.js"
 import { dpiaDraft } from "./dpia.js"
+import { findProjectRoot } from "@gatehouse/policy"
+import { complianceIndex, gatherSources, indexMarkdown } from "./compliance-map.js"
+import { sessionNotes as commitNotes } from "./slsa.js"
+import { execFileSync as runGit } from "node:child_process"
 import { deadCode } from "./dead-code.js"
 import { measuredTime, outcomes } from "./outcomes.js"
 import { stakeholderSummary } from "./stakeholder-summary.js"
@@ -233,6 +237,9 @@ export interface AdminContext {
   evals?: PluginEvaluator
   /** The working folder of a running session, for the files panel. */
   sessionCwd?: (sessionId: string) => string | undefined
+  /** E-065: the AI system register and the residency record, for the DORA and NIS2 index. */
+  aiRegister?: Pick<import("./ai-register.js").AiRegister, "list">
+  residency?: Pick<import("./residency.js").ResidencyLog, "sessions">
   /** T-113: the ports a running session's processes listen on. */
   sessionPorts?: (sessionId: string) => Promise<Listening[]>
   /** T-080: pull requests watched for sessions. */
@@ -2579,6 +2586,33 @@ function registerInsightRoutes(app: FastifyInstance, ctx: AdminContext): void {
     const map = personalDataMap(root, await listFiles(root).catch(() => [] as string[]))
     // E-067: and the DPIA drafted from it, for legal review.
     return { ...map, markdown: legalDraft(map), dpia: dpiaDraft(path.basename(root), map) }
+  })
+
+  // E-065: the DORA and NIS2 evidence index of a session's project, for the period, a draft.
+  app.get("/api/insights/compliance-index", async (req, reply) => {
+    const q = req.query as { session?: string; days?: string }
+    const cwd = ctx.sessionCwd?.(String(q.session ?? ""))
+    if (!cwd) return reply.code(404).send({ error: "That session is not running." })
+    const root = findProjectRoot(cwd)
+    const project = path.basename(root)
+    const days = Math.min(Math.max(Number(q.days) || 90, 1), 3650)
+    const notes = commitNotes(root, "-50")
+    let commits = 0
+    try {
+      commits = Number(runGit("git", ["-C", root, "rev-list", "--count", "--max-count=50", "HEAD"], { encoding: "utf8", windowsHide: true }).trim()) || 0
+    } catch {
+      commits = 0
+    }
+    const sources = gatherSources({
+      project,
+      records: recordsSince(ctx.auditDir, Date.now() - days * DAY),
+      packs: { commits, withPack: notes.filter((n) => n.evidence).length },
+      aiModels: ctx.aiRegister?.list(project).length ?? 0,
+      residencySessions: ctx.residency?.sessions(project).length ?? 0,
+      ...(ctx.store.current?.hash ? { policyHash: ctx.store.current.hash } : {}),
+    })
+    const rows = complianceIndex(sources)
+    return { rows, markdown: indexMarkdown(project, `the last ${days} day(s)`, rows) }
   })
 
   // D-068: dead code in a session's project, with static and coverage evidence and removal in small slices.
