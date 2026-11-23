@@ -290,6 +290,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   }),
   /** E-029: what this session left running, with its ports; and stopping one, only when you confirm. */
   z.object({ type: z.literal("session_processes"), sessionId: Id }),
+  /** E-049: Codehouse's own jobs waiting for memory or CPU, and why. */
+  z.object({ type: z.literal("scheduler_status") }),
   z.object({ type: z.literal("stop_process"), sessionId: Id, pid: z.number().int().min(1), confirm: z.boolean() }),
   /** D-084: a second model tries to break this session's change, in a worktree of its own. */
   z.object({ type: z.literal("adversary_start"), sessionId: Id }),

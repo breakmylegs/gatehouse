@@ -160,6 +160,8 @@ export interface HostApp {
   /** E-036: a command run as a Codehouse action for a session (judged, no credentials, at its level). */
   /** E-038: the project log store, and whether the rules allow reading a file by themselves. */
   logs?: import("./log-capture.js").LogStore
+  /** E-049: Codehouse's heavy jobs waiting for memory or CPU. */
+  scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession">
   /** E-043: each project's verified reproductions. */
   repros?: import("./repro.js").ReproStore
   /** E-040: the trace receiver's tokens and spans, its port and whether it is on. */
@@ -906,9 +908,12 @@ export class HostServer {
         return undefined
       }
       case "interrupt":
+        // E-049: its jobs waiting to start are cancelled too; Interrupt itself never waits for them.
+        a.scheduler?.cancelSession(cmd.sessionId, "the session was interrupted")
         await this.#session(cmd.sessionId).interrupt()
         return undefined
       case "stop_session":
+        a.scheduler?.cancelSession(cmd.sessionId)
         await this.#session(cmd.sessionId).stop()
         return undefined
       case "resume_session": {
@@ -1125,6 +1130,8 @@ export class HostServer {
         })
         return report
       }
+      case "scheduler_status":
+        return { waiting: a.scheduler?.waiting() ?? [] }
       case "session_processes": {
         // E-029: the processes under the session's root, with their ports and when each started; read only.
         const s = this.#session(cmd.sessionId)

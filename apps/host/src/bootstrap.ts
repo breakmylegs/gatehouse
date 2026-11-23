@@ -6,6 +6,8 @@ import { PriceSheets, priceSheetCheck } from "./price-sheet.js"
 import { ContractSnapshots } from "./contract-snapshots.js"
 import { LogStore } from "./log-capture.js"
 import { ReproStore } from "./repro.js"
+import type { ActionDeps, ActionRequest, ActionResult } from "./codehouse-action.js"
+import { cpuSampler, Scheduler, SchedulerCancelled } from "./scheduler.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -26,7 +28,7 @@ import { SastCommitGuard } from "./sast.js"
 import { InstructionPins } from "./instruction-pins.js"
 import { makeClaimJudge } from "./claim-judge-run.js"
 import { TimelineSigner } from "./timeline-export.js"
-import { helperReader, memoryPoint, MemoryGovernor } from "./memory-governor.js"
+import { helperReader, commitPercent, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
 import { macAway } from "./away-mac.js" // Mac fork
 import fs from "node:fs"
@@ -385,6 +387,8 @@ export function createHost(opts: HostOptions = {}): Host {
     // The kill switch also stops your own commands in the terminal pane.
     interruptAll: () => {
       terminal.stopAll()
+      // E-049: what waits to start is cancelled at once.
+      scheduler.cancelAll()
       return manager.interruptAll()
     },
     env,
@@ -529,6 +533,16 @@ export function createHost(opts: HostOptions = {}): Host {
     point: () => memoryPoint(config.memoryGovernor),
     audit,
     log,
+  })
+  // E-049: Codehouse's heavy jobs wait for memory and CPU, only while the memory governor is on (owner, 16 Nov).
+  const cpuBusy = cpuSampler()
+  const scheduler = new Scheduler({
+    probe: async () => ({ memory: commitPercent(await governor.reading()), cpu: cpuBusy() }),
+    limits: () => {
+      const point = memoryPoint(config.memoryGovernor)
+      return point === undefined ? undefined : { memory: point, cpu: 90 }
+    },
+    killed: () => kill.isEngaged(),
   })
   // E-089: on battery the heavy work Codehouse starts by itself waits, new sessions start lower, and Extreme approval
   // pauses only when you chose so in Settings. Each change of power state is audited.
@@ -918,9 +932,15 @@ export function createHost(opts: HostOptions = {}): Host {
   const actionLog = (r: { sessionId: string; cwd: string; command: string }, output: string) => {
     if (output) logs.append(manager.get(r.sessionId)?.cwd ?? r.cwd, `action: ${r.command.slice(0, 120)}`, output)
   }
+  // E-049: a heavy job waits its turn; one cancelled while waiting (Stop, the kill switch) is simply not run.
+  const scheduledAction = (r: ActionRequest, d: ActionDeps): Promise<ActionResult> =>
+    scheduler.run({ label: r.why, sessionId: r.sessionId }, () => runCodehouseAction(r, d)).catch((e: unknown) => {
+      if (e instanceof SchedulerCancelled) return { ran: false, refused: e.message, exitCode: null, output: "", timedOut: false, killed: true, ms: 0 }
+      throw e
+    })
   // D-009: a claim's check runs as Codehouse's own action, for the session it was made in.
   deps.codehouseAction = (r) =>
-    runCodehouseAction(r, {
+    scheduledAction(r, {
       approver: deps.approver,
       broker,
       audit,
@@ -937,7 +957,7 @@ export function createHost(opts: HostOptions = {}): Host {
   const container = (sessionId: string) => () => containerFor(config.containerRuns, podman, gatehouseDataDir(env), sessionId)
   const actionFor = (sessionId: string, why = "this project's held-out checks"): HeldOutExec => async (command, cwd, timeoutMs) => {
     const s = manager.get(sessionId)
-    const r = await runCodehouseAction(
+    const r = await scheduledAction(
       {
         sessionId,
         cwd,
@@ -962,7 +982,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // D-004: a mutation run's test runs, as Codehouse actions; the memory cap's stop is told apart from a failure.
   const mutationExecFor = (sessionId: string): MutationExec => async (command, cwd, timeoutMs) => {
     const s = manager.get(sessionId)
-    const r = await runCodehouseAction(
+    const r = await scheduledAction(
       { sessionId, cwd, project: s?.project ?? "", command, why: "testing the tests against small changes to the new lines", level: s?.info().resources ?? "high", timeoutMs },
       { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog, container: container(sessionId) },
     )
@@ -1690,6 +1710,7 @@ export function createHost(opts: HostOptions = {}): Host {
     artifacts,
     priceSheets,
     logs,
+    scheduler,
     repros: new ReproStore(path.join(gatehouseDataDir(env), "repros.json")),
     traces: { tokens: traceTokens, store: traces, port: () => (traceServer?.address() as { port?: number } | null)?.port ?? config.traceReceiver?.port ?? 4318, on: () => !!traceServer },
     // E-038: a listed log file is read only when the rules allow reading it by themselves.
@@ -1698,7 +1719,7 @@ export function createHost(opts: HostOptions = {}): Host {
     runAction: async (sessionId: string, command: string, cwd: string, why: string, extraEnv?: Record<string, string>) => {
       // E-041: a profile run adds NODE_OPTIONS (the profiler, never an inspector); credentials are taken out as always.
       const s = manager.get(sessionId)
-      const r = await runCodehouseAction(
+      const r = await scheduledAction(
         { sessionId, cwd, project: s?.project ?? "", command, why, level: s?.info().resources ?? "high", timeoutMs: 10 * 60_000, ...(extraEnv ? { env: extraEnv } : {}) },
         { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog },
       )
@@ -2300,6 +2321,7 @@ export function createHost(opts: HostOptions = {}): Host {
       // First, so the sessions closed below come back next time.
       await openSessions?.freeze()
       limitPauser.stop()
+      scheduler.stop()
       power.stop()
       traceServer?.close()
       cnw.stop()

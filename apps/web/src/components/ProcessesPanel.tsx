@@ -13,7 +13,12 @@ interface Proc {
 export function ProcessesPanel({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const [procs, setProcs] = useState<Proc[]>()
   const [asking, setAsking] = useState<number>()
-  const load = () => void send({ type: "session_processes", sessionId }).then((r) => setProcs(r.ok ? (r.data as { processes: Proc[] }).processes : []))
+  const [waiting, setWaiting] = useState<Array<{ id: number; label: string; sessionId?: string; reason: string }>>([])
+  const load = () => {
+    void send({ type: "session_processes", sessionId }).then((r) => setProcs(r.ok ? (r.data as { processes: Proc[] }).processes : []))
+    // E-049: Codehouse's own jobs waiting for memory or CPU, and why.
+    void send({ type: "scheduler_status" }).then((r) => r.ok && setWaiting((r.data as { waiting: typeof waiting }).waiting))
+  }
   useEffect(load, [sessionId])
   async function stop(pid: number) {
     const r = await send({ type: "stop_process", sessionId, pid, confirm: true })
@@ -35,6 +40,17 @@ export function ProcessesPanel({ sessionId, onClose }: { sessionId: string; onCl
           Close
         </button>
       </div>
+      {waiting.length ? (
+        <div className="grid gap-0.5">
+          <strong>Waiting to start</strong>
+          {waiting.map((w) => (
+            <span key={w.id}>
+              {w.label}
+              {w.sessionId && w.sessionId !== sessionId ? " (another session)" : ""}: <span className="text-mut">{w.reason}</span>
+            </span>
+          ))}
+        </div>
+      ) : null}
       {!procs ? (
         <p className="m-0 text-mut">Reading…</p>
       ) : !procs.length ? (
