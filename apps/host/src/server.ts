@@ -21,7 +21,8 @@ import { findLeaks, leakSummary } from "./leak-detector.js"
 import { crashText, dotnetDumpCommand, readDotnetCrashes, runWithCrashReports, summariseCrashes } from "./crash-summary.js"
 import { confirmFails, confirmPasses, reproPrompt } from "./repro.js"
 import { bisect } from "./bisect.js"
-import { HANDOVER_PROMPT } from "./handover.js"
+import { changedFiles, HANDOVER_PROMPT } from "./handover.js"
+import { playbookPrompt, readPlaybooks, verifyPlaybook } from "./playbooks.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -1132,6 +1133,35 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "playbooks": {
+        // E-053: read only, apart from the checklist's commands, which run as Codehouse actions.
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const all = readPlaybooks(root)
+        if (cmd.step === "list") return { playbooks: all }
+        const p = all.find((x) => x.id === cmd.id)
+        if (!p) throw new CommandError("not-found", "That playbook is not in this project.")
+        if (cmd.step === "start") {
+          s.prompt(playbookPrompt(p))
+          return undefined
+        }
+        const run = a.runAction
+        const items = await verifyPlaybook(root, p, {
+          changed: (await changedFiles(root)) ?? new Set<string>(),
+          run: async (command, cwd) => {
+            if (!run) return { ran: false, exitCode: null, refused: "Codehouse actions are not available here" }
+            const x = await run(s.id, command, cwd, `checking the playbook "${p.name}"`)
+            return { ran: !x.refused, exitCode: x.exitCode, ...(x.refused ? { refused: x.refused } : {}) }
+          },
+        })
+        await a.audit.record({
+          session: s.id, event: "playbook_verified", channel: "desktop", tool: "playbooks", cwd: s.cwd, project: s.project,
+          input: { playbook: p.id, met: items.filter((i) => i.status === "met").length, unmet: items.filter((i) => i.status === "unmet").map((i) => i.text) },
+          verdict: { outcome: "allow", ruleId: "playbook", reason: `The playbook "${p.name}" was checked: ${items.filter((i) => i.status === "unmet").length} item(s) unmet.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { items }
       }
       case "handover_ask":
         this.#session(cmd.sessionId).prompt(HANDOVER_PROMPT)

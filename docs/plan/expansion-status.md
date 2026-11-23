@@ -103,7 +103,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-049 | Resource-aware scheduler | E4 | done | feat/e4b | yes | heavy jobs wait for memory and CPU (only with the governor on), reasons shown; approvals, kill switch and Stop never delayed |
 | E-050 | Cross-session locks | E4 | done | feat/e4b | yes | files and ports held per session; another session's edit or server escalates (cross-session-lock), released on end |
 | E-055 | Agent handover notes | E4 | done | feat/e4b | yes | write_handover Companion tool (sdk only); named files checked against the change; next session in the folder receives it once |
-| E-053 | Verified playbooks | E4 | todo | | |  |
+| E-053 | Verified playbooks | E4 | done | feat/e4b | yes | playbooks in .codehouse/playbooks; checklist verified against the change (changed, exists, contains, run); unmet listed |
 | E-048 | Evidence gates between steps | E4 | todo | | |  |
 | E-046 | Role-based agent teams | E4 | todo | | |  |
 | E-047 | Workflows as code | E4 | todo | | |  |

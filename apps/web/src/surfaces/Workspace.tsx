@@ -25,6 +25,7 @@ import { TracesPanel } from "../components/TracesPanel"
 import { ProfilePanel } from "../components/ProfilePanel"
 import { ReproPanel } from "../components/ReproPanel"
 import { BisectPanel } from "../components/BisectPanel"
+import { PlaybooksPanel } from "../components/PlaybooksPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -431,6 +432,7 @@ function SessionPane({
   const [profileOpen, setProfileOpen] = useState(false)
   const [reproOpen, setReproOpen] = useState(false)
   const [bisectOpen, setBisectOpen] = useState(false)
+  const [playbooksOpen, setPlaybooksOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -727,6 +729,8 @@ function SessionPane({
     // E-044: git bisect in a scratch worktree.
     ...(chat ? [] : [{ label: "Find the bad commit...", onSelect: () => setBisectOpen(true) }]),
     // E-055: ask Claude for a handover note for the next session in this folder.
+    // E-053: the project's playbooks, with a checklist verified at the end.
+    ...(chat ? [] : [{ label: "Playbooks...", onSelect: () => setPlaybooksOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1006,6 +1010,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {playbooksOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <PlaybooksPanel sessionId={session.id} onClose={() => setPlaybooksOpen(false)} />
         </div>
       ) : null}
       {bisectOpen ? (
