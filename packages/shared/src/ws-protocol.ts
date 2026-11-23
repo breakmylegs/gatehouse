@@ -348,6 +348,9 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("residency_statement"), sessionId: Id, from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }),
   /** E-069: the AI system register, of the session's project or of all of them. */
   z.object({ type: z.literal("ai_register"), sessionId: Id, all: z.boolean().optional() }),
+  /** E-090: the energy and carbon estimate of the session's project (or all), and its figures. */
+  z.object({ type: z.literal("energy_estimate"), sessionId: Id, all: z.boolean().optional() }),
+  z.object({ type: z.literal("energy_figures"), deviceWatts: z.number().positive().max(2000).nullable(), modelWhPer1kTokens: z.number().min(0).max(1000).nullable(), gridGramsPerKwh: z.number().min(0).max(2000).nullable() }),
   /** E-063: you are working in this session now (the window sends it at most every half minute). */
   z.object({ type: z.literal("effort_active"), sessionId: Id }),
   /** E-063: the effort and billing log as CSV, of the session's project or of all of them. */

@@ -167,6 +167,18 @@ function build(loose: boolean) {
     recapByClaude: z.boolean().optional(),
     /** E-038: how many days the log store keeps a project's lines, 1 to 90. Absent: 7. */
     logRetentionDays: z.number().int().min(1).max(90).optional(),
+    /** E-066: days kept by data classification and kind; what is not set comes from the defaults. */
+    retention: z
+      .partialRecord(z.enum(["public", "internal", "confidential", "restricted"]), z.object({ evidence: z.number().int().min(1).max(3650).optional(), logs: z.number().int().min(1).max(365).optional() }).passthrough())
+      .optional(),
+    /**
+     * E-090: the figures the energy estimate uses: this computer's draw at full load (watts), the models' energy
+     * (watt-hours per thousand tokens; absent: not known) and the grid's carbon intensity (g CO2e per kWh; absent: not known).
+     */
+    energy: z
+      .object({ deviceWatts: z.number().positive().max(2000).optional(), modelWhPer1kTokens: z.number().min(0).max(1000).optional(), gridGramsPerKwh: z.number().min(0).max(2000).optional() })
+      .passthrough()
+      .optional(),
     /** E-040: the local OTLP trace receiver on 127.0.0.1, off unless switched on; its port (absent: 4318). */
     traceReceiver: z.object({ enabled: z.boolean().optional(), port: z.number().int().min(1024).max(65535).optional() }).passthrough().optional(),
     /** E-026: heavy checks in a Podman container (no network, project read-only). Off unless switched on. */

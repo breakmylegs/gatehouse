@@ -139,6 +139,6 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-078 | Policy exceptions register | E6 | done | feat/e6a | yes | grants with who, why, scope, expiry; other exceptions; reminders within three days; CSV; grant_made recorded |
 | E-079 | Reviewer suggestions | E6 | done | feat/e6a | yes | authors of the touched files, weighted by recency; you and bots left out |
 | E-088 | Daily plan | E6 | done | feat/e6a | yes | Contradicted runs first, then escalations by risk, grants, night failures, reviews, routines |
-| E-090 | Energy and carbon estimate | E6 | todo | | |  |
+| E-090 | Energy and carbon estimate | E6 | done | feat/e6a | yes | job CPU time from the helper's samples x device watts; model energy and carbon not known without figures; labelled estimates |
 | E-091 | Screen-share safe mode | E6 | todo | | |  |
 | E-098 | Upgrade rehearsal | E6 | todo | | |  |

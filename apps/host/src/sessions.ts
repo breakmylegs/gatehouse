@@ -83,7 +83,8 @@ import {
   type SessionMode,
 } from "./safety.js"
 import type { UsageStore } from "./usage.js"
-import { LEVELS, type Limiter, type ResourceLevel } from "./limits.js"
+import { LEVELS, REPORT_SECONDS, type Limiter, type ResourceLevel } from "./limits.js"
+import { cpuSecondsOf } from "./energy.js"
 import { decideElicitation } from "./elicitation.js"
 import { readAgentsMd } from "./agents-md.js"
 import { Provenance } from "./provenance.js"
@@ -553,6 +554,8 @@ export interface SessionDeps {
   usage: UsageStore
   /** E-063: the effort and billing log. */
   effort?: import("./effort-log.js").EffortLog
+  /** E-090: CPU time by project, for the energy estimate. */
+  energy?: import("./energy.js").EnergyLog
   /** E-069: the AI system register. */
   aiRegister?: import("./ai-register.js").AiRegister
   /** E-068: where each session's words went, and the region; and what D-094 saw a session reach. */
@@ -1579,7 +1582,9 @@ export class Session extends EventEmitter<SessionEvents> {
               () => this.#resources,
               onStderr,
               // What it uses now, for the bars in its pane (owner, 1 Nov), against its level's memory cap.
-              (u) =>
+              (u) => {
+                // E-090: the job's CPU time, for the energy estimate.
+                this.#deps.energy?.add(this.project, cpuSecondsOf(u.cpu, REPORT_SECONDS, os.cpus().length))
                 this.emit("event", {
                   type: "load",
                   data: {
@@ -1587,7 +1592,8 @@ export class Session extends EventEmitter<SessionEvents> {
                     capMb: LEVELS[this.#resources].memoryMb,
                     totalMb: Math.round(os.totalmem() / 1024 / 1024),
                   },
-                }),
+                })
+              },
               // T-113: the root of the session's processes, for the ports they hold.
               (pid) => {
                 this.#rootPid = pid

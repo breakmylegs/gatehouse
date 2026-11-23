@@ -126,6 +126,8 @@ import {
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
+import { estimate as energyEstimate, type EnergyConfig, type EnergyLog } from "./energy.js"
+import { configPath } from "@gatehouse/shared/node"
 import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
 import { sequenceFrom } from "./sequence.js"
@@ -156,6 +158,8 @@ export interface HostApp {
   usage: UsageStore
   /** E-063: the effort and billing log, kept on this computer. */
   effort?: EffortLog
+  /** E-090: CPU time by project, for the energy estimate. */
+  energy?: EnergyLog
   /** E-069: the AI system register. */
   aiRegister?: AiRegister
   /** E-068: where each session's words went, and the region. */
@@ -1720,6 +1724,45 @@ export class HostServer {
         if (!a.aiRegister) throw new CommandError("unavailable", "The AI system register is not kept here")
         const project = cmd.all ? undefined : s.project
         return { entries: a.aiRegister.list(project), markdown: a.aiRegister.markdown(project) }
+      }
+      case "energy_estimate": {
+        const s = this.#session(cmd.sessionId)
+        const project = cmd.all ? undefined : s.project
+        const snap = a.usage.snapshot()
+        const t = project ? snap.byProject[project] : snap.total
+        return {
+          project: project ?? "every project",
+          ...energyEstimate({
+            cpuSeconds: a.energy?.cpuSeconds(project) ?? 0,
+            cores: os.cpus().length,
+            tokens: (t?.inputTokens ?? 0) + (t?.outputTokens ?? 0),
+            config: ((a.admin?.config() as { energy?: EnergyConfig } | undefined)?.energy ?? {}),
+          }),
+          figures: (a.admin?.config() as { energy?: EnergyConfig } | undefined)?.energy ?? {},
+        }
+      }
+      case "energy_figures": {
+        // Only the energy figures change; everything else in the settings file is kept as it is.
+        const admin = a.admin
+        if (!admin) throw new CommandError("unavailable", "Settings are not available here.")
+        const file = configPath(admin.env)
+        let onDisk: Record<string, unknown> = {}
+        try {
+          onDisk = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>
+        } catch {
+          onDisk = {}
+        }
+        const energy: EnergyConfig = {
+          ...((onDisk.energy as EnergyConfig | undefined) ?? {}),
+          ...(cmd.deviceWatts !== null ? { deviceWatts: cmd.deviceWatts } : {}),
+          ...(cmd.modelWhPer1kTokens !== null ? { modelWhPer1kTokens: cmd.modelWhPer1kTokens } : {}),
+          ...(cmd.gridGramsPerKwh !== null ? { gridGramsPerKwh: cmd.gridGramsPerKwh } : {}),
+        }
+        for (const k of ["deviceWatts", "modelWhPer1kTokens", "gridGramsPerKwh"] as const) if (cmd[k] === null) delete energy[k]
+        fs.mkdirSync(path.dirname(file), { recursive: true })
+        await writeFileAtomic(file, JSON.stringify({ ...onDisk, energy }, null, 2) + "\n")
+        ;(admin.config() as { energy?: EnergyConfig }).energy = energy
+        return { figures: energy }
       }
       case "effort_active": {
         a.effort?.active(this.#session(cmd.sessionId).project)

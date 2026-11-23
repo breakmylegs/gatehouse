@@ -179,6 +179,7 @@ import { ResidencyLog } from "./residency.js"
 import { LegalHolds, retentionDays, type RetentionConfig } from "./retention.js"
 import { SkillLog } from "./skills.js"
 import { OnboardingProgress } from "./onboarding.js"
+import { EnergyLog } from "./energy.js"
 import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
 import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
@@ -371,6 +372,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const usage = new UsageStore(path.join(gatehouseDataDir(env), "usage.json"))
   // E-063: your active time, the agent's time and the cost, by project and day; on this computer only.
   const effort = new EffortLog(path.join(gatehouseDataDir(env), "effort.json"))
+  // E-090: CPU time by project and day, for the energy estimate.
+  const energy = new EnergyLog(path.join(gatehouseDataDir(env), "energy.json"))
   // E-069: every model each project used, with its card.
   const aiRegister = new AiRegister(path.join(gatehouseDataDir(env), "ai-register.json"))
   // E-068: where each session's words went, and the region its card states.
@@ -677,6 +680,7 @@ export function createHost(opts: HostOptions = {}): Host {
     kill,
     usage,
     effort,
+    energy,
     aiRegister,
     residency,
     checkpoints,
@@ -1787,6 +1791,7 @@ export function createHost(opts: HostOptions = {}): Host {
     checkpoints,
     usage,
     effort,
+    energy,
     aiRegister,
     residency,
     legalHolds,
