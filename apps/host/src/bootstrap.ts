@@ -12,6 +12,8 @@ import { LockTable } from "./locks.js"
 import { HandoverStore, handoverReply, handoverText } from "./handover.js"
 import { RunStore } from "./workflows.js"
 import { NightStore } from "./night-shift.js"
+import { outcomes } from "./outcomes.js"
+import { applyPricing } from "./model-pricing.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -1747,6 +1749,12 @@ export function createHost(opts: HostOptions = {}): Host {
     artifacts,
     priceSheets,
     logs,
+    // E-062: the project's estimate per change, from the last 90 days (D-100).
+    projectEstimate: (project: string) => {
+      const to = Date.now()
+      const report = applyPricing(usage.report(localDay(new Date(to - 89 * 86_400_000)), localDay(new Date(to))), config.modelPricing)
+      return outcomes(report, recordsSince(auditDir(env), to - 90 * 86_400_000)).projects.find((p) => p.project === project)?.estimate
+    },
     nights: new NightStore(path.join(gatehouseDataDir(env), "night-runs.json")),
     taskResults,
     workflowRuns: new RunStore(path.join(gatehouseDataDir(env), "workflow-runs.json")),

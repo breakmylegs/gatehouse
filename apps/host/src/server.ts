@@ -27,6 +27,7 @@ import { evaluateGate, parseGate, type GateSources } from "./gates.js"
 import { readRoles, rolePrompt, type Role } from "./roles.js"
 import { advance, dryRun, newRun, readWorkflows, type StepDeps } from "./workflows.js"
 import { morningReport, newNight, order, runNight } from "./night-shift.js"
+import { epicPrompt, STORY_SCHEMA, writeStories, type StoryInput } from "./epic.js"
 import { check, lastJson, readSchema, resultInstruction } from "./task-results.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
@@ -175,6 +176,8 @@ export interface HostApp {
   scheduler?: Pick<import("./scheduler.js").Scheduler, "waiting" | "cancelSession" | "run">
   /** E-054: night runs. */
   nights?: import("./night-shift.js").NightStore
+  /** E-062: a project's estimate per change from its history (D-100). */
+  projectEstimate?: (project: string) => import("./outcomes.js").Estimate | undefined
   /** E-050: the lock table. */
   sessionLocks?: Pick<import("./locks.js").LockTable, "list">
   /** E-043: each project's verified reproductions. */
@@ -1291,6 +1294,25 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "epic": {
+        // E-062: the session returns the stories as a checked result; Codehouse writes them with stable ids.
+        const s = this.#session(cmd.sessionId)
+        if (cmd.step === "ask") {
+          if (!cmd.brief?.trim()) throw new CommandError("invalid", "Give the epic's brief.")
+          s.prompt(`${epicPrompt(cmd.epic, cmd.brief)}${resultInstruction(JSON.stringify(STORY_SCHEMA, null, 2))}`)
+          return undefined
+        }
+        const r = check(lastJson(s.lastResult()), STORY_SCHEMA as unknown as Record<string, unknown>)
+        if (!r.ok) throw new CommandError("invalid", `The session's last message does not hold the stories as asked: ${r.errors.join("; ")}`)
+        const written = writeStories(findProjectRoot(s.cwd), cmd.epic, (r.value as { stories: StoryInput[] }).stories, a.projectEstimate?.(s.project))
+        await a.audit.record({
+          session: s.id, event: "epic_decomposed", channel: "desktop", tool: "ledger", cwd: s.cwd, project: s.project,
+          input: { epic: cmd.epic, stories: written.map((w) => w.id), written: written.filter((w) => w.written).length },
+          verdict: { outcome: "allow", ruleId: "epic", reason: `You wrote ${written.filter((w) => w.written).length} stories of "${cmd.epic}" into the requirement ledger.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { stories: written }
       }
       case "night": {
         // E-054: in dependency order, through the scheduler, each within its cap and the night's budget.

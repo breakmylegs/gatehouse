@@ -29,6 +29,7 @@ import { PlaybooksPanel } from "../components/PlaybooksPanel"
 import { TeamPanel } from "../components/TeamPanel"
 import { WorkflowsPanel } from "../components/WorkflowsPanel"
 import { NightPanel } from "../components/NightPanel"
+import { EpicPanel } from "../components/EpicPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -439,6 +440,7 @@ function SessionPane({
   const [teamOpen, setTeamOpen] = useState(false)
   const [workflowsOpen, setWorkflowsOpen] = useState(false)
   const [nightOpen, setNightOpen] = useState(false)
+  const [epicOpen, setEpicOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -743,6 +745,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Workflows...", onSelect: () => setWorkflowsOpen(true) }]),
     // E-054: the night's tasks and the morning report.
     ...(chat ? [] : [{ label: "Night shift...", onSelect: () => setNightOpen(true) }]),
+    // E-062: an epic broken into ledger stories.
+    ...(chat ? [] : [{ label: "Break down an epic...", onSelect: () => setEpicOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1022,6 +1026,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {epicOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <EpicPanel sessionId={session.id} onClose={() => setEpicOpen(false)} />
         </div>
       ) : null}
       {nightOpen ? (

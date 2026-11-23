@@ -108,7 +108,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-046 | Role-based agent teams | E4 | done | feat/e4b | yes | roles.yml roles as sessions in their own worktrees; overlay only restricts (role-scope holds, role-tool denies); widening roles refused |
 | E-047 | Workflows as code | E4 | done | feat/e4b | yes | workflows of roles, outputs, gates and approval points; validated and dry-run first; saved per step, resumed after a restart |
 | E-054 | Night shift planner and morning report | E4 | done | feat/e4b | yes | night tasks in dependency order through the scheduler, each capped; night budget stops it; morning report of status, evidence, cost, decisions |
-| E-062 | Epic decomposition | E5 | todo | | |  |
+| E-062 | Epic decomposition | E5 | done | feat/e5a | yes | stories from a brief as a checked result, written to docs/requirements with stable ids, dependencies by id, D-100 estimates |
 | E-056 | Work item linkage | E5 | todo | | | Safe variant only; the List for part is listed |
 | E-057 | Definition of done checklist | E5 | todo | | |  |
 | E-058 | Release readiness report | E5 | todo | | |  |
