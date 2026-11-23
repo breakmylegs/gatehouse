@@ -19,6 +19,7 @@ import { SchemaDiffPanel } from "../components/SchemaDiffPanel"
 import { RehearsalPanel } from "../components/RehearsalPanel"
 import { QueryPlanPanel } from "../components/QueryPlanPanel"
 import { TestDataPanel } from "../components/TestDataPanel"
+import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
 import { CounterexampleCards } from "../components/CounterexampleCards"
@@ -418,6 +419,7 @@ function SessionPane({
   const [rehearsal, setRehearsal] = useState(false)
   const [plans, setPlans] = useState(false)
   const [testData, setTestData] = useState(false)
+  const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
   // D-042, D-043: the project's architecture and its drift.
@@ -700,6 +702,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Query plans...", onSelect: () => setPlans(true) }]),
     // E-015: real-looking personal data in fixtures, and synthetic seed rows.
     ...(chat ? [] : [{ label: "Test data...", onSelect: () => setTestData(true) }]),
+    // E-022: misconfigurations in the project's infrastructure code.
+    ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
     // E-025: the tools this computer has against what the project asks for.
     ...(chat ? [] : [{ label: "Environment...", onSelect: () => setEnvironment(true) }]),
     // E-029: what this session left running, with its ports.
@@ -971,6 +975,11 @@ function SessionPane({
       {schema ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <SchemaDiffPanel sessionId={session.id} onOpenArtifacts={openArtifacts} onClose={() => setSchema(false)} />
+        </div>
+      ) : null}
+      {iacCheck ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
         </div>
       ) : null}
       {testData ? (

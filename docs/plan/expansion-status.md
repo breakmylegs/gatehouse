@@ -84,7 +84,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-024 | Blast radius preview | E3 | done | feat/e3c | yes | dependents of a deleted or replaced resource from Terraform and Pulumi graphs, on the approval card |
 | E-019 | Infrastructure cost delta | E3 | done | feat/e3d | yes | signed price sheet (managed key); apply card shows the monthly change as an interval, unknown SKUs not known |
 | E-020 | Least-privilege IAM diff | E3 | done | feat/e3e | yes | broad-iam High: * actions or resources, Owner/Contributor at subscription, admin roles; edits and plans; 13 golden |
-| E-022 | In-process IaC misconfiguration checks | E3 | todo | | |  |
+| E-022 | In-process IaC misconfiguration checks | E3 | done | feat/e3e | yes | public storage, open groups, encryption, TLS, diagnostics over HCL, Bicep, ARM, CFN; own block reader (no grammars bundled); 11 seeded |
 | E-031 | Contract-first conformance probe | E3 | todo | | |  |
 | E-032 | Mock definitions from specs | E3 | todo | | | Safe variant only; the List for part is listed |
 | E-033 | Spec breaking-change detector | E3 | todo | | |  |

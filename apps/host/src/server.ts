@@ -9,6 +9,7 @@ import { projectSchemaDiff } from "./schema-diff.js"
 import { findMigrations, rehearse } from "./migration-rehearsal.js"
 import { explainAll, gitOut, queriesIn } from "./query-plan.js"
 import { generateFixtures, scanFixtures } from "./fixtures.js"
+import { IAC_PARSERS, iacFormat, lintIac } from "@gatehouse/policy"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
@@ -1223,6 +1224,33 @@ export class HostServer {
         })
         if (r.state === "refused") throw new CommandError("refused", `The price sheet was not kept: ${r.why}.`)
         return r
+      }
+      case "iac_check": {
+        // E-022: read only, in process; nothing is run.
+        const s = this.#session(cmd.sessionId)
+        const listed = await gitLines(s.cwd, ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => undefined)
+        if (!listed) throw new CommandError("not-a-repo", "The folder is not a git repository, so its files cannot be listed.")
+        const files = listed
+          .filter((p) => /\.(tf|bicep|json|ya?ml|template)$/i.test(p) && !/(^|\/)(node_modules|\.terraform)\//.test(p))
+          .slice(0, 2000)
+          .flatMap((p) => {
+            try {
+              const st = fs.statSync(path.join(s.cwd, p))
+              if (st.size > 2 * 1024 * 1024) return []
+              const text = fs.readFileSync(path.join(s.cwd, p), "utf8")
+              return iacFormat(p, text) ? [{ file: p, text }] : []
+            } catch {
+              return []
+            }
+          })
+        const findings = lintIac(files)
+        await a.audit.record({
+          session: s.id, event: "iac_checked", channel: "desktop", tool: "iac-check", cwd: s.cwd, project: s.project,
+          input: { files: files.length, findings: findings.length, rules: [...new Set(findings.map((f) => f.rule))] },
+          verdict: { outcome: "allow", ruleId: "iac-checked", reason: `${files.length} infrastructure file(s) checked: ${findings.length} finding(s).`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { files: files.length, findings, parsers: IAC_PARSERS }
       }
       case "test_data": {
         // E-015: the scan reads only; generated rows are checked in a throwaway database and shown, never written.

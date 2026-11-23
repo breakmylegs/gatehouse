@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Seeded misconfigurations (E-022).
+Resources:
+  Logs:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+  Disk:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 100
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      Encrypted: false

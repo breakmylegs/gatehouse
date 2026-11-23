@@ -1,0 +1,16 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "resources": [
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2023-04-01",
+      "name": "nsg-web",
+      "properties": {
+        "securityRules": [
+          { "name": "rdp", "properties": { "access": "Allow", "direction": "Inbound", "sourceAddressPrefix": "*", "destinationPortRange": "3389", "priority": 100, "protocol": "Tcp" } }
+        ]
+      }
+    }
+  ]
+}

@@ -190,7 +190,8 @@ export function exposures(settings: unknown): string[] {
     if (TRUE_OPENS.has(k) && v === true) out.add(`${key} true`)
     if (FALSE_OPENS.has(k) && v === false) out.add(`${key} false`)
     if (k === "publicnetworkaccess" && v === "Enabled") out.add(`${key} Enabled`)
-    if ((k === "acl" || k === "cannedacl") && typeof v === "string" && /^public-read(-write)?$/i.test(v)) out.add(`${key} ${v}`)
+    // CloudFormation names it AccessControl, PublicRead.
+    if ((k === "acl" || k === "cannedacl" || k === "accesscontrol") && typeof v === "string" && /^public-?read(-?write)?$/i.test(v)) out.add(`${key} ${v}`)
     if ((k === "containeraccesstype" || k === "publicaccess") && typeof v === "string" && /^(blob|container)$/i.test(v)) out.add(`${key} ${v}`)
     if (k === "principal" && v === "*") out.add("Principal *")
   }
