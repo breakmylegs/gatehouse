@@ -48,6 +48,7 @@ import { PatternCardsPanel } from "../components/PatternCardsPanel"
 import { HandoverPackPanel } from "../components/HandoverPackPanel"
 import { ExceptionsPanel } from "../components/ExceptionsPanel"
 import { ReviewersPanel } from "../components/ReviewersPanel"
+import { DailyPlanPanel } from "../components/DailyPlanPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -486,6 +487,7 @@ function SessionPane({
   const [handoverOpen, setHandoverOpen] = useState(false)
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
   const [reviewersOpen, setReviewersOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -812,6 +814,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "How this repository does things...", onSelect: () => setPatternsOpen(true) }]),
     { label: "Handover pack...", onSelect: () => setHandoverOpen(true) },
     { label: "Policy exceptions...", onSelect: () => setExceptionsOpen(true) },
+    { label: "Today's plan...", onSelect: () => setPlanOpen(true) },
     ...(chat ? [] : [{ label: "Suggest reviewers...", onSelect: () => setReviewersOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
@@ -1179,6 +1182,11 @@ function SessionPane({
       {reviewersOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <ReviewersPanel sessionId={session.id} onClose={() => setReviewersOpen(false)} />
+        </div>
+      ) : null}
+      {planOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <DailyPlanPanel onClose={() => setPlanOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

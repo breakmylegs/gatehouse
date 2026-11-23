@@ -132,6 +132,7 @@ import { sequenceFrom } from "./sequence.js"
 import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
 import { changedSince, teachBack } from "./teach-back.js"
 import { historyOf, suggestReviewers } from "./reviewers.js"
+import { dailyPlan } from "./daily-plan.js"
 import { tutorPrompt } from "./tutor.js"
 import { cardsMarkdown, patternCards } from "./patterns.js"
 import { handoverMarkdown, makeHandover, openHandover, signHandover } from "./handover-pack.js"
@@ -1458,6 +1459,27 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "daily_plan": {
+        const pendingOf = (id: string) => a.broker.list().filter((p) => p.request.sessionId === id).length
+        const last = a.nights?.all().at(-1)
+        const night = last
+          ? { lines: morningReport(last, (id) => a.manager.get(id)?.info(), pendingOf).lines.map((l) => ({ ...l, ...(last.outcomes[l.task]?.sessionId ? { sessionId: last.outcomes[l.task]!.sessionId! } : {}) })) }
+          : undefined
+        const today = new Date()
+        const day = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][today.getDay()]!
+        const ymd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+        const routines = a.admin?.routines?.list() ?? []
+        return {
+          items: dailyPlan({
+            sessions: a.manager.list().map((s) => ({ id: s.id, project: s.project, title: (s as { title?: string }).title ?? s.project, claims: (s.claims ?? []).map((c) => ({ outcome: c.outcome, quote: c.quote })) })),
+            pending: a.broker.list().map((p) => ({ id: p.request.id, sessionId: p.request.sessionId, project: p.request.project, tool: p.request.toolName, risk: p.request.verdict.risk, reason: p.request.verdict.reason })),
+            reminders: grantReminders(this.exceptions().grants),
+            ...(night ? { night } : {}),
+            runs: a.admin?.routines?.runs() ?? [],
+            today: routines.filter((r) => r.enabled && !r.trigger && (r.once ? r.once.startsWith(ymd) : r.days.includes(day as never))).map((r) => ({ name: r.name, time: r.once ? r.once.slice(11) : r.time })),
+          }),
+        }
       }
       case "reviewers": {
         const s = this.#session(cmd.sessionId)
