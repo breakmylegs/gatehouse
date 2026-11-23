@@ -44,6 +44,7 @@ import { SkillsPanel } from "../components/SkillsPanel"
 import { TeachBackPanel } from "../components/TeachBackPanel"
 import { TutorPanel } from "../components/TutorPanel"
 import { OnboardingPanel } from "../components/OnboardingPanel"
+import { PatternCardsPanel } from "../components/PatternCardsPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -478,6 +479,7 @@ function SessionPane({
   const [teachOpen, setTeachOpen] = useState(false)
   const [tutorOpen, setTutorOpen] = useState(false)
   const [onboardingOpen, setOnboardingOpen] = useState(false)
+  const [patternsOpen, setPatternsOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -801,6 +803,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Explain the change...", onSelect: () => setTeachOpen(true) }]),
     ...(chat ? [] : [{ label: "Start a tutor session...", onSelect: () => setTutorOpen(true) }]),
     ...(chat ? [] : [{ label: "Onboarding path...", onSelect: () => setOnboardingOpen(true) }]),
+    ...(chat ? [] : [{ label: "How this repository does things...", onSelect: () => setPatternsOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1147,6 +1150,11 @@ function SessionPane({
             onOpenTours={() => setTours(true)}
             onClose={() => setOnboardingOpen(false)}
           />
+        </div>
+      ) : null}
+      {patternsOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <PatternCardsPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setPatternsOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

@@ -314,6 +314,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-058: the release readiness report for the project's change. */
   /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
   z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
+  /** E-076: the project's pattern cards; saved to .codehouse/patterns.md when asked. */
+  z.object({ type: z.literal("pattern_cards"), sessionId: Id, save: z.boolean().optional() }),
   /** E-072: a tutor session on this one's project, about what you want to learn. */
   z.object({ type: z.literal("tutor_start"), sessionId: Id, topic: z.string().max(500) }),
   /** E-071: your explanation of the change, compared with the change. */

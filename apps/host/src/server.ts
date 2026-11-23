@@ -132,6 +132,7 @@ import { sequenceFrom } from "./sequence.js"
 import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
 import { changedSince, teachBack } from "./teach-back.js"
 import { tutorPrompt } from "./tutor.js"
+import { cardsMarkdown, patternCards } from "./patterns.js"
 import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
@@ -1436,6 +1437,24 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "pattern_cards": {
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const cards = patternCards(root, await listFiles(root).catch(() => [] as string[]))
+        const markdown = cardsMarkdown(s.project, cards)
+        if (cmd.save) {
+          if (!cards.length) throw new CommandError("no-cards", "No pattern has two examples yet, so there is nothing to save.")
+          // Your action, from this window: one file in the project's .codehouse folder.
+          fs.mkdirSync(path.join(root, ".codehouse"), { recursive: true })
+          await writeFileAtomic(path.join(root, ".codehouse", "patterns.md"), markdown)
+          await a.audit.record({
+            session: s.id, event: "pattern_cards_saved", channel: "desktop", tool: "patterns", cwd: s.cwd, project: s.project, input: { cards: cards.map((c) => c.topic) },
+            verdict: { outcome: "allow", ruleId: "pattern-cards", reason: "You saved the project's pattern cards as .codehouse/patterns.md", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+            latencyMs: 0,
+          })
+        }
+        return { cards, markdown }
       }
       case "tutor_start": {
         // E-072: in Manual mode, with the tutor overlay; it can only restrict.

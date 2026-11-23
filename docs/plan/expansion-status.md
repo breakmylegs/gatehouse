@@ -134,7 +134,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-072 | Tutor mode | E6 | done | feat/e6a | yes | restrict-only overlay: non-test edits denied in canUse and the floor hook; other commands ask; hints; overlay denies now audited |
 | E-074 | Code reading drills | E6 | done | feat/e6a | yes | questions from checked tour steps, each linked to its code, each answer explained |
 | E-075 | Onboarding curriculum | E6 | done | feat/e6a | yes | tours, terms, drills, starter tasks in order, each linked; progress per project persists |
-| E-076 | Pattern cards | E6 | todo | | |  |
+| E-076 | Pattern cards | E6 | done | feat/e6a | yes | errors, logging, configuration, tests from the code; two or more real examples; saved for agents |
 | E-077 | Personal handover packs | E6 | todo | | |  |
 | E-078 | Policy exceptions register | E6 | todo | | |  |
 | E-079 | Reviewer suggestions | E6 | todo | | |  |
