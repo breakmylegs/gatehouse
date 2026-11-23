@@ -137,7 +137,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-076 | Pattern cards | E6 | done | feat/e6a | yes | errors, logging, configuration, tests from the code; two or more real examples; saved for agents |
 | E-077 | Personal handover packs | E6 | done | feat/e6a | yes | sessions, pending, grants expiring in a week, routines, summary; redacted; Ed25519-signed; tampering refused |
 | E-078 | Policy exceptions register | E6 | done | feat/e6a | yes | grants with who, why, scope, expiry; other exceptions; reminders within three days; CSV; grant_made recorded |
-| E-079 | Reviewer suggestions | E6 | todo | | |  |
+| E-079 | Reviewer suggestions | E6 | done | feat/e6a | yes | authors of the touched files, weighted by recency; you and bots left out |
 | E-088 | Daily plan | E6 | todo | | |  |
 | E-090 | Energy and carbon estimate | E6 | todo | | |  |
 | E-091 | Screen-share safe mode | E6 | todo | | |  |

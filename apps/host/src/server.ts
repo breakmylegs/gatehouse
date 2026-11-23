@@ -131,6 +131,7 @@ import type { ResidencyLog } from "./residency.js"
 import { sequenceFrom } from "./sequence.js"
 import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
 import { changedSince, teachBack } from "./teach-back.js"
+import { historyOf, suggestReviewers } from "./reviewers.js"
 import { tutorPrompt } from "./tutor.js"
 import { cardsMarkdown, patternCards } from "./patterns.js"
 import { handoverMarkdown, makeHandover, openHandover, signHandover } from "./handover-pack.js"
@@ -1457,6 +1458,13 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "reviewers": {
+        const s = this.#session(cmd.sessionId)
+        const root = findProjectRoot(s.cwd)
+        const files = (await changedSince(root)).map((f) => f.file)
+        const { history, me } = await historyOf(root, files)
+        return { files: files.length, suggestions: suggestReviewers(history, me) }
       }
       case "exceptions_register": {
         const r = this.exceptions()

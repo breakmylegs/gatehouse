@@ -314,6 +314,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-058: the release readiness report for the project's change. */
   /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
   z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
+  /** E-079: who should review the session's change, from the history of the files it touches. */
+  z.object({ type: z.literal("reviewers"), sessionId: Id }),
   /** E-078: every grant and exception, with reminders before a grant ends. */
   z.object({ type: z.literal("exceptions_register") }),
   /** E-077: a signed handover pack across your projects, and checking one you were given. */
