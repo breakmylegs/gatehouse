@@ -34,6 +34,7 @@ import { WorkItemsPanel } from "../components/WorkItemsPanel"
 import { DodPanel } from "../components/DodPanel"
 import { ReadinessPanel } from "../components/ReadinessPanel"
 import { EffortPanel } from "../components/EffortPanel"
+import { AiRegisterPanel } from "../components/AiRegisterPanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -458,6 +459,7 @@ function SessionPane({
   const [dodOpen, setDodOpen] = useState(false)
   const [readyOpen, setReadyOpen] = useState(false)
   const [effortOpen, setEffortOpen] = useState(false)
+  const [registerOpen, setRegisterOpen] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -771,6 +773,7 @@ function SessionPane({
     // E-058: whether the change is ready to release.
     ...(chat ? [] : [{ label: "Release readiness...", onSelect: () => setReadyOpen(true) }]),
     { label: "Effort and billing...", onSelect: () => setEffortOpen(true) },
+    { label: "AI system register...", onSelect: () => setRegisterOpen(true) },
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1062,6 +1065,11 @@ function SessionPane({
       {effortOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <EffortPanel sessionId={session.id} project={session.project} onClose={() => setEffortOpen(false)} />
+        </div>
+      ) : null}
+      {registerOpen ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <AiRegisterPanel sessionId={session.id} project={session.project} onClose={() => setRegisterOpen(false)} />
         </div>
       ) : null}
       {dodOpen ? (

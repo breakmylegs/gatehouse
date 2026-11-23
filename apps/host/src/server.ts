@@ -126,6 +126,7 @@ import {
 } from "./sessions.js"
 import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
+import type { AiRegister } from "./ai-register.js"
 
 /** D-021: how long the friction holds a High approval back before the deliberate one. */
 const FRICTION_WAIT_MS = 2000
@@ -140,6 +141,8 @@ export interface HostApp {
   usage: UsageStore
   /** E-063: the effort and billing log, kept on this computer. */
   effort?: EffortLog
+  /** E-069: the AI system register. */
+  aiRegister?: AiRegister
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
@@ -1389,6 +1392,12 @@ export class HostServer {
           latencyMs: 0,
         })
         return report
+      }
+      case "ai_register": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.aiRegister) throw new CommandError("unavailable", "The AI system register is not kept here")
+        const project = cmd.all ? undefined : s.project
+        return { entries: a.aiRegister.list(project), markdown: a.aiRegister.markdown(project) }
       }
       case "effort_active": {
         a.effort?.active(this.#session(cmd.sessionId).project)

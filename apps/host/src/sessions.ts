@@ -553,6 +553,8 @@ export interface SessionDeps {
   usage: UsageStore
   /** E-063: the effort and billing log. */
   effort?: import("./effort-log.js").EffortLog
+  /** E-069: the AI system register. */
+  aiRegister?: import("./ai-register.js").AiRegister
   checkpoints: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
@@ -1778,6 +1780,19 @@ export class Session extends EventEmitter<SessionEvents> {
       }
       this.#deps.usage.record(this.id, this.project, m)
       this.#deps.effort?.turn(this.id, this.project, m)
+      if (this.#deps.aiRegister) {
+        const cfg = this.#deps.config() as { providers?: { boundaries?: unknown }; dataClassification?: unknown }
+        const info = this.info()
+        const label = info.local ? this.#deps.local?.label?.() : undefined
+        this.#deps.aiRegister.turn(this.project, m, {
+          local: info.local === true,
+          ...(label ? { localLabel: label } : {}),
+          purpose: this.#opts.kind === "chat" ? "chat" : "code session",
+          ...(info.model ? { model: info.model } : {}),
+          boundaries: cfg.providers?.boundaries as import("./boundary.js").Boundaries | undefined,
+          classifications: cfg.dataClassification as Parameters<typeof import("./boundary.js").classificationOf>[0],
+        })
+      }
       // E-052: the turn's final words, kept before it goes idle so a waiting session reads this turn's result.
       if (typeof m.result === "string") this.#lastResult = m.result
       this.#running = false
