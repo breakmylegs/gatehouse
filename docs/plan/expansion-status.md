@@ -130,7 +130,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-087 | Research to decision brief | E5 | done | feat/e5a | yes | brief in a fixed shape from the Sources pane; every option must cite a pane source; failures sent back to fix |
 | E-092 | Signed industry packs | E5 | done | feat/e5a | yes | safe variant: four draft packs; add-only; sign after review; install needs trusted signatures; sign-off listed for legal |
 | E-073 | Skill growth tracker | E6 | done | feat/e6a | yes | accepts, undos and explanation requests by language and area; suggestions; local and deletable |
-| E-071 | Teach-back check | E6 | todo | | |  |
+| E-071 | Teach-back check | E6 | done | feat/e6a | yes | every changed module named or listed; deterministic, no model (deviation) |
 | E-072 | Tutor mode | E6 | todo | | |  |
 | E-074 | Code reading drills | E6 | todo | | |  |
 | E-075 | Onboarding curriculum | E6 | todo | | |  |

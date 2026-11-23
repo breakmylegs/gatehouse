@@ -130,6 +130,7 @@ import type { AiRegister } from "./ai-register.js"
 import type { ResidencyLog } from "./residency.js"
 import { sequenceFrom } from "./sequence.js"
 import { areaOf, asksToExplain, type SkillLog } from "./skills.js"
+import { changedSince, teachBack } from "./teach-back.js"
 import { draftPacks, installIndustryPack, signIndustryPack, type SignedIndustryPack } from "./industry-packs.js"
 import { extract as extractMeeting, plan as planMeeting, writePlan as writeMeeting } from "./meeting-notes.js"
 import { retentionDays, RETENTION_KINDS, type LegalHolds, type RetentionConfig } from "./retention.js"
@@ -1434,6 +1435,13 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "teach_back": {
+        // E-071: the change from git and your words; nothing is sent anywhere.
+        const s = this.#session(cmd.sessionId)
+        const files = await changedSince(findProjectRoot(s.cwd))
+        if (!files.length) throw new CommandError("no-change", "There is no change to explain: nothing differs from the default branch.")
+        return teachBack(cmd.explanation, files)
       }
       case "skills":
         return { areas: a.skills?.areas() ?? [], suggestions: a.skills?.suggestions() ?? [] }

@@ -314,6 +314,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-058: the release readiness report for the project's change. */
   /** E-070: the project's third-party notices; written to THIRD-PARTY-NOTICES.txt at its root when asked. */
   z.object({ type: z.literal("third_party_notices"), sessionId: Id, write: z.boolean().optional() }),
+  /** E-071: your explanation of the change, compared with the change. */
+  z.object({ type: z.literal("teach_back"), sessionId: Id, explanation: z.string().min(1).max(4000) }),
   /** E-073: the skill growth record and its suggested topics; deleting it is yours. */
   z.object({ type: z.literal("skills") }),
   z.object({ type: z.literal("skills_delete") }),
