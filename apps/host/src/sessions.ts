@@ -555,6 +555,9 @@ export interface SessionDeps {
   effort?: import("./effort-log.js").EffortLog
   /** E-069: the AI system register. */
   aiRegister?: import("./ai-register.js").AiRegister
+  /** E-068: where each session's words went, and the region; and what D-094 saw a session reach. */
+  residency?: import("./residency.js").ResidencyLog
+  egressFor?: (sessionId: string) => Array<{ remote: string; why?: string; allowed: boolean }> | undefined
   checkpoints: CheckpointManager
   /** C-013: counts the uses of remembered rules that have a limit. */
   grants?: GrantUses
@@ -1780,17 +1783,28 @@ export class Session extends EventEmitter<SessionEvents> {
       }
       this.#deps.usage.record(this.id, this.project, m)
       this.#deps.effort?.turn(this.id, this.project, m)
-      if (this.#deps.aiRegister) {
+      if (this.#deps.aiRegister || this.#deps.residency) {
         const cfg = this.#deps.config() as { providers?: { boundaries?: unknown }; dataClassification?: unknown }
         const info = this.info()
         const label = info.local ? this.#deps.local?.label?.() : undefined
-        this.#deps.aiRegister.turn(this.project, m, {
+        const boundaries = cfg.providers?.boundaries as import("./boundary.js").Boundaries | undefined
+        this.#deps.aiRegister?.turn(this.project, m, {
           local: info.local === true,
           ...(label ? { localLabel: label } : {}),
           purpose: this.#opts.kind === "chat" ? "chat" : "code session",
           ...(info.model ? { model: info.model } : {}),
-          boundaries: cfg.providers?.boundaries as import("./boundary.js").Boundaries | undefined,
+          boundaries,
           classifications: cfg.dataClassification as Parameters<typeof import("./boundary.js").classificationOf>[0],
+        })
+        const reached = this.#deps.egressFor?.(this.id)
+        this.#deps.residency?.turn({
+          sessionId: this.id,
+          project: this.project,
+          local: info.local === true,
+          ...(label ? { localLabel: label } : {}),
+          ...(info.model ? { model: info.model } : {}),
+          boundaries,
+          ...(reached ? { reached } : {}),
         })
       }
       // E-052: the turn's final words, kept before it goes idle so a waiting session reads this turn's result.

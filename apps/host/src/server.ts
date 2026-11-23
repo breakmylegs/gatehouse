@@ -127,6 +127,7 @@ import {
 import type { UsageStore } from "./usage.js"
 import type { EffortLog } from "./effort-log.js"
 import type { AiRegister } from "./ai-register.js"
+import type { ResidencyLog } from "./residency.js"
 import { collectNotices, noticesText } from "./notices.js"
 
 /** D-021: how long the friction holds a High approval back before the deliberate one. */
@@ -144,6 +145,8 @@ export interface HostApp {
   effort?: EffortLog
   /** E-069: the AI system register. */
   aiRegister?: AiRegister
+  /** E-068: where each session's words went, and the region. */
+  residency?: ResidencyLog
   account: AccountMonitor
   /** D-007: the locked tests. Absent where they cannot be kept (tests). */
   locks?: TestLocks
@@ -1412,6 +1415,11 @@ export class HostServer {
           })
         }
         return { packages: n.entries.length, missing: n.missing, ...(n.none ? { none: n.none } : {}), text, ...(written ? { written } : {}) }
+      }
+      case "residency_statement": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.residency) throw new CommandError("unavailable", "The data residency record is not kept here")
+        return { markdown: a.residency.statement(s.project, cmd.from, cmd.to) }
       }
       case "ai_register": {
         const s = this.#session(cmd.sessionId)

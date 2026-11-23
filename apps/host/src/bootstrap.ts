@@ -175,6 +175,7 @@ import { SessionMetaStore } from "./session-meta.js"
 import { localDay, UsageStore } from "./usage.js"
 import { EffortLog } from "./effort-log.js"
 import { AiRegister } from "./ai-register.js"
+import { ResidencyLog } from "./residency.js"
 import { UpdateService, type UpdateServiceOptions, type Updates } from "./update/service.js"
 import { MacUpdateService } from "./update/service-mac.js" // Mac fork
 import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "./update/release-mac.js" // Mac fork
@@ -364,6 +365,8 @@ export function createHost(opts: HostOptions = {}): Host {
   const effort = new EffortLog(path.join(gatehouseDataDir(env), "effort.json"))
   // E-069: every model each project used, with its card.
   const aiRegister = new AiRegister(path.join(gatehouseDataDir(env), "ai-register.json"))
+  // E-068: where each session's words went, and the region its card states.
+  const residency = new ResidencyLog(path.join(gatehouseDataDir(env), "residency.json"))
   // G27: undo points for a folder outside git, kept in Codehouse's data folder, never in the folder itself.
   useShadowCheckpoints(path.join(gatehouseDataDir(env), "undo"))
   const checkpoints = new CheckpointManager({
@@ -665,6 +668,7 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     effort,
     aiRegister,
+    residency,
     checkpoints,
     grants,
     // C-015: each project's cap, from its record.
@@ -1729,6 +1733,7 @@ export function createHost(opts: HostOptions = {}): Host {
   // D-080 and D-094: this computer's signing key, its private half sealed for this user.
   const machineKey = new KnowledgeKey(path.join(gatehouseDataDir(env), "knowledge-key.json"), sealer())
   // D-094: every minute on Windows, each session's remote endpoints against what it may reach; strict stops it.
+  deps.egressFor = (id) => egress.report(id)?.endpoints
   const egress = new EgressMonitor({
     sessions: () => manager.liveSessions().map((s) => ({ id: s.id, rootPid: s.rootPid, local: s.info().local === true })),
     sampler: windowsSampler,
@@ -1764,6 +1769,7 @@ export function createHost(opts: HostOptions = {}): Host {
     usage,
     effort,
     aiRegister,
+    residency,
     account,
     limits: limitPauser,
     heldOut,

@@ -118,7 +118,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-063 | Effort and billing log | E5 | done | feat/e5a | yes | local effort.json; CSV with totals; deletable; no network |
 | E-069 | AI system register | E5 | done | feat/e5a | yes | per project, model, purpose; classification; card or no card; first and last use |
 | E-070 | Third-party notices generator | E5 | done | feat/e5a | yes | npm lockfile packages, licences and notice texts; missing listed; written by you |
-| E-068 | Data residency evidence | E5 | todo | | |  |
+| E-068 | Data residency evidence | E5 | done | feat/e5a | yes | endpoint and card region per session, or not known; local none; D-094 addresses; statement per project and period |
 | E-067 | DPIA draft | E5 | todo | | |  |
 | E-065 | DORA and NIS2 evidence mapping | E5 | todo | | |  |
 | E-066 | Retention and legal hold | E5 | todo | | | Safe variant only; the List for part is listed |
