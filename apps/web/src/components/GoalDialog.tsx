@@ -60,7 +60,7 @@ export function GoalDialog({
           it passes.{" "}
           {extreme
             ? "It carries on by itself until then, within your turn and spending limits."
-            : "It is used while Extreme approval carries on by itself, so switch Extreme approval on for this session to use it."}{" "}
+            : "It is used while Max approval carries on by itself, so switch Max approval on for this session to use it."}{" "}
           Leave it empty for no goal.
         </span>
         <div className="flex gap-2">

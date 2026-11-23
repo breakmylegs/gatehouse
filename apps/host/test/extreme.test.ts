@@ -8,7 +8,6 @@ import {
   HANDOFF_ASKS,
   MAX_ASKS,
   NEVER_AUTO_APPROVED,
-  overLimit,
   type CanUseDeps,
 } from "../src/canuse.js"
 
@@ -32,10 +31,6 @@ const lost = {
 
 function setup(opts: {
   extreme: boolean
-  /** O36: Extreme max approval, or the Rules-based limit. */
-  max?: boolean
-  limit?: number
-  strict?: boolean
   v:
     | ReturnType<typeof verdict>
     | (Omit<ReturnType<typeof verdict>, "decidedBy"> & { decidedBy: "judge" })
@@ -67,8 +62,6 @@ function setup(opts: {
     pwsh: undefined,
     decided: new Set<string>(),
     extreme: () => opts.extreme,
-    extremeLevel: () => ({ max: opts.max === true, limit: opts.limit ?? 80 }),
-    ...(opts.strict ? { strictTests: () => true } : {}),
     notifyAutoApproved: (tool: string, project: string) => notified.push([tool, project]),
     ...(opts.effects ? { effects: opts.effects } : {}),
     log: () => undefined,
@@ -108,23 +101,15 @@ describe("Extreme approval mode", () => {
     expect(t.notified).toEqual([])
   })
 
-  it("never approves an escalation that came from a failure, nor a locked test", async () => {
+  it("never approves an escalation that came from a failure, nor a chat's hand-off", async () => {
     for (const id of EXTREME_ASKS) {
       const t = setup({ extreme: true, v: verdict("escalate", id) })
       await t.call()
       expect(t.request, id).toHaveBeenCalledTimes(1)
       expect(t.notified, id).toEqual([])
-      // The card says why Extreme approval did not approve it; a locked test's own reason already says so.
+      // The card says why Max approval did not approve it.
       expect(t.request.mock.calls[0]?.[0], id).toMatchObject({
-        verdict: {
-          ruleId: id,
-          reason:
-            id === LOCKED_TEST_RULE
-              ? "because"
-              : id === HANDOFF_RULE
-                ? `because ${HANDOFF_ASKS}`
-                : `because ${EXTREME_CANNOT_APPROVE}`,
-        },
+        verdict: { ruleId: id, reason: id === HANDOFF_RULE ? `because ${HANDOFF_ASKS}` : `because ${EXTREME_CANNOT_APPROVE}` },
       })
     }
     expect(EXTREME_ASKS.has("evaluator-unavailable")).toBe(true)
@@ -144,43 +129,31 @@ describe("Extreme approval mode", () => {
     expect((await denied.call(HANDOFF_TOOL, { prompt: "Fix it" }))?.behavior).toBe("deny")
   })
 
-  it("Rules-based answers what a rule holds below the risk limit, and asks at or above it (owner, 15 Nov)", async () => {
-    for (const id of [...NEVER_AUTO_APPROVED].filter((x) => !EXTREME_ASKS.has(x))) {
-      const low = setup({ extreme: true, v: { ...verdict("escalate", id), risk: 79 } })
-      expect((await low.call())?.behavior, id).toBe("allow")
-      const high = setup({ extreme: true, v: { ...verdict("escalate", id), risk: 80 } })
-      await high.call()
-      expect(high.request, id).toHaveBeenCalledTimes(1)
-      expect(high.request.mock.calls[0]?.[0], id).toMatchObject({ verdict: { reason: `because ${overLimit(80)}` } })
-    }
-    // The limit is the one in Settings; 101 means never on risk.
-    const at90 = setup({ extreme: true, limit: 90, v: { ...verdict("escalate", "git-remote"), risk: 85 } })
-    expect((await at90.call())?.behavior).toBe("allow")
-    const never = setup({ extreme: true, limit: 101, v: { ...verdict("escalate", "git-remote"), risk: 100 } })
-    expect((await never.call())?.behavior).toBe("allow")
-  })
-
-  it("Max answers every request a rule makes, whatever its risk, locked and strict tests too (owner, 15 Nov)", async () => {
-    // "Extreme Max Approval mode which doesnt use any rules and approves everything."
+  it("Max approval answers every request a rule makes, whatever its risk, locked and strict tests too (O45)", async () => {
+    // O45 (owner, 20 Nov): one option, behaving as Extreme max approval did: "approves everything".
     for (const id of [...NEVER_AUTO_APPROVED, LOCKED_TEST_RULE, "no-rule"].filter((x) => !MAX_ASKS.has(x))) {
-      const t = setup({ extreme: true, max: true, strict: true, v: { ...verdict("escalate", id), risk: 100 } })
+      const t = setup({ extreme: true, v: { ...verdict("escalate", id), risk: 100 } })
       expect((await t.call())?.behavior, id).toBe("allow")
       expect(t.request, id).not.toHaveBeenCalled()
     }
-    const strict = setup({ extreme: true, max: true, strict: true, v: verdict("escalate", "test-integrity-assertion-removed") })
+    const strict = setup({ extreme: true, v: verdict("escalate", "test-integrity-assertion-removed") })
     expect((await strict.call())?.behavior).toBe("allow")
+    // There is no risk limit any more: 100 is approved like 1.
+    const top = setup({ extreme: true, v: { ...verdict("escalate", "git-remote"), risk: 100 } })
+    expect((await top.call())?.behavior).toBe("allow")
   })
 
-  it("Max still waits for a failure and a chat's hand-off, and a floor deny stays a deny", async () => {
+  it("Max approval still waits for a failure and a chat's hand-off, and a floor deny stays a deny", async () => {
+    expect(MAX_ASKS).toBe(EXTREME_ASKS)
     for (const id of MAX_ASKS) {
-      const t = setup({ extreme: true, max: true, v: verdict("escalate", id) })
+      const t = setup({ extreme: true, v: verdict("escalate", id) })
       await t.call()
       expect(t.request, id).toHaveBeenCalledTimes(1)
     }
     expect(MAX_ASKS.has("evaluator-unavailable")).toBe(true)
     expect(MAX_ASKS.has(HANDOFF_RULE)).toBe(true)
     expect(MAX_ASKS.has(LOCKED_TEST_RULE)).toBe(false)
-    const deny = setup({ extreme: true, max: true, v: verdict("deny", "secrets-files") })
+    const deny = setup({ extreme: true, v: verdict("deny", "secrets-files") })
     expect((await deny.call())?.behavior).toBe("deny")
   })
 

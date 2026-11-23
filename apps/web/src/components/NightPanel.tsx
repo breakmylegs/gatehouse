@@ -57,7 +57,7 @@ export function NightPanel({ folder, onClose }: { folder: string; onClose: () =>
             <input className="field w-24" aria-label="Its cap in dollars" placeholder="cap $" inputMode="decimal" value={t.budget} onChange={(e) => set(i, { budget: e.target.value })} />
             <label className="flex items-center gap-1">
               <input type="checkbox" checked={t.extreme} onChange={(e) => set(i, { extreme: e.target.checked })} />
-              Extreme approval
+              Max approval
             </label>
           </div>
           <textarea className="field min-h-12" aria-label="The task" value={t.prompt} onChange={(e) => set(i, { prompt: e.target.value })} />
@@ -81,7 +81,7 @@ export function NightPanel({ folder, onClose }: { folder: string; onClose: () =>
       </div>
       <p className="m-0 text-xs text-mut">
         Tasks run in this folder in dependency order, through the scheduler, each within its cap; none starts once the night&apos;s
-        budget is reached. Extreme approval keeps its own limits and still stops for what it never answers.
+        budget is reached. Max approval keeps its own limits and still stops for what it never answers.
       </p>
       {report ? (
         <div className="grid gap-1">

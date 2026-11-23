@@ -34,9 +34,9 @@ describe("the organisation's settings, enforced (T-067)", () => {
 
   it("offers no Extreme approval when it is turned off, at start or later", async () => {
     managed = { extremeApproval: false }
-    await expect(s.manager.start({ cwd: s.repo, extreme: true })).rejects.toThrow("Managed by your organisation: Extreme approval is turned off.")
+    await expect(s.manager.start({ cwd: s.repo, extreme: true })).rejects.toThrow("Managed by your organisation: Max approval is turned off.")
     const session = await s.manager.start({ cwd: s.repo })
-    await expect(session.setExtreme(true)).rejects.toThrow(/Extreme approval is turned off/)
+    await expect(session.setExtreme(true)).rejects.toThrow(/Max approval is turned off/)
     expect(session.info().extreme).toBe(false)
     await session.setExtreme(false)
     await session.close()

@@ -15,7 +15,7 @@ export function TestsFirstStart({ sessionId, goal, onClose }: { sessionId: strin
       <h2 className="m-0 text-[17px]">Tests first</h2>
       <p className="m-0 text-mut">
         Claude writes tests for these criteria first. Until you approve them, a change to anything but a test file comes to
-        you, even in Extreme approval. Approving locks the tests, and then Claude implements.
+        you, unless you chose Max approval. Approving locks the tests, and then Claude implements.
       </p>
       <label className="grid gap-1">
         <span>Acceptance criteria</span>

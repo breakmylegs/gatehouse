@@ -1030,7 +1030,7 @@ const MODE_WORDS: Record<string, string> = {
   plan: "Plan",
   acceptEdits: "Accept edits",
   auto: "Auto",
-  extreme: "Extreme approval",
+  extreme: "Max approval",
 }
 
 /** One session: how it stands, its conversation, and a message box. New steps keep it scrolled to the end. */

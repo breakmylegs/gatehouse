@@ -46,7 +46,7 @@ export const TEMPLATES: Record<QueryTemplate, { title: string; needsProject?: bo
     match: (e) => e.net === true,
   },
   extreme: {
-    title: "Every Extreme approval",
+    title: "Every Max approval",
     match: (e) => e.decidedBy === "extreme-mode",
   },
 }

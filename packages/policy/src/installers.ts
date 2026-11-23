@@ -61,7 +61,7 @@ export function installerCall(segments: Segment[]): InstallerFinding | undefined
     const publisher = tool === "winget" && id && /^[A-Za-z0-9-]+\.[A-Za-z0-9.-]+$/.test(id) ? id.split(".")[0] : undefined
     return {
       ruleId: INSTALLER_RULE,
-      reason: `It installs software on this computer with ${tool}: ${id ?? "a package it does not name"}, from ${source}${publisher ? `, published as ${publisher}` : ""} (not checked: Codehouse looks nothing up). An installer runs with your rights, so it is always yours to decide, even in Extreme approval.`,
+      reason: `It installs software on this computer with ${tool}: ${id ?? "a package it does not name"}, from ${source}${publisher ? `, published as ${publisher}` : ""} (not checked: Codehouse looks nothing up). An installer runs with your rights, so it is yours to decide, unless you chose Max approval.`,
       risk: 80,
     }
   }

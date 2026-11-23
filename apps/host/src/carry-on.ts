@@ -62,17 +62,17 @@ export function noteFor(
     case "turns":
       return {
         title: "Stopped at the turn limit",
-        body: `Extreme approval stopped ${done}, the most Settings allows. Send a message to carry on.`,
+        body: `Max approval stopped ${done}, the most Settings allows. Send a message to carry on.`,
       }
     case "spend":
       return {
         title: "Stopped at the spending limit",
-        body: `Extreme approval stopped ${done}, at the spending Settings allows. Send a message to carry on.`,
+        body: `Max approval stopped ${done}, at the spending Settings allows. Send a message to carry on.`,
       }
     case "stalled":
       return {
         title: "Stopped: no work done",
-        body: `Two turns in a row did no work, so Extreme approval stopped ${done}.`,
+        body: `Two turns in a row did no work, so Max approval stopped ${done}.`,
       }
     case "fitness":
       return {
@@ -82,7 +82,7 @@ export function noteFor(
     case "error":
       return {
         title: "Stopped: a turn failed",
-        body: `A turn failed, so Extreme approval stopped ${done}. Look in Codehouse.`,
+        body: `A turn failed, so Max approval stopped ${done}. Look in Codehouse.`,
       }
     default:
       return undefined

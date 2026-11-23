@@ -25,7 +25,7 @@ export const LEVELS = ["plan", "default", "acceptEdits", "auto", "extreme"] as c
 export type Level = (typeof LEVELS)[number]
 export const rank = (l: Level): number => LEVELS.indexOf(l)
 export const isLevel = (v: unknown): v is Level => typeof v === "string" && (LEVELS as readonly string[]).includes(v)
-export const LEVEL_NAMES: Record<Level, string> = { plan: "Plan", default: "Manual", acceptEdits: "Accept edits", auto: "Auto", extreme: "Extreme approval" }
+export const LEVEL_NAMES: Record<Level, string> = { plan: "Plan", default: "Manual", acceptEdits: "Accept edits", auto: "Auto", extreme: "Max approval" }
 
 export const WINDOW_MS = 30 * 86_400_000
 /** What lowers a cap, in 30 days: so many floor denies, or so many of your own denies. */

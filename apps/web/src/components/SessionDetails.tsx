@@ -260,7 +260,7 @@ export function SessionDetails({
               <dt className="text-mut">Tests</dt>
               <dd className="m-0 font-semibold text-warn">
                 weakened {session.testsWeakened === 1 ? "once" : `${session.testsWeakened} times`}, approved by
-                Extreme approval: done-claims are not verified
+                Max approval: done-claims are not verified
               </dd>
             </>
           ) : null}

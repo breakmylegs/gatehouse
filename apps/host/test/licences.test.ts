@@ -33,9 +33,8 @@ function setup(ruleId: string, auditOk = true, max = true) {
     engine: {},
     pwsh: undefined,
     decided: new Set<string>(),
-    extreme: () => true,
-    // O36 (owner, 15 Nov): Extreme max approval; Rules-based asks at 80 and above.
-    extremeLevel: () => ({ max, limit: 80 }),
+    // O45: Max approval when the session has it; Manual otherwise.
+    extreme: () => max,
     notifyAutoApproved: () => undefined,
     log: () => undefined,
   } as unknown as CanUseDeps
@@ -46,7 +45,7 @@ function setup(ruleId: string, auditOk = true, max = true) {
 }
 
 describe("licence policy in canUseTool (D-055)", () => {
-  it("records licence_escalated; Extreme max approval approves a licence outside the list, Rules-based asks at its risk (owner, 15 Nov)", async () => {
+  it("records licence_escalated; Max approval approves a licence outside the list, and Manual asks (O45)", async () => {
     const t = setup(LICENCE_NOT_ALLOWED)
     expect((await t.call())?.behavior).toBe("allow")
     expect(t.records[0]).toMatchObject({ event: "licence_escalated", verdict: { ruleId: LICENCE_NOT_ALLOWED } })

@@ -301,4 +301,4 @@ export async function approveInstructions(pins: InstructionPins, audit: Pick<Hos
 }
 
 export const instructionsReason = (files: string[]) =>
-  `It would change ${files[0]}${files.length > 1 ? ` and ${files.length - 1} more` : ""}, which tells Claude what to do in this project. Changes to the instructions are yours to approve, even in Extreme approval, and the card shows the change.`
+  `It would change ${files[0]}${files.length > 1 ? ` and ${files.length - 1} more` : ""}, which tells Claude what to do in this project. Changes to the instructions are yours to approve (Max approval, when you chose it, approves them), and the card shows the change.`

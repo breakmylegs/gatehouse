@@ -248,7 +248,7 @@ export function RoutinesPanel() {
         A routine starts a session by itself on the days and at the time you choose, while Codehouse
         is open (within an hour of it, if the computer was asleep), and sends it your prompt. It
         goes through every check a session you start does: the kill switch, your sign-in and
-        organisation, the limit on sessions, and every rule. With Extreme approval it carries on by
+        organisation, the limit on sessions, and every rule. With Max approval it carries on by
         itself within your turn and spending limits; otherwise it asks you as usual. One can start
         instead on a new commit in its folder, when files in it change, or when a program on this
         computer calls its address with its own token: never because of its own session&apos;s work,
@@ -291,7 +291,7 @@ export function RoutinesPanel() {
                 <strong className="truncate">{x.name}</strong>
                 <span className="mono truncate text-xs text-mut">
                   {startsText(x)}, {x.folder}
-                  {x.extreme ? ", Extreme approval" : ""}
+                  {x.extreme ? ", Max approval" : ""}
                   {x.worktree ? ", in a new worktree" : ""}
                   {x.phone ? ", can be started from the phone" : ""}
                   {x.lastRun ? `, last ran ${x.lastRun}` : ""}
@@ -454,7 +454,7 @@ export function RoutinesPanel() {
               checked={draft.extreme}
               onChange={(e) => setDraft({ ...draft, extreme: e.target.checked })}
             />
-            Extreme approval
+            Max approval
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input

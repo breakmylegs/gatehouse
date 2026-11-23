@@ -51,7 +51,7 @@ version: 1
 settings:
   managedBy: Accenture IT          # shown as "Managed by Accenture IT" wherever a limit applies
   maxMode: default                 # the broadest permission mode: plan, default, acceptEdits or auto
-  extremeApproval: false           # no Extreme approval
+  extremeApproval: false           # no Max approval
   providers: [claude]              # the AI providers allowed: claude, local (a runtime on this computer), gateway
   phone: false                     # no phone, Relay or push channel (ntfy, Slack)
   locked: [expectedOrg, theme]     # settings (by their key in the settings file) that cannot be changed here

@@ -26,7 +26,7 @@ interface ProposalsView {
   waitingForPhone?: boolean
 }
 
-const NAMES: Record<Level, string> = { plan: "Plan", default: "Manual", acceptEdits: "Accept edits", auto: "Auto", extreme: "Extreme approval" }
+const NAMES: Record<Level, string> = { plan: "Plan", default: "Manual", acceptEdits: "Accept edits", auto: "Auto", extreme: "Max approval" }
 const ORDER: Level[] = ["plan", "default", "acceptEdits", "auto", "extreme"]
 
 /**

@@ -222,7 +222,7 @@ Built into the engine, beside the hidden-character check, and like it no rule or
 
 Test files are found by convention: a `test`, `tests`, `spec` or `__tests__` folder; `*.test.*` and `*.spec.*`; `test_*.py`, `*_test.py` and `conftest.py`; `*Test.cs` and `*Tests.cs`; `*.Tests.ps1`; `*_test.go`. Test config: the vitest, jest, karma, playwright and cypress configs, `.mocharc`, `pytest.ini`, `tox.ini`, `.coveragerc`, `setup.cfg`, `pyproject.toml`, `codecov.yml`, `.nycrc`, `*.runsettings`, `PesterConfiguration.psd1`, workflow files and `package.json`.
 
-In Extreme approval the Host decides what happens to such an escalation per project (Settings, Sessions, Test integrity): by default it is approved and the session says its tests were weakened; a strict project waits for a person. Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
+In Max approval, which you choose for a session, it is approved and the session says its tests were weakened (O45: the strict projects setting went with the rules-based Extreme approval). Every one is recorded as `test_integrity_escalated` with its pattern before it is decided, and refused if the record fails.
 
 ### Settings that decide what a tool may do (D-060)
 
@@ -246,7 +246,7 @@ An agent's edit of a lockfile (package-lock.json, npm-shrinkwrap.json, yarn.lock
 
 ### Installing software (D-096)
 
-winget install, upgrade and add, choco install and upgrade (and cinst), scoop install and update, msiexec, and PowerShell's Install-Module, Install-Package and Install-Script escalate as `installer-admission` at 80 (High, so Auto and Accept edits ask too), with the package id, the source and, for a WinGet id, its publisher part, marked as not checked since nothing is looked up. Extreme approval never approves it.
+winget install, upgrade and add, choco install and upgrade (and cinst), scoop install and update, msiexec, and PowerShell's Install-Module, Install-Package and Install-Script escalate as `installer-admission` at 80 (High, so Auto and Accept edits ask too), with the package id, the source and, for a WinGet id, its publisher part, marked as not checked since nothing is looked up. Only Max approval, when you chose it for the session, approves it.
 
 ## 8. Redaction
 

@@ -81,11 +81,11 @@ describe("Settings in sections", () => {
     expect(group("Setup")).toBeTruthy()
     expect(group("Organisation and workspaces")).toBeNull()
     await open("Sessions")
-    expect(group("Extreme approval")).toBeTruthy()
+    expect(group("Max approval")).toBeTruthy()
     expect(group("Setup")).toBeNull()
     unmount()
     render(<Settings />)
-    expect(await screen.findByRole("group", { name: /Extreme approval/ })).toBeTruthy()
+    expect(await screen.findByRole("group", { name: /Max approval/ })).toBeTruthy()
     expect(
       (await nav()).getByRole("button", { name: "Sessions" }).getAttribute("aria-current"),
     ).toBe("page")
@@ -117,7 +117,7 @@ describe("Settings in sections", () => {
     for (const title of [
       "Organisation and workspaces",
       "Quiet hours and timeouts",
-      "Extreme approval",
+      "Max approval",
       "Daily digest",
       "Redaction list",
       "Checkpoints",
@@ -152,7 +152,7 @@ describe("searching Settings", () => {
     render(<Settings />)
     await screen.findByRole("navigation", { name: "Settings sections" })
     await search("Most spending")
-    expect(group("Extreme approval")).toBeTruthy()
+    expect(group("Max approval")).toBeTruthy()
     expect(group("Setup")).toBeNull()
     expect(screen.getByText("Most spending").closest("label")?.getAttribute("data-match")).toBe(
       "true",
@@ -166,7 +166,7 @@ describe("searching Settings", () => {
     await screen.findByRole("navigation", { name: "Settings sections" })
     await search("belongs to this organisation")
     expect(group("Organisation and workspaces")).toBeTruthy()
-    expect(group("Extreme approval")).toBeNull()
+    expect(group("Max approval")).toBeNull()
   })
 
   it("says so when nothing matches, and clearing the box brings the section back", async () => {

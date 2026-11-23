@@ -105,32 +105,33 @@ describe("on real sessions (D-007)", () => {
     await s.stop()
   })
 
-  it("extreme_locked_tests: an Extreme session cannot change a locked test without a person", async () => {
+  it("extreme_locked_tests: Max approval changes a locked test only because you chose it, recorded as such (O45)", async () => {
     let r: ToolCallResult | undefined
     s.sdk.turn = async (api, text) => {
-      // Extreme approval carries on by itself after the turn; the queue is empty then.
+      // Max approval carries on by itself after the turn; the queue is empty then.
       if (text !== "change it") return api.say("QUEUE EMPTY")
-      const call = api.callTool("Edit", {
+      r = await api.callTool("Edit", {
         file_path: path.join(s.repo, "tests", "locked.test.ts"),
         old_string: "toBe(1)",
         new_string: "toBe(2)",
       })
-      // It waits for a person, though Extreme approval approves other escalations by itself.
-      await s.waitForPending()
-      expect(s.broker.list()[0]?.request.verdict).toMatchObject({ ruleId: LOCKED_TEST_RULE })
-      s.broker.resolve(s.pendingId(), { kind: "decision", decision: "deny" }, "desktop")
-      r = await call
     }
     const session = await s.manager.start({ cwd: s.repo, extreme: true })
+    // Shown as Max approval to this window and to an older one, which still knows the two kinds.
+    expect(session.info()).toMatchObject({ extreme: true, extremeMax: true })
     const done = new Promise<void>((res) => session.on("message", (m) => m.type === "result" && res()))
     session.prompt("change it")
     await done
-    expect(r).toMatchObject({ executed: false })
-    expect(fs.readFileSync(path.join(s.repo, "tests", "locked.test.ts"), "utf8")).toContain("toBe(1)")
-    const events = s.records().map((x) => x.event)
-    expect(events).toContain("locked_test_escalated")
-    expect(events).not.toContain("test_lock_repinned")
+    // O45 (owner, 20 Nov): Max approval approves everything a rule holds, a locked test too; it is not asked.
+    expect(s.broker.list()).toEqual([])
+    expect(r).toMatchObject({ executed: true })
+    const recs = s.records()
+    expect(recs.map((x) => x.event)).toContain("locked_test_escalated")
+    expect(recs.some((x) => x.verdict.decidedBy === "extreme-mode" && x.verdict.ruleId === LOCKED_TEST_RULE)).toBe(true)
     await session.close()
+    // Put back for the tests after this one, and accept it as the locked version again.
+    fs.writeFileSync(path.join(s.repo, "tests", "locked.test.ts"), fs.readFileSync(path.join(s.repo, "tests", "locked.test.ts"), "utf8").replace("toBe(2)", "toBe(1)"))
+    await locks.accept(s.repo)
   })
 
   it("is asked in Auto, where Claude Code would otherwise approve it by itself", async () => {

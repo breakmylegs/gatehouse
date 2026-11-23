@@ -104,8 +104,8 @@ export function describeDecision(d: Decision): DecisionLine {
       }
     case "extreme-mode":
       return {
-        mark: "Extreme approval",
-        line: `Allowed by Extreme approval. It would have asked: ${why}`,
+        mark: "Max approval",
+        line: `Allowed by Max approval. It would have asked: ${why}`,
         stopped: false,
       }
     case "evaluator-unavailable":

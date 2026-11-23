@@ -926,7 +926,7 @@ export function createHost(opts: HostOptions = {}): Host {
       void phoneHolder.svc
         ?.notify("notify", {
           title: "Approved automatically",
-          body: `Extreme approval mode is on, so this was approved without asking: ${toolName}.`,
+          body: `Max approval mode is on, so this was approved without asking: ${toolName}.`,
           project,
         })
         .catch(() => undefined),
@@ -1537,7 +1537,7 @@ export function createHost(opts: HostOptions = {}): Host {
       void phone.notify("notify", { title: "Drifting from the goal?", body, project }).catch(() => undefined)
     } else if (type === "heartbeat_missed") {
       // D-025: nothing was heard from you, so an Extreme session paused: the phone and push channels are told.
-      const body = "Nothing was heard from you in time, so Extreme approval paused it. Start it again on the desktop."
+      const body = "Nothing was heard from you in time, so Max approval paused it. Start it again on the desktop."
       void phone.notify("notify", { title: "Paused: are you there?", body, project }).catch(() => undefined)
       void ntfy.note("paused, are you there?", body, project)
     } else if (type === "thrash_paused") {
@@ -1548,7 +1548,7 @@ export function createHost(opts: HostOptions = {}): Host {
     } else if (type === "risk_budget_exhausted") {
       // D-018: the risk budget is spent: the phone and push channels are told.
       const body = data.extreme
-        ? "Its risk budget is spent, so Extreme approval paused it until you start it again."
+        ? "Its risk budget is spent, so Max approval paused it until you start it again."
         : "Its risk budget is spent, so it went back to Manual."
       void phone.notify("notify", { title: "Risk budget spent", body, project }).catch(() => undefined)
       void ntfy.note("risk budget spent", body, project)

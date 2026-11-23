@@ -1,5 +1,5 @@
 // Mac fork. D-096 on a Mac: installing software is the installer-admission rule there too (installers-mac.ts), so it
-// is High, says what it installs and from where, and Extreme approval never approves it. Looking installs nothing.
+// is High, says what it installs and from where, and only Max approval, when chosen, approves it (O45). Looking installs nothing.
 import { describe, expect, it } from "vitest"
 import { analyseBash } from "../src/bash.js"
 import { INSTALLER_RULE, installerCall } from "../src/installers.js"

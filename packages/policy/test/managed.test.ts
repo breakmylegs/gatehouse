@@ -134,7 +134,7 @@ describe("the organisation's settings in IT's policy (T-067)", () => {
     expect(describeManaged(p.managedSettings)).toEqual([
       "Managed by Accenture IT",
       "The broadest permission mode allowed is default.",
-      "Extreme approval is turned off.",
+      "Max approval is turned off.",
       "AI providers allowed: claude.",
       "The phone, the Relay and push channels are turned off.",
       "Settings you cannot change here: theme, extremeRiskLimit.",

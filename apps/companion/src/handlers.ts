@@ -535,7 +535,7 @@ export const ORCHESTRATE_TOOLS: readonly CompanionToolDef[] = [
   {
     name: "start_session",
     description:
-      "Start another Codehouse session in this folder, in this session's mode and never in Extreme approval, and send it the prompt. Use it to hand a separate piece of work to another agent. The person approves each start (or Extreme approval does), at most 3 from one session. You get its id: read it with read_linked_session and wait for it with wait_for_session. To get a structured result, give resultSchema (a JSON Schema, as JSON text): the session is asked to end with JSON in that shape, and wait_for_session hands it to you only once it matches (sent back once with what is wrong, then failed).",
+      "Start another Codehouse session in this folder, in this session's mode and never in Max approval, and send it the prompt. Use it to hand a separate piece of work to another agent. The person approves each start (or Max approval does), at most 3 from one session. You get its id: read it with read_linked_session and wait for it with wait_for_session. To get a structured result, give resultSchema (a JSON Schema, as JSON text): the session is asked to end with JSON in that shape, and wait_for_session hands it to you only once it matches (sent back once with what is wrong, then failed).",
     shape: { prompt: z.string().min(1).max(8000), title: z.string().max(60).optional(), resultSchema: z.string().max(20_000).optional() },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     run: (h, a) =>

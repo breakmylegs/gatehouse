@@ -78,7 +78,7 @@ describe("settings save as you change them", () => {
     expect(screen.queryByRole("button", { name: /save settings/i })).toBeNull()
   })
 
-  it("sets Extreme approval's limits, with No limit kept readable by an older version", async () => {
+  it("sets Max approval's limits, with No limit kept readable by an older version", async () => {
     render(<Settings />)
     await openSection("Sessions")
     const spend = await screen.findByRole("combobox", { name: "Most spending" })
@@ -86,7 +86,7 @@ describe("settings save as you change them", () => {
     fireEvent.change(spend, { target: { value: "none" } })
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0]?.extremeCarryOn).toEqual({ turns: 200, usd: 1000, noSpendLimit: true })
-    await waitFor(() => expect(toasts).toEqual(["Extreme approval saved"]))
+    await waitFor(() => expect(toasts).toEqual(["Max approval saved"]))
   })
 
   it("sets where sessions pause for the plan limit, and says what Never can cost", async () => {

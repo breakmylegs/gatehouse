@@ -872,7 +872,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       if (data.crashed === true) return "It carries on where it was."
       return data.restart === true
         ? "Codehouse restarted while this session was working, so it carries on where it was."
-        : `Extreme approval: carrying on by itself, turn ${String(data.turn)}${typeof data.of === "number" ? ` of ${data.of}` : ""}.`
+        : `Max approval: carrying on by itself, turn ${String(data.turn)}${typeof data.of === "number" ? ` of ${data.of}` : ""}.`
     case "paused":
       if (data.reason === "spend")
         return "Paused: today's extra spending beyond your plan reached the most Settings allows a day. It starts again by itself tomorrow."
@@ -902,7 +902,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
       return str(data.line)
     case "tests_weakened":
       // D-001: Extreme approval approved a change that weakens the tests; the session says so.
-      return `Tests weakened, approved by Extreme approval: ${str(data.reason) ?? "a change weakens the tests"} Claims that the work is done are not verified while this stands.`
+      return `Tests weakened, approved by Max approval: ${str(data.reason) ?? "a change weakens the tests"} Claims that the work is done are not verified while this stands.`
     case "bypass_ended":
       return data.why === "time"
         ? "The time you gave the bypass ran out, so the limits in Settings apply to this session again."
@@ -922,7 +922,7 @@ export function describeEvent(event: string, data: Record<string, unknown>): str
         stalled: "its last two turns did no work, so nothing seems left to do",
       }
       const limit = data.why === "turns" || data.why === "spend"
-      return `Stopped carrying on: ${why[String(data.why)] ?? "it was told to"}.${limit ? " Send a message to carry on, or raise the limit in Settings, Extreme approval." : ""}`
+      return `Stopped carrying on: ${why[String(data.why)] ?? "it was told to"}.${limit ? " Send a message to carry on, or raise the limit in Settings, Max approval." : ""}`
     }
     default:
       return undefined

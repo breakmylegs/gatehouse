@@ -1,5 +1,5 @@
 // E-018: an apply inherits the strictest finding of the plan the session showed (or a recent plan file); a plan that
-// deletes a database escalates as Severe, naming it, and Rules-based Extreme approval waits on it.
+// deletes a database escalates as Severe, naming it; Max approval (O45) approves it, audited, and Manual asks.
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -22,13 +22,13 @@ const tmp = () => {
 const deletesDb = JSON.stringify({ format_version: "1.2", resource_changes: [{ address: "aws_db_instance.orders", type: "aws_db_instance", change: { actions: ["delete"] } }] })
 const clean = JSON.stringify({ format_version: "1.2", resource_changes: [{ address: "aws_lambda_function.api", type: "aws_lambda_function", change: { actions: ["update"], before: {}, after: {} } }] })
 
-function canUseWith(plans: IacPlans, cwd: string, extreme?: { max: boolean; limit: number }) {
+function canUseWith(plans: IacPlans, cwd: string, extreme = false) {
   const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
   const canUse = createCanUseTool({
     sessionId: "s1", cwd, project: "infra",
     approver: { evaluate: async () => ({ outcome: "allow", ruleId: "safe-shell", reason: "ok", risk: 10, decidedBy: "rules", policyHash: "h" }) },
     broker: { request }, audit: { record: async () => true }, kill: () => false, policy: () => undefined, engine: {}, pwsh: undefined,
-    decided: new Set<string>(), extreme: () => extreme !== undefined, ...(extreme ? { extremeLevel: () => extreme } : {}), effects: async () => undefined, log: () => undefined,
+    decided: new Set<string>(), extreme: () => extreme, effects: async () => undefined, log: () => undefined,
     iacPlan: (command: string) => plans.forCommand("s1", command, cwd),
   } as unknown as CanUseDeps)
   const call = (command: string) => canUse("Bash", { command }, { toolUseID: "t", signal: new AbortController().signal } as never)
@@ -44,12 +44,15 @@ describe("infrastructure applies and their plans", () => {
     expect(t.request).toHaveBeenCalledWith(expect.objectContaining({ verdict: expect.objectContaining({ ruleId: "iac-destroys-stateful", risk: 90, reason: expect.stringContaining("aws_db_instance.orders") }) }))
   })
 
-  it("is not approved by Rules-based Extreme approval, which waits at Severe", async () => {
+  it("is approved by Max approval only as you chose, audited, and asks you in Manual (O45)", async () => {
     const plans = new IacPlans()
     plans.seen("s1", deletesDb)
-    const t = canUseWith(plans, tmp(), { max: false, limit: 80 })
-    expect((await t.call("terraform apply -auto-approve tfplan"))?.behavior).toBe("deny")
-    expect(t.request).toHaveBeenCalledOnce()
+    const max = canUseWith(plans, tmp(), true)
+    expect((await max.call("terraform apply -auto-approve tfplan"))?.behavior).toBe("allow")
+    expect(max.request).not.toHaveBeenCalled()
+    const manual = canUseWith(plans, tmp())
+    expect((await manual.call("terraform apply -auto-approve tfplan"))?.behavior).toBe("deny")
+    expect(manual.request).toHaveBeenCalledOnce()
   })
 
   it("lets an apply of a clean plan through, and holds one whose plan was never seen", async () => {

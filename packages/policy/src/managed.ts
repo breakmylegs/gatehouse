@@ -36,7 +36,7 @@ export function describeManaged(m: ManagedSettings | undefined): string[] {
   if (!m) return ["No settings are managed by your organisation."]
   const lines = [managedLabel(m)]
   if (m.maxMode) lines.push(`The broadest permission mode allowed is ${m.maxMode}.`)
-  if (m.extremeApproval === false) lines.push("Extreme approval is turned off.")
+  if (m.extremeApproval === false) lines.push("Max approval is turned off.")
   if (m.providers) lines.push(`AI providers allowed: ${m.providers.length ? m.providers.join(", ") : "none"}.`)
   if (m.phone === false) lines.push("The phone, the Relay and push channels are turned off.")
   if (m.locked?.length) lines.push(`Settings you cannot change here: ${m.locked.join(", ")}.`)

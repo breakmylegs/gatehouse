@@ -169,9 +169,9 @@ describe("store events", () => {
     )
   })
 
-  it("says when Extreme approval carries on by itself, and why it stopped", () => {
+  it("says when Max approval carries on by itself, and why it stopped", () => {
     expect(describeEvent("carry_on", { turn: 2, of: 25 })).toBe(
-      "Extreme approval: carrying on by itself, turn 2 of 25.",
+      "Max approval: carrying on by itself, turn 2 of 25.",
     )
     expect(describeEvent("carry_on", { restart: true })).toMatch(
       /Codehouse restarted while this session was working/,
@@ -180,10 +180,10 @@ describe("store events", () => {
       "Stopped carrying on: the build queue is empty.",
     )
     expect(describeEvent("carry_on_end", { why: "spend", spentUsd: 25.4 })).toBe(
-      "Stopped carrying on: it spent $25.40 since your last message, the most allowed. Send a message to carry on, or raise the limit in Settings, Extreme approval.",
+      "Stopped carrying on: it spent $25.40 since your last message, the most allowed. Send a message to carry on, or raise the limit in Settings, Max approval.",
     )
     expect(describeEvent("carry_on", { turn: 7 })).toBe(
-      "Extreme approval: carrying on by itself, turn 7.",
+      "Max approval: carrying on by itself, turn 7.",
     )
     expect(describeEvent("carry_on_end", { why: "stalled" })).toMatch(/did no work/)
   })

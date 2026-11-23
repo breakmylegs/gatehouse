@@ -1,11 +1,11 @@
 // E-061: a promotion goes to a person unless its gate passes; to production with a failing gate it is Severe, and to
-// production at all it waits for Rules-based Extreme approval.
+// production at all it goes to a person in Manual; Max approval (O45) approves it, audited, as you chose.
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { loadPolicy } from "@gatehouse/policy"
-import { createCanUseTool, DEFAULT_EXTREME_LIMIT, extremeAnswers, type CanUseDeps } from "../src/canuse.js"
+import { createCanUseTool, extremeAnswers, type CanUseDeps } from "../src/canuse.js"
 import { createFloorHook } from "../src/hooks.js"
 import type { GateSources } from "../src/gates.js"
 import { judgePromotion, promotionFor, readEnvironments, PROMOTION_GATE_RULE, PRODUCTION_PROMOTION_RULE } from "../src/promotion.js"
@@ -41,10 +41,9 @@ const sources = (testsVerified: boolean | undefined, score?: number): GateSource
   readFile: () => undefined,
   dodItems: async () => undefined,
 })
-const rulesExtreme = { max: false, limit: DEFAULT_EXTREME_LIMIT }
 
 describe("environment promotion gate", () => {
-  it("escalates a promotion to production with a failing gate as Severe, which Rules-based Extreme does not answer", async () => {
+  it("escalates a promotion to production with a failing gate as Severe", async () => {
     const envs = readEnvironments(project(YAML)).environments
     const env = promotionFor(envs, "git pull && npm run deploy:prod --force")
     expect(env?.name).toBe("production")
@@ -52,7 +51,8 @@ describe("environment promotion gate", () => {
     expect(v).toMatchObject({ ruleId: PROMOTION_GATE_RULE, risk: 90 })
     expect(v!.reason).toMatch(/production/)
     expect(v!.reason).toMatch(/40/)
-    expect(extremeAnswers(v!, rulesExtreme)).toBe(false)
+    // O45: Max approval answers it, as it answers every rule's request.
+    expect(extremeAnswers(v!)).toBe(true)
   })
 
   it("lets a promotion whose gates pass go to the rules, but still asks for production", async () => {
@@ -60,7 +60,7 @@ describe("environment promotion gate", () => {
     expect(await judgePromotion(promotionFor(envs, "npm run deploy:staging")!, sources(true))).toBeUndefined()
     const prod = await judgePromotion(promotionFor(envs, "npm run deploy:prod")!, sources(true, 80))
     expect(prod).toMatchObject({ ruleId: PRODUCTION_PROMOTION_RULE })
-    expect(extremeAnswers(prod!, rulesExtreme)).toBe(false)
+    expect(extremeAnswers(prod!)).toBe(true)
   })
 
   it("escalates a failing gate below production, and an environment with no gate", async () => {
@@ -85,14 +85,14 @@ describe("environment promotion gate", () => {
     expect(await judgePromotion(env!, sources(true))).toMatchObject({ ruleId: PROMOTION_GATE_RULE, risk: 90 })
   })
 
-  it("holds the promotion in canUseTool, even when the rules allow the command and in Rules-based Extreme", async () => {
+  it("holds the promotion in canUseTool, even when the rules allow the command", async () => {
     const root = project(YAML)
     const request = vi.fn(async () => ({ outcome: "deny", channel: "desktop", waitedMs: 1 }))
     const canUse = createCanUseTool({
       sessionId: "s1", cwd: root, project: "app",
       approver: { evaluate: async () => ({ outcome: "allow", ruleId: "safe-shell", reason: "ok", risk: 10, decidedBy: "rules", policyHash: "h" }) },
       broker: { request }, audit: { record: async () => true }, kill: () => false, policy: () => undefined, engine: {}, pwsh: undefined,
-      decided: new Set<string>(), extreme: () => true, extremeLevel: () => rulesExtreme, effects: async () => undefined, log: () => undefined,
+      decided: new Set<string>(), extreme: () => false, effects: async () => undefined, log: () => undefined,
       promotion: async (command: string) => {
         const env = promotionFor(readEnvironments(root).environments, command)
         return env ? await judgePromotion(env, sources(false)) : undefined

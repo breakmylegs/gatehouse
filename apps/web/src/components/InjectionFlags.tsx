@@ -21,7 +21,7 @@ export function InjectionFlags({ session }: { session: SessionInfo }) {
       <summary className="cursor-pointer font-semibold">
         {flagged.length === 1 ? "A result" : `${flagged.length} results`} looked like prompt injection. Claude read{" "}
         {flagged.length === 1 ? "it" : "them"} with those parts taken out. Commands that send over the network (such as
-        curl or a push) now ask you, even in Extreme approval; web fetches are decided as before.
+        curl or a push) now ask you, even in Max approval; web fetches are decided as before.
       </summary>
       <ul className="m-0 mt-1.5 grid list-none gap-1.5 p-0">
         {flagged.map((f, i) => (

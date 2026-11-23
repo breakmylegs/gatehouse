@@ -238,8 +238,6 @@ interface Values {
   telFile: boolean
   telEndpoint: string
   ecUsd: string
-  /** O36: the risk at or above which Rules-based Extreme approval asks you; "none" never on risk. */
-  exLimit: string
   /** E-038: days the log viewer keeps a project's lines. */
   logDays: string
   /** E-040: the local trace receiver, and its port. */
@@ -337,7 +335,6 @@ export function valuesOf(d: SettingsData): Values {
     telFile: c.telemetry?.file === true,
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
-    exLimit: c.extremeRiskLimit === 101 ? "none" : String(c.extremeRiskLimit ?? 80),
     logDays: String(c.logRetentionDays ?? 7),
     traces: c.traceReceiver?.enabled === true,
     tracePort: String(c.traceReceiver?.port ?? 4318),
@@ -466,8 +463,6 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     ...(v.ecUsd === "none" ? { noSpendLimit: true } : {}),
   }
   // O36: 80 is what an absent setting means, so the file only says so when you choose another.
-  if (v.exLimit === "80") delete body.extremeRiskLimit
-  else body.extremeRiskLimit = v.exLimit === "none" ? 101 : Number(v.exLimit)
   // E-038: 7 days is what an absent setting means.
   // E-040: anything else a newer version keeps in traceReceiver stays.
   {
@@ -686,7 +681,6 @@ export const DEFAULT_VALUES: Values = {
   telFile: false,
   telEndpoint: "",
   ecUsd: "500",
-  exLimit: "80",
   logDays: "7",
   traces: false,
   tracePort: "4318",
@@ -965,7 +959,7 @@ export function Settings() {
   const phoneChanged = v.quiet || differs(v, ["phoneMin", "hardMin"])
   const digestChanged =
     differs(v, ["digestOn"]) || (v.digestOn && v.digestAt !== DEFAULT_VALUES.digestAt)
-  const extremeChanged = differs(v, ["ecTurns", "ecUsd", "exLimit"])
+  const extremeChanged = differs(v, ["ecTurns", "ecUsd"])
   const pauseChanged = differs(v, ["plPause", "plResume"])
   const memChanged = differs(v, ["memPoint"])
   const ladChanged = differs(v, ["ladPhone", "ladPush", "ladHere"])
@@ -1303,9 +1297,9 @@ export function Settings() {
               </p>
             </Group>
 
-            <Group section="sessions" title="Extreme approval" gap="gap-3" changed={extremeChanged}>
+            <Group section="sessions" title="Max approval" gap="gap-3" changed={extremeChanged}>
               <p className="m-0 text-xs text-mut">
-                A session in Extreme approval carries on by itself until Claude says its build queue
+                A session in Max approval carries on by itself until Claude says its build queue
                 is empty. It also stops when two turns in a row do no work, when you press Stop, or
                 at these limits after each message of yours.
               </p>
@@ -1314,7 +1308,7 @@ export function Settings() {
                   <select
                     className="field"
                     value={v.ecTurns}
-                    onChange={(e) => change({ ecTurns: e.target.value }, "Extreme approval")}
+                    onChange={(e) => change({ ecTurns: e.target.value }, "Max approval")}
                   >
                     {withCurrent(CARRY_TURNS, v.ecTurns).map((n) => (
                       <option key={n} value={n}>
@@ -1327,27 +1321,11 @@ export function Settings() {
                   <select
                     className="field"
                     value={v.ecUsd}
-                    onChange={(e) => change({ ecUsd: e.target.value }, "Extreme approval")}
+                    onChange={(e) => change({ ecUsd: e.target.value }, "Max approval")}
                   >
                     {withCurrent(CARRY_USD, v.ecUsd).map((n) => (
                       <option key={n} value={n}>
                         {n === "none" ? "No limit" : `${Number(n).toLocaleString("en-GB")}`}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field
-                  label="Rules-based: ask me at this risk and above"
-                  help="Extreme approval answers what would ask you below this risk and waits for you at or above it. Extreme max approval answers everything, whatever the risk."
-                >
-                  <select
-                    className="field"
-                    value={v.exLimit}
-                    onChange={(e) => change({ exLimit: e.target.value }, "Extreme approval")}
-                  >
-                    {withCurrent(["50", "60", "70", "80", "85", "90", "none"], v.exLimit).map((n) => (
-                      <option key={n} value={n}>
-                        {n === "none" ? "Never on risk" : `${n} and above${n === "80" ? " (usual)" : ""}`}
                       </option>
                     ))}
                   </select>
@@ -1543,7 +1521,7 @@ export function Settings() {
               </label>
               <p className="m-0 text-[13px] text-mut">
                 Claude pushes the session's own branch and opens the pull request with gh. Each push
-                and each gh command asks you first, as always, unless Extreme approval is on for that
+                and each gh command asks you first, as always, unless Max approval is on for that
                 session. Sessions not in a worktree are never asked to push.
               </p>
             </Group>
@@ -1571,7 +1549,7 @@ export function Settings() {
             <Group section="sessions" title="Risk budget" gap="gap-2" changed={rbChanged}>
               <Field
                 label="Points each session may spend on what is approved without you"
-                help="Off unless you set it. An approval given without you (Extreme approval, or Claude Code by itself in Auto or Accept edits) spends 1 point at Moderate risk and 3 at High. When a session has none left, an Extreme session pauses until you start it again, and any other goes back to Manual. Your own message fills it again. Your own approvals spend nothing."
+                help="Off unless you set it. An approval given without you (Max approval, or Claude Code by itself in Auto or Accept edits) spends 1 point at Moderate risk and 3 at High. When a session has none left, an Extreme session pauses until you start it again, and any other goes back to Manual. Your own message fills it again. Your own approvals spend nothing."
               >
                 <select
                   className="field"
@@ -1591,29 +1569,9 @@ export function Settings() {
               <p className="m-0 text-[13px] text-mut">
                 A change that weakens a project's tests (an assertion taken out, a skip added, an
                 expected value changed, a test file deleted, a coverage threshold lowered, or a flag
-                that hides a failure) always comes to you, except in Extreme approval. There, by
-                default, it is approved and the session says the tests were weakened. A strict
-                project waits for you instead.
+                that hides a failure) always comes to you, except in Max approval, where it is
+                approved and the session says the tests were weakened.
               </p>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={v.tiAll}
-                  onChange={(e) => change({ tiAll: e.target.checked }, "Test integrity")}
-                />
-                Every project is strict
-              </label>
-              <Field
-                label="Strict projects, one folder name to a line"
-                help="The project's folder name, as in its policy overlay. Not case sensitive."
-              >
-                <textarea
-                  className="field mono min-h-[4.5rem]"
-                  value={v.tiProjects}
-                  disabled={v.tiAll}
-                  onChange={(e) => change({ tiProjects: e.target.value }, "Test integrity")}
-                />
-              </Field>
             </Group>
 
             <Group section="sessions" title="Data classification" gap="gap-2" changed={dcChanged}>
@@ -1727,11 +1685,11 @@ export function Settings() {
             <Group section="sessions" title="On battery" gap="gap-2" changed={batChanged}>
               <p className="m-0 text-sm text-mut">
                 On battery, the routines and timeline summaries Codehouse starts by itself wait until mains power is back, and new
-                sessions start at a low resource level. Extreme approval keeps working unless you choose otherwise here.
+                sessions start at a low resource level. Max approval keeps working unless you choose otherwise here.
               </p>
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={v.batPause} onChange={(e) => change({ batPause: e.target.checked }, "On battery")} />
-                Pause Extreme approval sessions on battery, and start them again on mains power
+                Pause Max approval sessions on battery, and start them again on mains power
               </label>
             </Group>
 
@@ -1783,7 +1741,7 @@ export function Settings() {
                 Start paused sessions again by themselves when the limit resets
               </label>
               <p className="m-0 text-xs text-mut">
-                A session that was working carries on where it stopped. In Extreme approval its turn
+                A session that was working carries on where it stopped. In Max approval its turn
                 and spending limits still apply. Off, each waits for you to press Start now.
               </p>
               {v.plPause === "off" || Number(v.plPause) >= 99 ? (

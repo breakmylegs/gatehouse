@@ -34,7 +34,7 @@ const UPDATE: UpdateStatus = {
     notes: [
       "- Build MCP servers with Claude, and give them to a session with /mcp",
       "- Watch and approve every computer's sessions from Neighbourhood Watch",
-      "- Two Extreme approval modes, with a risk limit you set",
+      "- Two Max approval modes, with a risk limit you set",
     ].join("\n"),
   },
   phase: "ready",

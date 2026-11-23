@@ -290,7 +290,7 @@ export function ChangesPane({ sessionId, cwd }: { sessionId: string; cwd: string
                 ))}
               </ul>
               {findings.some((x) => x.severity === "Severe") ? (
-                <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Extreme approval.</p>
+                <p className="m-0 text-[12.5px] text-mut">A commit of a Severe one waits for you, even in Max approval.</p>
               ) : null}
             </section>
           ) : null}

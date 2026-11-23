@@ -34,7 +34,7 @@ const WHO: Record<string, string> = {
   "human-desktop": "you",
   "human-phone": "your phone",
   "human-push": "a push answer",
-  "extreme-mode": "Extreme approval",
+  "extreme-mode": "Max approval",
   floor: "the floor",
   judge: "the judge",
   timeout: "no answer in time",

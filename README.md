@@ -68,7 +68,7 @@ You need Node 24 and Git. Quit Codehouse from its tray icon before running it ov
 
 - Your sessions sit in a sidebar, grouped by folder, with those that need you first, and in a strip across the top, most recently active first.
 - **Start a new project from what you want to build.** Choose where new projects go in Settings, then say what you want: Codehouse names a folder from it, makes it a git repository and sends your words as the first prompt. Or start a session on a folder you choose.
-- Pick the model, the effort and the mode under the prompt box: **Manual** (asks before edits and commands), **Plan**, **Accept edits**, **Auto**, or Extreme approval (below). Codehouse never uses the modes that skip permission checks.
+- Pick the model, the effort and the mode under the prompt box: **Manual** (asks before edits and commands), **Plan**, **Accept edits**, **Auto**, or Max approval (below). Codehouse never uses the modes that skip permission checks.
 - Watch up to four sessions side by side, each with its own transcript, plan, files, changes, git, terminal and browser panels, and prompt box. A line under the transcript says what Claude is doing and how long it has taken, and says so if a turn looks stuck.
 - Runs of tool calls fold into one readable line ("Ran 2 commands, read schema.ts") that opens to each call.
 - **Ask about code** opens a chat beside a session that reads its work and answers questions without changing anything. If it thinks the code session should do something, it offers the prompt, and you approve it by hand every time.
@@ -102,13 +102,13 @@ Shell commands are parsed properly (Bash with tree-sitter, PowerShell with its o
 
 ![The dashboard: what needs you now, the oldest request in full and the rest one line each](docs/images/dashboard.png)
 
-### Extreme approval, for long unattended runs
+### Max approval, for long unattended runs
 
-Turn on Extreme approval for a session and it does not wait on you: questions get their recommended answer, plans are approved, and Codehouse carries on by itself after each turn until Claude says its work queue is empty, within the turn and spending limits you set.
+Turn on Max approval for a session and it does not wait on you: questions get their recommended answer, plans are approved, and Codehouse carries on by itself after each turn until Claude says its work queue is empty, within the turn and spending limits you set.
 
-- **Rules-based Extreme approval** still stops for anything at or above the risk limit you choose in Settings (80 unless you change it).
-- **Extreme max approval** approves every escalation.
-- In both, floor denies stay denies, failures still wait for you, and every automatic answer is in the audit log.
+- It approves every escalation a rule makes, whatever its risk.
+- Floor denies stay denies, failures and a chat's hand-off still wait for you, and every automatic answer is in the audit log.
+- Your organisation can turn it off. It is never kept as a new session's mode: you choose it each time.
 
 ### Codehouse Neighbourhood Watch
 

@@ -226,7 +226,7 @@ export function Audit() {
           Every network call
         </button>
         <button type="button" className="pane-tool" aria-pressed={question.template === "extreme"} onClick={() => void ask("extreme")}>
-          Every Extreme approval
+          Every Max approval
         </button>
         <label className="flex items-center gap-1.5 text-[13px]">
           <span className="text-mut">Every deny for</span>

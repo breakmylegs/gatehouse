@@ -31,7 +31,7 @@ const WHO: Record<string, string> = {
   "human-desktop": "you, on this computer",
   "human-phone": "you, on your phone",
   "human-push": "you, from a notification",
-  "extreme-mode": "Extreme approval",
+  "extreme-mode": "Max approval",
   judge: "the judge",
   rules: "your rules",
   floor: "the always-blocked list",

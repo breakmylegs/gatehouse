@@ -2,6 +2,7 @@
 // T-017: a new session starts with the model, effort and mode you chose last, and a folder you started in before with
 // what you chose there. An Extreme approval mode is never remembered: it is chosen each time.
 import { beforeEach, describe, expect, it } from "vitest"
+import { MODE_OPTIONS, uiModeOf, wireOf } from "../src/lib/modes"
 import { choicesFor, folderKey, hasFolderChoices, rememberChoices } from "../src/lib/newSessionChoices"
 
 beforeEach(() => localStorage.clear())
@@ -19,11 +20,20 @@ describe("choices for a new session (T-017)", () => {
     expect(folderKey("C:\\Dev\\Shop\\")).toBe("c:/dev/shop")
   })
 
-  it("never remembers an Extreme approval mode", () => {
+  it("never remembers Max approval, nor the Extreme max approval an older version kept", () => {
     rememberChoices("C:\\dev\\shop", { model: "", effort: "", mode: "extreme" })
     expect(choicesFor("C:\\dev\\shop").mode).toBeUndefined()
-    rememberChoices("C:\\dev\\shop", { model: "", effort: "", mode: "extremeMax" })
+    rememberChoices("C:\\dev\\shop", { model: "", effort: "", mode: "extremeMax" as never })
     expect(choicesFor().mode).toBeUndefined()
+  })
+
+  it("offers one Max approval, sent with the max flag so an older Host approves everything too (O45)", () => {
+    expect(MODE_OPTIONS.filter((o) => o.id === "extreme").map((o) => o.label)).toEqual(["Max approval"])
+    expect(MODE_OPTIONS.some((o) => /Extreme/.test(o.label))).toBe(false)
+    expect(wireOf("extreme")).toEqual({ mode: "default", extreme: true, extremeMax: true })
+    expect(wireOf("acceptEdits")).toEqual({ mode: "acceptEdits", extreme: false })
+    // A session an older version started as the rules-based kind shows as Max approval.
+    expect(uiModeOf({ mode: "default", extreme: true })).toBe("extreme")
   })
 
   it("starts as usual when what was kept cannot be read", () => {

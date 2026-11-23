@@ -265,4 +265,4 @@ export function changedByShell(command: string, cwd: string, isTarget: (abs: str
 }
 
 export const lockedReason = (files: string[]) =>
-  `It would change the locked test ${files[0]}${files.length > 1 ? ` and ${files.length - 1} more` : ""}. Locked tests change only with you, even in Extreme approval.`
+  `It would change the locked test ${files[0]}${files.length > 1 ? ` and ${files.length - 1} more` : ""}. Locked tests change only with you, unless you chose Max approval for the session.`

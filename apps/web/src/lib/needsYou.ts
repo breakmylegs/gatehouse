@@ -13,10 +13,10 @@ export interface NeedsYou {
 }
 
 const STOPPED: Record<string, string> = {
-  turns: "Extreme approval stopped at its limit on automatic turns. Send a message to carry on.",
-  spend: "Extreme approval stopped at its spending limit. Send a message to carry on.",
-  error: "Extreme approval stopped because a turn failed.",
-  stalled: "Extreme approval stopped because two turns in a row did no work.",
+  turns: "Max approval stopped at its limit on automatic turns. Send a message to carry on.",
+  spend: "Max approval stopped at its spending limit. Send a message to carry on.",
+  error: "Max approval stopped because a turn failed.",
+  stalled: "Max approval stopped because two turns in a row did no work.",
 }
 
 export function needsYou(

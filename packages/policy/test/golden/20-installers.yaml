@@ -1,5 +1,5 @@
 # D-096, WinGet and installer admission: installing software on this computer is High in every mode and names what it
-# installs and from where; Extreme approval never approves it (canuse). Looking, not installing, is as before.
+# installs and from where; only Max approval, when chosen, approves it (canuse, O45). Looking, not installing, is as before.
 - { t: Bash, cmd: "winget install Microsoft.PowerToys", o: escalate, r: installer-admission, note: "winget, by id" }
 - { t: Bash, cmd: "winget install --id Git.Git --source winget --silent", o: escalate, r: installer-admission, note: "winget with flags" }
 - { t: PowerShell, cmd: "winget upgrade --id Microsoft.VisualStudioCode", o: escalate, r: installer-admission, note: "an upgrade" }

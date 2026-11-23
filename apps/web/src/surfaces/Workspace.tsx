@@ -204,7 +204,7 @@ const SLASH: Array<{ cmd: string; help: string }> = [
   { cmd: "/default", help: "Switch this session to Manual" },
   { cmd: "/accept-edits", help: "Switch this session to Accept edits" },
   { cmd: "/auto", help: "Switch this session to Auto" },
-  { cmd: "/extreme", help: "Turn Extreme approval on or off for this session" },
+  { cmd: "/extreme", help: "Turn Max approval on or off for this session" },
   { cmd: "/effort", help: "Set effort: low, medium, high, xhigh or max" },
   { cmd: "/model", help: "Change model, for example /model claude-sonnet-5-5" },
   { cmd: "/btw", help: "Ask a side question about this session, without interrupting it" },
@@ -2302,21 +2302,21 @@ function PausedLine({
   return (
     <div role="status" className="pane-stopped flex-wrap">
       {paused.reason === "battery" ? (
-        // E-089: on battery, with "Pause Extreme approval sessions on battery" on in Settings.
+        // E-089: on battery, with "Pause Max approval sessions on battery" on in Settings.
         <span>
-          <strong>Paused.</strong> The computer is on battery, and Settings pauses Extreme approval on battery. It starts
+          <strong>Paused.</strong> The computer is on battery, and Settings pauses Max approval on battery. It starts
           again by itself on mains power, or start it now.
         </span>
       ) : paused.reason === "heartbeat" ? (
         // D-025: nothing was heard from you in time.
         <span>
           <strong>Paused.</strong> Nothing was heard from you within this session's dead-man timer, so
-          Extreme approval stopped it. Start it again when you are back.
+          Max approval stopped it. Start it again when you are back.
         </span>
       ) : paused.reason === "risk" ? (
         // D-018: the session's risk budget is spent.
         <span>
-          <strong>Paused.</strong> This session's risk budget is spent: Extreme approval approved as much
+          <strong>Paused.</strong> This session's risk budget is spent: Max approval approved as much
           as Settings allows without you. Start it again when you have looked; its budget is then full.
         </span>
       ) : paused.reason === "spend" ? (

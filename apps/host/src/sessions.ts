@@ -54,7 +54,7 @@ import { checkOrg, type AccountMonitor, type QueryFn } from "./account.js"
 import type { ApproverClient } from "./approver-client.js"
 import type { Broker } from "./broker.js"
 import { clamp, LEVEL_NAMES, rank, type AutonomyStore, type Level } from "./autonomy.js"
-import { createCanUseTool, DEFAULT_EXTREME_LIMIT, recheckEdited, type CanUseDeps } from "./canuse.js"
+import { createCanUseTool, recheckEdited, type CanUseDeps } from "./canuse.js"
 import { withSecrets, type SecretRequests } from "./secret-requests.js"
 import type { CheckpointManager } from "./checkpoints.js"
 import type { GrantUses } from "./grant-uses.js"
@@ -242,19 +242,6 @@ export class KillSwitchEngagedError extends Error {
 }
 
 /** Owner, 9 Nov: a message to a session a limit paused; going on needs a bypass for this session. */
-/**
- * D-001: whether a project is strict about its tests, so Extreme approval waits for a person on a weakening. By name,
- * the folder's, as policy overlays are; or every project.
- */
-export function strictAboutTests(
-  s: { strictAll?: boolean; strictProjects?: string[] } | undefined,
-  project: string,
-): boolean {
-  if (s?.strictAll === true) return true
-  const p = project.trim().toLowerCase()
-  return (s?.strictProjects ?? []).some((n) => typeof n === "string" && n.trim().toLowerCase() === p)
-}
-
 /** D-007: locked tests changed outside Codehouse; no session starts in the project until the owner accepts them. */
 export class LockedTestsChangedError extends Error {
   constructor(readonly files: string[]) {
@@ -302,7 +289,7 @@ export class LimitPausedError extends Error {
         : reason === "heartbeat"
           ? "This session is paused: nothing was heard from you within its dead-man time. Start it again from its pane when you have looked at what it did."
           : reason === "battery"
-          ? "This session is paused: the computer is on battery and Settings pauses Extreme approval on battery. It starts again by itself on mains power, or start it from its pane."
+          ? "This session is paused: the computer is on battery and Settings pauses Max approval on battery. It starts again by itself on mains power, or start it from its pane."
           : reason === "phone"
           ? "This session is paused: you paused its project from the phone. Start it again from its pane on the computer."
           : reason === "spend"
@@ -913,7 +900,7 @@ export class Session extends EventEmitter<SessionEvents> {
       "risk-budget",
       { by, extreme, mode: this.#mode },
       extreme
-        ? "The session's risk budget is spent, so Extreme approval paused it."
+        ? "The session's risk budget is spent, so Max approval paused it."
         : "The session's risk budget is spent, so it went back to Manual: each call now asks you.",
       "rules",
     )
@@ -1033,7 +1020,8 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#effort =
       opts.localModel !== undefined ? undefined : capEffort(opts.effort, deps.config().effortCap)
     this.#extreme = opts.extreme === true
-    this.#extremeMax = opts.extreme === true && opts.extremeMax === true
+    // O45: Extreme approval is Max approval, whatever an older window or a saved session asked for.
+    this.#extremeMax = opts.extreme === true
     // E-089: on battery, a new session starts lower unless you chose its level.
     this.#resources = opts.resources ?? deps.defaultResources?.() ?? "high"
     this.#account = opts.account ?? MAIN_ACCOUNT
@@ -1471,11 +1459,9 @@ export class Session extends EventEmitter<SessionEvents> {
       verdicts: this.#verdicts,
       extreme: () => this.#extreme,
       // O36: Max, or Rules-based at the limit in Settings, read at each call.
-      extremeLevel: () => ({ max: this.#extremeMax, limit: d.config().extremeRiskLimit ?? DEFAULT_EXTREME_LIMIT }),
       toolGranted: (tool: string) => this.#toolGrants.has(tool),
       mode: () => this.#mode,
       // D-001: whether this project is strict about its tests, read at each call; and what was weakened.
-      strictTests: () => strictAboutTests(d.config().testIntegrity, this.project),
       onRememberRefused: (why) => this.emit("event", { type: "remember_refused", data: { why } }),
       onAutoApproved: (verdict) => void this.#spendRisk(verdict.risk, "extreme"),
       onTestsWeakened: (pattern, reason) => {
@@ -2483,7 +2469,7 @@ export class Session extends EventEmitter<SessionEvents> {
             ? "Claude Code crashed while the session was working, so it was started again and carried on where it was."
             : data.restart === true
               ? "Codehouse restarted while the session was working, so it carried on where it was."
-              : "Extreme approval is on, so the session carried on with its build queue by itself.",
+              : "Max approval is on, so the session carried on with its build queue by itself.",
         risk: 0,
         decidedBy: "extreme-mode",
         policyHash: this.#deps.policy()?.hash ?? "",
@@ -2566,7 +2552,7 @@ export class Session extends EventEmitter<SessionEvents> {
         ...(until ? { until } : {}),
       },
       reason === "battery"
-        ? "The computer went on battery and Settings pauses Extreme approval on battery, so Codehouse paused this Extreme session until mains power is back."
+        ? "The computer went on battery and Settings pauses Max approval on battery, so Codehouse paused this Extreme session until mains power is back."
         : reason === "heartbeat"
         ? "Nothing was heard from you in time, so Codehouse paused this Extreme session until you start it again."
         : reason === "risk"
@@ -2863,7 +2849,7 @@ export class Session extends EventEmitter<SessionEvents> {
         reason:
           check === undefined
             ? "The goal for this session was cleared from the desktop."
-            : "A goal was set for this session from the desktop: Extreme approval carries on until its check passes.",
+            : "A goal was set for this session from the desktop: Max approval carries on until its check passes.",
         risk: 0,
         decidedBy: "human-desktop",
         policyHash: this.#deps.policy()?.hash ?? "",
@@ -2912,11 +2898,11 @@ export class Session extends EventEmitter<SessionEvents> {
   async setExtreme(on: boolean, max = false): Promise<void> {
     if (this.#opts.kind === "chat" && on) throw new ChatModeError()
     const managed = this.#deps.policy()?.managedSettings
-    if (on && !extremeAllowed(managed)) throw new ManagedSettingError(managedRefusal(managed, "Extreme approval is turned off"))
+    if (on && !extremeAllowed(managed)) throw new ManagedSettingError(managedRefusal(managed, "Max approval is turned off"))
     // C-015: Extreme approval only where this project's record allows it.
     if (on && this.#opts.kind !== "chat" && this.#autonomyCap() !== "extreme") throw new AutonomyCapError(capRefusal(this.project, this.#autonomyCap(), this.#deps.autonomy))
     this.#extreme = on
-    this.#extremeMax = on && max
+    this.#extremeMax = on
     await this.#deps.audit.record({
       session: this.id,
       event: "settings_changed",
@@ -2930,9 +2916,9 @@ export class Session extends EventEmitter<SessionEvents> {
         ruleId: on ? (max ? "extreme-max-on" : "extreme-on") : "extreme-off",
         reason: on
           ? max
-            ? "Extreme max approval turned on for this session from the desktop: every request a rule makes is answered."
-            : "Rules-based Extreme approval turned on for this session from the desktop."
-          : "Extreme approval turned off for this session from the desktop.",
+            ? "Max approval turned on for this session from the desktop: every request a rule makes is answered."
+            : "Rules-based Max approval turned on for this session from the desktop."
+          : "Max approval turned off for this session from the desktop.",
         risk: 0,
         decidedBy: "human-desktop",
         policyHash: "",
@@ -3110,7 +3096,7 @@ export class SessionManager extends EventEmitter<ManagerEvents> {
     // T-067: a session starts (or carries on after a resume) only within the organisation's settings.
     const ms = this.#deps.policy?.()?.managedSettings
     if (!modeAllowed(ms, opts.mode ?? "default")) throw new ManagedSettingError(managedRefusal(ms, `the broadest mode allowed is ${ms?.maxMode}`))
-    if (opts.extreme === true && !extremeAllowed(ms)) throw new ManagedSettingError(managedRefusal(ms, "Extreme approval is turned off"))
+    if (opts.extreme === true && !extremeAllowed(ms)) throw new ManagedSettingError(managedRefusal(ms, "Max approval is turned off"))
     if (opts.localModel !== undefined && !providerAllowed(ms, "local") && !providerAllowed(ms, "gateway")) throw new ManagedSettingError(managedRefusal(ms, "models other than Claude are not allowed"))
     if (opts.localModel === undefined && !providerAllowed(ms, "claude")) throw new ManagedSettingError(managedRefusal(ms, "Claude is not one of the providers allowed"))
     // C-015: no higher than this project's record allows; a session asked for more starts lowered, and says so.
