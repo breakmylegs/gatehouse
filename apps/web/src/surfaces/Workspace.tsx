@@ -19,6 +19,7 @@ import { SchemaDiffPanel } from "../components/SchemaDiffPanel"
 import { RehearsalPanel } from "../components/RehearsalPanel"
 import { QueryPlanPanel } from "../components/QueryPlanPanel"
 import { TestDataPanel } from "../components/TestDataPanel"
+import { ContractProbePanel } from "../components/ContractProbePanel"
 import { IacCheckPanel } from "../components/IacCheckPanel"
 import { PwshModernisePanel } from "../components/PwshModernisePanel"
 import { SessionDetails } from "../components/SessionDetails"
@@ -419,6 +420,7 @@ function SessionPane({
   const [rehearsal, setRehearsal] = useState(false)
   const [plans, setPlans] = useState(false)
   const [testData, setTestData] = useState(false)
+  const [contract, setContract] = useState(false)
   const [iacCheck, setIacCheck] = useState(false)
   // D-033: the project's requirements and their trace matrix.
   const [requirements, setRequirements] = useState(false)
@@ -702,6 +704,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Query plans...", onSelect: () => setPlans(true) }]),
     // E-015: real-looking personal data in fixtures, and synthetic seed rows.
     ...(chat ? [] : [{ label: "Test data...", onSelect: () => setTestData(true) }]),
+    // E-031 to E-036: the app probed against its OpenAPI spec, its mocks, its security gaps and its generated clients.
+    ...(chat ? [] : [{ label: "API contract...", onSelect: () => setContract(true) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
     // E-025: the tools this computer has against what the project asks for.
@@ -980,6 +984,11 @@ function SessionPane({
       {iacCheck ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <IacCheckPanel sessionId={session.id} onOpen={(file, line) => setOpened({ kind: "file", rel: file, line })} onClose={() => setIacCheck(false)} />
+        </div>
+      ) : null}
+      {contract ? (
+        <div className="max-h-[60vh] overflow-auto px-3 pt-2">
+          <ContractProbePanel sessionId={session.id} onClose={() => setContract(false)} />
         </div>
       ) : null}
       {testData ? (

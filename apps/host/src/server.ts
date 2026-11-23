@@ -10,6 +10,11 @@ import { findMigrations, rehearse } from "./migration-rehearsal.js"
 import { explainAll, gitOut, queriesIn } from "./query-plan.js"
 import { generateFixtures, scanFixtures } from "./fixtures.js"
 import { IAC_PARSERS, iacFormat, lintIac } from "@gatehouse/policy"
+import { probe, readSpec } from "./conformance-probe.js"
+import { mocksFrom } from "./mock-gen.js"
+import { lintApi } from "./api-lint.js"
+import { checkSpecErrors } from "./error-contract.js"
+import { checkDrift, findGenerators, hasDrift } from "./client-drift.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
@@ -141,6 +146,12 @@ export interface HostApp {
   container?: (sessionId: string) => import("./codehouse-action.js").ContainerRun | undefined
   /** E-019: signed price sheets. */
   priceSheets?: import("./price-sheet.js").PriceSheets
+  /** E-031: whether the rules allow a command by themselves for a session, as a Codehouse action's would be judged. */
+  rulesAllow?: (sessionId: string, cwd: string, command: string) => Promise<boolean>
+  /** E-034: the shapes of probed answers, per project. */
+  contractSnapshots?: import("./contract-snapshots.js").ContractSnapshots
+  /** E-036: a command run as a Codehouse action for a session (judged, no credentials, at its level). */
+  runAction?: (sessionId: string, command: string, cwd: string, why: string) => Promise<{ exitCode: number | null; output: string; refused?: string }>
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1225,6 +1236,95 @@ export class HostServer {
         if (r.state === "refused") throw new CommandError("refused", `The price sheet was not kept: ${r.why}.`)
         return r
       }
+      case "client_drift": {
+        // E-036: the tool runs as a Codehouse action in a scratch folder inside .codehouse, deleted afterwards.
+        const s = this.#session(cmd.sessionId)
+        const run = a.runAction
+        if (!run) throw new CommandError("unavailable", "Codehouse actions are not available here.")
+        const listed = await gitLines(s.cwd, ["-c", "core.quotePath=false", "ls-files", "--cached", "--others", "--exclude-standard"]).catch(() => undefined)
+        if (!listed) throw new CommandError("not-a-repo", "The folder is not a git repository, so its files cannot be listed.")
+        const gens = findGenerators(listed, (p) => {
+          try {
+            return fs.readFileSync(path.join(s.cwd, p), "utf8")
+          } catch {
+            return undefined
+          }
+        }).slice(0, 10)
+        const results = []
+        for (const g of gens)
+          results.push(
+            await checkDrift(s.cwd, g, async (command, cwd) => {
+              const r = await run(s.id, command, cwd, `generating the ${g.tool} client again to compare it with the committed one`)
+              return { ran: !r.refused, exitCode: r.exitCode, output: r.output, ...(r.refused ? { refused: r.refused } : {}) }
+            }),
+          )
+        await a.audit.record({
+          session: s.id, event: "client_drift_checked", channel: "desktop", tool: "client-drift", cwd: s.cwd, project: s.project,
+          input: { clients: results.length, drifted: results.filter((r) => hasDrift(r.drift)).length },
+          verdict: { outcome: "allow", ruleId: "client-drift", reason: `${results.length} generated client(s) compared with a fresh generation.`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { results }
+      }
+      case "api_lint": {
+        // E-035: read only.
+        const s = this.#session(cmd.sessionId)
+        const file = path.resolve(s.cwd, cmd.spec)
+        const rel = path.relative(s.cwd, file)
+        if (rel.startsWith("..") || path.isAbsolute(rel)) throw new CommandError("outside", "The spec must be a file in the project.")
+        let text: string
+        try {
+          text = fs.readFileSync(file, "utf8")
+        } catch {
+          throw new CommandError("no-spec", "The spec could not be read.")
+        }
+        const spec = readSpec(text)
+        if (!spec) throw new CommandError("not-openapi", "That file is not an OpenAPI 3 spec.")
+        // E-037: error answers against RFC 9457 or the project's convention, beside the security gaps.
+        return { findings: [...lintApi(spec), ...checkSpecErrors(spec).map((e) => ({ rule: "error-contract", where: e.where, message: e.message }))] }
+      }
+      case "mock_defs": {
+        // E-032: read only; the mocks are shown to copy, never written, and Codehouse hosts no mock server.
+        const s = this.#session(cmd.sessionId)
+        const file = path.resolve(s.cwd, cmd.spec)
+        const rel = path.relative(s.cwd, file)
+        if (rel.startsWith("..") || path.isAbsolute(rel)) throw new CommandError("outside", "The spec must be a file in the project.")
+        let text: string
+        try {
+          text = fs.readFileSync(file, "utf8")
+        } catch {
+          throw new CommandError("no-spec", "The spec could not be read.")
+        }
+        const mocks = mocksFrom(text, rel.replace(/\\/g, "/"))
+        if (!mocks) throw new CommandError("not-openapi", "That file is not an OpenAPI 3 spec.")
+        return mocks
+      }
+      case "contract_probe": {
+        // E-031: loopback only; each request judged as the same curl command would be; recorded with its outcome.
+        const s = this.#session(cmd.sessionId)
+        const file = path.resolve(s.cwd, cmd.spec)
+        if (path.relative(s.cwd, file).startsWith("..") || path.isAbsolute(path.relative(s.cwd, file))) throw new CommandError("outside", "The spec must be a file in the project.")
+        let text: string
+        try {
+          text = fs.readFileSync(file, "utf8")
+        } catch {
+          throw new CommandError("no-spec", "The spec could not be read.")
+        }
+        const spec = readSpec(text)
+        if (!spec) throw new CommandError("not-openapi", "That file is not an OpenAPI 3 spec.")
+        const allow = a.rulesAllow
+        const report = await probe(spec, cmd.base, { allowed: (command) => (allow ? allow(s.id, s.cwd, command) : Promise.resolve(false)) })
+        if (!report.refused) s.contractProbed({ base: report.base, operations: report.operations.length, mismatches: report.mismatches })
+        // E-034: how each answer's shape changed since the last probe of this project.
+        const changes = !report.refused && a.contractSnapshots ? a.contractSnapshots.record(s.cwd, report.operations) : []
+        await a.audit.record({
+          session: s.id, event: "contract_probed", channel: "desktop", tool: "contract-probe", cwd: s.cwd, project: s.project,
+          input: { spec: cmd.spec, base: report.base, operations: report.operations.length, mismatches: report.mismatches.length, ...(report.refused ? { refused: true } : {}) },
+          verdict: { outcome: report.refused ? "deny" : "allow", ruleId: "contract-probe", reason: report.refused ?? `${report.operations.length} operation(s) probed on ${report.base}: ${report.mismatches.length} mismatch(es).`, risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        return { ...report, operations: report.operations.map(({ shape: _s, ...o }) => o), changes }
+      }
       case "iac_check": {
         // E-022: read only, in process; nothing is run.
         const s = this.#session(cmd.sessionId)
@@ -1344,7 +1444,7 @@ export class HostServer {
         const allowed = a.policy()?.managedLicences ?? a.admin?.config().allowedLicences ?? DEFAULT_LICENCES
         for (const f of licenceFindings([...direct, ...upgradedDirect].slice(0, 200), [s.cwd], allowed)) admission.push({ dependency: f.dependency, check: "licence", outcome: "escalate", reason: f.reason })
         for (const m of a.vulnSnapshot?.matches(all) ?? []) admission.push({ dependency: `${m.ecosystem}:${m.name}`, check: "vulnerability", outcome: "escalate", reason: `${m.name} ${m.version} is in the vulnerability snapshot (${m.ids.join(", ")}).` })
-        const evidence = a.evidence ? await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions(), ...adversaryOf(a, s.id) }, cmd.ref ? { ref: cmd.ref } : {}).catch(() => undefined) : undefined
+        const evidence = a.evidence ? await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions(), ...adversaryOf(a, s.id), ...(s.contract() ? { contract: s.contract()! } : {}) }, cmd.ref ? { ref: cmd.ref } : {}).catch(() => undefined) : undefined
         const pack = upgradePack({
           changes: all,
           evidence: evidence?.pack,
@@ -1486,7 +1586,7 @@ export class HostServer {
       case "evidence_build": {
         const s = this.#session(cmd.sessionId)
         if (!a.evidence) throw new CommandError("unavailable", "Evidence packs are not available here.")
-        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions(), ...adversaryOf(a, s.id) }, cmd.ref ? { ref: cmd.ref } : {})
+        const got = await a.evidence.build({ id: s.id, cwd: s.cwd, project: s.project, assumptions: s.openAssumptions(), ...adversaryOf(a, s.id), ...(s.contract() ? { contract: s.contract()! } : {}) }, cmd.ref ? { ref: cmd.ref } : {})
         if (!got) throw new CommandError("no-checkpoint", "This session has no checkpoint yet, so there is no change to gather.")
         return got
       }

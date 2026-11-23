@@ -308,6 +308,14 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("price_sheet_import"), sheet: z.string().max(20_000_000), signature: z.string().max(2000) }),
   /** E-022: the project's Terraform, Bicep, ARM and CloudFormation checked for misconfigurations, in process. */
   z.object({ type: z.literal("iac_check"), sessionId: Id }),
+  /** E-031: each operation of an OpenAPI spec in the project sent to the app on this computer, and its answers checked. */
+  /** E-032: MSW handlers, WireMock mappings and a Prism command made from an OpenAPI spec in the project, to copy. */
+  /** E-035: an OpenAPI spec in the project checked for API security gaps. */
+  /** E-036: each generated API client made again with the project's own tool, and compared with the committed one. */
+  z.object({ type: z.literal("client_drift"), sessionId: Id }),
+  z.object({ type: z.literal("api_lint"), sessionId: Id, spec: z.string().max(500) }),
+  z.object({ type: z.literal("mock_defs"), sessionId: Id, spec: z.string().max(500) }),
+  z.object({ type: z.literal("contract_probe"), sessionId: Id, spec: z.string().max(500), base: z.string().max(300).optional() }),
   z.object({ type: z.literal("test_data"), sessionId: Id, generate: z.boolean().optional(), rows: z.number().int().min(1).max(500).optional() }),
   /** D-080: the project's ADRs, glossary and instructions as a signed pack, and importing one signed by a trusted key. */
   z.object({ type: z.literal("knowledge_export"), sessionId: Id }),

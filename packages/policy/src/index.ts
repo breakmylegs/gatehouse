@@ -29,3 +29,7 @@ export { migrationKind } from "./migration.js"
 export * from "./iac-plan.js"
 export * from "./iam.js"
 export * from "./iac-lint.js"
+export * from "./spec-diff.js"
+
+/** E-031: the YAML reader the policy pins, for other workspaces that read YAML (OpenAPI specs). */
+export { parse as parseYaml } from "yaml"

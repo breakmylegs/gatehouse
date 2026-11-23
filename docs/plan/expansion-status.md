@@ -85,13 +85,13 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-019 | Infrastructure cost delta | E3 | done | feat/e3d | yes | signed price sheet (managed key); apply card shows the monthly change as an interval, unknown SKUs not known |
 | E-020 | Least-privilege IAM diff | E3 | done | feat/e3e | yes | broad-iam High: * actions or resources, Owner/Contributor at subscription, admin roles; edits and plans; 13 golden |
 | E-022 | In-process IaC misconfiguration checks | E3 | done | feat/e3e | yes | public storage, open groups, encryption, TLS, diagnostics over HCL, Bicep, ARM, CFN; own block reader (no grammars bundled); 11 seeded |
-| E-031 | Contract-first conformance probe | E3 | todo | | |  |
-| E-032 | Mock definitions from specs | E3 | todo | | | Safe variant only; the List for part is listed |
-| E-033 | Spec breaking-change detector | E3 | todo | | |  |
-| E-034 | Contract snapshots | E3 | todo | | |  |
-| E-035 | API security lint | E3 | todo | | |  |
-| E-036 | Generated client drift | E3 | todo | | |  |
-| E-037 | Error contract consistency | E3 | todo | | |  |
+| E-031 | Contract-first conformance probe | E3 | done | feat/e3f | yes | conformance probe: loopback only, each request judged, ajv; mismatches in evidence and contradict claims |
+| E-032 | Mock definitions from specs | E3 | done | feat/e3f | yes | MSW handlers (compile), WireMock mappings, loopback Prism command, to copy |
+| E-033 | Spec breaking-change detector | E3 | done | feat/e3f | yes | spec breaking changes without a major bump escalate (spec-breaking-change, 70) |
+| E-034 | Contract snapshots | E3 | done | feat/e3f | yes | answer shapes kept per project (no values), changes reported next probe |
+| E-035 | API security lint | E3 | done | feat/e3f | yes | API security lint: no security, 401/403, object ids, unbounded arrays, rate limit, sensitive query |
+| E-036 | Generated client drift | E3 | done | feat/e3f | yes | generated clients made again in a scratch folder as a Codehouse action, drift reported |
+| E-037 | Error contract consistency | E3 | done | feat/e3f | yes | error answers against RFC 9457 or the project's convention, in specs and probes |
 | E-038 | Local log capture and viewer | E4 | todo | | |  |
 | E-039 | Error signature triage | E4 | todo | | |  |
 | E-040 | Local trace receiver | E4 | todo | | |  |

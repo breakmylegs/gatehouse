@@ -58,6 +58,8 @@ export interface EvidencePack {
   assumptions?: Array<{ id: string; text: string; check?: string; at: string }>
   /** D-084: what the breaker of an adversarial pair found, and which model it was. */
   adversary?: { model: string; at: string; reported: boolean; findings: string[] }
+  /** E-031: the last contract probe of the app on this computer, and what did not match the spec. */
+  contract?: { at: string; base: string; operations: number; mismatches: string[] }
   /** What this pack does not hold, said plainly. */
   notes: string[]
 }
@@ -115,6 +117,7 @@ export interface PackInput {
   findings: SastFinding[]
   assumptions?: Array<{ id: string; text: string; check?: string; at: string }>
   adversary?: EvidencePack["adversary"]
+  contract?: EvidencePack["contract"]
   now?: () => Date
 }
 
@@ -173,6 +176,7 @@ export function buildPack(o: PackInput): EvidencePack {
     findings: o.findings,
     ...(o.assumptions?.length ? { assumptions: o.assumptions } : {}),
     ...(o.adversary ? { adversary: o.adversary } : {}),
+    ...(o.contract ? { contract: o.contract } : {}),
     files: o.files,
     notes: [
       "Coverage and mutation deltas: none recorded for this change.",
@@ -319,7 +323,7 @@ export class EvidenceService {
   }
 
   /** The pack for what the session changed since a checkpoint (its first, by default), kept and recorded. */
-  async build(s: { id: string; cwd: string; project: string; assumptions?: EvidencePack["assumptions"]; adversary?: EvidencePack["adversary"] }, o: { ref?: string; commit?: string } = {}): Promise<{ sha: string; pack: EvidencePack } | undefined> {
+  async build(s: { id: string; cwd: string; project: string; assumptions?: EvidencePack["assumptions"]; adversary?: EvidencePack["adversary"]; contract?: EvidencePack["contract"] }, o: { ref?: string; commit?: string } = {}): Promise<{ sha: string; pack: EvidencePack } | undefined> {
     const c = await this.#o.checkpoints.changes(s.cwd, s.id, o.ref)
     const head = headOf(this.#o.auditDir)
     if (!c.since || !head) return undefined
@@ -362,6 +366,7 @@ export class EvidenceService {
       findings,
       ...(s.assumptions?.length ? { assumptions: s.assumptions } : {}),
       ...(s.adversary ? { adversary: s.adversary } : {}),
+      ...(s.contract ? { contract: s.contract } : {}),
     })
     const fit = hasFitness(s.cwd) ? await fitnessCheck(s.cwd, await listFiles(s.cwd).catch(() => [] as string[])).catch(() => undefined) : undefined
     if (fit) {

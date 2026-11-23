@@ -1941,6 +1941,15 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /** D-037: the ones not yet verified, for the evidence pack. */
+  /** E-031: the last contract probe; its mismatches make done-claims Contradicted until a probe passes. */
+  #contract: { at: string; base: string; operations: number; mismatches: string[] } | undefined
+  contractProbed(r: { base: string; operations: number; mismatches: string[] }): void {
+    this.#contract = { at: new Date().toISOString(), base: r.base, operations: r.operations, mismatches: r.mismatches.slice(0, 50) }
+  }
+  contract() {
+    return this.#contract
+  }
+
   openAssumptions() {
     return this.#assumptions.filter((a) => !a.verified).map((a) => ({ ...a }))
   }
@@ -2112,6 +2121,11 @@ export class Session extends EventEmitter<SessionEvents> {
           why = `${why}, but the claims judge ${j.outcome === "flag" ? "flagged it" : "could not decide"}: ${j.reasons.join("; ")}${j.ranOn ? ` (it ran on ${j.ranOn})` : ""}`
           judged = j
         } else if (j.ranOn) why = `${why}; the claims judge found nothing (it ran on ${j.ranOn})`
+      }
+      // E-031: a contract probe that found mismatches contradicts a claim of done, whatever the check said.
+      if (outcome !== "contradicted" && this.#contract?.mismatches.length) {
+        outcome = "contradicted"
+        why = `${why}; but the contract probe found ${this.#contract.mismatches.length} mismatch(es) with the spec: ${this.#contract.mismatches.slice(0, 3).join("; ")}`
       }
       const entry = {
         kind: c.kind,

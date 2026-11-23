@@ -3,6 +3,7 @@ import { devDriveCheck, readDevDrive } from "./devdrive.js"
 import { containerCheck, containerFor, findPodman } from "./container-runs.js"
 import { IacPlans } from "./iac-plans.js"
 import { PriceSheets, priceSheetCheck } from "./price-sheet.js"
+import { ContractSnapshots } from "./contract-snapshots.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
@@ -1676,6 +1677,13 @@ export function createHost(opts: HostOptions = {}): Host {
     adversary,
     artifacts,
     priceSheets,
+    // E-031: a contract probe's requests are judged as the same curl commands would be; only the rules' own allow sends one.
+    runAction: async (sessionId: string, command: string, cwd: string, why: string) => {
+      const r = await actionFor(sessionId, why)(command, cwd, 10 * 60_000)
+      return { exitCode: r.exitCode, output: r.output, ...(r.refused ? { refused: r.refused } : {}) }
+    },
+    contractSnapshots: new ContractSnapshots(path.join(gatehouseDataDir(env), "contract-snapshots"), (k) => redactString(k, { terms: config.redactTerms })),
+    rulesAllow: async (sessionId: string, cwd: string, command: string) => (await deps.approver.evaluate({ toolName: "Bash", input: { command } }, { cwd, sessionId })).outcome === "allow",
     container: (id: string) => container(id)(),
     // D-080: knowledge packs are signed with a key kept sealed for this user.
     knowledgeKey: machineKey,
