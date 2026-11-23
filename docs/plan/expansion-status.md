@@ -92,11 +92,11 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | E-035 | API security lint | E3 | done | feat/e3f | yes | API security lint: no security, 401/403, object ids, unbounded arrays, rate limit, sensitive query |
 | E-036 | Generated client drift | E3 | done | feat/e3f | yes | generated clients made again in a scratch folder as a Codehouse action, drift reported |
 | E-037 | Error contract consistency | E3 | done | feat/e3f | yes | error answers against RFC 9457 or the project's convention, in specs and probes |
-| E-038 | Local log capture and viewer | E4 | todo | | |  |
-| E-039 | Error signature triage | E4 | todo | | |  |
-| E-040 | Local trace receiver | E4 | todo | | |  |
-| E-041 | Profiling on request | E4 | todo | | |  |
-| E-042 | Memory leak detector | E4 | todo | | |  |
+| E-038 | Local log capture and viewer | E4 | done | feat/e4a | yes | log store per project from actions and listed files, parsed and redacted; reads judged by the rules; search, level, time, retention |
+| E-039 | Error signature triage | E4 | done | feat/e4a | yes | errors grouped by signature, frames source-mapped inside the project, a fix task each |
+| E-040 | Local trace receiver | E4 | done | feat/e4a | yes | OTLP JSON receiver on 127.0.0.1, per-project token, no Origin, Host checked, 4 MB cap; span trees; T162 |
+| E-041 | Profiling on request | E4 | done | feat/e4a | yes | --cpu-prof as a Codehouse action, never an inspector; top functions and flame graph; dotnet-trace when present |
+| E-042 | Memory leak detector | E4 | done | feat/e4a | yes | heap snapshots by a preload; constructors that keep growing reported |
 | E-045 | Crash summary | E4 | todo | | |  |
 | E-043 | Verified reproduction recipes | E4 | todo | | |  |
 | E-044 | Bisect assistant | E4 | todo | | |  |

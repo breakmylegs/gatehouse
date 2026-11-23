@@ -4,6 +4,8 @@ import { containerCheck, containerFor, findPodman } from "./container-runs.js"
 import { IacPlans } from "./iac-plans.js"
 import { PriceSheets, priceSheetCheck } from "./price-sheet.js"
 import { ContractSnapshots } from "./contract-snapshots.js"
+import { LogStore } from "./log-capture.js"
+import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
 import { powerShellExe } from "@gatehouse/policy"
@@ -906,6 +908,15 @@ export function createHost(opts: HostOptions = {}): Host {
   const builtServers = new BuiltServers(gatehouseDataDir(env))
   const mcpRunner = new McpRunner({ store: builtServers, limitsExe: () => limitsExe, env, log })
   deps.builtBridge = (name) => bridgeFor(mcpRunner, name)
+  // E-038: what Codehouse's own commands print, kept per project (redacted) for the log viewer.
+  const logs = new LogStore(path.join(gatehouseDataDir(env), "logs"), (t) => redactString(t, { terms: config.redactTerms }), () => config.logRetentionDays ?? 7)
+  // E-040: the local trace receiver, per-project tokens kept as hashes; started below when Settings switch it on.
+  const traceTokens = new TraceTokens(path.join(gatehouseDataDir(env), "trace-tokens.json"))
+  const traces = new TraceStore()
+  let traceServer: import("node:http").Server | undefined
+  const actionLog = (r: { sessionId: string; cwd: string; command: string }, output: string) => {
+    if (output) logs.append(manager.get(r.sessionId)?.cwd ?? r.cwd, `action: ${r.command.slice(0, 120)}`, output)
+  }
   // D-009: a claim's check runs as Codehouse's own action, for the session it was made in.
   deps.codehouseAction = (r) =>
     runCodehouseAction(r, {
@@ -914,7 +925,7 @@ export function createHost(opts: HostOptions = {}): Host {
       audit,
       kill,
       extreme: () => manager.get(r.sessionId)?.info().extreme === true,
-      ...(limitsExe ? { limitsExe } : {}),
+      ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog,
     })
   // D-086: a passing claim is judged for reward hacks, with a model on this computer when you chose one.
   deps.judgeClaim = makeClaimJudge({ config: () => config, redact: (t) => redactString(t, { terms: config.redactTerms }) })
@@ -941,7 +952,7 @@ export function createHost(opts: HostOptions = {}): Host {
         audit,
         kill,
         extreme: () => s?.info().extreme === true,
-        ...(limitsExe ? { limitsExe } : {}),
+        ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog,
         container: container(sessionId),
       },
     )
@@ -952,7 +963,7 @@ export function createHost(opts: HostOptions = {}): Host {
     const s = manager.get(sessionId)
     const r = await runCodehouseAction(
       { sessionId, cwd, project: s?.project ?? "", command, why: "testing the tests against small changes to the new lines", level: s?.info().resources ?? "high", timeoutMs },
-      { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), container: container(sessionId) },
+      { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog, container: container(sessionId) },
     )
     return { exitCode: r.exitCode, output: r.output, timedOut: r.timedOut, killed: r.killed && !r.timedOut, ...(r.refused ? { refused: r.refused } : {}) }
   }
@@ -1677,9 +1688,18 @@ export function createHost(opts: HostOptions = {}): Host {
     adversary,
     artifacts,
     priceSheets,
+    logs,
+    traces: { tokens: traceTokens, store: traces, port: () => (traceServer?.address() as { port?: number } | null)?.port ?? config.traceReceiver?.port ?? 4318, on: () => !!traceServer },
+    // E-038: a listed log file is read only when the rules allow reading it by themselves.
+    rulesAllowRead: async (sessionId: string, cwd: string, abs: string) => (await deps.approver.evaluate({ toolName: "Read", input: { file_path: abs } }, { cwd, sessionId })).outcome === "allow",
     // E-031: a contract probe's requests are judged as the same curl commands would be; only the rules' own allow sends one.
-    runAction: async (sessionId: string, command: string, cwd: string, why: string) => {
-      const r = await actionFor(sessionId, why)(command, cwd, 10 * 60_000)
+    runAction: async (sessionId: string, command: string, cwd: string, why: string, extraEnv?: Record<string, string>) => {
+      // E-041: a profile run adds NODE_OPTIONS (the profiler, never an inspector); credentials are taken out as always.
+      const s = manager.get(sessionId)
+      const r = await runCodehouseAction(
+        { sessionId, cwd, project: s?.project ?? "", command, why, level: s?.info().resources ?? "high", timeoutMs: 10 * 60_000, ...(extraEnv ? { env: extraEnv } : {}) },
+        { approver: deps.approver, broker, audit, kill, extreme: () => s?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog },
+      )
       return { exitCode: r.exitCode, output: r.output, ...(r.refused ? { refused: r.refused } : {}) }
     },
     contractSnapshots: new ContractSnapshots(path.join(gatehouseDataDir(env), "contract-snapshots"), (k) => redactString(k, { terms: config.redactTerms })),
@@ -1824,13 +1844,13 @@ export function createHost(opts: HostOptions = {}): Host {
       forgeAct: (id, cwd, command, why) =>
         runCodehouseAction(
           { sessionId: id, cwd, project: manager.get(id)?.project ?? "", command, why, level: manager.get(id)?.info().resources ?? "high", timeoutMs: 120_000 },
-          { approver: deps.approver, broker, audit, kill, extreme: () => manager.get(id)?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+          { approver: deps.approver, broker, audit, kill, extreme: () => manager.get(id)?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog },
         ),
       // T-083: a fast-forward pull as a Codehouse action, judged like the same command from the session.
       pullFastForward: (id, cwd) =>
         runCodehouseAction(
           { sessionId: id, cwd, project: manager.get(id)?.project ?? "", command: PULL_FF, why: "bringing the checkout up to date by fast-forward", level: manager.get(id)?.info().resources ?? "high", timeoutMs: 120_000 },
-          { approver: deps.approver, broker, audit, kill, extreme: () => manager.get(id)?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}) },
+          { approver: deps.approver, broker, audit, kill, extreme: () => manager.get(id)?.info().extreme === true, ...(limitsExe ? { limitsExe } : {}), onFinished: actionLog },
         ),
       sessionWrote: (id, abs) => manager.get(id)?.wrote(abs) ?? false,
       chat: { store: chatStore, recorder: chatRecorder },
@@ -2263,6 +2283,14 @@ export function createHost(opts: HostOptions = {}): Host {
       timeline.start()
       settler.start()
       power.start()
+      // E-040: only when switched on; one that cannot start (its port taken) says so and the rest go on.
+      if (config.traceReceiver?.enabled)
+        void startReceiver(config.traceReceiver.port ?? 4318, { tokens: traceTokens, store: traces, redact: (t) => redactString(t, { terms: config.redactTerms }), log })
+          .then((srv) => {
+            traceServer = srv
+            log(`trace receiver: on 127.0.0.1:${(srv.address() as { port: number }).port}`)
+          })
+          .catch((e: Error) => log(`trace receiver: not started (${e.message})`))
     },
     async stop() {
       // E-096: an orderly stop, so this start is not counted as a crash.
@@ -2271,6 +2299,7 @@ export function createHost(opts: HostOptions = {}): Host {
       await openSessions?.freeze()
       limitPauser.stop()
       power.stop()
+      traceServer?.close()
       cnw.stop()
       timeline.stop()
       settler.stop()

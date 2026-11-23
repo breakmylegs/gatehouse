@@ -165,6 +165,10 @@ function build(loose: boolean) {
     phoneAlerts: z.enum(["all", "decisions"]).optional(),
     /** While you were away, written by Claude in plain English (owner, 4 Nov). Absent is on; false turns it off. */
     recapByClaude: z.boolean().optional(),
+    /** E-038: how many days the log store keeps a project's lines, 1 to 90. Absent: 7. */
+    logRetentionDays: z.number().int().min(1).max(90).optional(),
+    /** E-040: the local OTLP trace receiver on 127.0.0.1, off unless switched on; its port (absent: 4318). */
+    traceReceiver: z.object({ enabled: z.boolean().optional(), port: z.number().int().min(1024).max(65535).optional() }).passthrough().optional(),
     /** E-026: heavy checks in a Podman container (no network, project read-only). Off unless switched on. */
     containerRuns: z.object({ enabled: z.boolean().optional(), image: z.string().max(255).optional() }).passthrough().optional(),
     /** O36: the risk at or above which Rules-based Extreme approval waits for you, 1 to 101 (101: never). Absent: 80. */

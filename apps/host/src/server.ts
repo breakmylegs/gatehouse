@@ -15,6 +15,10 @@ import { mocksFrom } from "./mock-gen.js"
 import { lintApi } from "./api-lint.js"
 import { checkSpecErrors } from "./error-contract.js"
 import { checkDrift, findGenerators, hasDrift } from "./client-drift.js"
+import { fixTask, triage } from "./error-triage.js"
+import { profileDotnet, profileNode, profileSummary } from "./profiler.js"
+import { findLeaks, leakSummary } from "./leak-detector.js"
+import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
 import { upgradePack, type AdmissionCheck } from "./upgrade-pack.js"
@@ -151,7 +155,12 @@ export interface HostApp {
   /** E-034: the shapes of probed answers, per project. */
   contractSnapshots?: import("./contract-snapshots.js").ContractSnapshots
   /** E-036: a command run as a Codehouse action for a session (judged, no credentials, at its level). */
-  runAction?: (sessionId: string, command: string, cwd: string, why: string) => Promise<{ exitCode: number | null; output: string; refused?: string }>
+  /** E-038: the project log store, and whether the rules allow reading a file by themselves. */
+  logs?: import("./log-capture.js").LogStore
+  /** E-040: the trace receiver's tokens and spans, its port and whether it is on. */
+  traces?: { tokens: import("./trace-receiver.js").TraceTokens; store: import("./trace-receiver.js").TraceStore; port: () => number; on: () => boolean }
+  rulesAllowRead?: (sessionId: string, cwd: string, abs: string) => Promise<boolean>
+  runAction?: (sessionId: string, command: string, cwd: string, why: string, env?: Record<string, string>) => Promise<{ exitCode: number | null; output: string; refused?: string }>
   /** C-004: the memory governor, for its status and the idle sessions it offers to suspend. */
   governor?: Pick<MemoryGovernor, "status">
   /** Owner, 9 Nov: whether a limit in Settings would pause an account now (Start now checks it). */
@@ -1235,6 +1244,71 @@ export class HostServer {
         })
         if (r.state === "refused") throw new CommandError("refused", `The price sheet was not kept: ${r.why}.`)
         return r
+      }
+      case "profile_run": {
+        // E-041: run once with Node's CPU profiler as a Codehouse action; no inspector port is ever opened.
+        const s = this.#session(cmd.sessionId)
+        const run = a.runAction
+        if (!run) throw new CommandError("unavailable", "Codehouse actions are not available here.")
+        // A .NET command goes through dotnet-trace when it is on this computer; anything else through Node's profiler.
+        const dotnet = /^dotnet\s/.test(cmd.command.trim()) && !!findOnPath("dotnet-trace", process.env)
+        const r = await (dotnet ? profileDotnet : profileNode)(cmd.command, s.cwd, async (command, cwd, env) => {
+          const x = await run(s.id, command, cwd, "profiling it on request", env)
+          return { ran: !x.refused, exitCode: x.exitCode, output: x.output, ...(x.refused ? { refused: x.refused } : {}) }
+        })
+        if ("notProfiled" in r) throw new CommandError("not-profiled", `It was not profiled: ${r.notProfiled}.`)
+        return { ...r, summary: profileSummary(cmd.command, r) }
+      }
+      case "leak_check": {
+        // E-042: a preload writes heap snapshots; no inspector port is opened; the folder is deleted afterwards.
+        const s = this.#session(cmd.sessionId)
+        const run = a.runAction
+        if (!run) throw new CommandError("unavailable", "Codehouse actions are not available here.")
+        const r = await findLeaks(cmd.command, s.cwd, async (command, cwd, env) => {
+          const x = await run(s.id, command, cwd, "looking for memory that keeps growing", env)
+          return { ran: !x.refused, exitCode: x.exitCode, output: x.output, ...(x.refused ? { refused: x.refused } : {}) }
+        })
+        if ("notChecked" in r) throw new CommandError("not-checked", `It was not checked: ${r.notChecked}.`)
+        return { ...r, summary: leakSummary(cmd.command, r) }
+      }
+      case "traces_list": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.traces) throw new CommandError("unavailable", "The trace receiver is not available here.")
+        return { on: a.traces.on(), port: a.traces.port(), traces: a.traces.store.traces(s.cwd) }
+      }
+      case "trace_tree": {
+        const s = this.#session(cmd.sessionId)
+        if (!a.traces) throw new CommandError("unavailable", "The trace receiver is not available here.")
+        return { tree: a.traces.store.tree(s.cwd, cmd.traceId) }
+      }
+      case "trace_token": {
+        // E-040: a new token for this project, shown once; the old one stops working. Recorded, never the token.
+        const s = this.#session(cmd.sessionId)
+        if (!a.traces) throw new CommandError("unavailable", "The trace receiver is not available here.")
+        const token = a.traces.tokens.issue(s.cwd)
+        await a.audit.record({
+          session: s.id, event: "trace_token_issued", channel: "desktop", tool: "traces", cwd: s.cwd, project: s.project, input: {},
+          verdict: { outcome: "allow", ruleId: "trace-token", reason: "A new trace token was made for this project; the old one no longer works.", risk: 0, decidedBy: "human-desktop", policyHash: "n/a" },
+          latencyMs: 0,
+        })
+        const port = a.traces.port()
+        return { token, env: [`OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:${port}`, "OTEL_EXPORTER_OTLP_PROTOCOL=http/json", `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Bearer%20${token}`] }
+      }
+      case "log_errors": {
+        // E-039: read only; frames are mapped through source maps inside the project only.
+        const s = this.#session(cmd.sessionId)
+        if (!a.logs) throw new CommandError("unavailable", "The log viewer is not available here.")
+        const signatures = triage(s.cwd, a.logs.query(s.cwd, { limit: 5000 }).reverse()).slice(0, 50)
+        return { signatures: signatures.map((g) => ({ ...g, task: fixTask(g) })) }
+      }
+      case "logs_query": {
+        // E-038: the listed files are read first (each judged by the rules), then the store is searched; redacted.
+        const s = this.#session(cmd.sessionId)
+        if (!a.logs) throw new CommandError("unavailable", "The log viewer is not available here.")
+        const allow = a.rulesAllowRead
+        const tailed = await a.logs.tail(s.cwd, s.cwd, (abs) => (allow ? allow(s.id, s.cwd, abs) : Promise.resolve(false)))
+        const entries = a.logs.query(s.cwd, { ...(cmd.text ? { text: cmd.text } : {}), ...(cmd.level ? { level: cmd.level } : {}), ...(cmd.since ? { since: cmd.since } : {}), limit: cmd.limit ?? 500 })
+        return { entries, read: tailed.read, refused: tailed.refused }
       }
       case "client_drift": {
         // E-036: the tool runs as a Codehouse action in a scratch folder inside .codehouse, deleted afterwards.

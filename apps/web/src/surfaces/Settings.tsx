@@ -110,6 +110,8 @@ interface Config {
   phoneAlerts?: "all" | "decisions" // Mac fork
   recapByClaude?: boolean
   extremeRiskLimit?: number
+  logRetentionDays?: number
+  traceReceiver?: { enabled?: boolean; port?: number }
   titleByClaude?: boolean
   forges?: { github?: boolean }
   containerRuns?: { enabled?: boolean; image?: string }
@@ -238,6 +240,11 @@ interface Values {
   ecUsd: string
   /** O36: the risk at or above which Rules-based Extreme approval asks you; "none" never on risk. */
   exLimit: string
+  /** E-038: days the log viewer keeps a project's lines. */
+  logDays: string
+  /** E-040: the local trace receiver, and its port. */
+  traces: boolean
+  tracePort: string
   /** What every session is told at its start. */
   instr: string
   /** What Claude should call you, and your work (Profile). */
@@ -331,6 +338,9 @@ export function valuesOf(d: SettingsData): Values {
     telEndpoint: c.telemetry?.endpoint ?? "",
     ecUsd: c.extremeCarryOn?.noSpendLimit ? "none" : String(c.extremeCarryOn?.usd ?? 500),
     exLimit: c.extremeRiskLimit === 101 ? "none" : String(c.extremeRiskLimit ?? 80),
+    logDays: String(c.logRetentionDays ?? 7),
+    traces: c.traceReceiver?.enabled === true,
+    tracePort: String(c.traceReceiver?.port ?? 4318),
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
@@ -458,6 +468,17 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   // O36: 80 is what an absent setting means, so the file only says so when you choose another.
   if (v.exLimit === "80") delete body.extremeRiskLimit
   else body.extremeRiskLimit = v.exLimit === "none" ? 101 : Number(v.exLimit)
+  // E-038: 7 days is what an absent setting means.
+  // E-040: anything else a newer version keeps in traceReceiver stays.
+  {
+    const { enabled: _e, port: _p, ...rest } = (d.saved.traceReceiver as Record<string, unknown> | undefined) ?? {}
+    const port = Number(v.tracePort)
+    const tr = { ...rest, ...(v.traces ? { enabled: true } : {}), ...(Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4318 ? { port } : {}) }
+    if (Object.keys(tr).length) body.traceReceiver = tr
+    else delete body.traceReceiver
+  }
+  if (v.logDays === "7") delete body.logRetentionDays
+  else body.logRetentionDays = Number(v.logDays)
   if (v.effortCap) body.effortCap = v.effortCap
   else delete body.effortCap
   if (v.maxSessions) body.maxSessions = Number(v.maxSessions)
@@ -666,6 +687,9 @@ export const DEFAULT_VALUES: Values = {
   telEndpoint: "",
   ecUsd: "500",
   exLimit: "80",
+  logDays: "7",
+  traces: false,
+  tracePort: "4318",
   instr: "",
   callMe: "",
   work: "",
@@ -2163,6 +2187,39 @@ export function Settings() {
                 Off until you switch it on. Codehouse asks the gh command line, with its own sign-in, so Codehouse holds no
                 token; it only reads, for the repository a session works in, and each read is recorded. Anything that
                 writes, such as a comment, a merge or a push, stays a request Claude makes through your rules.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Traces" gap="gap-2" changed={differs(v, ["traces", "tracePort"])}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.traces} onChange={(e) => change({ traces: e.target.checked }, "Traces")} />
+                Receive traces from your apps on this computer
+              </label>
+              <label className="flex flex-wrap items-center gap-2">
+                Port
+                <input className="field mono w-24" inputMode="numeric" value={v.tracePort} onChange={(e) => change({ tracePort: e.target.value.replace(/\D/g, "").slice(0, 5) }, "Traces")} />
+              </label>
+              <p className="m-0 text-xs text-mut">
+                Off until you switch it on, and it starts with Codehouse. It listens on 127.0.0.1 only, takes OTLP JSON
+                only with a project&apos;s own token (made in the session&apos;s Traces panel), never from a web page, up
+                to 4 MB a request, and redacts attributes before keeping them.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Logs" gap="gap-2" changed={differs(v, ["logDays"])}>
+              <label className="flex flex-wrap items-center gap-2">
+                Keep each project&apos;s log lines for
+                <select className="field" value={v.logDays} onChange={(e) => change({ logDays: e.target.value }, "Logs")}>
+                  {withCurrent(["1", "3", "7", "14", "30", "90"], v.logDays).map((n) => (
+                    <option key={n} value={n}>
+                      {n} day{n === "1" ? "" : "s"}{n === "7" ? " (usual)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="m-0 text-xs text-mut">
+                What Codehouse&apos;s own commands print, and the files a project lists in .codehouse/logs.yml, redacted
+                before they are kept. A listed file is read only when your rules allow reading it.
               </p>
             </Group>
 

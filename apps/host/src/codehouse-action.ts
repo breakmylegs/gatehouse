@@ -65,6 +65,8 @@ export interface ActionDeps {
   env?: NodeJS.ProcessEnv
   /** Tests only: stands in for starting the command. */
   start?: (command: string, cwd: string, env: NodeJS.ProcessEnv, level: ResourceLevel) => ChildProcess
+  /** E-038: told what a command printed once it ends, for the project's log store. */
+  onFinished?: (r: ActionRequest, output: string) => void
   /** E-026: run it in a container instead, when Podman is here and Settings allow it. */
   container?: () => ContainerRun | undefined
 }
@@ -227,5 +229,11 @@ export async function runCodehouseAction(r: ActionRequest, d: ActionDeps): Promi
   })
   clearTimeout(timer)
   clearInterval(watch)
+  // E-038: what it printed, for the project's log store (redacted there).
+  try {
+    d.onFinished?.(r, output)
+  } catch {
+    // The log store's trouble never changes the action's outcome.
+  }
   return await done({ ran: true, exitCode, output, timedOut, killed }, decidedBy)
 }

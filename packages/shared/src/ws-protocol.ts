@@ -313,6 +313,25 @@ export const ClientCommand = z.discriminatedUnion("type", [
   /** E-035: an OpenAPI spec in the project checked for API security gaps. */
   /** E-036: each generated API client made again with the project's own tool, and compared with the committed one. */
   z.object({ type: z.literal("client_drift"), sessionId: Id }),
+  /** E-038: the project's log lines (Codehouse's commands and the files in .codehouse/logs.yml), searched. */
+  /** E-039: the errors in the project's log lines, grouped by signature, each with a fix task. */
+  z.object({ type: z.literal("log_errors"), sessionId: Id }),
+  /** E-040: the project's traces, one trace's span tree, or a new token for the project (shown once). */
+  z.object({ type: z.literal("traces_list"), sessionId: Id }),
+  /** E-041: a command run once with Node's CPU profiler, its top functions and a flame graph. */
+  z.object({ type: z.literal("profile_run"), sessionId: Id, command: z.string().min(1).max(2000) }),
+  /** E-042: a command run once with heap snapshots taken while it works, and what kept growing. */
+  z.object({ type: z.literal("leak_check"), sessionId: Id, command: z.string().min(1).max(2000) }),
+  z.object({ type: z.literal("trace_tree"), sessionId: Id, traceId: z.string().regex(/^[0-9a-f]{32}$/) }),
+  z.object({ type: z.literal("trace_token"), sessionId: Id }),
+  z.object({
+    type: z.literal("logs_query"),
+    sessionId: Id,
+    text: z.string().max(200).optional(),
+    level: z.enum(["trace", "debug", "info", "warn", "error", "fatal"]).optional(),
+    since: z.string().max(40).optional(),
+    limit: z.number().int().min(1).max(2000).optional(),
+  }),
   z.object({ type: z.literal("api_lint"), sessionId: Id, spec: z.string().max(500) }),
   z.object({ type: z.literal("mock_defs"), sessionId: Id, spec: z.string().max(500) }),
   z.object({ type: z.literal("contract_probe"), sessionId: Id, spec: z.string().max(500), base: z.string().max(300).optional() }),
