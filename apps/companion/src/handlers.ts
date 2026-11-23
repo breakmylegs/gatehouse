@@ -70,6 +70,11 @@ export interface RoutineDraftClient {
   draft(d: { name: string; prompt: string; time?: string; days?: string[] }): Promise<ToolText>
 }
 
+/** E-055: a handover note for the next session in the folder, kept by the Host. */
+export interface HandoverClient {
+  write(note: { state: string; next?: string[]; risks?: string[]; questions?: string[]; files?: string[] }): Promise<ToolText>
+}
+
 /** D-037: the session's assumption register, kept by the Host. */
 export interface AssumptionClient {
   declare(text: string, check?: string): Promise<ToolText>
@@ -98,6 +103,8 @@ export interface CompanionDeps {
   linked?: LinkedReadClient
   /** D-037: a coding session's assumptions. Absent: declare_assumption is not offered. */
   assumptions?: AssumptionClient
+  /** E-055: a coding session's handover notes. Absent: write_handover is not offered. */
+  handover?: HandoverClient
   /** T-135: asking the person for a secret for one command. Absent: request_secret is not offered. */
   secrets?: SecretClient
   /** D-065: a coding session's test impact analysis. Absent: affected_tests is not offered. */
@@ -231,6 +238,15 @@ export class CompanionHandlers {
     return this.#deps.assumptions.declare(clean.slice(0, 500), check?.trim().slice(0, 300) || undefined)
   }
 
+  /** E-055: where the work stands, for the next session in this folder. */
+  async writeHandover(a: Record<string, unknown>): Promise<ToolText> {
+    const state = typeof a.state === "string" ? a.state.trim() : ""
+    if (!state) return { text: "Not kept: say where the work stands.", isError: true }
+    if (!this.#deps.handover) return { text: "Handover notes are not kept for this session.", isError: true }
+    const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : undefined)
+    return this.#deps.handover.write({ state, ...(list(a.next_steps) ? { next: list(a.next_steps)! } : {}), ...(list(a.risks) ? { risks: list(a.risks)! } : {}), ...(list(a.questions) ? { questions: list(a.questions)! } : {}), ...(list(a.files) ? { files: list(a.files)! } : {}) })
+  }
+
   async readSession(): Promise<ToolText> {
     if (!this.#deps.about) return { text: "This chat is not about a code session.", isError: true }
     return await this.#deps.about.read()
@@ -310,6 +326,7 @@ export interface CompanionToolDef {
     | "start_session"
     | "wait_for_session"
     | "declare_assumption"
+    | "write_handover"
     | "affected_tests"
     | "request_secret"
   description: string
@@ -588,6 +605,24 @@ export const ASSUMPTION_TOOLS: readonly CompanionToolDef[] = [
       openWorldHint: false,
     },
     run: (h, a) => h.declareAssumption(String(a.text ?? ""), typeof a.how_to_check === "string" ? a.how_to_check : undefined),
+  },
+]
+
+/** E-055: a handover note for whoever works in this folder next; files it names are checked against the change. */
+export const HANDOVER_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "write_handover",
+    description:
+      "Leave a handover note for the next session that works in this folder: where the work stands, the next steps, the risks, the open questions for the person, and the files you changed. Write it before you stop, or when you are asked. Codehouse checks each file you name against the real change and marks any that has not changed, so name only what you changed.",
+    shape: {
+      state: z.string().min(1).max(2000),
+      next_steps: z.array(z.string().max(300)).max(15).optional(),
+      risks: z.array(z.string().max(300)).max(10).optional(),
+      questions: z.array(z.string().max(300)).max(10).optional(),
+      files: z.array(z.string().max(300)).max(40).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    run: (h, a) => h.writeHandover(a),
   },
 ]
 

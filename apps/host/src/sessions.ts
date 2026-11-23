@@ -2,6 +2,7 @@ import { breakerFindings } from "./adversary.js"
 import { lockdownHint } from "./lockdown.js"
 import { outputText } from "./iac-plans.js"
 import { lockReason } from "./locks.js"
+import { HANDOVER_HABIT } from "./handover.js"
 import { cleanLease, leaseFromPlan, type ScopeLease } from "./scope-lease.js"
 import { noteCommit } from "./lineage.js"
 import { fileOf, TEST_COMMAND } from "./failure-taxonomy.js"
@@ -519,6 +520,8 @@ export interface SessionDeps {
   /** E-050: the Host's lock table, and a session's name for a lock's reason. */
   sessionLocks?: import("./locks.js").LockTable
   sessionName?: (id: string) => string
+  /** E-055: the last session's handover note for a folder, given to a new session once. */
+  handoverFor?: (folder: string, sessionId: string) => string | undefined
   /** E-019: the signed price sheet, when there is one. */
   priceSheet?: () => import("./price-sheet.js").PriceSheet | undefined
   /** D-084: a breaker's test runs: the project's test command, as a Codehouse action in its worktree. */
@@ -1224,7 +1227,16 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(project && info ? { project: { name: project, text: info.instructions, files } } : {}),
       // D-044: the project's accepted architecture decisions, after what you told this session.
       // T-008: a project inside WSL is told to run its commands inside the distro.
-      session: [this.#opts.instructions, this.#opts.kind !== "chat" ? adrContext(readAdrs(this.cwd), []) : "", this.#opts.kind !== "chat" ? wslNote(this.cwd) : ""].filter((x) => x?.trim()).join("\n\n") || undefined,
+      session: [
+        this.#opts.instructions,
+        this.#opts.kind !== "chat" ? adrContext(readAdrs(this.cwd), []) : "",
+        this.#opts.kind !== "chat" ? wslNote(this.cwd) : "",
+        // E-055: the last session's handover note, for a new session only (not one brought back after a restart).
+        this.#opts.kind !== "chat" && !this.#opts.restore ? (this.#deps.handoverFor?.(this.cwd, this.id) ?? "") : "",
+        this.#opts.kind !== "chat" && this.#deps.handoverFor ? HANDOVER_HABIT : "",
+      ]
+        .filter((x) => x?.trim())
+        .join("\n\n") || undefined,
       ...(memory ? { memory } : {}),
       artifacts: this.#opts.kind === "chat" && this.#deps.artifacts !== undefined,
       tidy: this.#opts.kind !== "chat",

@@ -66,6 +66,8 @@ allow:
                                    "mcp__companion__get_policy_summary"], mcpSource: [sdk] }
   # D-037: an assumption Claude records for you to check; only the Host's own in-process Companion offers it.
   - { id: assumption-tools, tools: ["mcp__companion__declare_assumption"], mcpSource: [sdk], sessionKinds: [code] }
+  # E-055: a handover note for the next session in the folder; only the Host's own in-process Companion offers it.
+  - { id: handover-tools, tools: ["mcp__companion__write_handover"], mcpSource: [sdk], sessionKinds: [code] }
   # T-135: a secret for one command, asked of you on the desktop; the tool itself sets nothing and sends nothing.
   - { id: secret-request-tools, tools: ["mcp__companion__request_secret"], mcpSource: [sdk], sessionKinds: [code] }
   # D-065: the tests a change affects; reads files and git log, runs nothing.

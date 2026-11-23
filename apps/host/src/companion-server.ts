@@ -11,6 +11,7 @@ import {
   ROUTINE_DRAFT_TOOLS,
   ORCHESTRATE_TOOLS,
   ASSUMPTION_TOOLS,
+  HANDOVER_TOOLS,
   TEST_IMPACT_TOOLS,
   SECRET_TOOLS,
   type CompanionDeps,
@@ -38,6 +39,7 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
       ...(deps.routineDrafts ? ROUTINE_DRAFT_TOOLS : []),
       ...(deps.orchestrate ? ORCHESTRATE_TOOLS : []),
       ...(deps.assumptions ? ASSUMPTION_TOOLS : []),
+      ...(deps.handover ? HANDOVER_TOOLS : []),
       ...(deps.testImpact ? TEST_IMPACT_TOOLS : []),
       ...(deps.secrets ? SECRET_TOOLS : []),
     ].map((def) =>

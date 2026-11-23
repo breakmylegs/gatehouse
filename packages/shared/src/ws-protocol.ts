@@ -294,6 +294,8 @@ export const ClientCommand = z.discriminatedUnion("type", [
   z.object({ type: z.literal("scheduler_status") }),
   /** E-050: the files, ports and named resources each session holds. */
   z.object({ type: z.literal("locks_list") }),
+  /** E-055: ask the session for a handover note now. */
+  z.object({ type: z.literal("handover_ask"), sessionId: Id }),
   z.object({ type: z.literal("stop_process"), sessionId: Id, pid: z.number().int().min(1), confirm: z.boolean() }),
   /** D-084: a second model tries to break this session's change, in a worktree of its own. */
   z.object({ type: z.literal("adversary_start"), sessionId: Id }),

@@ -9,6 +9,7 @@ import { ReproStore } from "./repro.js"
 import type { ActionDeps, ActionRequest, ActionResult } from "./codehouse-action.js"
 import { cpuSampler, Scheduler, SchedulerCancelled } from "./scheduler.js"
 import { LockTable } from "./locks.js"
+import { HandoverStore, handoverReply, handoverText } from "./handover.js"
 import { startReceiver, TraceStore, TraceTokens } from "./trace-receiver.js"
 import { projectCommand } from "./claims.js"
 import { AdversaryStore } from "./adversary.js"
@@ -397,6 +398,7 @@ export function createHost(opts: HostOptions = {}): Host {
   })
 
   const lockTable = new LockTable()
+  const handovers = new HandoverStore(path.join(gatehouseDataDir(env), "handovers.json"))
   const queryFn: QueryFn = opts.queryFn ?? (query as unknown as QueryFn)
   const probeOptions = (probeEnv: Record<string, string | undefined>): Options => ({
     cwd: process.cwd(),
@@ -707,6 +709,20 @@ export function createHost(opts: HostOptions = {}): Host {
                     : { text: r === "declined" ? `The person declined to give ${name}.` : `Nobody answered the request for ${name} in 10 minutes.`, isError: true }
                 },
               },
+              // E-055: a handover note, its files checked against the change, for the next session in the folder.
+              handover: {
+                write: async (note: { state: string; next?: string[]; risks?: string[]; questions?: string[]; files?: string[] }) => {
+                  const folder = manager.get(sessionId)?.cwd ?? cwd
+                  const n = await handovers.write(folder, sessionId, note)
+                  await audit.record({
+                    session: sessionId, event: "handover_written", channel: "host", tool: "handover", cwd: folder,
+                    input: { id: n.id, files: n.files.length, unchanged: n.files.filter((f) => !f.changed).length },
+                    verdict: { outcome: "allow", ruleId: "handover-tools", reason: "The session left a handover note for the next session in this folder.", risk: 0, decidedBy: "rules", policyHash: store.current?.hash ?? "" },
+                    latencyMs: 0,
+                  })
+                  return { text: handoverReply(n) }
+                },
+              },
               assumptions: {
                 declare: async (text: string, check?: string) => {
                   const s = manager.get(sessionId)
@@ -995,6 +1011,17 @@ export function createHost(opts: HostOptions = {}): Host {
   if (process.platform === "win32") deps.portHolder = (port) => portHolder(port, windowsSnapshot)
   // E-018: the infrastructure plans each session shows, for the applies that follow.
   deps.iacPlans = new IacPlans()
+  // E-055: the next coding session in a folder receives the last session's handover note, once, recorded.
+  deps.handoverFor = (folder, sessionId) => {
+    const n = handovers.takeFor(folder, sessionId)
+    if (!n) return undefined
+    void audit.record({
+      session: sessionId, event: "handover_received", channel: "host", tool: "handover", cwd: folder, input: { id: n.id, from: n.sessionId },
+      verdict: { outcome: "allow", ruleId: "handover", reason: "This session was given the last session's handover note.", risk: 0, decidedBy: "rules", policyHash: store.current?.hash ?? "" },
+      latencyMs: 0,
+    })
+    return handoverText(n)
+  }
   // E-050: files, ports and named resources held by one session; another's use goes to a person.
   deps.sessionLocks = lockTable
   deps.sessionName = (id) => {

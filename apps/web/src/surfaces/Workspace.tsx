@@ -726,6 +726,8 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Reproduce a bug...", onSelect: () => setReproOpen(true) }]),
     // E-044: git bisect in a scratch worktree.
     ...(chat ? [] : [{ label: "Find the bad commit...", onSelect: () => setBisectOpen(true) }]),
+    // E-055: ask Claude for a handover note for the next session in this folder.
+    ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
     // E-025: the tools this computer has against what the project asks for.

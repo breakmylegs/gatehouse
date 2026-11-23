@@ -21,6 +21,7 @@ import { findLeaks, leakSummary } from "./leak-detector.js"
 import { crashText, dotnetDumpCommand, readDotnetCrashes, runWithCrashReports, summariseCrashes } from "./crash-summary.js"
 import { confirmFails, confirmPasses, reproPrompt } from "./repro.js"
 import { bisect } from "./bisect.js"
+import { HANDOVER_PROMPT } from "./handover.js"
 import { findOnPath } from "./welcome.js"
 import { languageOf } from "./outline.js"
 import { importPack, makePack, openPack, type KnowledgeKey } from "./knowledge-pack.js"
@@ -1132,6 +1133,9 @@ export class HostServer {
         })
         return report
       }
+      case "handover_ask":
+        this.#session(cmd.sessionId).prompt(HANDOVER_PROMPT)
+        return undefined
       case "locks_list":
         return { locks: a.sessionLocks?.list() ?? [] }
       case "scheduler_status":
