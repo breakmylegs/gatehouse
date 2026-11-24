@@ -14,6 +14,7 @@ import {
   HANDOVER_TOOLS,
   TEST_IMPACT_TOOLS,
   SECRET_TOOLS,
+  DEBUG_TOOLS,
   type CompanionDeps,
 } from "@gatehouse/companion"
 
@@ -42,6 +43,7 @@ export function createCompanionSdkServer(deps: CompanionDeps) {
       ...(deps.handover ? HANDOVER_TOOLS : []),
       ...(deps.testImpact ? TEST_IMPACT_TOOLS : []),
       ...(deps.secrets ? SECRET_TOOLS : []),
+      ...(deps.debug ? DEBUG_TOOLS : []),
     ].map((def) =>
       tool(
         def.name,

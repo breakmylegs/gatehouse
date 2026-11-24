@@ -109,8 +109,19 @@ export interface CompanionDeps {
   secrets?: SecretClient
   /** D-065: a coding session's test impact analysis. Absent: affected_tests is not offered. */
   testImpact?: boolean
+  /** G37: the debugger, with an adapter named in Settings. Absent: the debug tools are not offered. */
+  debug?: DebugClient
   now?: () => number
   checkpoint?: typeof defaultCheckpoint
+}
+
+/** G37: the debugger, run by the Host; each call is audited there as Claude's. */
+export interface DebugClient {
+  start(o: { adapter: string; program: string; args?: string[]; breakpoints?: Record<string, number[]> }): Promise<ToolText>
+  breakpoints(file: string, lines: number[]): Promise<ToolText>
+  step(kind: "continue" | "next" | "stepIn" | "stepOut" | "pause"): Promise<ToolText>
+  state(): Promise<ToolText>
+  stop(): Promise<ToolText>
 }
 
 export interface SecretClient {
@@ -238,6 +249,32 @@ export class CompanionHandlers {
     return this.#deps.assumptions.declare(clean.slice(0, 500), check?.trim().slice(0, 300) || undefined)
   }
 
+  /** G37: the debugger. Starting a program asks the person (rule debug-start); the rest act on what was started. */
+  async debug(action: "start" | "breakpoints" | "step" | "state" | "stop", a: Record<string, unknown>): Promise<ToolText> {
+    const d = this.#deps.debug
+    if (!d) return { text: "No debug adapter is named in Settings, so the debugger is not available.", isError: true }
+    const lines = (v: unknown) => (Array.isArray(v) ? v.filter((n): n is number => Number.isInteger(n) && n > 0) : [])
+    if (action === "start") {
+      const breakpoints: Record<string, number[]> = {}
+      if (Array.isArray(a.breakpoints))
+        for (const b of a.breakpoints as Array<{ file?: unknown; line?: unknown }>)
+          if (typeof b?.file === "string" && Number.isInteger(b.line)) (breakpoints[b.file] ??= []).push(b.line as number)
+      return d.start({
+        adapter: String(a.adapter ?? ""),
+        program: String(a.program ?? ""),
+        ...(Array.isArray(a.args) ? { args: a.args.filter((x): x is string => typeof x === "string") } : {}),
+        breakpoints,
+      })
+    }
+    if (action === "breakpoints") return d.breakpoints(String(a.file ?? ""), lines(a.lines))
+    if (action === "step") {
+      const kind = String(a.kind ?? "")
+      if (!["continue", "next", "stepIn", "stepOut", "pause"].includes(kind)) return { text: "kind is continue, next, stepIn, stepOut or pause.", isError: true }
+      return d.step(kind as "continue")
+    }
+    return action === "state" ? d.state() : d.stop()
+  }
+
   /** E-055: where the work stands, for the next session in this folder. */
   async writeHandover(a: Record<string, unknown>): Promise<ToolText> {
     const state = typeof a.state === "string" ? a.state.trim() : ""
@@ -329,6 +366,11 @@ export interface CompanionToolDef {
     | "write_handover"
     | "affected_tests"
     | "request_secret"
+    | "debug_start"
+    | "debug_set_breakpoints"
+    | "debug_step"
+    | "debug_state"
+    | "debug_stop"
   description: string
   shape: z.ZodRawShape
   /**
@@ -623,6 +665,55 @@ export const HANDOVER_TOOLS: readonly CompanionToolDef[] = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     run: (h, a) => h.writeHandover(a),
+  },
+]
+
+/**
+ * G37: the debugger, offered to a coding session when an adapter is named in Settings. Starting a program runs it, so
+ * it asks the person; breakpoints, stepping and reading where it stopped act only on what was started. Nothing is
+ * evaluated in the program.
+ */
+export const DEBUG_TOOLS: readonly CompanionToolDef[] = [
+  {
+    name: "debug_start",
+    description:
+      "Start a program from this folder under a debug adapter the person named in Settings (the adapter's name, the program's path from the folder, its arguments, and breakpoints as file and line). The person approves each start. It answers once the program stops at a breakpoint or ends, or after 30 seconds: where it stopped, the stack and the top frame's variables. Nothing can be evaluated in the program.",
+    shape: {
+      adapter: z.string().min(1).max(60),
+      program: z.string().min(1).max(500),
+      args: z.array(z.string().max(1000)).max(50).optional(),
+      breakpoints: z.array(z.object({ file: z.string().max(500), line: z.number().int().positive() })).max(100).optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    run: (h, a) => h.debug("start", a),
+  },
+  {
+    name: "debug_set_breakpoints",
+    description: "Set the breakpoints for one file of the program being debugged (all its lines at once; an empty list clears them). Says which were placed.",
+    shape: { file: z.string().min(1).max(500), lines: z.array(z.number().int().positive()).max(100) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    run: (h, a) => h.debug("breakpoints", a),
+  },
+  {
+    name: "debug_step",
+    description: "Continue the stopped program, or step: next (over), stepIn, stepOut, or pause a running one. It answers when it stops again or ends, or after 30 seconds.",
+    shape: { kind: z.enum(["continue", "next", "stepIn", "stepOut", "pause"]) },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    run: (h, a) => h.debug("step", a),
+  },
+  {
+    name: "debug_state",
+    description: "Where the program being debugged is: running, stopped (the stack and the top frame's variables), or ended, with the end of its output.",
+    shape: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    run: (h) => h.debug("state", {}),
+  },
+  {
+    name: "debug_stop",
+    description: "Stop the program being debugged, and its adapter.",
+    shape: {},
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    run: (h) => h.debug("stop", {}),
   },
 ]
 

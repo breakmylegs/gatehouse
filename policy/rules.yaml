@@ -53,6 +53,8 @@ escalate:
   # every time, on the desktop: Severe, so no push channel offers Allow, and the Host lets no rule, grant or Extreme
   # approval answer it (canuse.ts HANDOFF_RULE).
   - { id: session-handoff, tools: ["mcp__companion__offer_to_session"], risk: 85 }
+  # G37: starting a program under the debugger runs it, so it asks you (only the Host's own Companion offers it).
+  - { id: debug-start, tools: ["mcp__companion__debug_start"], risk: 60 }
   - { id: unc-path, pathUnc: true, risk: 90 }
 
 allow:
@@ -93,5 +95,8 @@ allow:
   # Browser tools (Settings, off unless turned on): a coding session looks at a page on this computer. The Host takes
   # the picture only of localhost or 127.0.0.1, in a profile made for the one look, and redacts the text.
   - { id: page-look-tools, tools: ["mcp__companion__look_at_page"], mcpSource: [sdk], sessionKinds: [code] }
+  # G37: breakpoints, stepping and reading where the program stopped, on a program a person let start; audited by the Host.
+  - { id: debug-tools, tools: ["mcp__companion__debug_set_breakpoints", "mcp__companion__debug_step", "mcp__companion__debug_state",
+                               "mcp__companion__debug_stop"], mcpSource: [sdk], sessionKinds: [code] }
 
 judgeEligible: [network]

@@ -23,7 +23,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | G7 | XLSX in chats | done | | Node built-ins only, no library; done as C-059 (xlsx-read.ts) |
 | G9 | Voice | built | feat/pkg1 | Whisper-compatible server through 127.0.0.1 (ADR 0010), Windows voice typing kept (T-136) |
 | G34 | Language servers | done | | Folds into C-032 (TypeScript language service) plus user-installed servers; C-032 built, and user-installed servers built (BUILD_REPORT G34) |
-| G37 | Debugger | todo | | Debug adapters (debugpy, netcoredbg, js-debug); DAP only, never CDP |
+| G37 | Debugger | done | | Debug adapters (debugpy, netcoredbg, js-debug); DAP only, never CDP; built (BUILD_REPORT G37): a Python breakpoint checked with debugpy here; Node and .NET not checkable on this PC |
 | G40 | Public hosts and sharing | todo | | Host CLIs with their own sign-in; zip without secrets |
 
 ## Owner requests during the build

@@ -114,6 +114,7 @@ interface Config {
   traceReceiver?: { enabled?: boolean; port?: number }
   sandbox?: { egressProxy?: boolean; allow?: string[]; upstream?: string }
   languageServers?: Array<{ name: string; command: string; args?: string[]; extensions: string[] }>
+  debugAdapters?: Array<{ name: string; kind: "python" | "node" | "dotnet" | "other"; command: string; args?: string[] }>
   titleByClaude?: boolean
   forges?: { github?: boolean }
   containerRuns?: { enabled?: boolean; image?: string }
@@ -251,6 +252,8 @@ interface Values {
   egressUpstream: string
   /** G34: language servers, one to a line: name | endings | command and arguments. */
   lsp: string
+  /** G37: debug adapters, one to a line: name | kind | command and arguments. */
+  dap: string
   /** What every session is told at its start. */
   instr: string
   /** What Claude should call you, and your work (Profile). */
@@ -281,6 +284,15 @@ interface Values {
 export function lspLine(s: { name: string; command: string; args?: string[]; extensions: string[] }): string {
   const q = (w: string) => (/\s/.test(w) ? `"${w}"` : w)
   return [s.name, s.extensions.join(", "), [s.command, ...(s.args ?? [])].map(q).join(" ")].join(" | ")
+}
+
+/** G37: the Settings lines as debug adapters: name | kind | command; a line without all three, or another kind, is left out. */
+export function parseDapLines(text: string): Array<{ name: string; kind: "python" | "node" | "dotnet" | "other"; command: string; args?: string[] }> {
+  return parseLspLines(text).flatMap((s) => {
+    const kind = s.extensions.length === 1 ? s.extensions[0]!.toLowerCase() : ""
+    if (kind !== "python" && kind !== "node" && kind !== "dotnet" && kind !== "other") return []
+    return [{ name: s.name, kind, command: s.command, ...(s.args ? { args: s.args } : {}) }]
+  })
 }
 
 /** G34: the Settings lines as language servers; a line without all three parts is left out. */
@@ -367,6 +379,7 @@ export function valuesOf(d: SettingsData): Values {
     egressAllow: (c.sandbox?.allow ?? []).join("\n"),
     egressUpstream: c.sandbox?.upstream ?? "",
     lsp: (c.languageServers ?? []).map(lspLine).join("\n"),
+    dap: (c.debugAdapters ?? []).map((a) => lspLine({ name: a.name, command: a.command, ...(a.args ? { args: a.args } : {}), extensions: [a.kind] })).join("\n"),
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
@@ -500,6 +513,12 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     const tr = { ...rest, ...(v.traces ? { enabled: true } : {}), ...(Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4318 ? { port } : {}) }
     if (Object.keys(tr).length) body.traceReceiver = tr
     else delete body.traceReceiver
+  }
+  // G37: name | kind | command, the kind one of python, node, dotnet or other.
+  {
+    const adapters = parseDapLines(v.dap)
+    if (adapters.length) body.debugAdapters = adapters
+    else delete body.debugAdapters
   }
   // G34: a line that does not read as name | endings | command is left out (the field says so).
   {
@@ -739,6 +758,7 @@ export const DEFAULT_VALUES: Values = {
   egressAllow: "",
   egressUpstream: "",
   lsp: "",
+  dap: "",
   instr: "",
   callMe: "",
   work: "",
@@ -2240,6 +2260,30 @@ export function Settings() {
                 Off until you name one. In the file view, a file of its kind shows its problems, what is at the cursor and
                 where a name is defined or used. Codehouse starts it in the session&apos;s folder without a shell and with no
                 credential in its environment, and stops it after ten idle minutes. It only reads; nothing it says changes a file.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Debug adapters" gap="gap-2" changed={differs(v, ["dap"])}>
+              <Field
+                label="Adapters you have installed, one to a line"
+                help="Name | python, node, dotnet or other | the command and its arguments. {port} in an argument: Codehouse chooses a port on 127.0.0.1. For example: Python | python | python -m debugpy.adapter"
+              >
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.dap}
+                  placeholder={"Python | python | python -m debugpy.adapter\n.NET | dotnet | netcoredbg --interpreter=vscode\nNode | node | node C:\\tools\\js-debug\\src\\dapDebugServer.js {port} 127.0.0.1"}
+                  onChange={(e) => change({ dap: e.target.value }, "Debug adapters")}
+                />
+              </Field>
+              {v.dap.split(/\r?\n/).filter((l) => l.trim() && !parseDapLines(l).length).length ? (
+                <p role="alert" className="m-0 text-xs text-sev">
+                  A line is not name | python, node, dotnet or other | command, so it is left out.
+                </p>
+              ) : null}
+              <p className="m-0 text-xs text-mut">
+                Off until you name one. Debug... in a session starts a program from its folder under the adapter, with
+                breakpoints; Claude can too, and you approve each start. Every action is in the audit log with who took it,
+                and nothing is evaluated in the program. Microsoft&apos;s vsdbg is not supported.
               </p>
             </Group>
 

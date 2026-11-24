@@ -456,6 +456,8 @@ export const START_TIMEOUT_MS = 300_000
 
 export interface SessionDeps {
   queryFn: QueryFn
+  /** G37: the debugger; a closed session's program is stopped. */
+  debugger?: { release(sessionId: string): void }
   /** G26: the outgoing-connection proxy, when on: the variables that point a session at it, with its own token. */
   egress?: { envFor(sessionId: string): Promise<Record<string, string> | undefined>; release(sessionId: string): void }
   /** Your title, pin and archive for a Claude Code session id. Absent where they are not kept. */
@@ -2948,6 +2950,8 @@ export class Session extends EventEmitter<SessionEvents> {
     this.#stuck.stop()
     // G26: its proxy token stops working.
     this.#deps.egress?.release(this.id)
+    // G37: and a program it was debugging is stopped.
+    this.#deps.debugger?.release(this.id)
     clearInterval(this.#deadmanTimer)
     this.#deps.broker.cancelSession(this.id, "The session was closed")
     this.#input.end()

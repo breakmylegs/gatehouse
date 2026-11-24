@@ -189,6 +189,7 @@ import { ChangelogStore } from "./update/changelog.js"
 import { EgressProxy } from "./egress-proxy.js"
 import { TestExplorer } from "./test-explorer.js"
 import { LanguageServers } from "./lsp-client.js"
+import { Debugger, debugClient } from "./dap-client.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -614,6 +615,15 @@ export function createHost(opts: HostOptions = {}): Host {
         latencyMs: 0,
       }),
   })
+  // G37: the debugger, with the adapters you named; each action audited with who took it.
+  const debuggerSvc = new Debugger({
+    adapters: () => config.debugAdapters,
+    audit,
+    killed: () => kill.isEngaged(),
+    policyHash: () => store.current?.hash ?? "none",
+    redact: (t) => redactString(t, { terms: config.redactTerms }),
+    env,
+  })
   // G26: the outgoing-connection proxy, listening only once it is on and a session starts; each refusal audited.
   const egressProxy = new EgressProxy({
     settings: () => config.sandbox,
@@ -641,6 +651,7 @@ export function createHost(opts: HostOptions = {}): Host {
   })
   const deps: SessionDeps = {
     egress: egressProxy,
+    debugger: debuggerSvc,
     governor,
     defaultResources: () => (power.onBattery ? "low" : undefined),
     queryFn,
@@ -753,6 +764,8 @@ export function createHost(opts: HostOptions = {}): Host {
           ? {
               // D-065: the tests a change affects, for the inner loop.
               testImpact: true,
+              // G37: the debugger, when an adapter is named in Settings; Claude's actions are audited as Claude's.
+              ...(config.debugAdapters?.length ? { debug: debugClient(debuggerSvc, sessionId, () => manager.get(sessionId)?.cwd ?? cwd) } : {}),
               // T-135: a secret for one command, asked of you on the desktop only.
               secrets: {
                 ask: async (name: string, reason: string, command: string) => {
@@ -2005,6 +2018,8 @@ export function createHost(opts: HostOptions = {}): Host {
       residency,
       // E-075: onboarding progress, per project, on this computer.
       onboarding: new OnboardingProgress(path.join(gatehouseDataDir(env), "onboarding.json")),
+    // G37: the debugger, for the window's panel.
+    debugger: debuggerSvc,
     // G34: the language servers you named in Settings, started for a folder at its first look.
     languageServers: new LanguageServers({ servers: () => config.languageServers, env, log }),
     // G38: your runs from the test explorer, audited and stopped by the kill switch, like the terminal's commands.
@@ -2504,6 +2519,7 @@ export function createHost(opts: HostOptions = {}): Host {
       phone.stop()
       await manager.closeAll()
       await egressProxy.stop()
+      debuggerSvc.close()
       await usage.flush()
       await approverProcess?.stop()
       store.close()

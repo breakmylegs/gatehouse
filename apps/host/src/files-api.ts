@@ -671,6 +671,34 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     }
   })
 
+  // G37: the debugger, for the window: the adapters named, the state, and each action as yours.
+  app.get("/api/debug", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    if (!rootOf(q)) return reply.code(404).send({ error: "That session is not open." })
+    return { adapters: (ctx.config().debugAdapters ?? []).map((a) => ({ name: a.name, kind: a.kind })), state: ctx.debugger?.state(String(q.session)) ?? null }
+  })
+  app.post("/api/debug/:action", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root || !ctx.debugger) return reply.code(404).send({ error: "That session is not open." })
+    const id = String(b.session)
+    const action = (req.params as { action: string }).action
+    try {
+      if (action === "start") {
+        const bps = (b.breakpoints && typeof b.breakpoints === "object" ? b.breakpoints : {}) as Record<string, unknown>
+        const breakpoints = Object.fromEntries(Object.entries(bps).map(([f, l]) => [f, Array.isArray(l) ? l.map(Number) : []]))
+        const args = Array.isArray(b.args) ? b.args.map(String) : []
+        await ctx.debugger.start(id, real(root), "desktop", { adapter: String(b.adapter ?? ""), program: String(b.program ?? ""), args, breakpoints })
+      } else if (action === "breakpoints") await ctx.debugger.setBreakpoints(id, "desktop", String(b.file ?? ""), Array.isArray(b.lines) ? b.lines.map(Number) : [])
+      else if (["continue", "next", "stepIn", "stepOut", "pause"].includes(action)) await ctx.debugger.step(id, "desktop", action as "continue")
+      else if (action === "stop") await ctx.debugger.stop(id, "desktop")
+      else return reply.code(404).send({ error: "No such debugger action." })
+      return { state: action === "stop" ? null : await ctx.debugger.settle(id, action === "pause" ? 2000 : 10_000) }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+
   // D-081: why a line is like this: its last commit, that commit's Codehouse note, and the decisions that bear on it.
   app.get("/api/files/why", async (req, reply) => {
     const q = req.query as Record<string, unknown>

@@ -180,6 +180,23 @@ function build(loose: boolean) {
       .passthrough()
       .optional(),
     /**
+     * G37: debug adapters you have installed (debugpy, js-debug, netcoredbg; never vsdbg): off until one is named here.
+     * "{port}" in an argument makes Codehouse choose a port on 127.0.0.1 and reach the adapter there.
+     */
+    debugAdapters: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(60),
+            kind: z.enum(["python", "node", "dotnet", "other"]),
+            command: z.string().min(1).max(500),
+            args: z.array(z.string().max(500)).max(40).optional(),
+          })
+          .passthrough(),
+      )
+      .max(20)
+      .optional(),
+    /**
      * G34: language servers you have installed, for the file view: off until one is named here with the file endings
      * it is for. Started without a shell in the session's folder.
      */

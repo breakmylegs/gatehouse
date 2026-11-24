@@ -6,6 +6,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { loadPolicy, redact, type Policy } from "@gatehouse/policy"
 import {
   CompanionHandlers,
+  DEBUG_TOOLS,
+  type DebugClient,
   NOTIFY_INTERVAL_MS,
   NOTIFY_MAX_CHARS,
   type HostClient,
@@ -210,5 +212,44 @@ describe("get_policy_summary", () => {
     const text = summarisePolicy(big, DEV)
     expect(text.length).toBe(SUMMARY_MAX_CHARS)
     expect(text.endsWith("...")).toBe(true)
+  })
+})
+
+describe("the debug tools (G37)", () => {
+  function debugFake() {
+    const calls: unknown[][] = []
+    const client: DebugClient = {
+      start: async (o) => (calls.push(["start", o]), { text: "Stopped" }),
+      breakpoints: async (file, lines) => (calls.push(["breakpoints", file, lines]), { text: "Placed" }),
+      step: async (kind) => (calls.push(["step", kind]), { text: "Stepped" }),
+      state: async () => (calls.push(["state"]), { text: "Running" }),
+      stop: async () => (calls.push(["stop"]), { text: "Stopped" }),
+    }
+    return { calls, client }
+  }
+
+  it("passes each call to the Host's debugger, breakpoints gathered by file and bad ones left out", async () => {
+    const { calls, client } = debugFake()
+    const { handlers } = make({ debug: client })
+    const run = (name: string, a: Record<string, unknown>) => DEBUG_TOOLS.find((t) => t.name === name)!.run(handlers, a)
+    await run("debug_start", { adapter: "Python", program: "app.py", args: ["--fast", 3], breakpoints: [{ file: "app.py", line: 3 }, { file: "app.py", line: 9 }, { file: "lib.py", line: 1 }, { file: "x.py", line: 1.5 }] })
+    await run("debug_set_breakpoints", { file: "lib.py", lines: [4, -1, 6] })
+    await run("debug_step", { kind: "stepIn" })
+    expect(await run("debug_step", { kind: "evaluate" })).toMatchObject({ isError: true })
+    await run("debug_state", {})
+    await run("debug_stop", {})
+    expect(calls).toEqual([
+      ["start", { adapter: "Python", program: "app.py", args: ["--fast"], breakpoints: { "app.py": [3, 9], "lib.py": [1] } }],
+      ["breakpoints", "lib.py", [4, 6]],
+      ["step", "stepIn"],
+      ["state"],
+      ["stop"],
+    ])
+  })
+
+  it("says the debugger is not available when no adapter is named, and offers no tool to evaluate anything", async () => {
+    const { handlers } = make()
+    expect(await handlers.debug("state", {})).toMatchObject({ isError: true, text: expect.stringMatching(/No debug adapter/) })
+    expect(DEBUG_TOOLS.map((t) => t.name)).toEqual(["debug_start", "debug_set_breakpoints", "debug_step", "debug_state", "debug_stop"])
   })
 })

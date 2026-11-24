@@ -244,6 +244,8 @@ export interface AdminContext {
   onboarding?: import("./onboarding.js").OnboardingProgress
   /** G38: runs a project's tests for the test explorer. */
   tests?: import("./test-explorer.js").TestExplorer
+  /** G37: the debugger, with the adapters you named. */
+  debugger?: import("./dap-client.js").Debugger
   /** G34: the language servers you named, for the file view. */
   languageServers?: import("./lsp-client.js").LanguageServers
   /** T-113: the ports a running session's processes listen on. */
@@ -2450,6 +2452,8 @@ const LIVE_SETTINGS = [
   "sandbox",
   // G34: read at each look; a server already running for a folder keeps going until it is idle.
   "languageServers",
+  // G37: read at each start.
+  "debugAdapters",
   "redactTerms",
   // E-086: read each time an export is made or a commit checked.
   "writingRules",
