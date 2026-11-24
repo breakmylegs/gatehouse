@@ -190,6 +190,7 @@ import { EgressProxy } from "./egress-proxy.js"
 import { TestExplorer } from "./test-explorer.js"
 import { LanguageServers } from "./lsp-client.js"
 import { Debugger, debugClient } from "./dap-client.js"
+import { Sharing } from "./share.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -2018,6 +2019,15 @@ export function createHost(opts: HostOptions = {}): Host {
       residency,
       // E-075: onboarding progress, per project, on this computer.
       onboarding: new OnboardingProgress(path.join(gatehouseDataDir(env), "onboarding.json")),
+    // G40: share as a zip that leaves secrets out, and publish with a host's own tool, each audited.
+    sharing: new Sharing({
+      audit,
+      killed: () => kill.isEngaged(),
+      policyHash: () => store.current?.hash ?? "none",
+      publishers: () => config.publishHosts,
+      redact: (t) => redactString(t, { terms: config.redactTerms }),
+      env,
+    }),
     // G37: the debugger, for the window's panel.
     debugger: debuggerSvc,
     // G34: the language servers you named in Settings, started for a folder at its first look.

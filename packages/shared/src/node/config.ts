@@ -180,6 +180,14 @@ function build(loose: boolean) {
       .passthrough()
       .optional(),
     /**
+     * G40: publish commands, each a public host's own command line tool with its own sign-in (Netlify, Vercel and the
+     * like); off until one is named here. Run from the window as your action.
+     */
+    publishHosts: z
+      .array(z.object({ name: z.string().min(1).max(60), command: z.string().min(1).max(500), args: z.array(z.string().max(500)).max(40).optional() }).passthrough())
+      .max(20)
+      .optional(),
+    /**
      * G37: debug adapters you have installed (debugpy, js-debug, netcoredbg; never vsdbg): off until one is named here.
      * "{port}" in an argument makes Codehouse choose a port on 127.0.0.1 and reach the adapter there.
      */

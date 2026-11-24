@@ -115,6 +115,7 @@ interface Config {
   sandbox?: { egressProxy?: boolean; allow?: string[]; upstream?: string }
   languageServers?: Array<{ name: string; command: string; args?: string[]; extensions: string[] }>
   debugAdapters?: Array<{ name: string; kind: "python" | "node" | "dotnet" | "other"; command: string; args?: string[] }>
+  publishHosts?: Array<{ name: string; command: string; args?: string[] }>
   titleByClaude?: boolean
   forges?: { github?: boolean }
   containerRuns?: { enabled?: boolean; image?: string }
@@ -254,6 +255,8 @@ interface Values {
   lsp: string
   /** G37: debug adapters, one to a line: name | kind | command and arguments. */
   dap: string
+  /** G40: publish commands, one to a line: name | command and arguments. */
+  pub: string
   /** What every session is told at its start. */
   instr: string
   /** What Claude should call you, and your work (Profile). */
@@ -284,6 +287,24 @@ interface Values {
 export function lspLine(s: { name: string; command: string; args?: string[]; extensions: string[] }): string {
   const q = (w: string) => (/\s/.test(w) ? `"${w}"` : w)
   return [s.name, s.extensions.join(", "), [s.command, ...(s.args ?? [])].map(q).join(" ")].join(" | ")
+}
+
+/** G40: a publish command as its Settings line. */
+export function pubLine(p: { name: string; command: string; args?: string[] }): string {
+  const q = (w: string) => (/\s/.test(w) ? `"${w}"` : w)
+  return `${p.name} | ${[p.command, ...(p.args ?? [])].map(q).join(" ")}`
+}
+
+/** G40: the Settings lines as publish commands: name | command; a line without both is left out. */
+export function parsePubLines(text: string): Array<{ name: string; command: string; args?: string[] }> {
+  return text.split(/\r?\n/).flatMap((l) => {
+    const at = l.indexOf("|")
+    if (at < 0) return []
+    const name = l.slice(0, at).trim()
+    const words = l.slice(at + 1).trim().match(/"[^"]*"|\S+/g)?.map((w) => w.replace(/^"|"$/g, "")) ?? []
+    if (!name || !words.length) return []
+    return [{ name, command: words[0]!, ...(words.length > 1 ? { args: words.slice(1) } : {}) }]
+  })
 }
 
 /** G37: the Settings lines as debug adapters: name | kind | command; a line without all three, or another kind, is left out. */
@@ -379,6 +400,7 @@ export function valuesOf(d: SettingsData): Values {
     egressAllow: (c.sandbox?.allow ?? []).join("\n"),
     egressUpstream: c.sandbox?.upstream ?? "",
     lsp: (c.languageServers ?? []).map(lspLine).join("\n"),
+    pub: (c.publishHosts ?? []).map(pubLine).join("\n"),
     dap: (c.debugAdapters ?? []).map((a) => lspLine({ name: a.name, command: a.command, ...(a.args ? { args: a.args } : {}), extensions: [a.kind] })).join("\n"),
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
@@ -513,6 +535,12 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     const tr = { ...rest, ...(v.traces ? { enabled: true } : {}), ...(Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4318 ? { port } : {}) }
     if (Object.keys(tr).length) body.traceReceiver = tr
     else delete body.traceReceiver
+  }
+  // G40: name | command.
+  {
+    const hosts = parsePubLines(v.pub)
+    if (hosts.length) body.publishHosts = hosts
+    else delete body.publishHosts
   }
   // G37: name | kind | command, the kind one of python, node, dotnet or other.
   {
@@ -759,6 +787,7 @@ export const DEFAULT_VALUES: Values = {
   egressUpstream: "",
   lsp: "",
   dap: "",
+  pub: "",
   instr: "",
   callMe: "",
   work: "",
@@ -2260,6 +2289,30 @@ export function Settings() {
                 Off until you name one. In the file view, a file of its kind shows its problems, what is at the cursor and
                 where a name is defined or used. Codehouse starts it in the session&apos;s folder without a shell and with no
                 credential in its environment, and stops it after ten idle minutes. It only reads; nothing it says changes a file.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Publish" gap="gap-2" changed={differs(v, ["pub"])}>
+              <Field
+                label="Publish commands, one to a line"
+                help="Name | the host's own command and its arguments, for example: Netlify | netlify deploy --dir dist --prod"
+              >
+                <textarea
+                  className="field mono min-h-[3.5rem]"
+                  value={v.pub}
+                  placeholder={"Netlify | netlify deploy --dir dist --prod\nVercel | vercel deploy --prod"}
+                  onChange={(e) => change({ pub: e.target.value }, "Publish")}
+                />
+              </Field>
+              {v.pub.split(/\r?\n/).filter((l) => l.trim() && !parsePubLines(l).length).length ? (
+                <p role="alert" className="m-0 text-xs text-sev">
+                  A line is not name | command, so it is left out.
+                </p>
+              ) : null}
+              <p className="m-0 text-xs text-mut">
+                Off until you name one. Share and publish... in a session runs it in the session&apos;s folder as your
+                action, recorded in the audit log. The host&apos;s tool signs in its own way; Codehouse keeps none of its
+                passwords or tokens.
               </p>
             </Group>
 

@@ -244,6 +244,8 @@ export interface AdminContext {
   onboarding?: import("./onboarding.js").OnboardingProgress
   /** G38: runs a project's tests for the test explorer. */
   tests?: import("./test-explorer.js").TestExplorer
+  /** G40: sharing as a zip, and publishing with a host's own tool. */
+  sharing?: import("./share.js").Sharing
   /** G37: the debugger, with the adapters you named. */
   debugger?: import("./dap-client.js").Debugger
   /** G34: the language servers you named, for the file view. */
@@ -2454,6 +2456,8 @@ const LIVE_SETTINGS = [
   "languageServers",
   // G37: read at each start.
   "debugAdapters",
+  // G40: read at each publish.
+  "publishHosts",
   "redactTerms",
   // E-086: read each time an export is made or a commit checked.
   "writingRules",

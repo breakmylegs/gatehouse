@@ -671,6 +671,36 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
     }
   })
 
+  // G40: what a share takes and leaves out; the zip itself; and publishing with a host's own tool.
+  app.get("/api/share/plan", async (req, reply) => {
+    const root = rootOf(req.query as Record<string, unknown>)
+    if (!root || !ctx.sharing) return reply.code(404).send({ error: "That session is not open." })
+    const plan = await ctx.sharing.plan(real(root))
+    return { project: path.basename(root), files: plan.files.length, bytes: plan.bytes, left: plan.left, publishers: (ctx.config().publishHosts ?? []).map((p) => p.name) }
+  })
+  app.get("/api/share/zip", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root || !ctx.sharing) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      const { zip } = await ctx.sharing.zip(String(q.session), real(root))
+      const name = path.basename(root).replace(/[^w.-]+/g, "-") || "project"
+      return reply.header("content-type", "application/zip").header("content-disposition", `attachment; filename="${name}.zip"`).send(zip)
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/share/publish", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root || !ctx.sharing) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      return await ctx.sharing.publish(String(b.session), real(root), String(b.name ?? ""))
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+
   // G37: the debugger, for the window: the adapters named, the state, and each action as yours.
   app.get("/api/debug", async (req, reply) => {
     const q = req.query as Record<string, unknown>

@@ -50,6 +50,7 @@ import { ExceptionsPanel } from "../components/ExceptionsPanel"
 import { ReviewersPanel } from "../components/ReviewersPanel"
 import { TestExplorerPanel } from "../components/TestExplorerPanel"
 import { DebugPanel } from "../components/DebugPanel"
+import { SharePanel } from "../components/SharePanel"
 import { DailyPlanPanel } from "../components/DailyPlanPanel"
 import { useScreenShare } from "../components/ScreenShare"
 import { hiddenSessions, setHidden } from "../lib/screenshare"
@@ -495,6 +496,8 @@ function SessionPane({
   const [testsOpen, setTestsOpen] = useState(false)
   // G37: the debugger.
   const [debugOpen, setDebugOpen] = useState(false)
+  // G40: share as a zip, and publish.
+  const [shareOpen, setShareOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   // E-091: a session you chose to hide shows nothing of itself while you share your screen.
   const sharing = useScreenShare()
@@ -837,6 +840,7 @@ function SessionPane({
     ...(chat ? [] : [{ label: "Suggest reviewers...", onSelect: () => setReviewersOpen(true) }]),
     ...(chat ? [] : [{ label: "Tests...", onSelect: () => setTestsOpen(true) }]),
     ...(chat ? [] : [{ label: "Debug...", onSelect: () => setDebugOpen(true) }]),
+    ...(chat ? [] : [{ label: "Share and publish...", onSelect: () => setShareOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1213,6 +1217,11 @@ function SessionPane({
       {debugOpen ? (
         <div className="max-h-[70vh] overflow-auto px-3 pt-2">
           <DebugPanel sessionId={session.id} onClose={() => setDebugOpen(false)} />
+        </div>
+      ) : null}
+      {shareOpen ? (
+        <div className="max-h-[70vh] overflow-auto px-3 pt-2">
+          <SharePanel sessionId={session.id} onClose={() => setShareOpen(false)} />
         </div>
       ) : null}
       {planOpen ? (

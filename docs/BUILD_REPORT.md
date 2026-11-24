@@ -2217,3 +2217,26 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 - Every action is audited first as `debug_action` with who took it (you, or Claude through the Companion); a start is refused when it cannot be recorded or while the kill switch is engaged. Only a program and breakpoints inside the session's folder are accepted. The adapter starts without a shell and with the credentials stripped. An adapter's request to run something (runInTerminal, startDebugging) is refused. The stack, variables and output are redacted. A closed session's program is stopped: disconnect, then the adapter's process tree half a second later.
 - **Acceptance, checked here:** a real breakpoint in Python hits through the debugpy that VS Code's Python debugger installs (the test finds it, and skips where it is not installed). Node and .NET could not be checked on this PC: there is no standalone js-debug server and no .NET SDK or netcoredbg. The client speaks the same protocol to them, and the fake adapter covers the port connection js-debug uses.
 - Tests: `apps/host/test/dap-client.test.ts` (a fake adapter: the stop, redaction, the launch, the order of breakpoints and configurationDone, a refused runInTerminal, stepping and the end, each action audited with who; the kill switch, an unrecorded start, an adapter not named, a program or breakpoint outside; an adapter on a port, on 127.0.0.1; no credential; no step while running; Claude's tools and their text; the real debugpy breakpoint), `apps/companion/test/handlers.test.ts` (the tools reach the debugger; nothing to evaluate), golden 07-mcp-unknown (debug-start asks; debug-tools for the Host's Companion in coding sessions only) and `apps/web/test/debug-panel.test.tsx`. Twenty breaks, all caught (three missed at first: credentials, stepping a running program, and the panel's buttons while running; tests added). Threat model T168.
+
+### G40 Sharing a project as a zip, and publishing with a host's own tool (feat/e6a)
+
+- `apps/host/src/share.ts`, Share and publish... in a session (`SharePanel.tsx`):
+  - **Share as a zip.** It takes the files git would (what .gitignore leaves out stays out), or outside git the folder less its build and package folders. It also leaves out:
+    - files named like secrets: .env and its kind, though .env.example and other templates are kept; keys and certificates; private SSH keys; .npmrc, .pypirc and .netrc; credentials and service-account files; Terraform state; folders of credentials (.ssh, .aws, .azure);
+    - any text file in which the commit scan (G22) finds a secret.
+
+    The panel names what is left out, and why, before the zip is made. A note inside the zip, SHARED-BY-CODEHOUSE.txt, names each file and why, never a value. The share is audited as `project_shared`, and no zip is made when it cannot be recorded. The zip is limited to 5000 files and 200 MB, and each file to 50 MB.
+  - **Publish.** It runs a command you name in Settings, Connectors, Publish (name | command), for example `Netlify | netlify deploy --dir dist --prod`. That is the host's own command line tool, signed in its own way; Codehouse keeps none of its passwords or tokens, as the 9 Nov connector rule asks.
+    - It is your action from the window: audited first as `project_published` (refused when it cannot be recorded), refused while the kill switch is engaged, run in the session's folder without an Anthropic credential, its output redacted and shown, stopped after ten minutes.
+    - On Windows, a tool installed as a .cmd file runs through cmd.exe with Settings' words only, and a word holding a character cmd.exe treats specially (& | < > ^ % ! ") is refused.
+    - Claude has no tool for either; a deploy command in a session still goes through the policy as before.
+- **Not built (the backlog's wider G40):** app templates, local SQLite and sign-in scaffolding, and keeping secrets in Credential Manager. The frontier row asked for host tools with their own sign-in and the zip without secrets, which is what is here.
+- Tests: `apps/host/test/share.test.ts` covers:
+  - secret names, with templates kept;
+  - git's view with secrets left out by name and by their text, and the folder walk outside git;
+  - the zip and its note, never a value, recorded first;
+  - a publish in the folder without a credential, output redacted, recorded first;
+  - the kill switch, an unrecorded publish, an unknown name, and the time limit;
+  - cmd.exe for a .cmd tool, refusing special characters.
+
+  `apps/web/test/share-panel.test.tsx` covers what is left out shown first, the download, a publish and its output, no host named, and the Settings lines. Seventeen breaks, all caught (one, a note showing a value, caught by the mutation failing rather than a test reading the note; the note's own test checks that no value is in it). Threat model T169.
