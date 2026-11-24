@@ -187,6 +187,7 @@ import { MAC_CHANNEL_TAG, MAC_UPDATE_FILE, MAC_UPDATE_SIGNATURE, macTag } from "
 import { GitHubSource } from "./update/source.js"
 import { ChangelogStore } from "./update/changelog.js"
 import { EgressProxy } from "./egress-proxy.js"
+import { TestExplorer } from "./test-explorer.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -2003,6 +2004,8 @@ export function createHost(opts: HostOptions = {}): Host {
       residency,
       // E-075: onboarding progress, per project, on this computer.
       onboarding: new OnboardingProgress(path.join(gatehouseDataDir(env), "onboarding.json")),
+    // G38: your runs from the test explorer, audited and stopped by the kill switch, like the terminal's commands.
+    tests: new TestExplorer({ audit, killed: () => kill.isEngaged(), policyHash: () => store.current?.hash ?? "none", log, env }),
       pickFolder: (start) => {
         if (process.platform === "darwin") return pickFolderWithMac(start) // Mac fork
         const exe = helper()

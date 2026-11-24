@@ -48,6 +48,7 @@ import { PatternCardsPanel } from "../components/PatternCardsPanel"
 import { HandoverPackPanel } from "../components/HandoverPackPanel"
 import { ExceptionsPanel } from "../components/ExceptionsPanel"
 import { ReviewersPanel } from "../components/ReviewersPanel"
+import { TestExplorerPanel } from "../components/TestExplorerPanel"
 import { DailyPlanPanel } from "../components/DailyPlanPanel"
 import { useScreenShare } from "../components/ScreenShare"
 import { hiddenSessions, setHidden } from "../lib/screenshare"
@@ -489,6 +490,8 @@ function SessionPane({
   const [handoverOpen, setHandoverOpen] = useState(false)
   const [exceptionsOpen, setExceptionsOpen] = useState(false)
   const [reviewersOpen, setReviewersOpen] = useState(false)
+  // G38: the test explorer.
+  const [testsOpen, setTestsOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   // E-091: a session you chose to hide shows nothing of itself while you share your screen.
   const sharing = useScreenShare()
@@ -829,6 +832,7 @@ function SessionPane({
       },
     },
     ...(chat ? [] : [{ label: "Suggest reviewers...", onSelect: () => setReviewersOpen(true) }]),
+    ...(chat ? [] : [{ label: "Tests...", onSelect: () => setTestsOpen(true) }]),
     ...(chat ? [] : [{ label: "Ask for a handover note", onSelect: () => void send({ type: "handover_ask", sessionId: session.id }) }]),
     // E-022: misconfigurations in the project's infrastructure code.
     ...(chat ? [] : [{ label: "Infrastructure checks...", onSelect: () => setIacCheck(true) }]),
@@ -1195,6 +1199,11 @@ function SessionPane({
       {reviewersOpen ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">
           <ReviewersPanel sessionId={session.id} onClose={() => setReviewersOpen(false)} />
+        </div>
+      ) : null}
+      {testsOpen ? (
+        <div className="max-h-[70vh] overflow-auto px-3 pt-2">
+          <TestExplorerPanel sessionId={session.id} onClose={() => setTestsOpen(false)} />
         </div>
       ) : null}
       {planOpen ? (

@@ -3,6 +3,7 @@ import { checkTour, readTours } from "./tours.js"
 import { curriculum, starterTasks, type OnboardingProgress } from "./onboarding.js"
 import { glossary } from "./glossary.js"
 import { listFiles as listProjectFiles } from "./mutation.js"
+import { detectRunners, discover, TestRunError } from "./test-explorer.js"
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
@@ -205,6 +206,37 @@ export function findFiles(root: string, query: string): string[] {
 }
 
 export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & FilesDeps): void {
+  // G38: the test explorer, its tests read from the session's folder and run with the project's own runner.
+  app.get("/api/tests", async (req, reply) => {
+    const root = rootOf(req.query as Record<string, unknown>)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    try {
+      const r = real(root)
+      const files = await listProjectFiles(r).catch(() => [] as string[])
+      return { runners: detectRunners(r, files), files: discover(r, files) }
+    } catch (e) {
+      return reply.code(409).send({ error: (e as Error).message })
+    }
+  })
+  app.post("/api/tests/run", async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const root = rootOf(b)
+    if (!root) return reply.code(404).send({ error: "That session is not open." })
+    if (!ctx.tests) return reply.code(503).send({ error: "The test explorer is not available here." })
+    const runner = b.runner
+    if (runner !== "vitest" && runner !== "jest" && runner !== "pytest" && runner !== "dotnet") return reply.code(422).send({ error: "Choose a runner." })
+    const file = typeof b.file === "string" && b.file ? b.file : undefined
+    const name = typeof b.name === "string" && b.name ? b.name.slice(0, 500) : undefined
+    try {
+      const r = real(root)
+      if (file && !insideRoot(r, file).abs) return reply.code(422).send({ error: "That file is not in the project." })
+      const files = discover(r, await listProjectFiles(r).catch(() => [] as string[]))
+      return await ctx.tests.run(b.session as string, r, runner, { ...(file ? { file } : {}), ...(name ? { name } : {}) }, files)
+    } catch (e) {
+      return reply.code(e instanceof TestRunError ? 409 : 500).send({ error: (e as Error).message })
+    }
+  })
+
   // C-032: one TypeScript language service for this Host, started at its first question, closed with the Host.
   let tsService: TsService | undefined
   const ts = { ask: (op: TsOp, root: string, file: string, pos: number) => (tsService ??= new TsService()).ask(op, root, file, pos) }

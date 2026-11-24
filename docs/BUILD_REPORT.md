@@ -2181,3 +2181,15 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - A push finding names its commit, since the line is that commit's version of the file.
   - Removing a secret, or rewording it away, is not refused. Pushing a commit that added a real-looking one still is, since that history would reach GitHub.
 - **Tests:** `apps/host/test/commit-scan.test.ts`, seven new cases covering the side branch, rewording and removal, a fresh reading after a change, a commit message that says push, placeholders against a real-looking password, removed lines, and reading refspecs and `-C`. Its addresses are put together at run time, so the file holds none. Eight breaks, all caught (one equivalent mutant at first, taking out one of the two guards on removed lines; rerun with both).
+
+### G38 The test explorer (feat/e6a)
+
+- `apps/host/src/test-explorer.ts` and Tests... in a session's menu (`TestExplorerPanel.tsx`): the project's tests a file at a time, with each test's line, for Vitest, Jest, pytest and dotnet test, found by reading the files (describe names prefix their tests, a pytest class gives Class::test, .NET methods marked [Fact], [Theory], [Test], [TestCase] or [TestMethod]). Listing runs nothing.
+- Run, for every test, a file or one test, starts the project's own runner as you would in the terminal: your action, so it does not pass the Approver, but:
+  - it is audited first as `tests_run`, and refused when the record cannot be written;
+  - it is refused while the kill switch is engaged, and for a file outside the project;
+  - it runs one at a time per project and is stopped after ten minutes;
+  - it uses the project's installed Vitest or Jest with this Node (never npx, so nothing is downloaded), `python -m pytest` or `dotnet test`, without a shell and with no credential in its environment;
+  - a test name reaches the runner as an escaped pattern.
+- Results come from the runner's own report (Vitest and Jest JSON, pytest's JUnit XML, dotnet's TRX). Each failure carries its message and its line, from the stack where it names the test file, else the test's own line. Open at line N shows the file there; Fix this puts a scoped task in the prompt box ("fix the code, change only what this failure needs, do not weaken, skip or delete the test"), with the failure fenced so it cannot close its own block. Nothing is sent until you send it.
+- Tests: `apps/host/test/test-explorer.test.ts` (reading JavaScript, Python and C# tests; finding runners and files, leaving out installed packages; the command, the project's own runner and never npx; the three report formats; a run audited first with the right arguments; the kill switch, an unrecorded run and a file outside; one at a time and the time limit) and `apps/web/test/test-explorer.test.tsx` (listing and running, results, a failure opened at its line, Fix this unsent, the fence, a runner that reported nothing). Twenty-four breaks, all caught. Threat model T166.

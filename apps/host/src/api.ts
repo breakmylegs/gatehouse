@@ -242,6 +242,8 @@ export interface AdminContext {
   residency?: Pick<import("./residency.js").ResidencyLog, "sessions">
   /** E-075: onboarding progress, per project. */
   onboarding?: import("./onboarding.js").OnboardingProgress
+  /** G38: runs a project's tests for the test explorer. */
+  tests?: import("./test-explorer.js").TestExplorer
   /** T-113: the ports a running session's processes listen on. */
   sessionPorts?: (sessionId: string) => Promise<Listening[]>
   /** T-080: pull requests watched for sessions. */
