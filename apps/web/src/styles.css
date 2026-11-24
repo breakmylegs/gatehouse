@@ -3077,6 +3077,6 @@ html.screenshare [data-screen-secret] {
   color: transparent !important;
   text-shadow: none !important;
   user-select: none;
-  background: var(--line, #8884);
+  background: var(--c-line);
   border-radius: 4px;
 }

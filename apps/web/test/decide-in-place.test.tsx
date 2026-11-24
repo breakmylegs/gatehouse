@@ -9,7 +9,8 @@ import { useStore } from "../src/store"
 
 const sent: Array<{ type: string; requestId?: string }> = []
 // The workspace also reads how full the context is; these tests are about decisions.
-const decided = () => sent.filter((c) => c.type !== "context_usage")
+// E-063: the workspace also tells the Host you are active (effort_active, for the effort log); that is not a decision.
+const decided = () => sent.filter((c) => c.type !== "context_usage" && c.type !== "effort_active")
 let reply: (cmd: { type: string }) => Promise<{
   ok: boolean
   data?: unknown
