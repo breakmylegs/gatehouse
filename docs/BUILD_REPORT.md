@@ -2165,3 +2165,19 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - a real session pointed at it and released on close
 
   Threat model T165. Eighteen breaks, all caught (one missed at first: listening on every interface; a test of the address added).
+
+### Fix: secret-in-commit refused every push from C:\dev\peter (24 Nov)
+
+- **What happened:** every push from the P.E.T.E.R. session was refused for "a password in a web address in scripts/update.sh, line 496", even when the push did not touch that file and after the file was reworded.
+- **Cause, from C:\dev\peter and the audit log:**
+  - A push was judged on every commit on every local branch no remote had (`git log --branches --not --remotes`). Commit 71a1293 on the local branch deploy-alignment (its GitHub branch gone) adds `DATABASE_URL=postgres://peter:<POSTGRES_PASSWORD>@db:5432/peter` at line 496 of its own version of the file.
+  - A commit counted as a push when "push" appeared anywhere after git, so the refused commits, whose messages said "push", read the same.
+  - The pattern took the placeholder for a password.
+  - Removed lines were never read, and nothing was cached; the constant line was that other commit's.
+- **Fix (`apps/host/src/commit-scan.ts`):**
+  - A push is judged only on the lines added by the commits it sends: `<remote>/<branch>..<local>`; the current branch to its upstream when no refspec is given; for a branch new to the remote, what that remote has nowhere; every branch for --all or a pattern.
+  - A push is a push only where push is git's subcommand; `git -C <folder> push` is judged in that folder.
+  - A placeholder in a web address is not a password (`<...>`, `$VAR`, `${VAR}`, `%VAR%`, `{{...}}`, `***`, REPLACE_WITH_..., CHANGE_ME, your_..., changeme, example, xxx, password). A real-looking one is still refused, beside a placeholder too.
+  - A push finding names its commit, since the line is that commit's version of the file.
+  - Removing a secret, or rewording it away, is not refused. Pushing a commit that added a real-looking one still is, since that history would reach GitHub.
+- **Tests:** `apps/host/test/commit-scan.test.ts`, seven new cases covering the side branch, rewording and removal, a fresh reading after a change, a commit message that says push, placeholders against a real-looking password, removed lines, and reading refspecs and `-C`. Its addresses are put together at run time, so the file holds none. Eight breaks, all caught (one equivalent mutant at first, taking out one of the two guards on removed lines; rerun with both).

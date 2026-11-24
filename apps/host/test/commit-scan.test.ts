@@ -8,8 +8,11 @@ import type { HookCallback } from "@anthropic-ai/claude-agent-sdk"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { parse as parseYaml } from "yaml"
 import {
+  isPlaceholder,
   makesCommit,
   makesPush,
+  pushes,
+  pushTargets,
   scanCommit,
   secretReason,
   secretsInDiff,
@@ -196,7 +199,7 @@ describe("the secret commit block (D-058)", () => {
     fs.writeFileSync(path.join(dir, "keys.ts"), `// keys\n\nexport const k = "${AWS}"\n`)
     git("add", "keys.ts")
     git("commit", "--quiet", "-m", "keys")
-    expect(await scanCommit(dir, "git push origin main")).toEqual([{ file: "keys.ts", kind: "an AWS access key", line: 3 }])
+    expect(await scanCommit(dir, "git push origin main")).toEqual([{ file: "keys.ts", kind: "an AWS access key", line: 3, commit: git("rev-parse", "--short", "HEAD") }])
     // Once a remote has it, a push sends nothing new.
     const bare = fs.mkdtempSync(path.join(os.tmpdir(), "gh-commit-bare-"))
     try {
@@ -245,5 +248,111 @@ describe("the secret commit block (D-058)", () => {
       expect(records[0], mode).toMatchObject({ event: "floor_deny", verdict: { ruleId: SECRET_IN_COMMIT_RULE } })
       expect(JSON.stringify({ out, records }), mode).not.toContain(AWS.slice(4))
     }
+  })
+})
+
+// 24 Nov: a push from C:\dev\peter was refused every time for "a password in a web address in scripts/update.sh, line
+// 496": an unpushed commit on another local branch added a placeholder there, and every push read every branch. The
+// addresses are put together at run time, so this file holds none of them.
+const url = (user: string, pw: string) => ["postgres://", user, ":", pw, "@db:5432/peter"].join("")
+const REAL = url("peter", "Xk82jfL0q9")
+const HINT = (pw: string) => `echo "DATABASE_URL=${url("peter", pw)}"`
+
+describe("a push is judged on what it sends (24 Nov)", () => {
+  let bare: string
+  beforeEach(() => {
+    bare = fs.mkdtempSync(path.join(os.tmpdir(), "gh-commit-bare-"))
+    execFileSync("git", ["init", "--quiet", "--bare", bare], { windowsHide: true })
+    git("remote", "add", "origin", bare)
+    git("push", "--quiet", "-u", "origin", "main")
+  })
+  afterEach(() => fs.rmSync(bare, { recursive: true, force: true }))
+
+  const commitFile = (file: string, text: string, msg: string) => {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true })
+    fs.writeFileSync(path.join(dir, file), text)
+    git("add", file)
+    git("commit", "--quiet", "-m", msg)
+    return git("rev-parse", "--short", "HEAD")
+  }
+
+  it("is not refused for a commit on another local branch that the push does not send", async () => {
+    git("checkout", "--quiet", "-b", "deploy-alignment")
+    const side = commitFile("scripts/update.sh", `#!/bin/sh\n\n\n${HINT("Xk82jfL0q9")}\n`, "side work, not for main")
+    git("checkout", "--quiet", "main")
+    commitFile("docs/notes.md", "nothing secret\n", "notes")
+    expect(await scanCommit(dir, "git push origin main")).toEqual([])
+    expect(await scanCommit(dir, "git push")).toEqual([])
+    expect(await scanCommit(dir, "Set-Location C:\\x; git push origin main 2>&1 | Select-Object -Last 3")).toEqual([])
+    // Sending that branch, or every branch, is still refused, naming the commit and its line there.
+    const sent = [{ file: "scripts/update.sh", kind: "a password in a web address", line: 4, commit: side }]
+    expect(await scanCommit(dir, "git push origin deploy-alignment")).toEqual(sent)
+    expect(await scanCommit(dir, "git push origin deploy-alignment:main")).toEqual(sent)
+    expect(await scanCommit(dir, "git push --all origin")).toEqual(sent)
+    expect(secretReason(sent)).toContain(`scripts/update.sh, line 4 of commit ${side}`)
+  })
+
+  it("is not refused, nor a commit, for removing a secret or rewording it away", async () => {
+    commitFile("scripts/update.sh", `one\n${HINT("Xk82jfL0q9")}\n`, "with a password")
+    git("push", "--quiet", "origin", "main")
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), "one\necho the password inside DATABASE_URL must match\n")
+    expect(await scanCommit(dir, "git commit -am reword")).toEqual([])
+    git("commit", "--quiet", "-am", "reword")
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), "one\n")
+    expect(await scanCommit(dir, "git commit -am remove && git push origin main")).toEqual([])
+  })
+
+  it("reads the file as it is now: a rewording clears what was found, with nothing kept from before", async () => {
+    fs.mkdirSync(path.join(dir, "scripts"))
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), `a\n${HINT("Xk82jfL0q9")}\n`)
+    git("add", ".")
+    expect(await scanCommit(dir, "git commit -m x")).toEqual([{ file: "scripts/update.sh", kind: "a password in a web address", line: 2 }])
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), `a\nb\n${HINT("<POSTGRES_PASSWORD>")}\n`)
+    git("add", ".")
+    expect(await scanCommit(dir, "git commit -m x")).toEqual([])
+  })
+
+  it("is not a push when a commit message only says push", async () => {
+    git("checkout", "--quiet", "-b", "side")
+    commitFile("s.sh", `${HINT("Xk82jfL0q9")}\n`, "side")
+    git("checkout", "--quiet", "main")
+    const command = 'git add -A; git commit -q -m "docs: so every session commits to main and pushes; then git push it"'
+    expect(makesPush("PowerShell", { command: 'git commit -q -m "commits and pushes, then push"' })).toBe(false)
+    expect(makesPush("PowerShell", { command: "git -C /c/dev/x push origin main" })).toBe(true)
+    expect(makesPush("Bash", { command: 'git -c "user.name=A B" push' })).toBe(true)
+    fs.writeFileSync(path.join(dir, "CLAUDE.md"), "rules\n")
+    expect(await scanCommit(dir, command)).toEqual([])
+  })
+})
+
+describe("placeholders in a web address (24 Nov)", () => {
+  it("does not take a placeholder for a password, and still refuses a real-looking one", () => {
+    const diffOf = (line: string) => `+++ b/scripts/update.sh\n@@ -0,0 +568 @@\n+${line}\n`
+    for (const pw of ["<POSTGRES_PASSWORD>", "$PGPW_VALUE", "${PGPW}", "%PGPW%", "{{ pg_password }}".replace(/ /g, ""), "********", "REPLACE_WITH_POSTGRES_PASSWORD", "changeme", "CHANGE_ME", "your_password", "example", "xxxxxx", "password"])
+      expect(secretsInDiff(diffOf(HINT(pw))), pw).toEqual([])
+    expect(secretsInDiff(diffOf(HINT("Xk82jfL0q9")))).toEqual([{ file: "scripts/update.sh", kind: "a password in a web address", line: 568 }])
+    expect(secretsInDiff(diffOf(REAL))).toHaveLength(1)
+    // A placeholder beside a real one on the same line does not hide the real one.
+    expect(secretsInDiff(diffOf(`${HINT("<PW>")} ${REAL}`))).toHaveLength(1)
+    expect(isPlaceholder("s3cretpass")).toBe(false)
+    expect(isPlaceholder("Xk82jfL0q9")).toBe(false)
+  })
+
+  it("never reads removed lines", () => {
+    expect(secretsInDiff(`--- a/x.sh\n+++ b/x.sh\n@@ -496 +495,0 @@\n-${REAL}\n`)).toEqual([])
+  })
+})
+
+describe("what a push sends (24 Nov)", () => {
+  it("reads the remote and refspecs, the current branch to its upstream when none is named", () => {
+    const up = { remote: "origin", branch: "main" }
+    expect(pushTargets(["origin", "main"], "main", up)).toEqual({ remote: "origin", targets: [{ local: "main", remote: "origin", branch: "main" }] })
+    expect(pushTargets([], "feature", { remote: "origin", branch: "feature-x" })).toEqual({ remote: "origin", targets: [{ local: "feature", remote: "origin", branch: "feature-x" }] })
+    expect(pushTargets(["-u", "origin", "fix/a:main"], "fix/a", undefined)).toEqual({ remote: "origin", targets: [{ local: "fix/a", remote: "origin", branch: "main" }] })
+    expect(pushTargets(["origin", "+HEAD:refs/heads/main"], "dev", undefined)).toEqual({ remote: "origin", targets: [{ local: "HEAD", remote: "origin", branch: "main" }] })
+    expect(pushTargets(["origin", ":old"], "main", up)).toEqual({ remote: "origin", targets: [] })
+    expect(pushTargets(["--all", "origin"], "main", up)).toEqual({ remote: "origin", all: true })
+    expect(pushTargets(["origin", "refs/heads/*"], "main", up)).toEqual({ remote: "origin", all: true })
+    expect(pushes("git -C /c/dev/gh-crash push origin fix/crash-evidence:main 2>&1 | tail -3")).toEqual([{ words: ["origin", "fix/crash-evidence:main"], dir: "/c/dev/gh-crash" }])
   })
 })
