@@ -499,7 +499,19 @@ export function Viewer({
                   ask={askDefinition}
                   onGo={(file, line) => (file === rel ? setGoTo((g) => ({ line, n: (g?.n ?? 0) + 1 })) : onNavigate({ kind: "file", rel: file, line }))}
                 />
-              ) : null}
+              ) : (
+                // G34: a language server you named for this kind of file, if any (it shows nothing otherwise).
+                <TypeScriptHelp
+                  key={rel}
+                  sessionId={sessionId}
+                  rel={rel}
+                  pos={cursorAt}
+                  ask={askDefinition}
+                  endpoint="/api/files/lsp"
+                  label="Language server"
+                  onGo={(file, line) => (file === rel ? setGoTo((g) => ({ line, n: (g?.n ?? 0) + 1 })) : onNavigate({ kind: "file", rel: file, line }))}
+                />
+              )}
             </div>
             <div className="max-h-[80vh] w-56 overflow-auto">
               <Outline sessionId={sessionId} rel={rel} onGo={(line) => setGoTo((g) => ({ line, n: (g?.n ?? 0) + 1 }))} />

@@ -4,6 +4,7 @@ import { curriculum, starterTasks, type OnboardingProgress } from "./onboarding.
 import { glossary } from "./glossary.js"
 import { listFiles as listProjectFiles } from "./mutation.js"
 import { detectRunners, discover, TestRunError } from "./test-explorer.js"
+import type { LspOp } from "./lsp-client.js"
 import { spawn } from "node:child_process"
 import { createHash, randomBytes } from "node:crypto"
 import fs from "node:fs"
@@ -242,6 +243,7 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
   const ts = { ask: (op: TsOp, root: string, file: string, pos: number) => (tsService ??= new TsService()).ask(op, root, file, pos) }
   app.addHook("onClose", async () => {
     await tsService?.close()
+    ctx.languageServers?.close()
   })
   // Preview addresses: /preview/<token>/<path>. A token belongs to one session and its folder, and ends when that
   // session closes or no longer works there (backlog O13: they used to last while Codehouse ran).
@@ -640,6 +642,29 @@ export function registerFilesRoutes(app: FastifyInstance, ctx: AdminContext & Fi
       const inside = (r: { file?: string }) => !r.file || path.resolve(r.file).startsWith(path.resolve(root) + path.sep)
       const rel = <T extends { file?: string }>(r: T): T => (r.file ? { ...r, file: path.relative(root, r.file).split(path.sep).join("/") } : r)
       if (Array.isArray(result)) return { op, results: (result as Array<{ file?: string }>).filter(inside).map(rel) }
+      return { op, result }
+    } catch (e) {
+      return bad(reply, 503, (e as Error).message)
+    }
+  })
+
+  // G34: a language server you named, for a file of its kind; the same answers as the TypeScript route.
+  app.get("/api/files/lsp", async (req, reply) => {
+    const q = req.query as Record<string, unknown>
+    const root = rootOf(q)
+    if (!root) return bad(reply, 404, "That session is not running.")
+    const where = locate(q, root)
+    if (!where.abs) return bad(reply, 403, where.error ?? "Not allowed.")
+    // No server named for this kind of file: the window shows nothing for it.
+    if (!ctx.languageServers?.has(where.abs)) return reply.code(404).send({ error: "No language server is named for this kind of file.", none: true })
+    const op = String(q.op ?? "")
+    if (!["diagnostics", "info", "definition", "references"].includes(op)) return bad(reply, 422, "Diagnostics, info, definition or references.")
+    if (!fs.existsSync(where.abs) || !fs.statSync(where.abs).isFile() || fs.statSync(where.abs).size > MAX_TEXT) return bad(reply, 422, "That file cannot be read here.")
+    if (await blocked(where.abs, root)) return bad(reply, 403, "The floor blocks that file.")
+    const pos = Math.max(0, Math.min(Number(q.pos) || 0, MAX_TEXT))
+    try {
+      const result = await ctx.languageServers.ask(op as LspOp, path.resolve(root), path.resolve(where.abs), pos)
+      if (Array.isArray(result)) return { op, results: result }
       return { op, result }
     } catch (e) {
       return bad(reply, 503, (e as Error).message)

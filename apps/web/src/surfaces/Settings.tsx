@@ -113,6 +113,7 @@ interface Config {
   logRetentionDays?: number
   traceReceiver?: { enabled?: boolean; port?: number }
   sandbox?: { egressProxy?: boolean; allow?: string[]; upstream?: string }
+  languageServers?: Array<{ name: string; command: string; args?: string[]; extensions: string[] }>
   titleByClaude?: boolean
   forges?: { github?: boolean }
   containerRuns?: { enabled?: boolean; image?: string }
@@ -248,6 +249,8 @@ interface Values {
   egress: boolean
   egressAllow: string
   egressUpstream: string
+  /** G34: language servers, one to a line: name | endings | command and arguments. */
+  lsp: string
   /** What every session is told at its start. */
   instr: string
   /** What Claude should call you, and your work (Profile). */
@@ -274,6 +277,23 @@ interface Values {
 }
 
 /** Exported for tests. */
+/** G34: a language server as its Settings line. */
+export function lspLine(s: { name: string; command: string; args?: string[]; extensions: string[] }): string {
+  const q = (w: string) => (/\s/.test(w) ? `"${w}"` : w)
+  return [s.name, s.extensions.join(", "), [s.command, ...(s.args ?? [])].map(q).join(" ")].join(" | ")
+}
+
+/** G34: the Settings lines as language servers; a line without all three parts is left out. */
+export function parseLspLines(text: string): Array<{ name: string; command: string; args?: string[]; extensions: string[] }> {
+  return text.split(/\r?\n/).flatMap((l) => {
+    const [name, ends, cmd] = l.split("|").map((p) => p.trim())
+    const words = (cmd ?? "").match(/"[^"]*"|\S+/g)?.map((w) => w.replace(/^"|"$/g, "")) ?? []
+    const extensions = (ends ?? "").split(/[,\s]+/).map((e) => e.replace(/^\./, "")).filter(Boolean)
+    if (!name || !words.length || !extensions.length) return []
+    return [{ name, command: words[0]!, ...(words.length > 1 ? { args: words.slice(1) } : {}), extensions }]
+  })
+}
+
 export function valuesOf(d: SettingsData): Values {
   const c = { ...d.running, ...d.saved } as Config
   const q = d.saved.quietHours ?? d.quietHoursInPolicy
@@ -346,6 +366,7 @@ export function valuesOf(d: SettingsData): Values {
     egress: c.sandbox?.egressProxy === true,
     egressAllow: (c.sandbox?.allow ?? []).join("\n"),
     egressUpstream: c.sandbox?.upstream ?? "",
+    lsp: (c.languageServers ?? []).map(lspLine).join("\n"),
     instr: c.globalInstructions ?? "",
     callMe: c.profile?.callMe ?? "",
     work: c.profile?.work ?? "",
@@ -479,6 +500,12 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
     const tr = { ...rest, ...(v.traces ? { enabled: true } : {}), ...(Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4318 ? { port } : {}) }
     if (Object.keys(tr).length) body.traceReceiver = tr
     else delete body.traceReceiver
+  }
+  // G34: a line that does not read as name | endings | command is left out (the field says so).
+  {
+    const servers = parseLspLines(v.lsp)
+    if (servers.length) body.languageServers = servers
+    else delete body.languageServers
   }
   // G26: anything else a newer version keeps in sandbox stays.
   {
@@ -711,6 +738,7 @@ export const DEFAULT_VALUES: Values = {
   egress: false,
   egressAllow: "",
   egressUpstream: "",
+  lsp: "",
   instr: "",
   callMe: "",
   work: "",
@@ -2188,6 +2216,30 @@ export function Settings() {
                 Off until you switch it on, and it starts with Codehouse. It listens on 127.0.0.1 only, takes OTLP JSON
                 only with a project&apos;s own token (made in the session&apos;s Traces panel), never from a web page, up
                 to 4 MB a request, and redacts attributes before keeping them.
+              </p>
+            </Group>
+
+            <Group section="connectors" title="Language servers" gap="gap-2" changed={differs(v, ["lsp"])}>
+              <Field
+                label="Servers you have installed, one to a line"
+                help="Name | file endings | the command and its arguments, for example: Python | py, pyi | pyright-langserver --stdio"
+              >
+                <textarea
+                  className="field mono min-h-[4.5rem]"
+                  value={v.lsp}
+                  placeholder={"Python | py, pyi | pyright-langserver --stdio\nGo | go | gopls"}
+                  onChange={(e) => change({ lsp: e.target.value }, "Language servers")}
+                />
+              </Field>
+              {v.lsp.split(/\r?\n/).filter((l) => l.trim() && !parseLspLines(l).length).length ? (
+                <p role="alert" className="m-0 text-xs text-sev">
+                  A line is not name | file endings | command, so it is left out.
+                </p>
+              ) : null}
+              <p className="m-0 text-xs text-mut">
+                Off until you name one. In the file view, a file of its kind shows its problems, what is at the cursor and
+                where a name is defined or used. Codehouse starts it in the session&apos;s folder without a shell and with no
+                credential in its environment, and stops it after ten idle minutes. It only reads; nothing it says changes a file.
               </p>
             </Group>
 

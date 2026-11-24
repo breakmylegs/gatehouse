@@ -180,6 +180,23 @@ function build(loose: boolean) {
       .passthrough()
       .optional(),
     /**
+     * G34: language servers you have installed, for the file view: off until one is named here with the file endings
+     * it is for. Started without a shell in the session's folder.
+     */
+    languageServers: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(60),
+            command: z.string().min(1).max(500),
+            args: z.array(z.string().max(500)).max(40).optional(),
+            extensions: z.array(z.string().max(20)).min(1).max(30),
+          })
+          .passthrough(),
+      )
+      .max(20)
+      .optional(),
+    /**
      * G26: the outgoing-connection proxy a session's commands are pointed at, on 127.0.0.1; off unless switched on.
      * Only the hosts allowed go through, by the upstream proxy when one is named (no user name or password).
      */

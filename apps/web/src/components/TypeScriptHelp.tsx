@@ -25,7 +25,12 @@ export function TypeScriptHelp({
   pos,
   ask,
   onGo,
+  endpoint = "/api/files/ts",
+  label = "TypeScript",
 }: {
+  /** G34: a language server you named answers the same questions at /api/files/lsp. */
+  endpoint?: string
+  label?: string
   sessionId: string
   rel: string
   /** The cursor's offset in the file. */
@@ -34,16 +39,19 @@ export function TypeScriptHelp({
   ask: number
   onGo: (file: string, line: number) => void
 }) {
-  const q = (op: string, at?: number) => `/api/files/ts?session=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(rel)}&op=${op}${at !== undefined ? `&pos=${at}` : ""}`
+  const q = (op: string, at?: number) => `${endpoint}?session=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(rel)}&op=${op}${at !== undefined ? `&pos=${at}` : ""}`
   const [problems, setProblems] = useState<Problem[]>()
   const [info, setInfo] = useState<string>()
   const [places, setPlaces] = useState<{ what: string; list: Place[] }>()
   const [note, setNote] = useState<string>()
+  // G34: no server named for this kind of file: nothing is shown.
+  const [none, setNone] = useState(false)
   useEffect(() => {
     setProblems(undefined)
     void api<{ results: Problem[] }>("GET", q("diagnostics")).then((r) => {
       if (r.ok && r.data) setProblems(r.data.results)
-      else setNote(r.error ?? "The TypeScript language service could not look at this file.")
+      else if (r.status === 404 && endpoint !== "/api/files/ts") setNone(true)
+      else setNote(r.error ?? `The ${label} language service could not look at this file.`)
     })
     // Only when the file changes (q is made from these).
   }, [sessionId, rel])
@@ -76,8 +84,9 @@ export function TypeScriptHelp({
     </button>
   )
   const errors = problems?.filter((p) => p.severity === "error").length ?? 0
+  if (none) return null
   return (
-    <section aria-label="TypeScript" className="grid gap-2 border-t border-line p-2 text-[12.5px]">
+    <section aria-label={label} className="grid gap-2 border-t border-line p-2 text-[12.5px]">
       <p className="m-0" aria-live="polite">
         <span className="text-mut">At the cursor: </span>
         <span className="mono">{info || "nothing to say"}</span>

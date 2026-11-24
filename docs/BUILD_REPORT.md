@@ -2193,3 +2193,16 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - a test name reaches the runner as an escaped pattern.
 - Results come from the runner's own report (Vitest and Jest JSON, pytest's JUnit XML, dotnet's TRX). Each failure carries its message and its line, from the stack where it names the test file, else the test's own line. Open at line N shows the file there; Fix this puts a scoped task in the prompt box ("fix the code, change only what this failure needs, do not weaken, skip or delete the test"), with the failure fenced so it cannot close its own block. Nothing is sent until you send it.
 - Tests: `apps/host/test/test-explorer.test.ts` (reading JavaScript, Python and C# tests; finding runners and files, leaving out installed packages; the command, the project's own runner and never npx; the three report formats; a run audited first with the right arguments; the kill switch, an unrecorded run and a file outside; one at a time and the time limit) and `apps/web/test/test-explorer.test.tsx` (listing and running, results, a failure opened at its line, Fix this unsent, the fence, a runner that reported nothing). Twenty-four breaks, all caught. Threat model T166.
+
+### G34 Language servers you have installed (feat/e6a)
+
+- C-032 already gave TypeScript and JavaScript their language service. G34's other half is here: a language server you have installed (pyright, gopls, rust-analyzer, clangd and the like) for files of its kind in the file view.
+- Off until you name one in Settings, Connectors, Language servers, one to a line: name | file endings | the command and its arguments, quoted where they hold spaces. A line without all three is left out, and the field says so.
+- `apps/host/src/lsp-client.ts`:
+  - It starts the server in the session's folder, without a shell and with the credentials stripped from its environment.
+  - It talks the Language Server Protocol over stdin and stdout: the file's problems as the server publishes them, what is at the cursor (hover, as plain text), and where a name is defined or used.
+  - Only places inside the session's folder are passed on, from the folder.
+  - A server that does not answer in twenty seconds is stopped and starts again at the next look; one idle for ten minutes is stopped, and all stop with Codehouse.
+  - It only reads: nothing a server says is applied to a file. A message too large, or a header that never ends, stops it.
+- The route `/api/files/lsp` answers as `/api/files/ts` does, and the file view shows the same panel, labelled Language server, under a file a server is named for. Under any other file it shows nothing.
+- Tests: `apps/host/test/lsp-client.test.ts`, with a small fake server, covers off until named; problems, what is at the cursor, a definition with the place outside the folder left out, and references, started in the folder without a credential; a hung server stopped and started again; and the protocol's framing, positions and hover text. `apps/web/test/language-servers.test.tsx` covers the panel for a named server, nothing without one, and the Settings lines. Thirteen breaks, all caught. Threat model T167.

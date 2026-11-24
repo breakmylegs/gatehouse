@@ -244,6 +244,8 @@ export interface AdminContext {
   onboarding?: import("./onboarding.js").OnboardingProgress
   /** G38: runs a project's tests for the test explorer. */
   tests?: import("./test-explorer.js").TestExplorer
+  /** G34: the language servers you named, for the file view. */
+  languageServers?: import("./lsp-client.js").LanguageServers
   /** T-113: the ports a running session's processes listen on. */
   sessionPorts?: (sessionId: string) => Promise<Listening[]>
   /** T-080: pull requests watched for sessions. */
@@ -2446,6 +2448,8 @@ const LIVE_SETTINGS = [
   "expectedOrg",
   // G26: read on each connection the proxy is asked for, and when a session starts.
   "sandbox",
+  // G34: read at each look; a server already running for a folder keeps going until it is idle.
+  "languageServers",
   "redactTerms",
   // E-086: read each time an export is made or a commit checked.
   "writingRules",

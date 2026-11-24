@@ -188,6 +188,7 @@ import { GitHubSource } from "./update/source.js"
 import { ChangelogStore } from "./update/changelog.js"
 import { EgressProxy } from "./egress-proxy.js"
 import { TestExplorer } from "./test-explorer.js"
+import { LanguageServers } from "./lsp-client.js"
 import { UpdateTokenStore } from "./update/token.js"
 import { execFileSync } from "node:child_process"
 
@@ -2004,6 +2005,8 @@ export function createHost(opts: HostOptions = {}): Host {
       residency,
       // E-075: onboarding progress, per project, on this computer.
       onboarding: new OnboardingProgress(path.join(gatehouseDataDir(env), "onboarding.json")),
+    // G34: the language servers you named in Settings, started for a folder at its first look.
+    languageServers: new LanguageServers({ servers: () => config.languageServers, env, log }),
     // G38: your runs from the test explorer, audited and stopped by the kill switch, like the terminal's commands.
     tests: new TestExplorer({ audit, killed: () => kill.isEngaged(), policyHash: () => store.current?.hash ?? "none", log, env }),
       pickFolder: (start) => {

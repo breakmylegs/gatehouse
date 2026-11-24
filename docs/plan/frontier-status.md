@@ -22,7 +22,7 @@ Status values: todo, in progress, built, built safe variant, listed for decision
 | G38 | Test explorer | done | | Connectors to the project's own runners (Vitest, Jest, pytest, dotnet); built (BUILD_REPORT G38) |
 | G7 | XLSX in chats | done | | Node built-ins only, no library; done as C-059 (xlsx-read.ts) |
 | G9 | Voice | built | feat/pkg1 | Whisper-compatible server through 127.0.0.1 (ADR 0010), Windows voice typing kept (T-136) |
-| G34 | Language servers | todo | | Folds into C-032 (TypeScript language service) plus user-installed servers |
+| G34 | Language servers | done | | Folds into C-032 (TypeScript language service) plus user-installed servers; C-032 built, and user-installed servers built (BUILD_REPORT G34) |
 | G37 | Debugger | todo | | Debug adapters (debugpy, netcoredbg, js-debug); DAP only, never CDP |
 | G40 | Public hosts and sharing | todo | | Host CLIs with their own sign-in; zip without secrets |
 
