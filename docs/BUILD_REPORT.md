@@ -2240,3 +2240,8 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - cmd.exe for a .cmd tool, refusing special characters.
 
   `apps/web/test/share-panel.test.tsx` covers what is left out shown first, the download, a publish and its output, no host named, and the Settings lines. Seventeen breaks, all caught (one, a note showing a value, caught by the mutation failing rather than a test reading the note; the note's own test checks that no value is in it). Threat model T169.
+
+### O47 Each session's Timeline is its own (feat/e6a)
+
+- Owner, 25 Nov: "The timeline should be for each code session. Not combined." O46 had put every Codehouse release on every session's Timeline, so the Home Services session showed Codehouse's own release and notes. `SummaryTimeline.tsx` now reads only that session's summaries (`/api/sessions/:id/timeline`, kept a file per session); Codehouse's releases stay on the changelog's timeline in Settings (O44). The keyboard support O46 brought stays: one tab stop, arrow keys, Home and End. The release-point styles and the Help line about them are gone.
+- Tests: `apps/web/test/session-timeline-own.test.tsx` (the session's own summaries only, no changelog read and no release point; one tab stop with the arrow keys, Home and End), with `summary-timeline.test.tsx` and `changelog.test.tsx`. Three breaks, all caught.
