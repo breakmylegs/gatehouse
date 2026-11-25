@@ -7,6 +7,7 @@ import "../polish.css"
 import "../mac.css"
 import "../mac-standard.css"
 import { markPlatform } from "../lib/platform-mac"
+import { watchLook } from "../lib/look"
 import { useStore } from "../store"
 import { type Case, health, pending, sessions } from "./data"
 
@@ -52,6 +53,7 @@ function load(c: Case) {
 }
 
 markPlatform() // Mac fork
+watchLook()
 const params = new URLSearchParams(location.search)
 const initial = (params.get("case") ?? "worst") as Case
 load(initial)

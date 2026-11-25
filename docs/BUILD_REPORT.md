@@ -2274,3 +2274,15 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 
   Regression: 23 window test files (app, palette, commands, help, rtl, scenes, theme tokens, settings search, the rail's others). Thirteen breaks, all caught.
 - Left for a later pass: Settings' Sessions section (27 groups) split into smaller pages; a session's 62-item menu.
+
+### O49 The Apple style look on Windows (feat/e6a)
+
+- The owner, 25 Nov: "I like the apple style interface that David's commits have done. I want the apple style interface on the windows version." David's Mac look (`mac-standard.css`: the palette, type, controls, the toolbar's capsules, the glass sidebar, menus and notices, the request list and the request read as grouped rows, Settings' grouped sections) now applies on Windows too.
+- `lib/look.ts` marks the page `data-look="apple"` on Windows. Apple style is the usual look; Settings, General, Appearance, Look offers Codehouse, the look it had before; the choice is kept in the window and read tolerantly. A Mac has its own mark and is not offered the choice. Windows high contrast takes over from either: the mark is taken off while it is on, so the colours you set in Windows show, and put back when it is off.
+- `mac-standard.css`: 101 rules apply under either mark. Thirteen stay Mac only: the three that hide the approval card's header for the Mac's own rows (`ApprovalCard.tsx` draws those rows only on a Mac), and Codehouse.app's window rules (`data-mac-vibrancy`, `data-mac-titlebar`). `mac.css` stays Mac only (SF Pro and SF Mono, the Mac's scrollbars and pointer); Windows keeps its own type, so the look is set in Segoe UI. docs/mac.md says so for the next change to either file.
+- This edits a Mac file from the Windows machine, which the 18 Nov rule allows. The Mac's gate runs after the merge.
+- Tests:
+  - `apps/web/test/look.test.ts`: Apple style by default and read tolerantly; the mark on Windows, not for Codehouse, not under high contrast and not on a Mac; following the choice and high contrast while open; the stylesheet's rules under either mark, and exactly the approval card's and the window's rules left Mac only.
+  - `appearance.test.tsx`: the Look choice kept and applied, and not offered on a Mac.
+
+  Regression: `approval-card.test.tsx`, `approval-card-mac.test.tsx`, `theme-tokens.test.ts`, rail, scenes, rtl, app and sections. `app.test.tsx` failed once in a batch under load and passed alone (11 of 11). Ten breaks, all caught.

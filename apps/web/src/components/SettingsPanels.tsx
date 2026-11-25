@@ -1,3 +1,4 @@
+import { readLook, saveLook, type Look } from "../lib/look"
 import clsx from "clsx"
 import { useEffect, useId, useState } from "react"
 import {
@@ -48,6 +49,7 @@ export function AppearancePanel() {
   const follows = useStore((s) => s.themeFollows)
   const [a, setA] = useState<Appearance>(readAppearance)
   const [font, setFont] = useState(a.codeFont)
+  const [look, setLookState] = useState<Look>(readLook)
   const set = (patch: Partial<Appearance>) => {
     const next = { ...a, ...patch }
     setA(next)
@@ -73,6 +75,26 @@ export function AppearancePanel() {
           </select>
         )}
       </Row>
+      {/* Owner, 25 Nov: the Apple style look on Windows too. A Mac always has it, so it is not offered there. */}
+      {isMac() ? null : (
+        <Row label="Look" help="Apple style is the look of Codehouse on the Mac. Windows high contrast takes over from either while it is on.">
+          {(id) => (
+            <select
+              id={id}
+              className="field w-auto"
+              value={look}
+              onChange={(e) => {
+                const v = e.target.value as Look
+                setLookState(v)
+                saveLook(v)
+              }}
+            >
+              <option value="apple">Apple style</option>
+              <option value="codehouse">Codehouse</option>
+            </select>
+          )}
+        </Row>
+      )}
       <Row
         label="Transcript text size"
         help="How a conversation opens; each pane's own menu still changes it."

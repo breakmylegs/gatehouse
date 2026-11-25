@@ -9,6 +9,7 @@ import {
   DEFAULT_APPEARANCE,
   readAppearance,
 } from "../src/lib/appearance"
+import { watchLook } from "../src/lib/look"
 import { readPaneView, savePaneView } from "../src/lib/paneView"
 import { useStore } from "../src/store"
 
@@ -78,5 +79,29 @@ describe("the appearance", () => {
     expect(useStore.getState()).toMatchObject({ theme: "dark", themeFollows: false })
     fireEvent.change(screen.getByLabelText("Theme"), { target: { value: "system" } })
     expect(useStore.getState().themeFollows).toBe(true)
+  })
+})
+
+describe("the look in Appearance (owner, 25 Nov)", () => {
+  it("offers Apple style and Codehouse on Windows, and the choice is kept and put on the page", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" })
+    vi.stubGlobal("matchMedia", () => ({ matches: false, addEventListener: () => undefined, removeEventListener: () => undefined }))
+    const stop = watchLook(root())
+    render(<AppearancePanel />)
+    const look = screen.getByLabelText("Look") as HTMLSelectElement
+    expect(look.value).toBe("apple")
+    expect(root().dataset.look).toBe("apple")
+    fireEvent.change(look, { target: { value: "codehouse" } })
+    expect(localStorage.getItem("codeh:look")).toBe("codehouse")
+    expect(root().dataset.look).toBeUndefined()
+    stop()
+    vi.unstubAllGlobals()
+  })
+
+  it("is not offered on a Mac, which always has its own look", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" })
+    render(<AppearancePanel />)
+    expect(screen.queryByLabelText("Look")).toBeNull()
+    vi.unstubAllGlobals()
   })
 })

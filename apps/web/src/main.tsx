@@ -7,12 +7,15 @@ import "./polish.css" // Mac fork
 import "./mac.css" // Mac fork
 import "./mac-standard.css" // Mac fork
 import { markPlatform } from "./lib/platform-mac" // Mac fork
+import { watchLook } from "./lib/look"
 import { startConnection, useStore } from "./store"
 import { Quick } from "./surfaces/Quick"
 import { PanePage } from "./surfaces/PanePage"
 import { NotchMac } from "./surfaces/NotchMac" // Mac fork
 
 markPlatform() // Mac fork
+// Owner, 25 Nov: the Apple style look on Windows too, unless you choose Codehouse or high contrast is on.
+watchLook()
 
 // The page's script has run: index.html's fallback for files that did not load stands down.
 ;(window as unknown as { __codehouseStarted?: boolean }).__codehouseStarted = true
