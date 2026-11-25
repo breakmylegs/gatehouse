@@ -102,7 +102,7 @@ const ctx = (over: Partial<CommandContext> = {}): CommandContext => ({
 const labels = (c: Partial<CommandContext> = {}) => buildCommands(ctx(c)).map((x) => x.label)
 
 describe("every menu action is in the palette", () => {
-  it("the profile menu and the More menu offer nothing the palette does not", async () => {
+  it("the profile menu offers nothing the palette does not", async () => {
     // A kept theme choice, so the menu also offers Follow Windows theme.
     useStore.setState({ themeFollows: false })
     render(<App />)
@@ -115,17 +115,9 @@ describe("every menu action is in the palette", () => {
     const profile = within(screen.getByRole("menu"))
       .getAllByRole("menuitem")
       .map((i) => i.textContent?.replace(/F1$|Ctrl K$/, "").trim() ?? "")
-    expect(profile.length).toBeGreaterThan(5)
+    expect(profile.length).toBeGreaterThan(3)
     expect(profile).toContain("Follow Windows theme")
     for (const name of profile) expect(known.has(name), `profile menu: ${name}`).toBe(true)
-    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
-    await userEvent.click(screen.getByRole("button", { name: "More pages" }))
-    const more = within(screen.getByRole("menu"))
-      .getAllByRole("menuitem")
-      .map((i) => i.textContent?.trim() ?? "")
-    expect(more.length).toBeGreaterThan(3)
-    for (const name of more.filter((n) => n !== "Edit sidebar..."))
-      expect(known.has(name), `More menu: ${name}`).toBe(true)
   })
 
   it("every page of the app is a command", () => {

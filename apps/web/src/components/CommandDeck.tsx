@@ -277,11 +277,7 @@ function ProfileMenu() {
             : []),
           { label: "Accounts...", onSelect: () => setManaging(true) },
           { kind: "separator" as const },
-          { label: "Settings", onSelect: () => setRoute("settings") },
-          { label: "What Claude may do", onSelect: () => setRoute("policy") },
-          { label: "Approver", onSelect: () => setRoute("approver") },
-          { label: "Audit log", onSelect: () => setRoute("audit") },
-          { label: "Phone and notifications", onSelect: () => setRoute("devices") },
+          // O48: Settings, What Claude may do, the Approver, the audit log and the phone have their own sections.
           { kind: "separator" },
           {
             label: theme === "dark" ? "Codehouse light" : "Codehouse dark",

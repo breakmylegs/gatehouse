@@ -3006,6 +3006,34 @@ tr:has(> .audit-cell[data-outcome="deny"]) {
   box-shadow: 0 6px 18px rgb(0 0 0 / 0.18);
 }
 
+/* O48: a section's pages as pills along the top of each of its pages. */
+.section-pills {
+  padding: 12px 24px 0;
+}
+.section-pill {
+  min-height: 30px;
+  padding: 4px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-tx);
+  font-size: 13px;
+  cursor: pointer;
+}
+.section-pill:hover {
+  background: var(--c-s2);
+}
+.section-pill[aria-current="page"] {
+  border-color: var(--c-acc);
+  background: var(--c-acc);
+  color: var(--c-acc-tx);
+  font-weight: 600;
+}
+.section-pill:focus-visible {
+  outline: 2px solid var(--c-acc);
+  outline-offset: 2px;
+}
+
 /* O42: a session's timeline of ten-minute summaries, scrolled left and right. */
 .summary-timeline {
   scroll-snap-type: x proximity;

@@ -1,3 +1,4 @@
+import { SectionPills } from "./components/SectionPills"
 import { useLoadPreset } from "./lib/appearance"
 import { useAppearance } from "./components/SettingsPanels"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"
@@ -258,6 +259,8 @@ export function App() {
                 data-rail={railHidden ? "hidden" : undefined}
               >
                 <UpdateResult />
+                {/* O48: the pages of the section this one is in, as pills along the top. */}
+                <SectionPills route={route} />
                 <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
                   {route === "approvals" && <Approvals />}
                   {route === "sessions" && <Sessions />}

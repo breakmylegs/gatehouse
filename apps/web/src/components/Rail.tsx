@@ -9,11 +9,8 @@ import {
   groupChats,
   isHiddenEnded,
   notifyLine,
-  RAIL_PAGES,
   readHideEnded,
-  readRailPages,
   saveHideEnded,
-  saveRailPages,
 } from "../lib/rail"
 import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
@@ -23,7 +20,8 @@ import { applyOrder, dropChange, moveBefore, moveBy, readOrder, saveOrder } from
 import { arrangeSections, hueOf, isProjectSection, monogram, readSections, saveSections, setSection, type SectionPrefs } from "../lib/project-marks"
 import { openExport } from "./ExportDialog"
 import { Icon, type IconName } from "./Icon"
-import { Menu, type MenuItem } from "./Menu"
+import { NAV_SECTIONS, openingPage, sectionOf } from "../lib/sections"
+import { Menu } from "./Menu"
 import { SessionCode } from "./SessionCode"
 import { RenameDialog } from "./RenameDialog"
 import { ProjectDialog } from "./ProjectDialog"
@@ -55,24 +53,6 @@ const STATE_MARK: Record<string, { text: string; className: string; icon: IconNa
 }
 
 /** Each page's icon from the Codehouse pack, where the sidebar shows it. */
-const PAGE_ICON: Partial<Record<Route, IconName>> = {
-  approvals: "needs-you",
-  sessions: "code",
-  board: "plan",
-  usage: "usage",
-  projects: "projects",
-  memory: "memory",
-  prompts: "prompts",
-  marketplace: "marketplace",
-  doctor: "done",
-  policy: "policy",
-  audit: "audit-log",
-  approver: "approver",
-  devices: "devices",
-  settings: "settings",
-  guide: "help",
-}
-
 const FOLDED_KEY = "gatehouse.rail.folded"
 
 /** The folders you folded in the sidebar, as you left them (owner, 31 Oct, U8). */
@@ -125,7 +105,6 @@ export function Rail({ onHide }: { onHide: () => void }) {
     window.addEventListener("codeh:hide-ended", flip)
     return () => window.removeEventListener("codeh:hide-ended", flip)
   }, [])
-  const [pinned, setPinned] = useState<Route[]>(readRailPages)
   // T-023: your own order of the sessions, by dragging, and the one being dragged.
   const [order, setOrder] = useState<string[]>(readOrder)
   // T-092: projects pinned to the top or archived, and whether archived ones are shown.
@@ -138,7 +117,6 @@ export function Rail({ onHide }: { onHide: () => void }) {
       return next
     })
   const [dragging, setDragging] = useState<string>()
-  const [editing, setEditing] = useState(false)
   const [folded, setFolded] = useState<Record<string, boolean>>(readFolded)
   // T-027: Working gathers busy sessions; fold it to keep them out of the way, kept like any folder's fold. It starts
   // open, so a session that is working is never out of sight until you choose.
@@ -214,15 +192,6 @@ export function Rail({ onHide }: { onHide: () => void }) {
     saveHideEnded(on)
   }
 
-  const more: MenuItem[] = [
-    ...RAIL_PAGES.filter((p) => !pinned.includes(p.route)).map((p) => ({
-      label: p.label,
-      onSelect: () => go(p.route),
-    })),
-    { kind: "separator" as const },
-    { label: "Edit sidebar...", onSelect: () => setEditing(true) },
-  ]
-
   return (
     <nav
       aria-label="Sidebar"
@@ -282,136 +251,45 @@ export function Rail({ onHide }: { onHide: () => void }) {
         ))}
       </div>
 
-      {mode === "chat" ? (
-        <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
-          {(
-            [
-              ["chat", "new", "New question"],
-              ["projects", "projects", "Projects"],
-              ["memory", "memory", "Memory"],
-              ["prompts", "prompts", "Prompts"],
-            ] as const satisfies ReadonlyArray<readonly [Route, IconName, string]>
-          ).map(([r, mark, label]) => (
-            <li key={r}>
-              <button
-                className="rail-item"
-                aria-current={route === r ? "page" : undefined}
-                onClick={() => go(r)}
-              >
-                <span className="rail-item-label">
-                  <Icon name={mark} />
-                  {label}
-                </span>
-              </button>
-            </li>
-          ))}
-          <li>
-            <button className="rail-item" onClick={openPalette}>
-              <span className="rail-item-label">
-                <Icon name="search" />
-                Search
-              </span>
-              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">
-                {keyLabel("Ctrl K")}
-              </kbd>
-            </button>
-          </li>
-        </ul>
-      ) : (
-        <ul className="m-0 grid list-none gap-0.5 px-2 pt-3">
-          <li>
+      {/* O48: the sections, the same whichever sessions the switch lists; each opens on the page last used in it. */}
+      <ul className="m-0 grid list-none gap-0.5 px-2 pt-3" aria-label="Sections">
+        <li>
+          <button
+            className="rail-item"
+            onClick={() => go(mode === "chat" ? "chat" : "sessions")}
+          >
+            <span className="rail-item-label">
+              <Icon name="new" />
+              {mode === "chat" ? "New question" : "New session"}
+            </span>
+          </button>
+        </li>
+        <li>
+          <button className="rail-item" onClick={openPalette}>
+            <span className="rail-item-label">
+              <Icon name="search" />
+              Search
+            </span>
+            <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">
+              {keyLabel("Ctrl K")}
+            </kbd>
+          </button>
+        </li>
+        {NAV_SECTIONS.map((sec) => (
+          <li key={sec.id}>
             <button
               className="rail-item"
-              aria-current={route === "dashboard" ? "page" : undefined}
-              onClick={() => go("dashboard")}
+              aria-current={sectionOf(route)?.id === sec.id ? "page" : undefined}
+              onClick={() => go(openingPage(sec))}
             >
               <span className="rail-item-label">
-                <Icon name="home" />
-                Dashboard
+                <Icon name={sec.icon} />
+                {sec.label}
               </span>
             </button>
           </li>
-          <li>
-            <button
-              className="rail-item"
-              aria-current={route === "sessions" ? "page" : undefined}
-              onClick={() => go("sessions")}
-            >
-              <span className="rail-item-label">
-                <Icon name="new" />
-                New session
-              </span>
-            </button>
-          </li>
-          <li>
-            <button
-              className="rail-item"
-              aria-current={route === "chat" ? "page" : undefined}
-              onClick={() => go("chat")}
-            >
-              <span className="rail-item-label">
-                <Icon name="new" />
-                Ask about code
-              </span>
-            </button>
-          </li>
-          <li>
-            <button className="rail-item" onClick={openPalette}>
-              <span className="rail-item-label">
-                <Icon name="search" />
-                Search
-              </span>
-              <kbd className="!border-shell-line !bg-shell-2 !text-shell-mut">
-                {keyLabel("Ctrl K")}
-              </kbd>
-            </button>
-          </li>
-          {pinned.map((r) => {
-            const page = RAIL_PAGES.find((p) => p.route === r)
-            if (!page || r === "approvals") return null
-            return (
-              <li key={r}>
-                <button
-                  className="rail-item"
-                  aria-current={route === r ? "page" : undefined}
-                  onClick={() => go(r)}
-                >
-                  <span className="rail-item-label">
-                    <Icon name={PAGE_ICON[r] ?? "more"} />
-                    {page.label}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-          <li>
-            <Menu
-              label="More pages"
-              className="rail-item"
-              placement="right"
-              tone="shell"
-              button={
-                <span className="rail-item-label">
-                  <Icon name="more" />
-                  More
-                </span>
-              }
-              items={more}
-            />
-          </li>
-        </ul>
-      )}
-
-      {editing ? (
-        <EditSidebar
-          pinned={pinned}
-          onChange={(next) => {
-            setPinned(next)
-            saveRailPages(next)
-          }}
-          onDone={() => setEditing(false)}
-        />
-      ) : null}
+        ))}
+      </ul>
 
       <div
         className="rail-sessions min-h-0 overflow-y-auto overflow-x-hidden px-2 pb-2 pt-4"
@@ -781,86 +659,6 @@ export function Rail({ onHide }: { onHide: () => void }) {
 }
 
 /** Which pages sit in the rail. The rest stay one click away under More. */
-function EditSidebar({
-  pinned,
-  onChange,
-  onDone,
-}: {
-  pinned: Route[]
-  onChange: (next: Route[]) => void
-  onDone: () => void
-}) {
-  // Approvals is always there, as the pill at the top, and is not part of the order you set.
-  const kept = pinned.includes("approvals") ? (["approvals"] as Route[]) : []
-  const order: Route[] = pinned.filter((r) => r !== "approvals")
-  const set = (next: Route[]) => onChange([...kept, ...next])
-  return (
-    <div
-      role="group"
-      aria-label="Edit sidebar"
-      className="mx-2 mt-2 grid gap-1.5 rounded border border-shell-line bg-shell-2 p-3"
-      onKeyDown={(e) => e.key === "Escape" && onDone()}
-    >
-      <span className="text-[13px] font-semibold">Show in the sidebar</span>
-      {[
-        ...order,
-        ...RAIL_PAGES.map((x) => x.route).filter((r) => r !== "approvals" && !order.includes(r)),
-      ].map((r) => {
-        const page = RAIL_PAGES.find((x) => x.route === r)
-        if (!page) return null
-        const at = order.indexOf(r)
-        const move = (by: -1 | 1) => {
-          const next = [...order]
-          const [it] = next.splice(at, 1)
-          next.splice(at + by, 0, it!)
-          set(next)
-        }
-        return (
-          <div key={r} className="flex items-center gap-2 text-[13.5px]">
-            <label className="flex flex-1 items-center gap-2">
-              <input
-                type="checkbox"
-                checked={at >= 0}
-                onChange={(e) =>
-                  set(e.target.checked ? [...order, r] : order.filter((x) => x !== r))
-                }
-              />
-              {page.label}
-            </label>
-            {at >= 0 ? (
-              <>
-                <button
-                  type="button"
-                  className="btn !min-h-6 !px-2 !text-[12px]"
-                  aria-label={`Move ${page.label} up`}
-                  disabled={at === 0}
-                  onClick={() => move(-1)}
-                >
-                  Up
-                </button>
-                <button
-                  type="button"
-                  className="btn !min-h-6 !px-2 !text-[12px]"
-                  aria-label={`Move ${page.label} down`}
-                  disabled={at === order.length - 1}
-                  onClick={() => move(1)}
-                >
-                  Down
-                </button>
-              </>
-            ) : null}
-          </div>
-        )
-      })}
-      <div>
-        <button type="button" className="btn !min-h-7 !text-[13px]" onClick={onDone}>
-          Done
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function Dot({ ok, neutral, label }: { ok: boolean; neutral?: boolean; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">

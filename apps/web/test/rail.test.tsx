@@ -153,7 +153,7 @@ describe("the sidebar", () => {
     }
   })
 
-  it("keeps every other page in the profile menu, with the theme and help", async () => {
+  it("keeps the account, the theme and help in the profile menu, and no pages (O48)", async () => {
     render(<App />)
     await userEvent.click(screen.getByRole("button", { name: /Your profile and settings: alex/ }))
     const menu = screen.getByRole("menu")
@@ -161,7 +161,10 @@ describe("the sidebar", () => {
     // Focus starts on the first action, your accounts, and the arrow keys move.
     expect(within(menu).getByRole("menuitem", { name: "Accounts..." })).toHaveFocus()
     fireEvent.keyDown(menu, { key: "ArrowDown" })
-    expect(within(menu).getByRole("menuitem", { name: "Settings" })).toHaveFocus()
+    expect(within(menu).getByRole("menuitem", { name: "Codehouse dark" })).toHaveFocus()
+    // Each page has one home now, in its section.
+    for (const page of ["Settings", "What Claude may do", "Approver", "Audit log", "Phone and notifications"])
+      expect(within(menu).queryByRole("menuitem", { name: page }), page).toBeNull()
     await userEvent.click(within(menu).getByRole("menuitem", { name: "Codehouse dark" }))
     expect(useStore.getState().theme).toBe("dark")
     expect(screen.queryByRole("menu")).toBeNull()
@@ -169,21 +172,11 @@ describe("the sidebar", () => {
 
   it("closes a menu with Esc and gives focus back to its button", async () => {
     render(<App />)
-    const more = screen.getByRole("button", { name: "More pages" })
-    await userEvent.click(more)
+    const profile = screen.getByRole("button", { name: /Your profile and settings/ })
+    await userEvent.click(profile)
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
     expect(screen.queryByRole("menu")).toBeNull()
-    expect(more).toHaveFocus()
-  })
-
-  it("lets you choose which pages sit in it, and remembers", async () => {
-    render(<App />)
-    await userEvent.click(screen.getByRole("button", { name: "More pages" }))
-    await userEvent.click(screen.getByRole("menuitem", { name: "Edit sidebar..." }))
-    await userEvent.click(screen.getByRole("checkbox", { name: "Audit log" }))
-    const rail = screen.getByRole("navigation", { name: "Sidebar" })
-    expect(within(rail).getByRole("button", { name: "Audit log" })).toBeTruthy()
-    expect(JSON.parse(localStorage.getItem("gatehouse.rail.pages") ?? "[]")).toContain("audit")
+    expect(profile).toHaveFocus()
   })
 
   it("names each way requests reach your phone, green while one of them works", () => {
@@ -246,43 +239,24 @@ describe("the folders you fold in the sidebar", () => {
   })
 })
 
-describe("the order of the pages in the sidebar (owner's plan, W1-05)", () => {
-  it("is the order you set, kept across a restart", async () => {
-    const { unmount } = render(<App />)
-    await userEvent.click(screen.getByRole("button", { name: "More pages" }))
-    await userEvent.click(screen.getByRole("menuitem", { name: "Edit sidebar..." }))
-    await userEvent.click(screen.getByRole("checkbox", { name: "Audit log" }))
-    await userEvent.click(screen.getByRole("checkbox", { name: "Usage" }))
-    // Shown in the order they were added: What Claude may do, Audit log, Usage. Move Usage to the top.
-    await userEvent.click(screen.getByRole("button", { name: "Move Usage up" }))
-    await userEvent.click(screen.getByRole("button", { name: "Move Usage up" }))
-    expect(JSON.parse(localStorage.getItem("gatehouse.rail.pages") ?? "[]")).toEqual([
-      "approvals",
-      "usage",
-      "policy",
-      "audit",
-    ])
-    const order = () =>
-      within(screen.getByRole("navigation", { name: "Sidebar" }))
-        .getAllByRole("button")
-        .map((b) => b.textContent ?? "")
-        .filter((t) => ["Usage", "What Claude may do", "Audit log"].includes(t))
-    expect(order()).toEqual(["Usage", "What Claude may do", "Audit log"])
-    unmount()
+describe("the sections in the sidebar (O48, owner 25 Nov)", () => {
+  it("lists the five sections whichever sessions the switch shows, each opening its section, the current one marked", async () => {
     render(<App />)
-    expect(order()).toEqual(["Usage", "What Claude may do", "Audit log"])
+    const sections = () => within(screen.getByRole("list", { name: "Sections" }))
+    const names = ["Work", "Ask about code", "Build", "Safety", "Settings"]
+    for (const n of names) expect(sections().getByRole("button", { name: n })).toBeTruthy()
+    // The switch changes the session list, not the sections.
+    await userEvent.click(screen.getByRole("radio", { name: /Ask about code/ }))
+    for (const n of names) expect(sections().getByRole("button", { name: n })).toBeTruthy()
+    await userEvent.click(sections().getByRole("button", { name: "Build" }))
+    expect(useStore.getState().route).toBe("mcp")
+    expect(sections().getByRole("button", { name: "Build" }).getAttribute("aria-current")).toBe("page")
+    expect(screen.queryByRole("button", { name: "More pages" })).toBeNull()
   })
 
-  it("cannot move the first page up or the last down, and ignores a page it does not know", async () => {
-    localStorage.setItem(
-      "gatehouse.rail.pages",
-      JSON.stringify(["audit", "nonsense", "policy", "audit"]),
-    )
+  it("reads a sidebar choice an older version saved without error, and ignores it", async () => {
+    localStorage.setItem("gatehouse.rail.pages", JSON.stringify(["audit", "nonsense", "policy", "audit"]))
     render(<App />)
-    await userEvent.click(screen.getByRole("button", { name: "More pages" }))
-    await userEvent.click(screen.getByRole("menuitem", { name: "Edit sidebar..." }))
-    expect(screen.getByRole("button", { name: "Move Audit log up" })).toBeDisabled()
-    expect(screen.getByRole("button", { name: "Move What Claude may do down" })).toBeDisabled()
-    expect(screen.getAllByRole("button", { name: /^Move Audit log/ })).toHaveLength(2)
+    expect(within(screen.getByRole("list", { name: "Sections" })).getByRole("button", { name: "Safety" })).toBeTruthy()
   })
 })

@@ -2245,3 +2245,32 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 
 - Owner, 25 Nov: "The timeline should be for each code session. Not combined." O46 had put every Codehouse release on every session's Timeline, so the Home Services session showed Codehouse's own release and notes. `SummaryTimeline.tsx` now reads only that session's summaries (`/api/sessions/:id/timeline`, kept a file per session); Codehouse's releases stay on the changelog's timeline in Settings (O44). The keyboard support O46 brought stays: one tab stop, arrow keys, Home and End. The release-point styles and the Help line about them are gone.
 - Tests: `apps/web/test/session-timeline-own.test.tsx` (the session's own summaries only, no changelog read and no release point; one tab stop with the arrow keys, Home and End), with `summary-timeline.test.tsx` and `changelog.test.tsx`. Three breaks, all caught.
+
+### O48 The menu structure, re-evaluated (feat/e6a)
+
+- The review is `docs/design/navigation-review.md`, made with Design with Intent (https://designwithintent.ai/): its /organize skill for the structure and its /evaluate shape for the findings (by severity, each with what happens, why it matters, what it breaks and the change). Verdict: significant issues. Four are major:
+  - most pages hidden behind More;
+  - no sense of where you are, nor of the pages beside the one you are on;
+  - the same page reached from different menus in different ways;
+  - the Chats or Code switch hiding whole pages.
+
+  Intent is written for phones first; its tab bar is read here as the sidebar of a desktop window.
+- Built:
+  - `lib/sections.ts`: five main sections, each page in exactly one:
+    - Work: Dashboard, All sessions, Board, Usage;
+    - Ask about code: New question, Projects, Memory, Prompts;
+    - Build: MCP servers, Marketplace;
+    - Safety: What Claude may do, Approver, Audit log;
+    - Settings: Settings, Phone and notifications, Doctor, User guide.
+  - The sidebar lists the five sections always, the current one marked, under Needs you, New session (or New question) and Search. Each section opens on the page last used in it. The Chats or Code switch now only chooses which sessions are listed.
+  - `SectionPills.tsx`, shown above every page with a section (App.tsx, one line): the section's pages as pills along the top, the current one filled. It is a navigation landmark named for its section with one tab stop; the arrow keys, Home and End move between pills, wrapping round.
+  - The profile menu keeps your accounts, the theme and help. More, the pinned pages and Edit sidebar are gone. A choice an older version saved is still read and simply not used, so an update cannot break on it.
+- Kept as they were: Needs you with its count; the session list; Search and commands (Ctrl K), which still reaches every page; Settings' own 14 sections with their search; a session's bar and menu.
+- Help (Using Codehouse) says where each page now lives. Impeccable could not be run here: its package is not installed, and npx would have downloaded it, which is not done for a check. No Intent check is defined in the repository beyond the review itself.
+- Tests:
+  - `apps/web/test/sections.test.tsx`: every page in one section, bar those with their own way in; the page a section opens on, a page from another section, and an unreadable value; the pills marking the current page, going to another, one tab stop with the arrow keys, Home and End wrapping; none in a session.
+  - `rail.test.tsx`: the five sections whichever sessions the switch lists, opening and marking; an older version's saved choice; the profile menu with no pages; Esc.
+  - `commands.test.tsx` and `dashboard.test.tsx` were updated.
+
+  Regression: 23 window test files (app, palette, commands, help, rtl, scenes, theme tokens, settings search, the rail's others). Thirteen breaks, all caught.
+- Left for a later pass: Settings' Sessions section (27 groups) split into smaller pages; a session's 62-item menu.

@@ -93,14 +93,15 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("the Dashboard", () => {
-  it("is the first link in the sidebar", () => {
+  it("is where Work, the first section in the sidebar, opens (O48)", () => {
+    localStorage.removeItem("codeh:section-last")
     render(<Rail onHide={() => undefined} />)
-    const links = screen.getAllByRole("button").map((b) => b.textContent ?? "")
-    const dash = links.findIndex((l) => l.includes("Dashboard"))
-    expect(dash).toBeGreaterThan(-1)
-    expect(dash).toBeLessThan(links.findIndex((l) => l.includes("New session")))
+    const sections = within(screen.getByRole("list", { name: "Sections" }))
+      .getAllByRole("button")
+      .map((b) => b.textContent ?? "")
+    expect(sections.findIndex((l) => l.includes("Work"))).toBe(sections.findIndex((l) => /Work|Ask about code|Build|Safety|Settings/.test(l)))
     useStore.setState({ route: "approvals" })
-    fireEvent.click(screen.getByRole("button", { name: /^.?\s*Dashboard$/ }))
+    fireEvent.click(screen.getByRole("button", { name: /^.?\s*Work$/ }))
     expect(useStore.getState().route).toBe("dashboard")
   })
 
