@@ -15,6 +15,7 @@ import {
 import { setRailMode, useRailMode, type RailMode } from "../lib/railMode"
 import { type Route, send, usePendingCount, useSessionList, useStore } from "../store"
 import { askAbout } from "../lib/askAbout"
+import { switchSide } from "../lib/switchSide"
 import { dropToShell } from "../lib/shell"
 import { applyOrder, dropChange, moveBefore, moveBy, readOrder, saveOrder } from "../lib/rail-order"
 import { arrangeSections, hueOf, isProjectSection, monogram, readSections, saveSections, setSection, type SectionPrefs } from "../lib/project-marks"
@@ -147,10 +148,8 @@ export function Rail({ onHide }: { onHide: () => void }) {
     else if (route === "workspace" && selected)
       setRailMode(selectedKind === "chat" ? "chat" : "code")
   }, [route, selected, selectedKind])
-  const choose = (m: RailMode) => {
-    setRailMode(m)
-    setRoute(m === "chat" ? "chat" : "sessions")
-  }
+  // O54: each side reopens the session you last had open on it, in its panes; its own page only when there is none.
+  const choose = (m: RailMode) => switchSide(m)
 
   const go = (r: Route) => setRoute(r)
   const open = (id: string) => {
@@ -280,7 +279,7 @@ export function Rail({ onHide }: { onHide: () => void }) {
             <button
               className="rail-item"
               aria-current={sectionOf(route)?.id === sec.id ? "page" : undefined}
-              onClick={() => go(openingPage(sec))}
+              onClick={() => (sec.id === "ask" ? switchSide("chat", openingPage(sec)) : go(openingPage(sec)))}
             >
               <span className="rail-item-label">
                 <Icon name={sec.icon} />

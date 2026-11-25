@@ -1,4 +1,5 @@
 import { holdNotice } from "./lib/screenshare"
+import { noteOpen } from "./lib/lastOpen"
 import { readKinds, worthTelling } from "./lib/notifyKinds"
 import { readInit, type SessionMeta } from "./lib/sessionMeta"
 import type { UpdateStatus } from "./lib/update"
@@ -758,6 +759,11 @@ useStore.subscribe((s, prev) => {
   } catch {
     // storage full or blocked: the view is only a convenience
   }
+})
+// O54: the session on screen, noted for its side of the sidebar to reopen when you switch back to it.
+useStore.subscribe((s, prev) => {
+  if (s.route === prev.route && s.panes === prev.panes && s.selectedSession === prev.selectedSession) return
+  noteOpen(s.route, s.selectedSession, s.panes, s.sessions)
 })
 
 const historyAsked = new Set<string>()
