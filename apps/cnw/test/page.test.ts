@@ -48,6 +48,10 @@ describe("CNW's page", () => {
     expect(link.getAttribute("href")).toBe("/app/?computer=c1")
     expect(link.getAttribute("role")).toBeNull()
     expect(link.getAttribute("aria-label")).toMatch(/Laptop: online, 1 waiting on you/)
+    // Owner, 25 Nov: a computer opens in a new tab, without giving that tab a hold on this one, and says so.
+    expect(link.getAttribute("target")).toBe("_blank")
+    expect(link.getAttribute("rel")).toBe("noopener")
+    expect(link.getAttribute("aria-label")).toMatch(/Opens in a new tab.$/)
     expect(document.getElementById("needs")!.textContent).toBe("1 needs you")
     expect(document.getElementById("needs")!.classList.contains("on")).toBe(true)
   })

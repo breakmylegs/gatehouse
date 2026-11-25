@@ -366,7 +366,10 @@ function boardView() {
         {
           class: `item${lit ? " lit" : ""}`,
           href: `/app/?computer=${encodeURIComponent(c.id)}`,
-          "aria-label": `${c.label}: ${c.online ? "online" : "offline"}${lit ? `, ${c.waiting.length} waiting on you` : ""}. Open it.`,
+          // Owner, 25 Nov: each computer opens in a tab of its own, so the board stays open beside it.
+          target: "_blank",
+          rel: "noopener",
+          "aria-label": `${c.label}: ${c.online ? "online" : "offline"}${lit ? `, ${c.waiting.length} waiting on you` : ""}. Opens in a new tab.`,
         },
         el("span", { class: "time", text: lit ? waited(oldest.since) : "-" }),
         el(
