@@ -36,6 +36,10 @@ export type ShellMessage =
   | "notch:hide"
   | `notch:size:${number}:${number}`
   | `notch-open:${string}`
+  // Mac fork: a request the notification could not answer, shown in the window (notify-mac.ts); and the page is
+  // listening, so the window may pass on a folder from the Finder.
+  | `notify-open:${string}`
+  | "shell-ready"
 
 export function tellShell(message: ShellMessage): void {
   try {

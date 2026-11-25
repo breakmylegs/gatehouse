@@ -15,6 +15,8 @@ if args.contains("--help") {
   exit(0)
 }
 let check = args.contains("--check")
+// A line to a Host that has just stopped (HostProcess.tell) fails rather than ending Codehouse.
+signal(SIGPIPE, SIG_IGN)
 let app = NSApplication.shared
 // The delegate is held here: NSApplication keeps only a weak reference to it.
 let delegate = AppDelegate(check: check)

@@ -5,6 +5,8 @@
  */
 import { AwakeWatch } from "./awake.js"
 import path from "node:path"
+import { createInterface } from "node:readline"
+import { attentionDetail } from "./notify-mac.js"
 import { generateToken } from "./approver-process.js"
 import { gatehouseDataDir } from "@gatehouse/shared/node"
 import { createHost, REPO_ROOT } from "./bootstrap.js"
@@ -37,14 +39,19 @@ const host = createHost({
 logFile.setTerms(() => host.config.redactTerms)
 const token = generateToken()
 // The window app shows a Windows notification from this line, so it works even while the page is hidden in the
-// tray or minimised. The line carries no detail: what the request is stays inside the app.
-host.app.broker.on("created", () => {
-  process.stdout.write(JSON.stringify({ event: "attention" }) + "\n")
+// tray or minimised. The line carries no detail: what the request is stays inside the app. Mac fork (owner, 25 Nov):
+// on a Mac it also carries the request's id, kind and risk band (notify-mac.ts), for the notification's Deny and
+// Allow once, and "settled" takes a decided request's notification away.
+const mac = process.platform === "darwin"
+host.app.broker.on("created", (view) => {
+  process.stdout.write(JSON.stringify({ event: "attention", ...(mac ? attentionDetail(view) : {}) }) + "\n")
 })
+if (mac) host.app.broker.on("resolved", ({ id }) => process.stdout.write(JSON.stringify({ event: "settled", id }) + "\n"))
 // Keep the computer awake while a session works (owner, 4 Nov): the window app asks Windows not to sleep while this
 // says on. Checked again each minute, so turning the setting off lets go without waiting for a session to change.
+// Mac fork (owner, 25 Nov): not while the battery is low, so an unattended run does not drain it (power.ts).
 const awake = new AwakeWatch(
-  () => host.config.keepAwake !== false,
+  () => host.config.keepAwake !== false && !host.power.low,
   (on) => process.stdout.write(JSON.stringify({ event: "awake", on }) + "\n"),
 )
 host.app.manager.on("session", (info) => awake.note(info))
@@ -76,6 +83,16 @@ async function stop(code: number): Promise<void> {
 if (env.GATEHOUSE_EXIT_ON_STDIN_CLOSE === "1") {
   process.stdin.on("end", () => void stop(0))
   process.stdin.resume()
+  // Mac fork (owner, 25 Nov): Codehouse.app writes the screen locking, sleep, wake and power changes on this input,
+  // one JSON line each (presence-mac.ts). After a power change, keep-awake is looked at again too.
+  const presence = host.presence
+  if (presence)
+    createInterface({ input: process.stdin, crlfDelay: Infinity }).on("line", (line) => {
+      void presence
+        .take(line)
+        .then((s) => (s === "power" || s === "wake" ? awake.check() : undefined))
+        .catch((e: Error) => log(`presence: ${e.message}`))
+    })
 }
 process.on("SIGINT", () => void stop(0))
 process.on("SIGTERM", () => void stop(0))

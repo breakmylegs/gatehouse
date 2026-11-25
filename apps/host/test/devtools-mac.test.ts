@@ -40,6 +40,7 @@ beforeAll(() => {
       mac("NavGuard.swift"),
       mac("Shortcut.swift"),
       mac("Host.swift"),
+      mac("MacEvents.swift"),
       mac("test/main.swift"),
     ],
     {

@@ -638,6 +638,45 @@ describe("the escalation ladder (E-094)", () => {
         expect(phone.delivered).toHaveLength(o.ladder === ladder ? 0 : 1)
       }
     })
+
+    // Owner, 25 Nov: the screen locking or the Mac going to sleep is leaving, so the wait ends then (presence-mac.ts).
+    it("tells what it holds back at once when you leave, and only once", async () => {
+      const { broker, phone } = make({ ladder, away: async () => false })
+      const pushed: string[] = []
+      broker.on("push_due", (v) => pushed.push(v.request.id))
+      void broker.request(spec())
+      await settle()
+      expect(phone.delivered).toHaveLength(0)
+      expect(broker.hurry()).toBe(2)
+      await settle()
+      expect(phone.delivered.map((r) => r.id)).toEqual([firstId(broker)])
+      expect(pushed).toEqual([firstId(broker)])
+      // The ladder's own time passing, and leaving again, tell nobody a second time.
+      vi.advanceTimersByTime(5 * 60_000)
+      expect(broker.hurry()).toBe(0)
+      await settle()
+      expect(phone.delivered).toHaveLength(1)
+      expect(pushed).toHaveLength(1)
+      // Nor does leaving after the ladder's wait is over and it has told them.
+      void broker.request(spec())
+      await settle()
+      vi.advanceTimersByTime(2 * 60_000)
+      await settle()
+      expect(broker.hurry()).toBe(0)
+      await settle()
+      expect(phone.delivered).toHaveLength(2)
+      expect(pushed).toHaveLength(2)
+    })
+
+    it("keeps a ladder's wait that is not only while you are here", async () => {
+      const { broker, phone } = make({ ladder: () => ({ phoneMs: 60_000 }) })
+      void broker.request(spec())
+      expect(broker.hurry()).toBe(0)
+      await settle()
+      expect(phone.delivered).toHaveLength(0)
+      vi.advanceTimersByTime(60_000)
+      expect(phone.delivered).toHaveLength(1)
+    })
   })
 
   it("tells every channel at once without a ladder, as before", () => {

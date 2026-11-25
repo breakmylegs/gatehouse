@@ -289,7 +289,7 @@ export class LimitPausedError extends Error {
         : reason === "heartbeat"
           ? "This session is paused: nothing was heard from you within its dead-man time. Start it again from its pane when you have looked at what it did."
           : reason === "battery"
-          ? "This session is paused: the computer is on battery and Settings pauses Max approval on battery. It starts again by itself on mains power, or start it from its pane."
+          ? "This session is paused: the computer is on battery, and Settings pauses Max approval on battery or the battery is low. It starts again by itself on mains power, or start it from its pane."
           : reason === "phone"
           ? "This session is paused: you paused its project from the phone. Start it again from its pane on the computer."
           : reason === "spend"
@@ -2560,7 +2560,7 @@ export class Session extends EventEmitter<SessionEvents> {
         ...(until ? { until } : {}),
       },
       reason === "battery"
-        ? "The computer went on battery and Settings pauses Max approval on battery, so Codehouse paused this Extreme session until mains power is back."
+        ? "The computer is on battery, and Settings pauses Max approval on battery or the battery is low, so Codehouse paused this Extreme session until mains power is back."
         : reason === "heartbeat"
         ? "Nothing was heard from you in time, so Codehouse paused this Extreme session until you start it again."
         : reason === "risk"

@@ -176,6 +176,11 @@ export class PhoneService extends EventEmitter implements PhoneChannel {
     this.#wake?.()
   }
 
+  /** Mac fork: the Mac woke from sleep, so a poll waiting out its backoff tries again now. */
+  nudge(): void {
+    this.#wake?.()
+  }
+
   async #loop(): Promise<void> {
     let backoff = 1000
     while (this.#running) {

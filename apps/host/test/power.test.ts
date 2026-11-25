@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { parseMac, parseWindows, Power, type PowerSource } from "../src/power.js"
+import { LOW_BATTERY_PERCENT, parseMac, parseMacPercent, parseWindows, Power, type PowerSource } from "../src/power.js"
 import { SessionTimeline } from "../src/session-timeline.js"
 
 function power(o: { pauseSetting?: boolean } = {}) {
@@ -107,5 +107,64 @@ describe("battery-aware scheduling (E-089)", () => {
     expect(parseMac("Now drawing from 'Battery Power'\n -InternalBattery-0 80%")).toBe("battery")
     expect(parseMac("Now drawing from 'AC Power'")).toBe("mains")
     expect(parseMac("")).toBe("unknown")
+  })
+
+  // Mac fork (owner, 25 Nov): a low battery pauses Extreme approval whatever the setting says, until mains power.
+  describe("a low battery on a Mac", () => {
+    function charged(o: { pauseSetting?: boolean } = {}) {
+      let now: { source: PowerSource; percent?: number } = { source: "mains", percent: 100 }
+      const audited: unknown[] = []
+      let paused = 0
+      let resumed = 0
+      const p = new Power({
+        read: async () => now,
+        audit: async (i) => void audited.push(i),
+        pauseExtremeOnBattery: () => o.pauseSetting === true,
+        pauseExtreme: () => void paused++,
+        resumeExtreme: () => void resumed++,
+      })
+      return { p, set: (source: PowerSource, percent?: number) => (now = { source, ...(percent !== undefined ? { percent } : {}) }), audited, paused: () => paused, resumed: () => resumed }
+    }
+
+    it("reads the charge from pmset", () => {
+      const out = "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=24117347)\t18%; discharging; 1:02 remaining present: true\n"
+      expect(parseMacPercent(out)).toBe(18)
+      expect(parseMacPercent("Now drawing from 'AC Power'\n")).toBeUndefined()
+    })
+
+    it("pauses Extreme once when the charge falls to 20%, audits it, and starts it again on mains", async () => {
+      const s = charged()
+      await s.p.check()
+      s.set("battery", 60)
+      await s.p.check()
+      expect([s.p.low, s.paused()]).toEqual([false, 0])
+      s.set("battery", LOW_BATTERY_PERCENT)
+      await s.p.check()
+      expect([s.p.low, s.paused()]).toEqual([true, 1])
+      expect(s.audited.at(-1)).toEqual({ source: "battery", was: "battery", low: true, percent: LOW_BATTERY_PERCENT })
+      s.set("battery", 12)
+      await s.p.check()
+      expect(s.paused()).toBe(1)
+      s.set("mains", 13)
+      await s.p.check()
+      expect([s.p.low, s.resumed()]).toEqual([false, 1])
+    })
+
+    it("pauses once when it goes on battery already low, and once only with the setting on too", async () => {
+      for (const pauseSetting of [false, true]) {
+        const s = charged({ pauseSetting })
+        await s.p.check()
+        s.set("battery", 10)
+        await s.p.check()
+        expect([s.p.low, s.paused()]).toEqual([true, 1])
+      }
+    })
+
+    it("is never low without a charge in the reading, as on Windows", async () => {
+      const s = charged()
+      s.set("battery")
+      await s.p.check()
+      expect([s.p.onBattery, s.p.low, s.paused()]).toEqual([true, false, 0])
+    })
   })
 })

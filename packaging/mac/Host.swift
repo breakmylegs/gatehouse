@@ -6,7 +6,10 @@ import Foundation
 /// A line the Host prints on its standard output, as one JSON object.
 enum HostEvent {
   case ready(url: String)
-  case attention
+  /// A request needs you; with what its notification may say (MacEvents.swift), nil from a line without it.
+  case attention(RequestNotice?)
+  /// A request was decided, so its notification goes.
+  case settled(String)
   case restart
   case progress(String)
   case awake(Bool)
@@ -20,7 +23,10 @@ enum HostEvent {
     else { return .other(line) }
     switch event {
     case "ready": return (j["url"] as? String).map { .ready(url: $0) } ?? .other(line)
-    case "attention": return .attention
+    case "attention": return .attention(RequestNotice.from(j))
+    case "settled":
+      guard let id = j["id"] as? String, RequestNotice.validId(id) else { return .other(line) }
+      return .settled(id)
     case "restart": return .restart
     case "progress": return .progress(j["text"] as? String ?? "")
     case "awake": return .awake(j["on"] as? Bool ?? false)
@@ -233,6 +239,13 @@ final class HostProcess {
     try p.run()
     process = p
     input = stdin
+  }
+
+  /// One line on the Host's input (apps/host/src/presence-mac.ts). Nothing when the Host is not running; a Host that
+  /// has just gone away is not worth telling (SIGPIPE is ignored, main.swift, so the write only fails).
+  func tell(_ signal: MacSignal) {
+    guard let input, process?.isRunning == true, !stopping else { return }
+    try? input.fileHandleForWriting.write(contentsOf: Data(signal.line.utf8))
   }
 
   /// Closes the Host's input, which tells it to stop cleanly, then ends it if it is still running after five seconds.
