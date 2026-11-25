@@ -2338,7 +2338,8 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 - `apps/web/src/lib/lastOpen.ts`: the session on screen in the workspace is noted for its side (a chat for Ask about code, anything else for Code), with the panes of that side it sat in, under `gatehouse.lastOpen` in the window's storage, beside the rail mode, so it lasts across restarts and updates. It is read tolerantly: an unreadable value, or one from another version, means there is none, and other keys in it are kept.
 - `apps/web/src/lib/switchSide.ts`: the Chat | Code switch (`Rail` `choose()`) and the Ask about code section reopen that session in the workspace, with its split panes and the pane that had focus. Only when it was deleted, has moved to the other side, or there is none, does the side open on its own page: New question for Ask about code (or the section's last page), the session list for Code. A pane deleted since is left out, and fewer than two left is the session on its own.
 - Chosen: "Ask about this session..." still opens New question about that session, because it asks for a new question; and the Work section keeps opening its last page, because the request named only Ask about code. The code is shared, so the Mac and Windows behave the same.
-- Tests: `apps/web/test/last-open.test.tsx`; regressions `rail-switch.test.tsx`.
+- Tests: `apps/web/test/last-open.test.tsx`; regressions `rail-switch.test.tsx`, `rail.test.tsx`, `sections.test.tsx`, `help.test.tsx`. Eleven breaks, all caught.
+- Gated on Windows with the named tests (38 files, with CNW single sign-on, David's notification and power work, and the four invariant tests). The full run the lockfile asks for was stopped at its two-hour limit with nothing failed; the new packages are used by CNW alone, and their tests all ran.
 
 ### O53 A computer opens in a new tab from CNW's board (feat/e6a)
 
