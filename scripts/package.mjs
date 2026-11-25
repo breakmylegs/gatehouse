@@ -100,6 +100,10 @@ if (!exeOnly) {
   copy("apps/phone", { keepDist: true })
   for (const p of ["policy", "shared"]) copy(`packages/${p}`)
   copy("policy")
+  // The shipped rules, also where an update never carries the old folder's over them: the Host puts them in place
+  // of an older policy/rules.yaml at start (apps/host/src/seed-rules.ts).
+  fs.mkdirSync(path.join(app, "policy-seed"), { recursive: true })
+  fs.copyFileSync(path.join(root, "policy", "rules.yaml"), path.join(app, "policy-seed", "rules.yaml"))
   for (const f of ["ps-ast.ps1", "dpapi.ps1", "verify-audit.ps1", "start.ps1", "links.mjs"])
     copy(`scripts/${f}`)
   for (const f of [
@@ -357,8 +361,9 @@ fs.writeFileSync(
     "You can move or copy the whole folder anywhere. Nothing is installed and nothing starts at logon.",
     "",
     "Your data (audit log, settings, usage) is in %LOCALAPPDATA%\\Gatehouse and stays when you replace this folder.",
-    "Your policy rules are in app\\policy. When you replace the app folder with a newer one, copy your own",
-    "rules.yaml, rules.local.yaml and rules.user.yaml across first (or keep the policy folder), or your changes are lost.",
+    "Your policy rules are in app\\policy: rules.local.yaml (what you chose to remember) and rules.user.yaml (your own",
+    "rules). When you replace the app folder with a newer one, copy those two across first, or your changes are lost.",
+    "rules.yaml is Codehouse's own and comes with each version.",
     "",
     "Sign in to Claude Code on this computer first. On the first run, open Settings and set the organisation.",
     "Documents: app\\docs (runbook.md, relay-local.md, threat-model.md).",

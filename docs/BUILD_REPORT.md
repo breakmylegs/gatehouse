@@ -2286,3 +2286,23 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - `appearance.test.tsx`: the Look choice kept and applied, and not offered on a Mac.
 
   Regression: `approval-card.test.tsx`, `approval-card-mac.test.tsx`, `theme-tokens.test.ts`, rail, scenes, rtl, app and sections. `app.test.tsx` failed once in a batch under load and passed alone (11 of 11). Ten breaks, all caught.
+
+### O50 Ask about code reads its session without asking (feat/e6a)
+
+- The owner, 25 Nov: "It should never require permission to query a code session. I only want approval when it offers a prompt into the session."
+- **The cause, from the audit log:** `read_session` had been held for approval 36 times since 8 Nov, the last at 12:44 today on 2.0.635, as no-rule. Yet the rule `session-read-tools` allows it, and its conditions were met: the Companion's source sdk and the chat's session kind reach the Approver.
+  - The installed `app\policy\rules.yaml` dated from 2 Nov: 58 lines against 102 in the source, with no `session-read-tools`, nor any other rule added since (the handover, test-impact, routine-draft, debugger and assumption rules among them).
+  - Each update's `Codehouse-Update.exe` (`Updater.cs`, `CarryYourFiles`) carried the old policy folder over the new one, seed rules and all. So every install kept the seed rules it was first installed with, and nothing told anyone.
+  - So this was not only Ask about code: every rule added to `rules.yaml` since an install never reached it.
+- **The fix, on the Host's side so it works whichever version's updater ran:**
+  - The package keeps a copy of its seed rules in `app\policy-seed\rules.yaml`, outside the folder an update carries.
+  - At start the Host (`seed-rules.ts`) puts that copy in place when `app\policy\rules.yaml` differs. It keeps the replaced file beside it as `rules.yaml.kept-<date>`, logs it, and audits it as `seed_rules_refreshed`.
+  - Your remembered decisions (`rules.local.yaml`) and your own rules (`rules.user.yaml`) are carried as before and never touched. So is a rules file named elsewhere.
+  - The package's README now says `rules.yaml` comes with each version.
+  - Choice made for the owner: nothing in Codehouse writes `rules.yaml`, and your own rules belong in `rules.user.yaml`, so the shipped file wins and a hand edit is kept beside it rather than lost.
+- **With the shipped rules in place:**
+  - Ask about code's `read_session` is allowed by `session-read-tools` in every mode, and reading files under your workspace roots by `read-workspace`.
+  - `offer_to_session`, a prompt into the session, still always asks you (O34: `session-handoff`, Severe, and the Host lets no rule, grant or Max approval answer it).
+  - Golden 07-mcp-unknown checks both.
+- **The next update applies it.** Your copy has the 2 Nov rules until then: the first start of the new version puts the shipped ones in place.
+- Checked: `npm run package:check` (the seed copy ships, identical to `policy/rules.yaml`) and `scripts/update-e2e.ts` from the installed 2.0.635 (it switches and starts). Tests: `apps/host/test/seed-rules.test.ts` (an older copy replaced and kept; left alone when it matches; made when missing; a rules file elsewhere and a folder with no seed copy untouched; your own rules untouched). Four breaks, all caught. Threat model T170.

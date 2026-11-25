@@ -188,6 +188,7 @@ import { GitHubSource } from "./update/source.js"
 import { ChangelogStore } from "./update/changelog.js"
 import { EgressProxy } from "./egress-proxy.js"
 import { TestExplorer } from "./test-explorer.js"
+import { refreshSeedRules, type SeedResult } from "./seed-rules.js"
 import { LanguageServers } from "./lsp-client.js"
 import { Debugger, debugClient } from "./dap-client.js"
 import { Sharing } from "./share.js"
@@ -2265,7 +2266,31 @@ export function createHost(opts: HostOptions = {}): Host {
           .catch((e: Error) => log(`safe mode: the plugins could not be listed (${e.message})`))
       }
       step("Loading your rules")
+      // The shipped rules, put back in place when an update carried an older copy over them (seed-rules.ts).
+      const seeded = await refreshSeedRules({ appRoot: REPO_ROOT, rulesPath }).catch((e: Error) => {
+        log(`rules: the shipped rules could not be put in place (${e.message}); the rules on disk are used`)
+        return { refreshed: false } as SeedResult
+      })
       store.load()
+      if (seeded.refreshed) {
+        log(`rules: put the shipped rules in place${seeded.kept ? `; the file they replaced is kept as ${path.basename(seeded.kept)}` : ""}`)
+        void audit.record({
+          session: "host",
+          event: "seed_rules_refreshed",
+          channel: "host",
+          tool: "policy",
+          input: { file: "rules.yaml", ...(seeded.kept ? { kept: path.basename(seeded.kept) } : {}) },
+          verdict: {
+            outcome: "allow",
+            ruleId: "seed-rules",
+            reason: "The rules this version ships were put in place of an older copy an update had carried over them.",
+            risk: 0,
+            decidedBy: "rules",
+            policyHash: store.current?.hash ?? "",
+          },
+          latencyMs: 0,
+        })
+      }
       try {
         phoneStore.load()
         phone.start()
