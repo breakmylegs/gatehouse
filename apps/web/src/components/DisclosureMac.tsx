@@ -1,10 +1,9 @@
-import { isMac } from "../lib/platform-mac"
-
 /**
- * Mac fork: a disclosure chevron. On a Mac it is drawn, as the Mac's own sidebars draw it, in the icon set's stroke;
- * elsewhere it is upstream's text arrow, unchanged. Rail.tsx and CommandDeck.tsx use it (see docs/mac.md).
+ * Mac fork: a disclosure chevron, drawn as the Mac's own sidebars draw it, in the icon set's stroke. Owner, 25 Nov: the
+ * Mac's style on Windows too, so on every platform; `mac={false}` still draws upstream's text arrow, for a caller that
+ * wants it. Rail.tsx and CommandDeck.tsx use it (see docs/mac.md).
  */
-export function Disclosure({ open, mac = isMac() }: { open: boolean; mac?: boolean }) {
+export function Disclosure({ open, mac = true }: { open: boolean; mac?: boolean }) {
   if (!mac) return <span aria-hidden="true">{open ? "▾" : "▸"}</span>
   return (
     <svg

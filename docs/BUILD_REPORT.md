@@ -2306,3 +2306,25 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - Golden 07-mcp-unknown checks both.
 - **The next update applies it.** Your copy has the 2 Nov rules until then: the first start of the new version puts the shipped ones in place.
 - Checked: `npm run package:check` (the seed copy ships, identical to `policy/rules.yaml`) and `scripts/update-e2e.ts` from the installed 2.0.635 (it switches and starts). Tests: `apps/host/test/seed-rules.test.ts` (an older copy replaced and kept; left alone when it matches; made when missing; a rules file elsewhere and a folder with no seed copy untouched; your own rules untouched). Four breaks, all caught. Threat model T170.
+
+### O51 The Mac's look, layout and menus on Windows (feat/e6a)
+
+- The owner, 25 Nov: "I want as little drift between the mac and windows version as possible. Mac features will always take the priority when it comes to menu layout, themes and style." Every place the window differs on a Mac (`isMac()`, `onMac()` and the Mac stylesheets, 40 places) was listed and sorted.
+- **Brought to Windows:**
+  - The Mac's look always (O49 had offered a Codehouse look as well; that choice is gone, and a kept one is set aside). Windows high contrast still takes over.
+  - The request's session, rule and wait as grouped rows (`ApprovalCard.tsx`), with their header copies hidden on every platform.
+  - The drawn disclosure chevron (`DisclosureMac.tsx`).
+  - The arrow pointer on buttons (`mac.css`), as Windows' own buttons use too.
+  - Settings on Ctrl+comma, as Command-comma on a Mac, listed in the shortcut sheet.
+  - The tray grouped as the Mac's status menu: open and the quick prompt; then what shows and how Codehouse starts, with **Open at sign-in** added as the Mac's Open at Login (it makes or removes the Startup shortcut the installer makes); then quit.
+- **Kept as each system's own:** key names (⌘ or Ctrl); where secrets are sealed (the Keychain or DPAPI) and what the memory reading means; zsh or PowerShell; Dictation or voice typing; the menu bar, the notch wing and the Mac's standard menus (Codehouse, Edit, View, Window, Help), which Windows apps do not have; Title Case or sentence case in menus; SF Pro and SF Mono or Segoe and Cascadia; the Mac's scrollbars.
+- **For the Mac's next pass:** Screen-share safe mode and Start in safe mode, which the Windows tray has and the Mac's menu does not yet (docs/mac.md).
+- The rule is recorded in CLAUDE.md, "Two machines", and docs/mac.md, "The same look and layout on Windows", so a look, layout or menu change on either platform is made on both. This edits Mac files (`mac.css`, `mac-standard.css`, `DisclosureMac.tsx`) from the Windows machine, as the 18 Nov rule allows; the Mac's gate runs after the merge.
+- Checked: `npm run package:check` (the tray compiles and the packaged copy works) and `scripts/update-e2e.ts` from the installed 2.0.637.
+- Tests:
+  - `apps/web/test/mac-parity.test.tsx`: the chevron; Ctrl+comma and the sheet.
+  - `apps/host/test/safe-mode-tray.test.ts`: the tray's grouping in the Mac's order; Open at sign-in tied to the installer's shortcut, made and removed.
+  - `look.test.ts` and `appearance.test.tsx`: always the Mac's look, with no choice offered.
+  - `approval-card.test.tsx`: the rule in the grouped rows.
+
+  Seven breaks, all caught. Three missed at first: two had Windows line endings in a file without them, and one only hid a label. A fourth, Open at sign-in left out of the menu, needed the test to require the item's add.

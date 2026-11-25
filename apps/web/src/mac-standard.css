@@ -511,16 +511,16 @@
   border-radius: 0;
   background: transparent;
 }
-/* The session, the rule and the wait are grouped rows on a Mac (ApprovalCard.tsx); the header keeps the state and
-   the risk. */
-:root[data-platform="mac"] .pass-head > span:not(.ml-auto) {
+/* The session, the rule and the wait are grouped rows (ApprovalCard.tsx), on every platform since 25 Nov, whatever
+   the look; the header keeps the state and the risk. */
+:root .pass-head > span:not(.ml-auto) {
   display: none;
 }
-:root[data-platform="mac"] .pass-head > .ml-auto {
+:root .pass-head > .ml-auto {
   margin-left: 0;
 }
 /* The note's square is the Severe shape; beside "Risk is high" it said the wrong band. The badge carries the shape. */
-:root[data-platform="mac"] .pass-alert-icon {
+:root .pass-alert-icon {
   display: none;
 }
 :root:is([data-platform="mac"], [data-look="apple"]) .pass-state {

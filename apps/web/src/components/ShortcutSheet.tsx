@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react"
 import { BINDINGS } from "../lib/commands"
 import { commandFor, SHORTCUTS } from "../lib/shortcuts"
 import { useShortcuts } from "../lib/useShortcuts"
-import { isMac, keyLabel } from "../lib/platform-mac" // Mac fork
+import { keyLabel } from "../lib/platform-mac" // Mac fork
 
-// Mac fork: Command-comma opens Settings, as in every Mac app (App.tsx).
-const MAC_BINDINGS = isMac() ? [{ keys: "Ctrl ,", label: "Settings" }] : []
+// Mac fork: Command-comma opens Settings, as in every Mac app, and Ctrl+comma on Windows (App.tsx, owner 25 Nov).
+export const MAC_BINDINGS = [{ keys: "Ctrl ,", label: "Settings" }]
 
 /**
  * Ctrl+/ lists every key Codehouse answers to, from the same list the palette shows its keys from (owner's plan, W1-05).

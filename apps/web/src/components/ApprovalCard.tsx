@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { decideFull } from "../lib/decide"
 import { age, clock, commandText, riskBand } from "../lib/format"
 import { splitByHighlights } from "../lib/highlight"
-import { isMac, keyLabel, onMac } from "../lib/platform-mac" // Mac fork
+import { keyLabel, onMac } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { send, useStore } from "../store"
 import { CopyButton } from "./CopyButton"
@@ -411,10 +411,9 @@ export function ApprovalCard({ view }: { view: PendingView }) {
           )}
 
           <dl className="m-0 grid grid-cols-[80px_1fr] gap-x-3 gap-y-1">
-            {/* Mac fork: on a Mac the session, the rule and the wait are grouped rows, as in System Settings;
-                mac-standard.css hides them from the header there. */}
-            {isMac() ? (
-              <>
+            {/* Mac fork: the session, the rule and the wait are grouped rows, as in System Settings; mac-standard.css
+                hides them from the header. Owner, 25 Nov: the Mac's layout on Windows too, so on every platform. */}
+            <>
                 <dt className="text-mut">Session</dt>
                 <dd className="m-0 flex flex-wrap items-center gap-2">
                   {session ? <SessionCode session={session} /> : null}
@@ -424,8 +423,7 @@ export function ApprovalCard({ view }: { view: PendingView }) {
                 <dd className="m-0 mono [overflow-wrap:anywhere]">{req.verdict.ruleId}</dd>
                 <dt className="text-mut">Waiting</dt>
                 <dd className="m-0">{age(req.createdAt, now)}</dd>
-              </>
-            ) : null}
+            </>
             <dt className="text-mut">Where</dt>
             <dd className="m-0 mono [overflow-wrap:anywhere]">
               {req.cwd}

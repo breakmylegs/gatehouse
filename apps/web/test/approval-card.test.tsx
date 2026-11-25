@@ -87,7 +87,9 @@ describe("ApprovalCard", () => {
     )
     expect(document.querySelector("mark")?.textContent).toBe("git push --force origin main")
     expect(screen.getByText("C:\\dev\\atlas")).toBeInTheDocument()
-    expect(screen.getByText("force-push")).toBeInTheDocument()
+    // The session, the rule and the wait are grouped rows on every platform (owner, 25 Nov); the stylesheet hides the
+    // header's copy, which a test without styles still sees.
+    expect(within(document.querySelector("dl")!).getByText("force-push")).toBeInTheDocument()
     expect(screen.getByText(/High risk 82/)).toBeInTheDocument()
     expect(screen.getByText(/Phone notified/)).toBeInTheDocument()
   })

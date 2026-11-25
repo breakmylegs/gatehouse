@@ -34,7 +34,7 @@
  * Buttons on a Mac use the arrow, not the hand: the hand is for links (Apple's Human Interface Guidelines). Links
  * keep it.
  */
-:root[data-platform="mac"]
+:root:is([data-platform="mac"], [data-look="apple"])
   :is(button, .btn, [role="tab"], [role="menuitem"], [role="option"], summary) {
   cursor: default;
 }

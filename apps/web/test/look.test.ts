@@ -7,7 +7,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { applyLook, DEFAULT_LOOK, readLook, saveLook, watchLook } from "../src/lib/look"
+import { applyLook, DEFAULT_LOOK, readLook, watchLook } from "../src/lib/look"
 
 const root = () => document.documentElement
 beforeEach(() => {
@@ -17,11 +17,11 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe("the look (owner, 25 Nov)", () => {
-  it("is Apple style unless you chose Codehouse, read tolerantly", () => {
+  it("is always Apple style, setting aside a Codehouse look an earlier version kept (owner, 25 Nov: as little drift as possible)", () => {
     expect(DEFAULT_LOOK).toBe("apple")
     expect(readLook()).toBe("apple")
-    saveLook("codehouse")
-    expect(readLook()).toBe("codehouse")
+    localStorage.setItem("codeh:look", "codehouse")
+    expect(readLook()).toBe("apple")
     localStorage.setItem("codeh:look", "something newer")
     expect(readLook()).toBe("apple")
   })
@@ -38,7 +38,7 @@ describe("the look (owner, 25 Nov)", () => {
     expect(root().dataset.look).toBeUndefined()
   })
 
-  it("follows your choice and high contrast while the window is open", () => {
+  it("follows high contrast while the window is open", () => {
     let forced = false
     const listeners: Array<() => void> = []
     vi.stubGlobal("matchMedia", (q: string) => ({
@@ -47,11 +47,8 @@ describe("the look (owner, 25 Nov)", () => {
       removeEventListener: () => undefined,
     }))
     vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" })
+    localStorage.setItem("codeh:look", "codehouse")
     const stop = watchLook(root())
-    expect(root().dataset.look).toBe("apple")
-    saveLook("codehouse")
-    expect(root().dataset.look).toBeUndefined()
-    saveLook("apple")
     expect(root().dataset.look).toBe("apple")
     forced = true
     for (const f of listeners) f()
@@ -70,13 +67,14 @@ describe("the Apple look's stylesheet (mac-standard.css)", () => {
     expect(css).toContain(`:root:is([data-platform="mac"], [data-look="apple"]) .rail.shell {`)
   })
 
-  it("keeps Mac only just what needs the Mac's own approval card or Codehouse.app's window", () => {
+  it("keeps Mac only just Codehouse.app's window, and hides the card's header copies on every platform", () => {
     const macOnly = css
       .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.startsWith(MAC))
-    const markup = macOnly.filter((l) => !l.includes("data-mac-"))
-    expect(markup).toEqual([`${MAC} .pass-head > span:not(.ml-auto) {`, `${MAC} .pass-head > .ml-auto {`, `${MAC} .pass-alert-icon {`])
-    expect(macOnly.filter((l) => l.includes("data-mac-")).length).toBeGreaterThan(0)
+    expect(macOnly.filter((l) => !l.includes("data-mac-"))).toEqual([])
+    expect(macOnly.length).toBeGreaterThan(0)
+    // The card's grouped rows are drawn on every platform, so their header copies are hidden whatever the look.
+    for (const rule of [`:root .pass-head > span:not(.ml-auto) {`, `:root .pass-head > .ml-auto {`, `:root .pass-alert-icon {`]) expect(css).toContain(rule)
   })
 })

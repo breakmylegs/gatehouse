@@ -132,6 +132,19 @@ All of it was written and unit tested on Windows. None of it has run on a Mac ye
 
 1. **PowerShell checking.** Commands are checked with tree-sitter Bash on a Mac. Without `pwsh`, PowerShell commands simply wait for you, as on Windows; with it (Microsoft's macOS build, which needs no administrator), they are checked as on Windows, and the tests that need it run.
 
+## The same look and layout on Windows (owner, 25 Nov)
+
+"I want as little drift between the mac and windows version as possible. Mac features will always take the priority when it comes to menu layout, themes and style." So Windows now has:
+
+- the Mac's look (`mac-standard.css`, under `[data-look="apple"]`, which `lib/look.ts` always sets on Windows; there is no longer a choice of look, and Windows high contrast still takes over);
+- the request's session, rule and wait as grouped rows (`ApprovalCard.tsx`; their header copies are hidden on every platform);
+- the drawn disclosure chevron (`DisclosureMac.tsx`);
+- the arrow pointer on buttons (`mac.css`);
+- Settings on Ctrl+comma, as Command-comma here (`App.tsx`, `ShortcutSheet.tsx`);
+- the tray grouped as this app's status menu, with Open at sign-in for Open at Login (`packaging/CodehouseApp.cs`).
+
+What stays each system's own: key names, the Keychain, zsh, the menu bar and the notch, Dictation, Title Case in menus, SF Pro and SF Mono, and the Mac's scrollbars (`mac.css`). The Mac side gets in return what Windows has that this app's menu does not yet: Screen-share safe mode and Start in safe mode (listed for the Mac's next pass). A look, layout or menu change made here should be made for Windows in the same change, and the reverse.
+
 ## Platform hooks
 
 Mac and Windows are one repository (13 Nov). Platform code lives in files of its own: for the Mac `*-mac.ts(x)`, `mac*.css`, `packaging/mac/` and `scripts/package-mac.mjs`; for Windows `packaging/*.cs`, the `*.ps1` scripts and their helpers. Shared files hold small hooks into the Mac's, each marked `Mac fork` in a comment (the name is from when the Mac version was a fork of the Windows one). When you change one of the places below, keep the other platform working:

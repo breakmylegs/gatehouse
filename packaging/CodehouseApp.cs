@@ -178,9 +178,16 @@ internal sealed class MainForm : Form
         menu.Items.Add("Open Codehouse", null, delegate { ShowWindow(); });
         quickItem = new ToolStripMenuItem("Quick prompt", null, delegate { OpenQuick(); });
         menu.Items.Add(quickItem);
+        // Owner, 25 Nov: the Mac's menu layout (AppDelegate.swift's status menu): open and the quick prompt; what shows
+        // and how Codehouse starts; then quit.
+        menu.Items.Add(new ToolStripSeparator());
         wingItem = new ToolStripMenuItem("Show requests at the top of the screen", null, delegate { SetWingOn(!wingItem.Checked); });
         wingItem.Checked = !File.Exists(WingOffMarker);
         menu.Items.Add(wingItem);
+        // As the Mac's Open at Login: the shortcut in your Startup folder the installer makes when you ask it to.
+        signInItem = new ToolStripMenuItem("Open at sign-in", null, delegate { SetSignIn(!signInItem.Checked); });
+        signInItem.Checked = File.Exists(SignInShortcut);
+        menu.Items.Add(signInItem);
         // The page holds the mode (it masks and hides what it shows); the tray only asks it to switch.
         shareItem = new ToolStripMenuItem("Screen-share safe mode", null, delegate { Tell("screenshare-toggle"); });
         menu.Items.Add(shareItem);
@@ -999,6 +1006,42 @@ internal sealed class MainForm : Form
     private void Restart() { Restart(false); }
 
     /// <summary>E-096: with safe, the new Codehouse starts in safe mode; without it, never, whatever this one was started with.</summary>
+    private ToolStripMenuItem signInItem;
+
+    /// <summary>The shortcut that starts Codehouse in the tray when you sign in: the one the installer makes.</summary>
+    private static string SignInShortcut
+    {
+        get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Codehouse.lnk"); }
+    }
+
+    /// <summary>Open at sign-in, as the Mac's Open at Login: makes or removes that shortcut, through Windows' own Shell.</summary>
+    private void SetSignIn(bool on)
+    {
+        try
+        {
+            if (!on)
+            {
+                if (File.Exists(SignInShortcut)) File.Delete(SignInShortcut);
+            }
+            else
+            {
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                object shell = Activator.CreateInstance(shellType);
+                object link = shellType.InvokeMember("CreateShortcut", System.Reflection.BindingFlags.InvokeMethod, null, shell, new object[] { SignInShortcut });
+                Type linkType = link.GetType();
+                linkType.InvokeMember("TargetPath", System.Reflection.BindingFlags.SetProperty, null, link, new object[] { Application.ExecutablePath });
+                linkType.InvokeMember("Arguments", System.Reflection.BindingFlags.SetProperty, null, link, new object[] { "--tray" });
+                linkType.InvokeMember("WorkingDirectory", System.Reflection.BindingFlags.SetProperty, null, link, new object[] { Path.GetDirectoryName(Application.ExecutablePath) });
+                linkType.InvokeMember("Save", System.Reflection.BindingFlags.InvokeMethod, null, link, null);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Codehouse could not change whether it opens when you sign in: " + ex.Message, "Codehouse");
+        }
+        signInItem.Checked = File.Exists(SignInShortcut);
+    }
+
     private void Restart(bool safe)
     {
         try

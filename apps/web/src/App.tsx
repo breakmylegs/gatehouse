@@ -116,8 +116,8 @@ export function App() {
           e.preventDefault()
           void send({ type: "set_effort", sessionId: s.id, effort: next })
         }
-      } else if (e.metaKey && !e.shiftKey && !e.altKey && e.key === "," && isMac()) {
-        // Mac fork: Command-comma opens Settings, as in every Mac app.
+      } else if ((isMac() ? e.metaKey : e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === ",") {
+        // Mac fork: Command-comma opens Settings, as in every Mac app; Ctrl+comma on Windows (owner, 25 Nov).
         e.preventDefault()
         useStore.getState().setRoute("settings")
       } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyK") {

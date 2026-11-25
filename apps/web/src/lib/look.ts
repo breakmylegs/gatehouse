@@ -3,23 +3,19 @@ import { isMac } from "./platform-mac"
 /**
  * The owner, 25 Nov: "I like the apple style interface that David's commits have done. I want the apple style
  * interface on the windows version." The Mac's look (mac-standard.css: the palette, type, controls, the glass sidebar,
- * menus and notices, the grouped rows) on Windows too, as Apple style, which is the usual look; Codehouse is the look
- * it had before. On a Mac the Mac's own look always applies (data-platform="mac"), so the choice is not offered there.
- * Windows high contrast takes over from either: while it is on, the page shows the colours you set in Windows.
+ * menus and notices, the grouped rows) on Windows too. Later the same day: "I want as little drift between the mac and
+ * windows version as possible. Mac features will always take the priority when it comes to menu layout, themes and
+ * style." So Windows always has it, and the Codehouse look is no longer offered (a kept "codehouse" is read and set
+ * aside). Windows high contrast still takes over: while it is on, the page shows the colours you set in Windows.
  */
 export type Look = "apple" | "codehouse"
 export const DEFAULT_LOOK: Look = "apple"
 const KEY = "codeh:look"
 export const LOOK_EVENT = "codeh-look"
 
-/** The look you chose, read tolerantly: anything else is the usual one. */
+/** The look: always Apple style now. What an earlier version kept is read tolerantly and set aside. */
 export function readLook(): Look {
-  try {
-    const v = localStorage.getItem(KEY)
-    return v === "codehouse" || v === "apple" ? v : DEFAULT_LOOK
-  } catch {
-    return DEFAULT_LOOK
-  }
+  return DEFAULT_LOOK
 }
 
 export function saveLook(look: Look): void {
