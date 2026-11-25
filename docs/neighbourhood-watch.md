@@ -137,6 +137,109 @@ computer paired before that moves to the root by itself the next time it connect
 Codehouse: it shows the root's fingerprint, which you compare with the Server panel's, and keeps this computer as it is
 on CNW. Untick **Share this computer's sessions** to stop for a while, or **Unpair** to end it.
 
+## Single sign-on
+
+CNW can sign people in through your organisation's identity provider, with OpenID Connect or SAML 2.0, beside its own
+passwords, codes and passkeys. Those keep working, so a provider that is down or set up wrongly never locks you out:
+sign in with your password and fix it.
+
+Set it on the Server page, under **Single sign-on**. The panel shows the three addresses a provider asks for:
+
+| What the provider calls it | CNW's address |
+| --- | --- |
+| Redirect URI (OpenID Connect) | `https://<CNW_HOST>/api/sso/oidc/callback` |
+| Entity ID or Identifier (SAML) | `https://<CNW_HOST>/api/sso/saml/metadata` |
+| Reply URL or ACS URL (SAML) | `https://<CNW_HOST>/api/sso/saml/acs` |
+
+CNW's own SAML metadata is at the entity ID's address once SAML is set, for a provider that reads it.
+
+**Who it is.** Choose how a sign-in finds its CNW person:
+
+- **Their email**: the provider's email for them, taken only when the provider does not say it is unverified, matched
+  to a CNW person with that email.
+- **Their subject**: the provider's own id for them (`sub` in OpenID Connect, the NameID in SAML). Each person links it
+  once, signed in, from **You**, **Link**. Choose this when emails can change or are not verified (Entra ID's often are
+  not).
+
+Nobody is made, and no role given, unless you tick **Make an account for someone with none**. Then the new person gets
+the role you choose, viewer, approver or admin, and never owner.
+
+**What it does not give.** A single sign-on is not a passkey sign-in, and does not count as having just signed in. To
+allow a Severe request, CNW still asks for the password (and its code) or a passkey again. Someone CNW made by single
+sign-on has no password: they add a passkey on **You** to allow Severe requests.
+
+**A second factor.** Someone with a code from an app set on their CNW account is asked for it after single sign-on too.
+
+**How it signs in.** OpenID Connect uses the authorization code flow with PKCE, state and nonce. CNW finds the
+provider from its issuer URL and checks the ID token's signature against the provider's keys, and its issuer,
+audience, expiry and nonce. SAML needs the assertion itself signed with a certificate from the IdP's metadata. The
+assertion must be for CNW as its audience, from the IdP's own issuer, in answer to a request CNW made, and not seen
+before. The client secret is sealed like CNW's other secrets and never shown again. While you are at the provider,
+CNW keeps the sign-in's state in a short-lived cookie for that one callback. Every single sign-on, link and refusal is
+in the audit log (the Server page's log) and CNW's own log.
+
+### Authentik
+
+OpenID Connect:
+
+1. In Authentik, **Applications**, **Providers**, **Create**: **OAuth2/OpenID Provider**.
+2. **Client type** Confidential. **Redirect URIs**: Strict, CNW's redirect URI.
+3. **Signing Key**: choose a certificate (the built-in self-signed one will do). CNW checks the ID token's signature
+   against it.
+4. **Scopes**: keep openid, email and profile.
+5. Create an application for the provider, for example with the slug `cnw`.
+6. In CNW: **Issuer URL** `https://<authentik>/application/o/cnw/`, and the provider's client ID and client secret.
+
+SAML:
+
+1. **Providers**, **Create**, **SAML Provider**.
+2. **ACS URL** is CNW's reply URL, and **Audience** is CNW's entity ID.
+3. Choose a **Signing Certificate**, and switch on signing the assertion.
+4. Create an application for it.
+5. In CNW, **IdP metadata URL** is the provider's metadata download link,
+   `https://<authentik>/api/v3/providers/saml/<id>/metadata/?download`. Or download the file and choose it.
+
+### Keycloak
+
+OpenID Connect:
+
+1. In the realm, **Clients**, **Create client**: OpenID Connect, client ID `cnw`.
+2. **Client authentication** on, **Standard flow** on.
+3. **Valid redirect URIs**: CNW's redirect URI.
+4. Under **Advanced**, **Proof Key for Code Exchange Code Challenge Method**: S256.
+5. Copy the secret from **Credentials**.
+6. In CNW: **Issuer URL** `https://<keycloak>/realms/<realm>`.
+
+SAML:
+
+1. **Clients**, **Create client**: SAML, **Client ID** CNW's entity ID.
+2. **Valid redirect URIs** and **Master SAML Processing URL**: CNW's reply URL.
+3. Under **Keys** and **Advanced**, **Sign assertions** on.
+4. To match by email, either set **Name ID format** to email or add an email attribute mapper.
+5. In CNW: **IdP metadata URL** `https://<keycloak>/realms/<realm>/protocol/saml/descriptor`.
+
+### Entra ID
+
+OpenID Connect:
+
+1. **App registrations**, **New registration**. Under **Redirect URI**, choose Web and enter CNW's redirect URI.
+2. **Certificates & secrets**, **New client secret**, and copy its value.
+3. **API permissions**: openid, email and profile. Under **Token configuration**, add the optional claim `email` to
+   the ID token.
+4. In CNW: **Issuer URL** `https://login.microsoftonline.com/<tenant-id>/v2.0`, and the application (client) ID and
+   the secret.
+
+Entra ID does not always say an email is verified, and a person's email can change. **Their subject**, with each
+person linking from **You**, is the safer match there.
+
+SAML:
+
+1. **Enterprise applications**, **New application**, **Create your own application**, non-gallery.
+2. **Single sign-on**, **SAML**. **Identifier (Entity ID)** is CNW's entity ID, and **Reply URL** is CNW's reply URL.
+3. Under **SAML Certificates**, keep **Signing Option** on one that signs the assertion: "Sign SAML assertion", or
+   "Sign SAML response and assertion".
+4. In CNW, **IdP metadata URL** is the **App Federation Metadata Url**.
+
 ## What CNW can and cannot do
 
 - Everything you can do at the computer, through the same checks: the floor, your rules and the audit log run on the

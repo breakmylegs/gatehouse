@@ -9,7 +9,7 @@ import path from "node:path"
  * and nothing in it is readable without that passphrase. caddy's certificates are not in it: they live in caddy-data,
  * and a CNW restored onto a new caddy-data has a new certificate, so each computer pairs again.
  */
-export const BACKUP_FILES = ["users.json", "settings.json", "computers.json", "server.json", "invites.json", "audit.json", "seal.key"] as const
+export const BACKUP_FILES = ["users.json", "settings.json", "computers.json", "server.json", "invites.json", "audit.json", "seal.key", "sso.json"] as const
 const SCRYPT = { N: 1 << 15, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }
 
 export function makeBackup(dataDir: string, passphrase: string, now = Date.now()): string {

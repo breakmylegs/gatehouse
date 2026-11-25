@@ -155,6 +155,20 @@ const signedOutShell = () => {
   clearInterval(poll)
 }
 
+/** O52: what a single sign-on sent back in the address: an error, the code step, or a link made. Read once. */
+const ssoBack = (() => {
+  const q = new URLSearchParams(location.search)
+  const back = { error: q.get("sso_error") ?? "", totp: q.get("sso_totp") ?? "", linked: q.get("sso") === "linked" }
+  if (back.error || back.totp || back.linked) history.replaceState(null, "", location.pathname + location.hash)
+  return back
+})()
+
+/** O52: a link that starts a single sign-on (a top-level navigation, so the provider's page opens in this tab). */
+const ssoLinks = (link) =>
+  Object.entries(me.sso ?? {}).map(([kind, label]) =>
+    el("a", { class: link ? "btn" : "btn primary", href: `/api/sso/${kind}/start${link ? "?link=1" : ""}`, text: link ? `Link ${label}` : `Sign in with ${label}` }),
+  )
+
 async function render() {
   me = (await call("GET", "/api/me")).json
   passkeysOff = me.passkeys === false ? (me.passkeyNote ?? "Passkeys are not available here.") : ""
@@ -221,6 +235,26 @@ async function render() {
   }
   if (me.access === "none") {
     signedOutShell()
+    // O52: after a single sign-on, the account's second factor, as after a password.
+    if (ssoBack.totp) {
+      const ticket = ssoBack.totp
+      ssoBack.totp = ""
+      return void codeStep(ticket)
+    }
+    if (me.sso || ssoBack.error) {
+      const err = el("p", { class: "err", role: "alert", text: ssoBack.error ? `Single sign-on did not sign you in: ${ssoBack.error}` : "" })
+      ssoBack.error = ""
+      main.append(
+        el(
+          "section",
+          { class: "panel" },
+          el("h2", { text: "Sign in with single sign-on" }),
+          me.sso ? el("p", { class: "muted", text: "Your organisation's sign-in. Your Neighbourhood Watch password and passkeys still work too." }) : null,
+          ...ssoLinks(false),
+          err,
+        ),
+      )
+    }
     if (canPasskey() && !passkeysOff) {
       const err = el("p", { class: "err", role: "alert" })
       main.append(
@@ -494,7 +528,83 @@ async function serverView() {
   main.append(el("h1", { text: "Server" }))
   if (me.access !== "user") return main.append(el("p", { class: "panel muted", text: "Sign in to see and change the server's settings, even on an allowed network." }))
   if (me.role !== "owner" && me.role !== "admin") return main.append(el("p", { class: "panel muted", text: "Your role looks and answers; an owner or an admin runs the server." }))
-  main.append(await healthPanel(), await serverPanel(), await peoplePanel(), await channelsPanel(), await allowPanel(), await updatesPanel(), backupPanel(), await auditPanel())
+  main.append(await healthPanel(), await serverPanel(), await ssoPanel(), await peoplePanel(), await channelsPanel(), await allowPanel(), await updatesPanel(), backupPanel(), await auditPanel())
+}
+
+/** O52: single sign-on, OpenID Connect and SAML, set here; the client secret is sealed and never shown again. */
+async function ssoPanel() {
+  const p = el("section", { class: "panel", "aria-labelledby": "sso-h" }, el("h2", { id: "sso-h", text: "Single sign-on" }))
+  const r = await call("GET", "/api/server/sso")
+  if (!r.ok) {
+    p.append(el("p", { class: "err", text: r.json.error ?? "Could not read the single sign-on settings." }))
+    return p
+  }
+  const s = r.json
+  const field = (label, input) => el("label", {}, el("span", { text: label }), input)
+  const input = (value, extra = {}) => el("input", { value: value ?? "", ...extra })
+  const issuer = input(s.oidc?.issuer, { type: "url", placeholder: "https://auth.example.org/application/o/cnw/", "aria-label": "OpenID Connect issuer URL" })
+  const clientId = input(s.oidc?.clientId, { autocomplete: "off" })
+  const secret = input("", { type: "password", autocomplete: "new-password", placeholder: s.oidc?.secretSet ? "Kept, sealed. Type to replace it." : "" })
+  const oidcLabel = input(s.oidc?.label, { placeholder: "Single sign-on" })
+  const metaUrl = input(s.saml?.metadataUrl, { type: "url", placeholder: "https://idp.example.org/saml/metadata" })
+  const metaXml = el("textarea", { rows: "4", "aria-label": "The IdP's metadata file", placeholder: s.saml?.metadataFile ? "A metadata file is kept. Paste another to replace it." : "Or paste the IdP's metadata file here." })
+  const metaFile = el("input", { type: "file", accept: ".xml,application/samlmetadata+xml,text/xml" })
+  metaFile.addEventListener("change", async () => {
+    if (metaFile.files?.[0]) metaXml.value = await metaFile.files[0].text()
+  })
+  const samlLabel = input(s.saml?.label, { placeholder: "Single sign-on (SAML)" })
+  const match = el("select", {}, el("option", { value: "email", text: "Their email (verified by the provider)" }), el("option", { value: "sub", text: "Their subject, linked once from their account" }))
+  match.value = s.match
+  const auto = el("input", { type: "checkbox" })
+  auto.checked = s.autoCreate
+  const role = el("select", {}, ...["viewer", "approver", "admin"].map((x) => el("option", { value: x, text: x })))
+  role.value = s.autoRole
+  const say = el("p", { class: "muted", role: "status" })
+  const err = el("p", { class: "err", role: "alert" })
+  p.append(
+    el("p", { class: "muted", text: "Beside the password and passkeys, which keep working, so you cannot be locked out. A single sign-on is not a passkey: allowing a Severe request still asks for your password or a passkey again." }),
+    el("h3", { text: "OpenID Connect" }),
+    field("Issuer URL", issuer),
+    field("Client id", clientId),
+    field("Client secret", secret),
+    field("Button label", oidcLabel),
+    el("p", { class: "muted mono", text: `Redirect URI to give the provider: ${s.oidcRedirect}` }),
+    el("h3", { text: "SAML 2.0" }),
+    field("IdP metadata URL", metaUrl),
+    field("Or the metadata file", metaFile),
+    metaXml,
+    field("Button label", samlLabel),
+    el("p", { class: "muted mono", text: `Entity id: ${s.samlEntityId}. Reply (ACS) URL: ${s.samlAcs}.` }),
+    el("h3", { text: "Who it is" }),
+    field("Match a person by", match),
+    el("label", { class: "check" }, auto, el("span", { text: "Make an account for someone with none" })),
+    field("With the role", role),
+    err,
+    say,
+    el("button", {
+      class: "btn primary",
+      text: "Save single sign-on",
+      onclick: async () => {
+        err.textContent = ""
+        say.textContent = ""
+        const body = {
+          ...(issuer.value || clientId.value ? { oidc: { issuer: issuer.value, clientId: clientId.value, clientSecret: secret.value, label: oidcLabel.value } } : {}),
+          ...(metaUrl.value || metaXml.value || s.saml?.metadataFile ? { saml: { metadataUrl: metaUrl.value, metadataXml: metaXml.value, label: samlLabel.value } } : {}),
+          match: match.value,
+          autoCreate: auto.checked,
+          autoRole: role.value,
+        }
+        const w = await call("PUT", "/api/server/sso", body)
+        if (!w.ok) {
+          err.textContent = w.json.error ?? "That did not save."
+          return
+        }
+        secret.value = ""
+        say.textContent = "Saved. The sign-in page offers it now."
+      },
+    }),
+  )
+  return p
 }
 
 async function allowPanel() {
@@ -776,7 +886,21 @@ async function youView() {
         ? el("button", { class: "btn", text: "Add a passkey", onclick: () => passkeyAdd(said) })
         : el("p", { class: "muted", text: "This browser cannot make passkeys." }),
   )
-  main.append(acct, note, pushPanel(), keys, totpPanel(), await devicesPanel(), computersPanel())
+  // O52: single sign-on linked to this account, for a CNW that matches people by their subject.
+  const sso = me.sso
+    ? el(
+        "section",
+        { class: "panel" },
+        el("h2", { text: "Single sign-on" }),
+        el("p", { class: "muted", text: me.ssoLinked ? `Linked to this account: ${me.ssoLinked}.` : "Not linked to this account yet. Link it once, and you can sign in with it." }),
+        ...ssoLinks(true),
+      )
+    : null
+  if (ssoBack.linked) {
+    ssoBack.linked = false
+    toast("Single sign-on is linked to your account.")
+  }
+  main.append(acct, note, pushPanel(), keys, totpPanel(), sso, await devicesPanel(), computersPanel())
 }
 
 /** Removing a computer: on You, away from the board, with what it means said first. */

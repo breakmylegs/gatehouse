@@ -16,6 +16,8 @@ import { checkPublicKey, newCode, redeem, type Computer, type PendingCode } from
 import { hashPassword, verifyPassword } from "./passwords.js"
 import { JsonStore } from "./store.js"
 import { PASSKEY_ON_IP, passkeysPossible, registerPasskeyRoutes } from "./passkeys.js"
+import { checkSso, type SsoSettings } from "./sso.js"
+import { fetchMetadata, registerSsoRoutes } from "./sso-routes.js"
 import { checkSettings, effective, grouped, newCertificate, type ServerSettings } from "./server-settings.js"
 import { bareHost } from "./tls.js"
 import { BackupError, makeBackup, openBackup, restoreFiles } from "./backup.js"
@@ -54,6 +56,10 @@ export interface CnwOptions {
   applySettings?: (s: { host: string; tls: string; port: string }) => Promise<{ ok: boolean; message: string }>
   now?: () => number
   log?: (line: string) => void
+  /** O52, tests only: an OpenID Connect provider or SAML metadata on plain http on this machine. */
+  ssoAllowHttp?: boolean
+  /** O52: reads the SAML metadata URL; tests stand in for the IdP. */
+  fetchText?: (url: string) => Promise<string>
 }
 
 interface Users {
@@ -70,6 +76,8 @@ interface Users {
     computers?: string[]
     /** A second factor (TOTP), its secret sealed. */
     totp?: { sealed: string; recovery: string[]; lastStep?: number }
+    /** O52: the single sign-on identities linked to this account ("oidc:<issuer>|<sub>", "saml:<idp>|<NameID>"). */
+    sso?: string[]
   }>
   setupHash?: string
 }
@@ -112,7 +120,8 @@ export async function createCnw(o: CnwOptions) {
   const invites = new JsonStore<Invites>(o.dataDir, "invites", () => ({ invites: [] }))
   const sha = (t: string) => crypto.createHash("sha256").update(t).digest("hex")
   const sealer = new Sealer(o.dataDir)
-  const loginTickets = new Map<string, { user: string; until: number }>()
+  const loginTickets = new Map<string, { user: string; until: number; sso?: boolean }>()
+  const ssoStore = new JsonStore<SsoSettings>(o.dataDir, "sso", () => ({}))
   const env = o.env ?? process.env
   const ownProxy = env.CNW_MODE === "own-proxy"
   const record = (user: string, action: string, detail: string) =>
@@ -168,10 +177,13 @@ export async function createCnw(o: CnwOptions) {
   // Another site's page can never drive CNW: a change must come from CNW's own origin and carry the CSRF token.
   app.addHook("onRequest", async (req, reply) => {
     const o2 = req.headers.origin
-    if (o2 && o2 !== origin && !req.url.startsWith("/agent")) return reply.code(403).send({ error: "Wrong origin." })
+    // O52: the IdP posts its SAML answer from its own origin; that one address checks it by its signature and a request
+    // id CNW made and uses once, and signs nobody in until this browser's own same-site request (/api/sso/saml/finish).
+    const samlAcs = req.method === "POST" && req.url.split("?")[0] === "/api/sso/saml/acs"
+    if (o2 && o2 !== origin && !req.url.startsWith("/agent") && !samlAcs) return reply.code(403).send({ error: "Wrong origin." })
     // /agent is a computer, not a browser: no cookie gives it anything, and it proves itself with the pairing code or
     // its signed key, so a CSRF token means nothing there.
-    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login") && !req.url.startsWith("/api/invite/accept") && !req.url.startsWith("/api/password/")) {
+    if (req.method !== "GET" && req.method !== "HEAD" && !req.url.startsWith("/agent") && !req.url.startsWith("/api/login") && !req.url.startsWith("/api/setup") && !req.url.startsWith("/api/passkey/login") && !req.url.startsWith("/api/invite/accept") && !req.url.startsWith("/api/password/") && !samlAcs) {
       if (!csrfOk(access(req), String(req.headers["x-csrf-token"] ?? ""))) return reply.code(403).send({ error: "Sign in again." })
     }
   })
@@ -230,6 +242,16 @@ export async function createCnw(o: CnwOptions) {
       access: a.kind,
       ...(a.kind === "user" ? { user: a.user, csrf: a.csrf, passkey: a.passkey, role: roleFor(a), totp: Boolean(userOf(a.user)?.totp), ...(userOf(a.user)?.email ? { email: userOf(a.user)!.email } : { needsEmail: true }) } : {}),
       setup: !users.read().users.length,
+      // O52: the single sign-on buttons the sign-in page offers.
+      ...(() => {
+        const s = ssoStore.read()
+        const sso = { ...(s.oidc?.sealedSecret ? { oidc: s.oidc.label ?? "Single sign-on" } : {}), ...(s.saml ? { saml: s.saml.label ?? "Single sign-on (SAML)" } : {}) }
+        return Object.keys(sso).length ? { sso } : {}
+      })(),
+      ...(a.kind === "user" && userOf(a.user)?.sso?.length ? { ssoLinked: userOf(a.user)!.sso!.length } : {}),
+      // Whether a Severe allow would go through now (signed in or again in the last five minutes); after a single
+      // sign-on it would not, until the password (and its code) or a passkey is given again.
+      ...(a.kind === "user" ? { severeReady: (o.now ?? Date.now)() - a.confirmedAt <= FRESH_MS } : {}),
       // Passkeys cannot work at an IP address; the page says so and offers the password only.
       passkeys: passkeysPossible(rpId),
       ...(passkeysPossible(rpId) ? {} : { passkeyNote: PASSKEY_ON_IP }),
@@ -324,6 +346,79 @@ export async function createCnw(o: CnwOptions) {
     throttleKey: (req) => `passkey:${ipOf(req)}`,
     throttle,
     log,
+  })
+
+  // O52: single sign-on, OpenID Connect and SAML, beside the password and passkeys.
+  registerSsoRoutes(app, {
+    origin,
+    publicUrl: o.publicUrl,
+    now: o.now ?? Date.now,
+    allowHttp: o.ssoAllowHttp === true,
+    fetchText: o.fetchText ?? fetchMetadata,
+    settings: () => ssoStore.read(),
+    secret: () => {
+      const s = ssoStore.read().oidc?.sealedSecret
+      return s ? sealer.open(s).toString("utf8") : ""
+    },
+    users: () => users.read().users,
+    makeUser: (name, email, role, key) =>
+      users.update((u) => ({ ...u, users: [...u.users, { name, ...(email ? { email } : {}), password: "sso-only", passkeys: [], role, sso: [key] }] })),
+    link: (name, key) => users.update((u) => ({ ...u, users: u.users.map((x) => (x.name === name ? { ...x, sso: [...new Set([...(x.sso ?? []), key])] } : x)) })),
+    hasTotp: (name) => Boolean(userOf(name)?.totp),
+    ticket: (name) => {
+      const ticket = crypto.randomBytes(24).toString("base64url")
+      loginTickets.set(ticket, { user: name, until: (o.now ?? Date.now)() + 5 * 60_000, sso: true })
+      return ticket
+    },
+    signIn: (req, reply, name) => {
+      const s = sessions.start(name, false, { ua: String(req.headers["user-agent"] ?? ""), ip: ipOf(req) }, { confirmed: false })
+      setCookie(reply, s.id, 7 * 24 * 3600)
+    },
+    signedIn: (req) => {
+      const a = access(req)
+      return a.kind === "user" ? a.user : undefined
+    },
+    ipOf,
+    throttle,
+    record,
+    log,
+  })
+  app.get("/api/server/sso", async (req, reply) => {
+    if (!need(req, reply, "server")) return
+    const s = ssoStore.read()
+    return {
+      ...(s.oidc ? { oidc: { issuer: s.oidc.issuer, clientId: s.oidc.clientId, secretSet: Boolean(s.oidc.sealedSecret), ...(s.oidc.label ? { label: s.oidc.label } : {}) } } : {}),
+      ...(s.saml ? { saml: { ...(s.saml.metadataUrl ? { metadataUrl: s.saml.metadataUrl } : {}), metadataFile: Boolean(s.saml.metadataXml), ...(s.saml.label ? { label: s.saml.label } : {}) } } : {}),
+      match: s.match ?? "email",
+      autoCreate: s.autoCreate === true,
+      autoRole: s.autoRole ?? "viewer",
+      ...(s.savedAt ? { savedAt: s.savedAt, savedBy: s.savedBy } : {}),
+      // What to give the provider: where it sends people back.
+      oidcRedirect: `${origin}/api/sso/oidc/callback`,
+      samlAcs: `${origin}/api/sso/saml/acs`,
+      samlEntityId: `${origin}/api/sso/saml/metadata`,
+    }
+  })
+  app.put("/api/server/sso", async (req, reply) => {
+    const a = need(req, reply, "server")
+    if (!a || a.kind !== "user") return
+    const checked = checkSso(req.body, o.ssoAllowHttp === true)
+    if ("error" in checked) return reply.code(422).send({ error: checked.error })
+    const before = ssoStore.read()
+    const keep = checked.clearSecret ? undefined : before.oidc?.sealedSecret
+    const sealed = checked.secret ? sealer.seal(Buffer.from(checked.secret, "utf8")) : keep
+    if (checked.settings.oidc && !sealed) return reply.code(422).send({ error: "The OpenID Connect client secret is needed." })
+    ssoStore.write({
+      ...checked.settings,
+      ...(checked.settings.oidc ? { oidc: { ...checked.settings.oidc, ...(sealed ? { sealedSecret: sealed } : {}) } } : {}),
+      savedAt: new Date((o.now ?? Date.now)()).toISOString(),
+      savedBy: a.user,
+    })
+    const s = checked.settings
+    const detail = [s.oidc ? `OpenID Connect ${s.oidc.issuer}` : "no OpenID Connect", s.saml ? `SAML ${s.saml.metadataUrl ?? "from a file"}` : "no SAML", `matched by ${s.match}`, s.autoCreate ? `new people made as ${s.autoRole}` : "nobody made"].join(", ")
+    record(a.user, "sso-settings", detail)
+    log(`Single sign-on settings changed by ${a.user}: ${detail}`)
+    return { ok: true }
   })
 
   app.post("/api/logout", async (req, reply) => {
@@ -754,9 +849,11 @@ export async function createCnw(o: CnwOptions) {
     }
     throttle.succeeded(key)
     loginTickets.delete(String(b.ticket))
-    const s = startFor(req, me.name, false)
+    // O52: after a single sign-on, the code completes it, still as not having just signed in for a Severe allow.
+    const s = sessions.start(me.name, false, { ua: String(req.headers["user-agent"] ?? ""), ip: ipOf(req) }, t.sso ? { confirmed: false } : {})
     setCookie(reply, s.id, 7 * 24 * 3600)
-    log(`Signed in: ${me.name} from ${ipOf(req)}, with a second factor`)
+    if (t.sso) record(me.name, "sso-sign-in", "single sign-on, then the second factor")
+    log(`Signed in: ${me.name} from ${ipOf(req)}, with a second factor${t.sso ? " after single sign-on" : ""}`)
     return { ok: true, csrf: s.csrf }
   })
 

@@ -2337,3 +2337,49 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 
 - `apps/cnw/public/cnw.js`: each paired computer's row on the home page (the link to `/app/?computer=<id>`) opens in a new tab, with `target="_blank"` and `rel="noopener"`, so the board stays open beside it and the new tab has no hold on this one. Its name for a screen reader ends "Opens in a new tab." instead of "Open it."
 - Tests: `apps/cnw/test/page.test.ts` (the target, the rel and the label). Three breaks, all caught.
+
+### O52 Single sign-on for Neighbourhood Watch (feat/e6a)
+
+- **OpenID Connect** (`apps/cnw/src/sso.ts`, `sso-routes.ts`), with **openid-client** 6.9.1:
+  - the authorization code flow with PKCE (S256), state and nonce;
+  - the provider found by discovery from its issuer URL;
+  - the ID token's signature checked against the provider's keys (`enableNonRepudiationChecks`, since openid-client checks signatures only when asked), and its issuer, audience, expiry and nonce.
+  - The issuer URL, client id and client secret are set on CNW's Server page, Single sign-on. The secret is sealed like the TOTP secrets (`Sealer`, `seal.key`), never sent back, and replaced only when a new one is typed.
+- **SAML 2.0**, with **@node-saml/node-saml** 5.2.0 (passport-saml's core; its signatures are checked by xml-crypto):
+  - signed assertions required (`wantAssertionsSigned`), CNW's entity ID as the audience, the IdP's issuer;
+  - `InResponseTo` a request CNW made, and replays refused;
+  - the IdP's metadata from a URL (https, ten seconds, kept an hour) or a file. **@xmldom/xmldom** 0.8.15 (already node-saml's own) reads only its entity ID, sign-in address and signing certificates, and refuses a DOCTYPE.
+  - CNW checks no XML signature itself.
+- **Who it is:** an identity matches a CNW person by the claim chosen in settings:
+  - **email**: refused when the provider says it is unverified;
+  - **subject**: linked once from **You** while signed in, and never one already on another account.
+  - Nobody is made and no role is given unless the owner switches it on; then the role chosen, never owner.
+- **Beside the rest:** passwords, codes and passkeys keep working. A second factor on the account is asked for after single sign-on too.
+  - A single sign-on is not a passkey sign-in (`passkey: false`), and its session starts as not having just signed in (`Sessions.start(..., { confirmed: false })`). So a Severe allow asks for the password (and code) or a passkey again.
+  - `/api/me` now says so (`severeReady`).
+- **The cookies:** the session cookie stays SameSite=Strict. The sign-in's state is kept on the server under a random id, in `cnw_sso`: HttpOnly, Secure, SameSite=Lax, Path=/api/sso, ten minutes, used once by the callback and cleared.
+  - SAML's POST from the IdP is cross-site and carries no cookie, so it signs nobody in. It checks the assertion, keeps the identity with its flow, and sends the browser on to `/api/sso/saml/finish`, a same-site request the Lax cookie comes with, which must name the same flow.
+  - That one address, `/api/sso/saml/acs`, is let past CNW's origin and CSRF checks, as `/agent` is.
+- **Recorded:** every sign-in (`sso-sign-in`), account made (`sso-user-made`), link (`sso-linked`), settings change (`sso-settings`) and refusal (`sso-failed`, with the reason, never a token) is in CNW's audit log and its log. Failures from an address are throttled as password failures are.
+- **Kept and backed up:** settings in `sso.json`, now in the backup's files.
+- The page (`public/cnw.js`):
+  - the sign-in page has a button for each kind, beside the password and passkeys, and says why a single sign-on was refused;
+  - **You** has Link;
+  - the Server page has the settings and the three addresses to give the provider.
+- Docs: `docs/neighbourhood-watch.md`, Single sign-on, with Authentik, Keycloak and Entra ID, each for OpenID Connect and SAML. Threat model T171.
+- **Dependencies (why):** openid-client 6.9.1 (and its oauth4webapi 3.8.9 and jose 6.2.18), the maintained reference OpenID Connect client for Node, by jose's author. @node-saml/node-saml 5.2.0, the maintained SAML 2.0 core, so CNW writes no XML signature checking (the owner asked for a well-maintained library). @xmldom/xmldom 0.8.15, node-saml's own DOM parser, named so CNW can read the IdP's metadata. All are pinned in `apps/cnw/package.json` and the lockfile, which CNW's image installs with `npm ci`. `npm audit` found no vulnerabilities.
+- On this PC, `npm install` replaced the worktree's `node_modules` junction with a partial folder of its own. The new packages were moved into the shared `node_modules`, with jose 6.2.18 nested under openid-client so nothing else's jose changed, and the junction was put back.
+- Tests:
+  - `apps/cnw/test/sso.test.ts` runs against an OpenID provider and a SAML IdP started by the tests, with keys and a certificate made at run time (@peculiar/x509 and xml-crypto, already installed), so no secret is kept. It covers:
+    - the whole OpenID Connect sign-in, with the Lax and Strict cookies, `severeReady` false until the password is given again, and the audit;
+    - a token signed with another key, for another audience, expired, or with the wrong nonce;
+    - no cookie, another state, a reused flow;
+    - an unverified email, nobody made, made as the chosen role and never owner;
+    - linking by subject, with the password still working;
+    - the sealed secret;
+    - the SAML sign-in through its same-site finish, and another browser refused;
+    - an unsigned assertion, another key, another audience, a replay, and an assertion carried into a new sign-in;
+    - the metadata, with a DOCTYPE and no certificate refused;
+    - matching.
+  - `apps/cnw/test/sso-page.test.ts` covers the sign-in page's buttons and the refusal shown once.
+  - All 18 CNW test files pass. Twenty breaks, all caught. Two were missed at first: a flow left unconsumed, since the replayed code was refused by the provider anyway, so the test now brings a fresh code for the same flow; and the settings left out of the backup, now tested through a real backup.

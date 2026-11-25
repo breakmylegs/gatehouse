@@ -34,11 +34,15 @@ export class Sessions {
     this.#now = now
   }
 
-  start(user: string, passkey: boolean, from: { ua?: string; ip?: string } = {}): { id: string; csrf: string } {
+  /**
+   * A new session. `confirmed: false` (O52, a single sign-on) starts it as not having just signed in, so a Severe allow
+   * asks for the password (and its code) or a passkey again, whatever the provider checked.
+   */
+  start(user: string, passkey: boolean, from: { ua?: string; ip?: string } = {}, o: { confirmed?: boolean } = {}): { id: string; csrf: string } {
     const id = crypto.randomBytes(32).toString("base64url")
     const csrf = crypto.randomBytes(24).toString("base64url")
     const t = this.#now()
-    this.#byHash.set(hash(id), { user, csrf, created: t, seen: t, passkey, confirmed: t, ...(from.ua ? { ua: from.ua.slice(0, 200) } : {}), ...(from.ip ? { ip: from.ip.slice(0, 60) } : {}) })
+    this.#byHash.set(hash(id), { user, csrf, created: t, seen: t, passkey, confirmed: o.confirmed === false ? 0 : t, ...(from.ua ? { ua: from.ua.slice(0, 200) } : {}), ...(from.ip ? { ip: from.ip.slice(0, 60) } : {}) })
     return { id, csrf }
   }
 
