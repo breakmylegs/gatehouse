@@ -362,6 +362,32 @@ function infoPlist() {
     "  <key>NSAppTransportSecurity</key>\n  <dict>\n    <key>NSAllowsLocalNetworking</key>\n    <true/>\n  </dict>",
     "  <key>NSHighResolutionCapable</key>\n  <true/>",
     "  <key>NSSupportsAutomaticGraphicsSwitching</key>\n  <true/>",
+    // Owner, 25 Nov: a folder dropped on the Dock icon or chosen in Open With opens the start-session form with it
+    // (AppDelegate.swift, application(_:open:)). Alternate, so the Finder still opens folders itself.
+    [
+      "  <key>CFBundleDocumentTypes</key>",
+      "  <array>",
+      "    <dict>",
+      "      <key>CFBundleTypeName</key>\n      <string>Folder</string>",
+      "      <key>CFBundleTypeRole</key>\n      <string>Viewer</string>",
+      "      <key>LSHandlerRank</key>\n      <string>Alternate</string>",
+      "      <key>LSItemContentTypes</key>\n      <array>\n        <string>public.folder</string>\n      </array>",
+      "    </dict>",
+      "  </array>",
+    ].join("\n"),
+    // And the Finder's Services menu for a folder: New Codehouse Session Here (newSession in AppDelegate.swift).
+    // NSRequiredContext, even empty, has macOS show it without switching it on in Keyboard Shortcuts first.
+    [
+      "  <key>NSServices</key>",
+      "  <array>",
+      "    <dict>",
+      "      <key>NSMenuItem</key>\n      <dict>\n        <key>default</key>\n        <string>New Codehouse Session Here</string>\n      </dict>",
+      "      <key>NSMessage</key>\n      <string>newSession</string>",
+      "      <key>NSRequiredContext</key>\n      <dict/>",
+      "      <key>NSSendFileTypes</key>\n      <array>\n        <string>public.folder</string>\n      </array>",
+      "    </dict>",
+      "  </array>",
+    ].join("\n"),
   )
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',

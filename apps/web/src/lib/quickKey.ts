@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react"
 import { toast } from "sonner"
 import { useStore } from "../store"
+import { fromNotification } from "./notify-mac"
 import { inShell, onShell, tellShell } from "./shell"
 import { readPromptLink } from "./prompt-link"
 
@@ -110,6 +111,8 @@ export function startShell(): () => void {
       toast("Drop a folder to open it as a project; a file cannot be one.", { id: "drop" })
       return
     }
+    // Mac fork: Deny or Allow once from the Mac's notification of a request (notify-mac.ts).
+    if (fromNotification(m)) return
     // Mac fork: a request opened from the wing beside the notch (NotchMac.tsx), on Approvals.
     if (m.startsWith("open-request:")) {
       const st = useStore.getState()
@@ -132,6 +135,8 @@ export function startShell(): () => void {
     }
   })
   chooseHotkey(savedHotkey())
+  // Mac fork: the window holds a folder from the Finder until the page listens (Windows ignores this).
+  tellShell("shell-ready")
   return off
 }
 

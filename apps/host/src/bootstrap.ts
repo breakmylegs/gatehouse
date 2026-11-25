@@ -41,6 +41,7 @@ import { TimelineSigner } from "./timeline-export.js"
 import { helperReader, commitPercent, memoryPoint, MemoryGovernor } from "./memory-governor.js"
 import { macMemoryReader } from "./memory-governor-mac.js" // Mac fork
 import { macAway } from "./away-mac.js" // Mac fork
+import { MacPresence } from "./presence-mac.js" // Mac fork
 import fs from "node:fs"
 import { pickFilesWithWindows } from "./attach-api.js"
 import { SlackChannel, SlackSecretStore } from "./push/slack.js"
@@ -228,6 +229,10 @@ export interface Host {
   pwsh: PwshWorker
   /** O41: the connection to Codehouse Neighbourhood Watch, off until paired and switched on. */
   cnw: CnwService
+  /** E-089: the power source, and (Mac fork) whether the battery is low. */
+  power: Power
+  /** Mac fork: Codehouse.app's news of the screen locking, sleep, wake and power. Only on a Mac. */
+  presence: MacPresence | undefined
   start(): Promise<void>
   stop(): Promise<void>
 }
@@ -347,6 +352,18 @@ export function createHost(opts: HostOptions = {}): Host {
   let plan = safeModePlan(false)
   let safePluginsOff: string[] = []
   const phoneHolder: { svc?: PhoneService } = {}
+  // Mac fork (owner, 25 Nov): Codehouse.app's news of the screen locking, sleep, wake and power (presence-mac.ts). Each
+  // part it reaches is made below, before any line can arrive.
+  const presence: MacPresence | undefined =
+    process.platform === "darwin"
+      ? new MacPresence({
+          hurry: (): number => broker.hurry(),
+          nudgeRelay: () => phoneHolder.svc?.nudge(),
+          checkPower: () => power.check(),
+          checkUpdates: () => updates.check(),
+          log,
+        })
+      : undefined
   const broker = new Broker({
     phone: {
       deliver: (r) =>
@@ -368,7 +385,7 @@ export function createHost(opts: HostOptions = {}): Host {
             onlyWhenHere: config.escalationLadder.onlyWhenHere === true,
           }
         : undefined,
-    ...(process.platform === "darwin" ? { away: macAway() } : {}), // Mac fork
+    ...(process.platform === "darwin" ? { away: macAway(undefined, presence) } : {}), // Mac fork
     redact: (v) => redact(v, { terms: config.redactTerms }),
   })
   // 15 seconds, or 35 while the policy has the judge on (its own limit is 25). Still bounded, still fail-closed.
@@ -596,18 +613,19 @@ export function createHost(opts: HostOptions = {}): Host {
         .then((n) => (n ? log(`power: paused ${n} Extreme session(s) on battery`) : undefined)),
     resumeExtreme: () => void manager.resumeAfterBattery(),
     log,
-    audit: ({ source, was }) =>
+    audit: ({ source, was, low, percent }) =>
       audit.record({
         session: "host",
         event: "power_state_changed",
         channel: "host",
         tool: "power",
-        input: { source, was },
+        input: { source, was, ...(low ? { low, percent } : {}) },
         verdict: {
           outcome: "allow",
           ruleId: "power-state",
-          reason:
-            source === "battery"
+          reason: low // Mac fork
+            ? `The battery is low (${percent}%): Max approval pauses and the Mac is no longer kept awake, until mains power.`
+            : source === "battery"
               ? "The computer went on battery: routines and timeline summaries wait, and new sessions start lower."
               : "The computer is on mains power: what waited for it runs now.",
           risk: 0,
@@ -2243,6 +2261,8 @@ export function createHost(opts: HostOptions = {}): Host {
     app,
     updates,
     cnw,
+    power,
+    presence,
     config,
     get approverProcess() {
       return approverProcess

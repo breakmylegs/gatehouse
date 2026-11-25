@@ -152,7 +152,7 @@ describe("the quick prompt", () => {
 describe("the main window and the quick prompt", () => {
   it("tells the window the shortcut, and shows what the quick prompt sent", () => {
     const stop = startShell()
-    expect(posted).toEqual(["hotkey:Ctrl+Alt+Space"])
+    expect(posted).toEqual(["hotkey:Ctrl+Alt+Space", "shell-ready"])
     act(() =>
       listeners.forEach((f) =>
         f({ data: 'open-session:{"session":"shop","text":"Run the tests"}' }),

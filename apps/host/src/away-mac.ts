@@ -19,10 +19,15 @@ const run: Run = (file, args) =>
     execFile(file, args, { timeout: 5_000 }, (err, out) => (err ? reject(err) : resolve(String(out)))),
   )
 
-/** True when nobody has used the Mac for AWAY_AFTER_MS. Unreadable counts as here, so the ladder still waits. */
-export function macAway(query: Run = run): () => Promise<boolean> {
+/**
+ * True when nobody has used the Mac for AWAY_AFTER_MS, or at once while the window app says the screen is locked or
+ * the Mac asleep (presence-mac.ts). Unreadable counts as here, so the ladder still waits.
+ */
+export function macAway(query: Run = run, presence?: { readonly away: boolean }): () => Promise<boolean> {
   return () =>
-    query("/usr/sbin/ioreg", ["-c", "IOHIDSystem", "-d", "4", "-k", "HIDIdleTime"])
+    presence?.away
+      ? Promise.resolve(true)
+      : query("/usr/sbin/ioreg", ["-c", "IOHIDSystem", "-d", "4", "-k", "HIDIdleTime"])
       .then((out) => (parseIdleMs(out) ?? 0) >= AWAY_AFTER_MS)
       .catch(() => false)
 }

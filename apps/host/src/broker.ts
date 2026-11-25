@@ -136,6 +136,8 @@ interface Entry {
   resolve: (r: Resolution) => void
   timers: NodeJS.Timeout[]
   abort?: { signal: AbortSignal; listener: () => void }
+  /** Mac fork: what the ladder holds back only while you are here (onlyWhenHere), for hurry(). */
+  held?: Array<{ timer: NodeJS.Timeout; tell: () => boolean }>
 }
 
 const MAX_MESSAGE = 500
@@ -257,9 +259,18 @@ export class Broker extends EventEmitter<BrokerEvents> {
       const ladder = this.#opts.ladder?.()
       const after = (ms: number | undefined, f: () => void) => {
         if (!ms || ms <= 0) return f()
-        const t = setTimeout(f, ms)
+        // Once only: hurry() may tell it before its time.
+        let told = false
+        const once = (): boolean => {
+          if (told) return false
+          told = true
+          f()
+          return true
+        }
+        const t = setTimeout(once, ms)
         t.unref?.()
         entry.timers.push(t)
+        if (ladder?.onlyWhenHere) (entry.held ??= []).push({ timer: t, tell: once })
       }
       const tell = (l: typeof ladder) => {
         after(l?.phoneMs, () => this.#deliverToPhone(request.id))
@@ -272,6 +283,24 @@ export class Broker extends EventEmitter<BrokerEvents> {
         void away().then((a) => tell(a ? undefined : ladder), () => tell(ladder))
       else tell(ladder)
     })
+  }
+
+  /**
+   * Mac fork (owner, 25 Nov): you have left the computer (the screen locked or the Mac went to sleep), so what the
+   * ladder holds back only while you are here is told now. A wait the ladder has without onlyWhenHere is kept. Returns
+   * how many tellings went early. It only tells sooner: nothing is decided.
+   */
+  hurry(): number {
+    let n = 0
+    for (const e of this.#pending.values()) {
+      const held = e.held ?? []
+      e.held = []
+      for (const h of held) {
+        clearTimeout(h.timer)
+        if (h.tell()) n++
+      }
+    }
+    return n
   }
 
   #resolution(

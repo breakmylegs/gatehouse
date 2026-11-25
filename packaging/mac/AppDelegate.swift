@@ -2,6 +2,7 @@
 // packaging/CodehouseApp.cs. Closing the window keeps Codehouse running, so a request that needs you still reaches you
 // (the Dock icon bounces and a notification says so, never what the request is). Quit stops the Host and the Approver.
 import AppKit
+import IOKit.ps
 import IOKit.pwr_mgt
 import ServiceManagement
 import UserNotifications
@@ -26,6 +27,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   private var quickItem: NSMenuItem?
   private let hotkey = GlobalHotkey()
   private var popouts: [String: PopoutWindow] = [:]
+  /// The requests that have a notification now, by the notification's id.
+  private var noticeIds = Set<String>()
+  /// The main page listens (it said shell-ready), so a folder from the Finder can be passed on.
+  private var pageReady = false
+  private var folderWaiting: String?
   /// The exit code for --check.
   private(set) var exitCode: Int32 = 0
 
@@ -54,7 +60,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
       if Bundle.main.bundleIdentifier != nil {
         UNUserNotificationCenter.current().delegate = self
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        registerNoticeButtons()
       }
+      watchPresence()
+      // The Finder's "New Codehouse Session Here" (Info.plist's NSServices), registered again in case it is new.
+      NSApp.servicesProvider = self
+      NSUpdateDynamicServices()
       clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.showStage() }
     }
     startHost()
@@ -97,7 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
       } else {
         main.open(u)
       }
-    case .attention: attention()
+    case .attention(let notice): attention(notice)
+    case .settled(let id): settle(id)
     case .restart: restart("Starting again")
     case .progress(let text): step(text)
     case .awake(let on): keepAwake(on)
@@ -175,7 +187,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
   private func pageSaid(_ m: String) {
     if m == "attention" {
-      attention()
+      attention(nil)
+    } else if m == "shell-ready" {
+      pageReady = true
+      passFolderOn()
+    } else if m.hasPrefix("notify-open:") {
+      // A request the notification's button could not answer: the window, on it.
+      let id = String(m.dropFirst("notify-open:".count))
+      if RequestNotice.validId(id) { openRequest(id) }
     } else if m == "voice" {
       // The Mac's own dictation, in the box that has the focus (the page focuses the prompt box first), as Win+H
       // does on Windows. macOS types the words; Codehouse hears nothing.
@@ -362,6 +381,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     stageSince = Date()
     clock = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.showStage() }
     // The new Host has a new token, so the other windows' pages would be refused: they open again from the new one.
+    // Its requests are new too, so the notifications of the old ones go, and the new page says when it listens.
+    pageReady = false
+    clearNotices()
     for w in popouts.values { w.window.close() }
     quick?.putAway()
     notch?.putAway()
@@ -409,30 +431,77 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
   // MARK: something needs you
 
   /// The Dock icon bounces until you come to Codehouse, and a notification says that something needs your decision.
-  /// It never says what: a notification can show on a locked screen.
-  private func attention() {
+  /// It never says what: a notification can show on a locked screen. Owner, 25 Nov: it says how risky, and has Deny,
+  /// and Allow once for a permission below High (RequestNotice, MacEvents.swift). Allow once asks for the Mac to be
+  /// unlocked first; Deny does not, as a deny is never slowed. A button goes to the page, which answers as a row of
+  /// Approvals does (apps/web/src/lib/notify-mac.ts), so the Host checks and audits it as any answer from the desktop.
+  private func attention(_ notice: RequestNotice?) {
     if NSApp.isActive && main.window.isKeyWindow { return }
     NSApp.requestUserAttention(.criticalRequest)
     NSApp.dockTile.badgeLabel = "!"
     setStatusImage(attention: true)
-    notify(id: "attention", title: "Codehouse", body: "Something needs your decision")
+    guard let notice else { return notify(id: "attention", title: "Codehouse", body: "Something needs your decision") }
+    noticeIds.insert(notice.identifier)
+    notify(
+      id: notice.identifier, title: "Codehouse", body: notice.body, category: notice.category,
+      info: ["id": notice.id, "kind": notice.kind, "band": notice.band, "allow": notice.allow])
   }
 
-  private func notify(id: String, title: String, body: String) {
+  /// A request was decided (here, on the phone, or by a timeout): its notification goes.
+  private func settle(_ id: String) {
+    let identifier = "request-\(id)"
+    guard noticeIds.remove(identifier) != nil, Bundle.main.bundleIdentifier != nil else { return }
+    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
+  }
+
+  private func clearNotices() {
+    guard !noticeIds.isEmpty, Bundle.main.bundleIdentifier != nil else { return }
+    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: Array(noticeIds))
+    noticeIds.removeAll()
+  }
+
+  /// Deny first, so the button macOS shows by itself is the safe one.
+  private func registerNoticeButtons() {
+    let deny = UNNotificationAction(identifier: RequestNotice.denyAction, title: "Deny", options: [])
+    let allow = UNNotificationAction(
+      identifier: RequestNotice.allowAction, title: "Allow Once", options: [.authenticationRequired])
+    UNUserNotificationCenter.current().setNotificationCategories([
+      UNNotificationCategory(identifier: RequestNotice.allowCategory, actions: [deny, allow], intentIdentifiers: []),
+      UNNotificationCategory(identifier: RequestNotice.denyCategory, actions: [deny], intentIdentifiers: []),
+    ])
+  }
+
+  private func notify(id: String, title: String, body: String, category: String? = nil, info: [String: Any] = [:]) {
     guard Bundle.main.bundleIdentifier != nil else { return }
     let c = UNMutableNotificationContent()
     c.title = title
     c.body = body
     c.sound = .default
+    if let category { c.categoryIdentifier = category }
+    c.userInfo = info
     // The same id each time, so a new one replaces the last rather than piling up.
     UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: id, content: c, trigger: nil))
+  }
+
+  /// The window, on Approvals with that request.
+  private func openRequest(_ id: String) {
+    showWindow()
+    main.tell("open-request:\(id)")
   }
 
   func userNotificationCenter(
     _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
     withCompletionHandler completionHandler: @escaping () -> Void
   ) {
-    DispatchQueue.main.async { self.showWindow() }
+    let notice = (response.notification.request.content.userInfo as? [String: Any]).flatMap(RequestNotice.from)
+    let action = response.actionIdentifier
+    DispatchQueue.main.async {
+      if let notice, let m = notice.message(for: action) {
+        self.main.tell(m)
+      } else if action == UNNotificationDefaultActionIdentifier {
+        if let notice { self.openRequest(notice.id) } else { self.showWindow() }
+      }
+    }
     completionHandler()
   }
 
@@ -449,6 +518,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     if Bundle.main.bundleIdentifier != nil {
       UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["attention"])
     }
+  }
+
+  // MARK: the screen locking, sleep, wake and power, for the Host (owner, 25 Nov)
+
+  /// Each goes to the Host as it happens (apps/host/src/presence-mac.ts): locked or asleep, what waits only while you
+  /// are here goes to the phone now; on waking, the Relay tries again and updates are looked for; a power change is
+  /// read at once. None of it allows anything.
+  private func watchPresence() {
+    let screen = DistributedNotificationCenter.default()
+    screen.addObserver(forName: .init("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
+      self?.host?.tell(.locked)
+    }
+    screen.addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
+      self?.host?.tell(.unlocked)
+    }
+    let workspace = NSWorkspace.shared.notificationCenter
+    workspace.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.host?.tell(.sleep)
+    }
+    workspace.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.host?.tell(.wake)
+    }
+    PowerWatch.start { [weak self] in self?.host?.tell(.power) }
+  }
+
+  // MARK: a folder from the Finder (owner, 25 Nov)
+
+  /// A folder dropped on the Dock icon, chosen in Open With, or given to open -a Codehouse (Info.plist's
+  /// CFBundleDocumentTypes, as an alternate, so the Finder still opens folders itself).
+  func application(_ application: NSApplication, open urls: [URL]) {
+    openFolder(urls.filter(\.isFileURL).map(\.path))
+  }
+
+  /// The Finder's Services menu: New Codehouse Session Here (Info.plist's NSServices, NSMessage newSession).
+  @objc(newSession:userData:error:)
+  func newSession(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+    let urls = pboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    openFolder(urls.map(\.path))
+  }
+
+  /// The start-session form with the folder filled in, once the page listens. Nothing starts until you say what to do,
+  /// and the Host's own checks of a session's folder apply as to any other.
+  private func openFolder(_ paths: [String]) {
+    guard !check, let folder = FinderFolder.pick(paths, isFolder: FinderFolder.isFolder) else { return }
+    folderWaiting = folder
+    passFolderOn()
+  }
+
+  private func passFolderOn() {
+    guard pageReady, let folder = folderWaiting else { return }
+    folderWaiting = nil
+    showWindow()
+    main.tell("open-folder:\(folder)")
   }
 
   // MARK: keep the computer awake while a session works
@@ -623,5 +745,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     NSApp.helpMenu = help
 
     NSApp.mainMenu = bar
+  }
+}
+
+/// Told by macOS when the power source or the battery's charge changes (IOKit's power sources notification), so the
+/// Host reads it at once instead of at its next look two minutes later.
+enum PowerWatch {
+  private static var onChange: (() -> Void)?
+  private static var source: CFRunLoopSource?
+
+  static func start(_ f: @escaping () -> Void) {
+    onChange = f
+    guard source == nil, let s = IOPSNotificationCreateRunLoopSource({ _ in PowerWatch.onChange?() }, nil) else { return }
+    let loop = s.takeRetainedValue()
+    source = loop
+    CFRunLoopAddSource(CFRunLoopGetMain(), loop, .defaultMode)
   }
 }

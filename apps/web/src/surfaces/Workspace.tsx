@@ -2329,10 +2329,10 @@ function PausedLine({
   return (
     <div role="status" className="pane-stopped flex-wrap">
       {paused.reason === "battery" ? (
-        // E-089: on battery, with "Pause Max approval sessions on battery" on in Settings.
+        // E-089: on battery, with "Pause Max approval sessions on battery" on in Settings, or (a Mac) a low battery.
         <span>
-          <strong>Paused.</strong> The computer is on battery, and Settings pauses Max approval on battery. It starts
-          again by itself on mains power, or start it now.
+          <strong>Paused.</strong> The computer is on battery, and Settings pauses Max approval on battery or the
+          battery is low. It starts again by itself on mains power, or start it now.
         </span>
       ) : paused.reason === "heartbeat" ? (
         // D-025: nothing was heard from you in time.
