@@ -403,11 +403,14 @@ describe("project actions (T-091)", () => {
   })
 })
 
+// A routine's folder as this platform writes one: a Mac refuses a drive path (folders-mac.ts).
+const SHOP = process.platform === "win32" ? "C:\\dev\\shop" : "/Users/me/dev/shop"
+
 describe("Run now (T-119)", () => {
   it("runs a routine at once, recorded as yours by the runner, and says when there is none or it did not start", async () => {
     const { RoutineStore } = await import("../src/routines.js")
     const routines = new RoutineStore(path.join(root, "routines-t119.json"))
-    const r = await routines.put({ name: "Tidy", folder: "C:\\dev\\shop", prompt: "Tidy the docs", time: "07:30", days: ["mon"] })
+    const r = await routines.put({ name: "Tidy", folder: SHOP, prompt: "Tidy the docs", time: "07:30", days: ["mon"] })
     const asked: string[] = []
     let fail = false
     const app2 = Fastify()
@@ -454,7 +457,7 @@ describe("a routine's address (T-120)", () => {
       const made = await app2.inject({
         method: "PUT",
         url: "/api/routines",
-        payload: { name: "Triage", folder: "C:\\dev\\shop", prompt: "Triage {{title}}", trigger: { kind: "webhook", filters: [{ field: "action", equals: "opened" }] } },
+        payload: { name: "Triage", folder: SHOP, prompt: "Triage {{title}}", trigger: { kind: "webhook", filters: [{ field: "action", equals: "opened" }] } },
       })
       const { routine, token } = made.json() as { routine: { id: string; trigger: unknown }; token: string }
       expect(routine.trigger).toEqual({ kind: "webhook", hasToken: true, filters: [{ field: "action", equals: "opened" }] })
