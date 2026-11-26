@@ -61,6 +61,8 @@ export type Route =
   | "board"
   /** CH-05: an imported claude.ai chat, read only. */
   | "imported"
+  /** O55: the phone's More tab. */
+  | "more"
 
 export interface ResolvedView {
   id: string

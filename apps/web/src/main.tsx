@@ -6,6 +6,7 @@ import "./styles.css"
 import "./polish.css" // Mac fork
 import "./mac.css" // Mac fork
 import "./mac-standard.css" // Mac fork
+import "./phone.css" // O55: the phone layout, only while data-layout="phone"
 import { markPlatform } from "./lib/platform-mac" // Mac fork
 import { watchLook } from "./lib/look"
 import { startConnection, useStore } from "./store"

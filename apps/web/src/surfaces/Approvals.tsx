@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import clsx from "clsx"
 import { ApprovalCard } from "../components/ApprovalCard"
@@ -12,6 +12,8 @@ import { isMac, keyLabel } from "../lib/platform-mac" // Mac fork
 import { useNow } from "../lib/useNow"
 import { usePending, useStore } from "../store"
 import { EmptyState } from "../components/EmptyState"
+import { PhoneBack } from "../components/Phone"
+import { usePhone } from "../lib/phone"
 
 export function Approvals() {
   const pending = usePending()
@@ -29,6 +31,9 @@ export function Approvals() {
   const selectSession = useStore((s) => s.selectSession)
   const setRoute = useStore((s) => s.setRoute)
   const attention = needsYou(sessions, pulse, now)
+  // O55: on a phone the queue and the request are two screens; a row opens the request, Back returns to the queue.
+  const phone = usePhone()
+  const [phoneOpen, setPhoneOpen] = useState(false)
 
   const current =
     (selected ? pending.find((p) => p.request.id === selected) : undefined) ?? pending[0]
@@ -69,8 +74,12 @@ export function Approvals() {
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 8)
 
+  const phoneCard = phone && phoneOpen && view
   return (
-    <div className="grid h-full grid-cols-[360px_1fr] max-[1000px]:grid-cols-1 max-[1000px]:grid-rows-[minmax(0,240px)_1fr]">
+    <div
+      data-phone-screen={phone ? (phoneCard ? "card" : "queue") : undefined}
+      className="approvals-page grid h-full grid-cols-[360px_1fr] max-[1000px]:grid-cols-1 max-[1000px]:grid-rows-[minmax(0,240px)_1fr]"
+    >
       <h1 className="sr-only">Approvals</h1>
       <section
         aria-label="Queue"
@@ -121,7 +130,10 @@ export function Approvals() {
                     !seen[p.request.id] && p.request.id !== current?.request.id ? "" : undefined
                   }
                   aria-current={p.request.id === current?.request.id ? "true" : undefined}
-                  onClick={() => select(p.request.id)}
+                  onClick={() => {
+                    select(p.request.id)
+                    setPhoneOpen(true)
+                  }}
                 >
                   <span className="board-time">{age(p.request.createdAt, now)}</span>
                   <span className="grid min-w-0 gap-0.5">
@@ -145,7 +157,14 @@ export function Approvals() {
                 </button>
                 {p.request.kind === "permission" ? (
                   <div className="absolute bottom-2.5 right-3.5">
-                    <QuickDecision view={p} variant="row" onMore={() => select(p.request.id)} />
+                    <QuickDecision
+                      view={p}
+                      variant="row"
+                      onMore={() => {
+                        select(p.request.id)
+                        setPhoneOpen(true)
+                      }}
+                    />
                   </div>
                 ) : null}
               </div>
@@ -199,6 +218,7 @@ export function Approvals() {
         aria-label="Selected request"
         className="pass-wrap min-h-0 min-w-0 overflow-auto p-6"
       >
+        {phoneCard ? <PhoneBack label="Needs you" onBack={() => setPhoneOpen(false)} /> : null}
         {view ? (
           <div className="mx-auto max-w-[1100px]">
             <ApprovalCard view={view} />

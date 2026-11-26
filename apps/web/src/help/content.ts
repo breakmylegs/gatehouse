@@ -171,6 +171,17 @@ Sessions from before Codehouse last started, and Claude Code sessions from elsew
 - **Drag** a card to another column. With the keyboard: press **Space** on a card to pick it up, **Left** and **Right** to choose a column, **Up** and **Down** for its place, **Space** to drop it, or **Esc** to put it back. Each step is read out, and nothing moves until you drop it, so passing a card through Running starts nothing.
 - **Remove** takes a card off the board; its session, if it has one, carries on.`,
   },
+  more: {
+    id: "more",
+    title: "Codehouse on a phone",
+    body: `On a phone, or in a window 640 pixels wide or less, Codehouse lays itself out for a phone: one column, with tabs along the foot in place of the sidebar.
+
+- **Needs you** lists what is waiting. Tap one to see it whole and allow or deny it, with every check it has on a computer.
+- **Sessions** and **Ask** list your coding sessions and your questions. A session opens full-screen, with **Back** at the top. Changes, Terminal and the other panels slide up from the foot.
+- **More** has the other pages, your computers in Neighbourhood Watch, and the kill switch. Pages made for a big screen, such as Policy and Audit, say so: open them on a computer.
+
+Tabs keep their place: Sessions reopens the session you were reading. Tap the tab you are on to go back to its list.`,
+  },
   imported: {
     id: "imported",
     title: "Chats from claude.ai",

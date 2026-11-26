@@ -31,6 +31,8 @@ import { Guide } from "./surfaces/Guide"
 import { Sessions } from "./surfaces/Sessions"
 import { send, START_ROUTE, usePendingCount, useStore } from "./store"
 import { SafeModeBanner } from "./components/SafeModeBanner"
+import { PHONE_PAGES, PhoneElsewhere, PhoneMore, PhoneSessions, PhoneTabs } from "./components/Phone"
+import { usePhone, usePhoneMark } from "./lib/phone"
 
 const Audit = lazy(() => import("./surfaces/Audit").then((m) => ({ default: m.Audit })))
 const Policy = lazy(() => import("./surfaces/Policy").then((m) => ({ default: m.Policy })))
@@ -181,6 +183,10 @@ export function App() {
   }, [health, route, setRoute])
 
   const killed = health?.killSwitch.engaged ?? false
+  // O55: a phone (by the window's size) gets the phone screens; a computer's window is drawn as before.
+  const phone = usePhone()
+  usePhoneMark(phone)
+  const elsewhere = phone && !PHONE_PAGES.has(route)
 
   return (
     <>
@@ -203,7 +209,7 @@ export function App() {
           >
             Skip to content
           </a>
-          {railHidden ? (
+          {phone ? null : railHidden ? (
             <button
               type="button"
               className="btn show-rail"
@@ -260,10 +266,15 @@ export function App() {
               >
                 <UpdateResult />
                 {/* O48: the pages of the section this one is in, as pills along the top. */}
-                <SectionPills route={route} />
+                {phone ? null : <SectionPills route={route} />}
                 <Suspense fallback={<p className="p-6 text-mut">Loading…</p>}>
+                  {elsewhere ? (
+                    <PhoneElsewhere route={route} />
+                  ) : (
+                  <>
+                  {phone && route === "more" ? <PhoneMore /> : null}
                   {route === "approvals" && <Approvals />}
-                  {route === "sessions" && <Sessions />}
+                  {route === "sessions" && (phone ? <PhoneSessions /> : <Sessions />)}
                   {route === "workspace" && <Workspace />}
                   {route === "policy" && <Policy />}
                   {route === "audit" && <Audit />}
@@ -285,12 +296,16 @@ export function App() {
                   {route === "home" && <Home />}
                   {route === "board" && <Board />}
                   {route === "imported" && <ImportedChat />}
+                  </>
+                  )}
                 </Suspense>
               </main>
-              <HelpPane />
+              {phone ? null : <HelpPane />}
             </div>
           </div>
         </div>
+        {/* O55: on a phone, the tab bar at the foot; a session open full-screen has its back button instead. */}
+        {phone && route !== "workspace" ? <PhoneTabs /> : null}
       </div>
       {/* Outside the layout grid: each of these would otherwise take a row of it. */}
       <CommandPalette />
@@ -299,7 +314,7 @@ export function App() {
       <ShortcutSheet />
       {/* T-135: a secret a session asks for, desktop only. */}
       <SecretRequests />
-      <Toaster position="bottom-right" theme={theme} closeButton />
+      <Toaster position={phone ? "top-center" : "bottom-right"} theme={theme} closeButton />
       {/* E-091: screen-share safe mode, for the whole window. */}
       <ScreenShareControl />
     </>

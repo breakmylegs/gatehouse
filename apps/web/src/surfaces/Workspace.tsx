@@ -81,6 +81,7 @@ import {
   useRef,
   useState,
   type ComponentProps,
+  type ReactNode,
 } from "react"
 import Markdown from "react-markdown"
 import { outward } from "../lib/links"
@@ -128,6 +129,8 @@ import {
   useOpenWhatClaudeWrites,
 } from "../lib/viewerPrefs"
 import { useNow } from "../lib/useNow"
+import { usePhone } from "../lib/phone"
+import { PhonePanels, PhoneSessionBack } from "../components/Phone"
 import { ApprovalCard } from "../components/ApprovalCard"
 import { QuickDecision } from "../components/QuickDecision"
 import { clock, longStamp, money, stamp } from "../lib/format"
@@ -248,10 +251,13 @@ export function Workspace() {
     () => [...sessionList].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
     [sessionList],
   )
+  // O55: on a phone the session you chose fills the screen; the panes you set on a computer are kept for it.
+  const phone = usePhone()
   const panes = useMemo(() => {
     const live = storePanes.filter((id) => sessions[id])
+    if (phone) return selected && sessions[selected] ? [selected] : live.slice(0, 1)
     return live.length ? live : selected && sessions[selected] ? [selected] : []
-  }, [storePanes, sessions, selected])
+  }, [storePanes, sessions, selected, phone])
   const session = panes[0] ? sessions[panes[0]] : undefined
 
   if (!session) {
@@ -649,6 +655,8 @@ function SessionPane({
   const prs = useMemo(() => prLinks(transcript.items), [transcript.items])
   const ended = session.state === "ended" || session.state === "error"
   const chat = session.kind === "chat"
+  const phone = usePhone()
+  const panelsFor = (group: ReactNode) => (phone ? <PhonePanels>{group}</PhonePanels> : group)
   // Each artifact a chat saves shows in its panel at once.
   const artifactSaves = transcript.items.filter(
     (i) =>
@@ -907,6 +915,8 @@ function SessionPane({
     >
       {/* O21: what this session runs on, its context, connectors, changes and background work. */}
       <header className="pane-head">
+        {/* O55: on a phone the session fills the screen, and its head starts with the way back to the list. */}
+        {phone ? <PhoneSessionBack session={session} /> : null}
         <SessionCode session={session} className="!text-[16px]" />
         {/* Never narrower than the name and its state: the side panel buttons wrap below instead. */}
         <span className="grid min-w-[11rem] flex-1">
@@ -957,7 +967,8 @@ function SessionPane({
           <PrLinksMenu prs={prs} />
         </span>
         {/* A chat has no project, so none of the project panels; it has what it made to show you. */}
-        {chat ? (
+        {/* O55: on a phone they are one Panels button, which opens them as a sheet. */}
+        {panelsFor(chat ? (
           <span role="group" aria-label="Side panels" className="flex items-center gap-1">
             <button
               ref={(el) => {
@@ -1062,7 +1073,7 @@ function SessionPane({
               Details
             </button>
           </span>
-        )}
+        ))}
       </header>
       {walkthrough ? (
         <div className="max-h-[60vh] overflow-auto px-3 pt-2">

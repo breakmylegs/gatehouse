@@ -1,0 +1,499 @@
+/*
+ * O55: the phone layout (docs/design/phone-layout.md). Every rule here is under :root[data-layout="phone"], which
+ * lib/phone.ts sets only while the window is phone sized, so a computer's window is drawn exactly as before.
+ * One column, a tab bar at the foot, sheets for the panels, 44 px targets, the safe areas kept, nothing sideways.
+ */
+:root[data-layout="phone"] {
+  --phone-tab-h: 56px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  -webkit-text-size-adjust: 100%;
+}
+:root[data-layout="phone"],
+:root[data-layout="phone"] body {
+  overflow-x: clip;
+  overscroll-behavior: none;
+}
+/* The visible part of the window, which shrinks when the keyboard comes up, so the prompt box rides above it. */
+:root[data-layout="phone"] body,
+:root[data-layout="phone"] #root {
+  height: 100dvh;
+}
+:root[data-layout="phone"] #root > .h-full,
+:root[data-layout="phone"] #root > div > .h-full {
+  height: 100dvh;
+}
+:root[data-layout="phone"] .flex.h-full.flex-col {
+  padding-top: var(--safe-top);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* ---------------------------------------------------------------------------------------------- one column */
+:root[data-layout="phone"] .app-shell,
+:root[data-layout="phone"] .app-shell[data-rail="hidden"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+:root[data-layout="phone"] .app-shell > div:last-child {
+  min-width: 0;
+}
+:root[data-layout="phone"] main {
+  min-width: 0;
+}
+/* The deck: the name and the kill switch only; the sessions strip and the profile are on the tabs. */
+:root[data-layout="phone"] .deck {
+  gap: 8px;
+  padding-inline: 12px;
+  min-width: 0;
+}
+:root[data-layout="phone"] .deck-sessions,
+:root[data-layout="phone"] .deck-sub,
+:root[data-layout="phone"] .deck-phone,
+:root[data-layout="phone"] .deck-profile {
+  display: none;
+}
+/* The kill switch: its icon only, a thumb's size; the confirmation under it fits the screen. */
+:root[data-layout="phone"] .kill-switch {
+  font-size: 0;
+  gap: 0;
+  padding: 0 10px;
+}
+:root[data-layout="phone"] .kill-switch kbd {
+  display: none;
+}
+:root[data-layout="phone"] .kill-switch .kill-icon {
+  width: 22px;
+  height: 22px;
+}
+:root[data-layout="phone"] .deck-end {
+  min-width: 0;
+  margin-left: auto;
+}
+:root[data-layout="phone"] .kill-confirm {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-width: none;
+}
+/* Anything wide keeps to its own box: long lines wrap, code and tables scroll inside themselves. */
+:root[data-layout="phone"] main :where(p, li, h1, h2, h3, dd, dt, span, label) {
+  overflow-wrap: anywhere;
+}
+:root[data-layout="phone"] main :where(pre, table, .term-out) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+:root[data-layout="phone"] main img,
+:root[data-layout="phone"] main svg,
+:root[data-layout="phone"] main video {
+  max-width: 100%;
+}
+
+/* ------------------------------------------------------------------------------------------ the tab bar */
+.phone-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  flex: none;
+  border-top: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-s1) 92%, transparent);
+  backdrop-filter: saturate(1.8) blur(20px);
+  padding: 0 var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+.phone-tab {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 2px;
+  min-height: var(--phone-tab-h, 56px);
+  min-width: 44px;
+  border: 0;
+  background: none;
+  color: var(--c-mut);
+  font: 500 11px var(--font-ui);
+  cursor: pointer;
+}
+.phone-tab svg {
+  width: 24px;
+  height: 24px;
+}
+.phone-tab[aria-current="page"] {
+  color: var(--c-acc);
+}
+.phone-badge {
+  position: absolute;
+  top: 5px;
+  left: calc(50% + 6px);
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  padding: 0 5px;
+  background: var(--c-sev, #d33);
+  color: #fff;
+  font: 600 11px/18px var(--font-ui);
+}
+
+/* --------------------------------------------------------------------------------- screens, rows, back bar */
+.phone-screen {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 16px 24px;
+}
+.phone-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.phone-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--c-acc);
+}
+.phone-wide {
+  width: 100%;
+  min-height: 48px;
+  justify-content: center;
+  font-size: 16px;
+}
+.phone-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--c-s1);
+  border: 1px solid var(--c-line);
+}
+.phone-list > li + li {
+  border-top: 1px solid var(--c-line);
+}
+.phone-row {
+  display: flex;
+  width: 100%;
+  min-height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  background: none;
+  padding: 10px 14px;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+.phone-row[data-state="waiting"] {
+  background: color-mix(in srgb, var(--c-warn, #c80) 10%, transparent);
+}
+.phone-row-main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.phone-row-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.phone-row-sub {
+  color: var(--c-mut);
+  font-size: 13px;
+}
+.phone-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--c-mut);
+}
+.phone-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--c-line);
+  background: var(--c-s1);
+}
+.phone-back {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  border: 0;
+  background: none;
+  color: var(--c-acc);
+  font: 500 16px var(--font-ui);
+  cursor: pointer;
+}
+.phone-back > span {
+  font-size: 26px;
+  line-height: 1;
+}
+.phone-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+}
+.phone-elsewhere {
+  display: grid;
+  gap: 8px;
+  padding-top: 24px;
+}
+.phone-address {
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--c-s1);
+  user-select: all;
+}
+.phone-note {
+  margin: 0;
+}
+
+/* ---------------------------------------------------------------------------------------------- approvals */
+:root[data-layout="phone"] .approvals-page {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+:root[data-layout="phone"] .approvals-page[data-phone-screen="queue"] > section[aria-label="Selected request"],
+:root[data-layout="phone"] .approvals-page[data-phone-screen="card"] > section[aria-label="Queue"] {
+  display: none;
+}
+:root[data-layout="phone"] .approvals-page > section {
+  border: 0;
+}
+:root[data-layout="phone"] .approvals-page .pass-wrap {
+  padding: 0 0 calc(16px + var(--safe-bottom));
+}
+:root[data-layout="phone"] .approvals-page .pass-wrap > div {
+  padding: 12px 12px 0;
+}
+:root[data-layout="phone"] .approvals-page .pass-wrap > div > p:last-child:has(kbd) {
+  display: none;
+}
+/* Allow and Deny: full width, tall, apart, so a thumb cannot hit the wrong one. */
+:root[data-layout="phone"] .pass-actions,
+:root[data-layout="phone"] .pass-bar {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+:root[data-layout="phone"] .pass-actions :where(button, .btn),
+:root[data-layout="phone"] .pass-bar :where(button, .btn) {
+  flex: 1 1 100%;
+  min-height: 48px;
+  font-size: 16px;
+  justify-content: center;
+}
+
+/* -------------------------------------------------------------------------------------- a session, full screen */
+:root[data-layout="phone"] .pane-head {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+:root[data-layout="phone"] .pane-transcript {
+  min-width: 0;
+}
+:root[data-layout="phone"] footer {
+  padding-bottom: calc(8px + var(--safe-bottom));
+}
+/* Changes, Terminal, Details and the rest: a sheet that slides up, never a side column. */
+:root[data-layout="phone"] .pane-rail,
+:root[data-layout="phone"] .pane[data-rail="open"] .pane-rail {
+  display: none;
+}
+:root[data-layout="phone"] .pane[data-rail="open"]:not([data-side="none"]) .pane-rail {
+  display: grid;
+  position: fixed;
+  inset: auto 0 0 0;
+  top: auto;
+  z-index: 40;
+  width: auto;
+  max-height: calc(88dvh - var(--safe-top));
+  height: calc(88dvh - var(--safe-top));
+  border: 0;
+  border-radius: 14px 14px 0 0;
+  padding-bottom: var(--safe-bottom);
+  box-shadow:
+    0 0 0 100vmax color-mix(in srgb, #000 38%, transparent),
+    0 -8px 30px color-mix(in srgb, #000 25%, transparent);
+  animation: phone-sheet-up 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+:root[data-layout="phone"] .pane[data-rail="open"] .pane-rail::before {
+  content: "";
+  justify-self: center;
+  width: 36px;
+  height: 5px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--c-line);
+  position: absolute;
+  left: calc(50% - 18px);
+}
+@keyframes phone-sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-layout="phone"] .pane[data-rail="open"] .pane-rail {
+    animation: none;
+  }
+}
+
+/* --------------------------------------------------------------------- touch: big targets, nothing on hover only */
+/*
+ * !important: the desktop's small buttons (Tailwind's !min-h-7 among them) are a mouse's size, not a thumb's.
+ * Tailwind keeps those in its utilities layer, where an !important beats any outside a layer, so this rule joins
+ * that layer and wins there by being more specific.
+ */
+@layer utilities {
+  :root[data-layout="phone"] :is(main, .phone-tabs, .deck, [role="dialog"], [role="menu"]) :is(button, .btn, a.btn, select, [role="button"], [role="menuitem"], [role="tab"], summary) {
+    min-height: 44px !important;
+    min-width: 44px !important;
+  }
+}
+:root[data-layout="phone"] :where(input:not([type="checkbox"], [type="radio"]), textarea, select) {
+  font-size: 16px; /* under 16 px, iOS zooms the page when you type */
+}
+:root[data-layout="phone"] .rail-session-menu,
+:root[data-layout="phone"] [data-hover-only] {
+  opacity: 1;
+}
+:root[data-layout="phone"] * {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ------------------------------------------------------------------------------------------- high contrast */
+@media (forced-colors: active) {
+  .phone-tabs,
+  .phone-list,
+  .phone-bar {
+    border-color: CanvasText;
+  }
+  .phone-tab[aria-current="page"] {
+    color: Highlight;
+    forced-color-adjust: none;
+  }
+  .phone-badge {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+  :root[data-layout="phone"] .pane[data-rail="open"] .pane-rail {
+    border-top: 2px solid CanvasText;
+  }
+}
+
+/* ------------------------------------------------------------------- Panels: one button, a sheet of choices */
+.phone-sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  z-index: 45;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(80dvh - var(--safe-top, 0px));
+  border-radius: 14px 14px 0 0;
+  padding: 6px 12px calc(12px + var(--safe-bottom, 0px));
+  background: var(--c-bg);
+  box-shadow:
+    0 0 0 100vmax color-mix(in srgb, #000 38%, transparent),
+    0 -8px 30px color-mix(in srgb, #000 25%, transparent);
+  animation: phone-sheet-up 280ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.phone-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 4px 8px;
+}
+.phone-panel-list {
+  overflow-y: auto;
+}
+.phone-panel-list > [role="group"] {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--c-s1);
+}
+.phone-panel-list .pane-tool {
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 0;
+  font-size: 16px;
+  white-space: nowrap;
+}
+.phone-panel-list .pane-tool + .pane-tool {
+  border-top: 1px solid var(--c-line);
+}
+.phone-panel-list .pane-tool svg {
+  width: 18px;
+  height: 18px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .phone-sheet {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .phone-sheet {
+    border-top: 2px solid CanvasText;
+  }
+}
+:root[data-layout="phone"] .phone-panels-btn {
+  flex: none;
+  margin-left: auto;
+}
+:root[data-layout="phone"] .pane-head > .phone-back {
+  margin-left: -6px;
+}
+/* Keys a phone has none of. */
+:root[data-layout="phone"] :is(button, .btn) kbd {
+  display: none;
+}
+
+/* A session's head on a phone: back, the name, Panels, in one row; the colour mark is the row's, not a column. */
+:root[data-layout="phone"] .pane-head {
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+}
+:root[data-layout="phone"] .pane-head > .code {
+  display: none;
+}
+:root[data-layout="phone"] .pane-head > span.grid {
+  min-width: 0;
+}
+/* Model, effort and mode under the prompt box: as narrow as they can be, so they share a row or two. */
+:root[data-layout="phone"] .composer-bar {
+  gap: 4px;
+}
+:root[data-layout="phone"] .composer-bar :is(.composer-pick, .composer-select) {
+  min-width: 0;
+  max-width: 100%;
+}

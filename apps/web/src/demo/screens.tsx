@@ -8,9 +8,16 @@ import { createRoot } from "react-dom/client"
 import { App } from "../App"
 import { NotchMac } from "../surfaces/NotchMac" // Mac fork: ?view=notch
 import "../styles.css"
+import "../polish.css"
+import "../mac.css"
+import "../mac-standard.css"
+import "../phone.css"
+import { watchLook } from "../lib/look"
 import type { UpdateStatus } from "../lib/update"
 import { startConnection, useStore } from "../store"
 
+// The look the app has (O51), so the demo screens are what the app shows, the phone check included (O55).
+watchLook()
 const params = new URLSearchParams(location.search)
 const view = params.get("view") ?? "approvals"
 const theme = params.get("theme") === "dark" ? "dark" : "light"
@@ -605,6 +612,8 @@ else if (view === "sessions") useStore.setState({ route: "sessions" })
 else if (view === "usage") useStore.setState({ route: "usage" })
 else if (view === "dashboard") useStore.setState({ route: "dashboard" })
 else if (view === "mcp") useStore.setState({ route: "mcp" })
+// O55: the phone's More tab.
+else if (view === "more") useStore.setState({ route: "more" })
 else if (view === "setup") useStore.setState({ route: "setup" })
 // The little fighter at work: the workspace with nothing waiting, while the first session runs a command.
 else if (view === "working")
