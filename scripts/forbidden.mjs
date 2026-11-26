@@ -22,18 +22,20 @@ export const CHECKS = [
     why: "no browser is started with a debugging port or pipe",
     re: /remote-debugging-(port|pipe)/i,
     // These start a throwaway headless Edge on Codehouse's own local page to take screenshots and measure it.
-    // They are build checks, never shipped, and the next check keeps them away from Anthropic's sites.
+    // They are build checks, never shipped, and the next check keeps them away from Anthropic's sites. The phone
+    // layout's check (O55) opens the demo screens on 127.0.0.1 the same way.
     except: [
       "scripts/screenshots.ts",
       "scripts/perf-check.ts",
       "scripts/artifact-sandbox-check.ts",
+      "apps/web/test/phone-browser.test.ts",
     ],
   },
   {
     id: "debugging-target",
     why: "a build check that drives a browser never points it at Anthropic's sites",
     re: /claude\.ai|anthropic\.com/i,
-    only: ["scripts/screenshots.ts", "scripts/perf-check.ts", "scripts/artifact-sandbox-check.ts"],
+    only: ["scripts/screenshots.ts", "scripts/perf-check.ts", "scripts/artifact-sandbox-check.ts", "apps/web/test/phone-browser.test.ts"],
   },
   {
     id: "browser-automation-flag",
