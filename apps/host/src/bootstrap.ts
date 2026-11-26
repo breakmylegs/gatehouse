@@ -1758,6 +1758,8 @@ export function createHost(opts: HostOptions = {}): Host {
         running: pwsh.running,
         ...(pwsh.languageMode ? { languageMode: pwsh.languageMode } : {}),
       },
+      // O57: whether the cards slow fast approvals down (U4's wait); the Host's own check reads the setting itself.
+      ...(config.slowFastApprovals === true ? { slowFastApprovals: true } : {}),
     }
   }
 
@@ -2031,6 +2033,8 @@ export function createHost(opts: HostOptions = {}): Host {
       untrustedMention: (rule) => manager.liveSessions().map((s) => s.untrustedMention(rule)).find(Boolean),
       env,
       config: () => config,
+      // O57: the cards read Slow down fast approvals from health.
+      healthChanged: () => opts.onHealthChanged?.(),
       log,
       phone,
       usage,

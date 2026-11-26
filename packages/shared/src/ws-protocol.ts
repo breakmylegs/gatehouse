@@ -831,6 +831,8 @@ export const Health = z.object({
     approverConfirmed: z.boolean(),
   }),
   pwsh: z.object({ running: z.boolean(), languageMode: z.string().optional() }),
+  /** O57: "Slow down fast approvals" is on, so a High card's Allow waits a second (U4). Absent: off. */
+  slowFastApprovals: z.boolean().optional(),
 })
 export type Health = z.infer<typeof Health>
 

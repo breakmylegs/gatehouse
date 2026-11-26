@@ -142,6 +142,12 @@ function build(loose: boolean) {
     timelineSummaries: z.boolean().optional(),
     /** E-089: on battery, Extreme sessions pause until mains power is back. Off unless true. */
     pauseExtremeOnBattery: z.boolean().optional(),
+    /**
+     * O57 (owner, 26 Nov): "Slow down fast approvals". On, approvals given faster than they could be read make the next
+     * High one ask again after two seconds (D-021), and Allow on a High card waits a second (U4). Off unless true (the
+     * owner's choice); fast approvals are recorded in the audit log either way.
+     */
+    slowFastApprovals: z.boolean().optional(),
     /** T-134: credential fields may hold 1Password references, read with op when needed. Off unless true. */
     onePassword: z.boolean().optional(),
     escalationLadder: obj({

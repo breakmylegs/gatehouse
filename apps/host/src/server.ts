@@ -1293,7 +1293,10 @@ export class HostServer {
         const stamp = this.#rubberStamp
         // A Severe request you typed allow for has been read on purpose: the friction does not ask again (owner, 13 Nov).
         const typedSevere = cmd.typed === true && risk >= SEVERE_RISK
-        if (view && !typedSevere && stamp.needsDeliberate(risk)) {
+        // O57 (owner, 26 Nov): "Slow down fast approvals", off unless switched on. Off, nothing asks again or waits;
+        // a run of fast approvals is still recorded in the audit log below.
+        const slow = a.admin?.config().slowFastApprovals === true
+        if (slow && view && !typedSevere && stamp.needsDeliberate(risk)) {
           const shownAt = this.#frictionAt.get(cmd.requestId)
           if (!cmd.deliberate || shownAt === undefined || Date.now() - shownAt < FRICTION_WAIT_MS) {
             if (shownAt === undefined) {
@@ -1347,8 +1350,36 @@ export class HostServer {
           const file = (view.request.input as { file_path?: unknown; notebook_path?: unknown } | undefined)?.file_path ?? (view.request.input as { notebook_path?: unknown } | undefined)?.notebook_path
           if (a.skills && typeof file === "string" && ["Edit", "Write", "MultiEdit", "NotebookEdit"].includes(view.request.toolName)) a.skills.note("accept", areaOf(findProjectRoot(view.request.cwd), file))
           this.#frictionAt.delete(cmd.requestId)
-          if ((cmd.deliberate || typedSevere) && stamp.needsDeliberate(risk)) stamp.deliberate()
-          else stamp.approved({ risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) })
+          if (slow && (cmd.deliberate || typedSevere) && stamp.needsDeliberate(risk)) stamp.deliberate()
+          else {
+            const run = stamp.approved({ risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) })
+            if (run && !slow) {
+              // O57: off, the run is recorded and counting starts again; nothing is slowed.
+              stamp.deliberate()
+              await a.audit
+                .record({
+                  session: view.request.sessionId,
+                  event: "approval_fast_run",
+                  // The audit's channels, as the friction's record has; Neighbourhood Watch answers through this one.
+                  channel: "desktop",
+                  tool: view.request.toolName,
+                  toolUseId: view.request.toolUseId,
+                  cwd: view.request.cwd,
+                  project: view.request.project,
+                  input: { risk, ...(cmd.shownMs !== undefined ? { shownMs: cmd.shownMs } : {}), ...(cmd.opened !== undefined ? { opened: cmd.opened } : {}) },
+                  verdict: {
+                    outcome: "allow",
+                    ruleId: "rubber-stamp",
+                    reason: "Approvals came faster than they could be read. Slow down fast approvals is off, so nothing asked again.",
+                    risk,
+                    decidedBy: "rules",
+                    policyHash: "",
+                  },
+                  latencyMs: 0,
+                })
+                .catch(() => false)
+            }
+          }
         }
         return resolveResult(r)
       }

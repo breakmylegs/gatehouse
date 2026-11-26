@@ -63,6 +63,19 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("settings save as you change them", () => {
+  it("saves Slow down fast approvals in Safety: off is no setting at all, on is true (O57)", async () => {
+    render(<Settings />)
+    await openSection("Safety")
+    const box = await screen.findByRole("checkbox", { name: "Slow down fast approvals" })
+    expect(box).not.toBeChecked()
+    fireEvent.click(box)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ slowFastApprovals: true, futureSetting: { keep: true } })
+    fireEvent.click(box)
+    await waitFor(() => expect(puts).toHaveLength(2))
+    expect(puts[1]).not.toHaveProperty("slowFastApprovals")
+  })
+
   it("saves a switch by itself, once, keeping settings this page does not show", async () => {
     render(<Settings />)
     await openSection("Sessions")

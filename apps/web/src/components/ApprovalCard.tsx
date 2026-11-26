@@ -121,7 +121,11 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   // you to type "allow" first, which a keyboard, a mouse and a screen reader can all do.
   const high = req.kind === "permission" && req.verdict.risk >= HIGH_RISK
   const severe = req.kind === "permission" && req.verdict.risk >= SEVERE_RISK
-  const [ready, setReady] = useState(!high)
+  // O57: the wait is part of "Slow down fast approvals" (Settings, Safety), off unless switched on. Severe still
+  // asks you to type allow either way.
+  const slow = useStore((s) => s.health?.slowFastApprovals === true)
+  const wait = high && slow
+  const [ready, setReady] = useState(!wait)
   // D-092: allowing High or Severe by keyboard takes two presses within two seconds.
   const chord = useAllowChord(high)
   const chunked = useLoadPreset("chunked")
@@ -141,11 +145,11 @@ export function ApprovalCard({ view }: { view: PendingView }) {
   }, [req.id, command])
 
   useEffect(() => {
-    if (!high) return setReady(true)
+    if (!wait) return setReady(true)
     setReady(false)
     const t = setTimeout(() => setReady(true), HIGH_DELAY_MS)
     return () => clearTimeout(t)
-  }, [req.id, high])
+  }, [req.id, wait])
 
   const segments = (req.verdict.segments ?? [])
     .filter((s) => s.outcome !== "allow")

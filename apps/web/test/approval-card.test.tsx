@@ -73,7 +73,8 @@ const allowReady = () =>
   })
 
 beforeEach(() => {
-  useStore.setState({ conn: "open" })
+  // O57: Slow down fast approvals is off unless switched on; the tests of its wait switch it on.
+  useStore.setState({ conn: "open", health: undefined })
   sent.length = 0
   reply = () => ({ ok: true })
 })
@@ -92,6 +93,17 @@ describe("ApprovalCard", () => {
     expect(within(document.querySelector("dl")!).getByText("force-push")).toBeInTheDocument()
     expect(screen.getByText(/High risk 82/)).toBeInTheDocument()
     expect(screen.getByText(/Phone notified/)).toBeInTheDocument()
+  })
+
+  it("with Slow down fast approvals off, Allow works at once at High risk, and Severe still asks you to type allow (O57)", async () => {
+    render(<ApprovalCard view={view()} />)
+    expect(screen.getByRole("button", { name: /^Allow once/ })).toBeEnabled()
+    cleanup()
+    render(<ApprovalCard view={view({ verdict: { ...view().request.verdict, risk: 90 } })} />)
+    fireEvent.click(screen.getByRole("button", { name: /^Allow once/ }))
+    // Severe: nothing is sent until allow is typed.
+    expect(sent).toEqual([])
+    expect(screen.getByRole("textbox", { name: /allow/i })).toBeInTheDocument()
   })
 
   it("shows what a call would delete and whether it can be undone (G20)", () => {
@@ -116,7 +128,8 @@ describe("ApprovalCard", () => {
     expect(effects.textContent).toContain("Cannot be undone")
   })
 
-  it("waits a second before Allow works at High risk, so a stray click or keypress allows nothing (U4)", async () => {
+  it("with Slow down fast approvals on, waits a second before Allow works at High risk, so a stray click allows nothing (U4, O57)", async () => {
+    useStore.setState({ health: { slowFastApprovals: true } as never })
     render(<ApprovalCard view={view()} />)
     const allowButton = screen.getByRole("button", { name: /^Allow once/ })
     expect(allowButton).toBeDisabled()

@@ -75,6 +75,8 @@ interface Config {
   timelineSummaries?: boolean
   /** E-089: true pauses Extreme sessions on battery. */
   pauseExtremeOnBattery?: boolean
+  /** O57: true slows approvals given faster than they could be read. */
+  slowFastApprovals?: boolean
   onePassword?: boolean
   /** T-020: false turns off the suggested next prompt. */
   promptSuggestions?: boolean
@@ -203,6 +205,8 @@ interface Values {
   tlOn: boolean
   /** E-089: Extreme approval pauses on battery. */
   batPause: boolean
+  /** O57: Slow down fast approvals. */
+  slowFast: boolean
   onePassword: boolean
   /** T-020: a suggested next prompt after each turn. */
   psOn: boolean
@@ -365,6 +369,7 @@ export function valuesOf(d: SettingsData): Values {
     ladHere: c.escalationLadder?.onlyWhenHere === true,
     tlOn: c.timelineSummaries !== false,
     batPause: c.pauseExtremeOnBattery === true,
+    slowFast: c.slowFastApprovals === true,
     onePassword: c.onePassword === true,
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
@@ -650,6 +655,9 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   else delete body.onePassword
   if (v.batPause) body.pauseExtremeOnBattery = true
   else delete body.pauseExtremeOnBattery
+  // O57: off is no setting at all.
+  if (v.slowFast) body.slowFastApprovals = true
+  else delete body.slowFastApprovals
   // E-094: saved only when a channel waits; all at once is no setting at all.
   if (v.ladPhone === "0" && v.ladPush === "0") delete body.escalationLadder
   else
@@ -753,6 +761,7 @@ export const DEFAULT_VALUES: Values = {
   ladHere: false,
   tlOn: true,
   batPause: false,
+  slowFast: false,
   onePassword: false,
   psOn: true,
   cmText: "",
@@ -817,6 +826,7 @@ export const SECTION_GROUPS = [
       ["general", "General"],
       ["account", "Account and plan"],
       ["privacy", "Privacy"],
+      ["safety", "Safety"],
       ["usage", "Usage"],
       ["capabilities", "Capabilities"],
       ["sessions", "Sessions"],
@@ -1069,6 +1079,7 @@ export function Settings() {
   const ladChanged = differs(v, ["ladPhone", "ladPush", "ladHere"])
   const tlChanged = differs(v, ["tlOn"])
   const batChanged = differs(v, ["batPause"])
+  const slowChanged = differs(v, ["slowFast"])
   const psChanged = differs(v, ["psOn"])
   const cmChanged = differs(v, ["cmText"])
   const settleChanged = differs(v, ["settleDays"])
@@ -1097,6 +1108,7 @@ export function Settings() {
     sessions: extremeChanged || checkpointsChanged || instrChanged,
     phone: phoneChanged || digestChanged,
     privacy: privacyChanged,
+    safety: slowChanged,
   }
 
   return (
@@ -1784,6 +1796,21 @@ export function Settings() {
                 Claude writes a few sentences from the session's messages and tool calls, with your redaction list applied
                 first. It uses a little of your plan each time, and never runs for a model on this computer.
               </p>
+            </Group>
+
+            {/* O57 (owner, 26 Nov): the D-021 and U4 slow-downs, as a choice; off unless you switch it on. */}
+            <Group section="safety" title="Slow down fast approvals" gap="gap-2" changed={slowChanged}>
+              <p className="m-0 text-sm text-mut">
+                When this is on and you approve several requests faster than they could be read, the next High one asks you again
+                after two seconds, and Allow on a High request waits a second after it appears. When it is off, approving never
+                asks twice or makes you wait, on this computer, from a notification, on your phone or in Neighbourhood Watch. Either
+                way a Severe request still needs you to type allow, a floor deny stays a deny, and fast approvals are recorded in
+                the audit log.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.slowFast} onChange={(e) => change({ slowFast: e.target.checked }, "Slow down fast approvals")} />
+                Slow down fast approvals
+              </label>
             </Group>
 
             <Group section="sessions" title="On battery" gap="gap-2" changed={batChanged}>

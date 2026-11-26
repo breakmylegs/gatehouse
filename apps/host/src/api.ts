@@ -153,6 +153,8 @@ export interface AdminContext {
   env: NodeJS.ProcessEnv
   /** The config the Host started with. Saved changes need a restart to take effect. */
   config: () => GatehouseConfig
+  /** O57: a saved setting the cards read from health (Slow down fast approvals), so they are told at once. */
+  healthChanged?: () => void
   log: (line: string) => void
   /** For the digest's spend and the usage views. */
   usage?: UsageStore
@@ -1813,6 +1815,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
+    if (changed.includes("slowFastApprovals")) ctx.healthChanged?.()
     const needsRestart = changed.filter((k) => !(LIVE_SETTINGS as readonly string[]).includes(k))
     return {
       ok: true,
@@ -2498,6 +2501,8 @@ const LIVE_SETTINGS = [
   "timelineSummaries",
   // E-089: read when the computer goes on battery.
   "pauseExtremeOnBattery",
+  // O57: read at each approval.
+  "slowFastApprovals",
   // T-134: read each time a credential is needed.
   "onePassword",
   // T-020: read when a session starts.

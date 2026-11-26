@@ -464,7 +464,18 @@ describe("commands over the WebSocket", () => {
     await c.send({ type: "close_session", sessionId })
   })
 
-  it("slows the next High approval after three made too fast to read, never a deny (D-021)", async () => {
+  /** O57: Slow down fast approvals, switched on or off for one test. */
+  const slowDown = (on: boolean) => {
+    const was = hostApp.admin
+    hostApp.admin = { config: () => ({ slowFastApprovals: on }) } as unknown as HostApp["admin"]
+    return () => {
+      hostApp.admin = was
+    }
+  }
+
+  it("with Slow down fast approvals on, slows the next High approval after three made too fast to read, never a deny (D-021, O57)", async () => {
+    const restore = slowDown(true)
+    try {
     const results: unknown[] = []
     s.sdk.turn = async (api) => {
       for (let i = 0; i < 5; i++) results.push(await api.callTool("Bash", { command: `git push origin rs${i}` }))
@@ -514,8 +525,46 @@ describe("commands over the WebSocket", () => {
     expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, false, true, true, true, true, true])
     expect(s.records().filter((r) => r.event === "approval_friction_shown")).toHaveLength(2)
     await c.send({ type: "close_session", sessionId })
+    } finally {
+      restore()
+    }
     // Five High calls, each checkpointed before it asks: slow when git is, and on a busy laptop (15 Nov: it ran past
     // 120 s whenever other sessions were working, with nothing wrong in the code).
+  }, 300_000)
+
+  // O57 (owner, 26 Nov): off, which it is unless switched on, nothing asks twice or waits, and each run of fast
+  // approvals is still in the audit log; counting starts again after each.
+  it("with Slow down fast approvals off, never slows an approval and records each fast run (O57)", async () => {
+    const restore = slowDown(false)
+    try {
+      const results: unknown[] = []
+      s.sdk.turn = async (api) => {
+        for (let i = 0; i < 7; i++) results.push(await api.callTool("Bash", { command: `git push origin off${i}` }))
+      }
+      const before = s.records().filter((r) => r.event === "approval_friction_shown").length
+      const created = await c.send({ type: "create_session", cwd: s.repo })
+      const sessionId = (created.data as { sessionId: string }).sessionId
+      await c.send({ type: "prompt", sessionId, text: "push" })
+      for (let i = 0; i < 7; i++) {
+        const a = await c.waitFor(
+          "approval_request",
+          (e) => e.view.request.sessionId === sessionId && JSON.stringify(e.view.rawInput).includes(`off${i}`),
+        )
+        expect(a.view.request.verdict.risk).toBeGreaterThanOrEqual(70)
+        // Each straight after its card appeared: all go through at once, none asks again.
+        expect(await c.send({ type: "approve", requestId: a.view.request.id, shownMs: 100, opened: true })).toMatchObject({ ok: true })
+      }
+      await c.waitFor("sdk_message", (e) => (e.message as { type?: string }).type === "result" && e.sessionId === sessionId)
+      expect(results.map((r) => (r as { executed?: boolean }).executed)).toEqual([true, true, true, true, true, true, true])
+      expect(s.records().filter((r) => r.event === "approval_friction_shown")).toHaveLength(before)
+      // Seven fast High approvals: a run at the third and again at the sixth, each recorded with its risk.
+      const runs = s.records().filter((r) => r.event === "approval_fast_run" && r.session === sessionId)
+      expect(runs).toHaveLength(2)
+      expect(runs[0]).toMatchObject({ verdict: { ruleId: "rubber-stamp", outcome: "allow" } })
+      await c.send({ type: "close_session", sessionId })
+    } finally {
+      restore()
+    }
   }, 300_000)
 
   it("denies with a message, answers a question, and refuses a second answer", async () => {
