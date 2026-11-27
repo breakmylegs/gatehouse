@@ -131,8 +131,8 @@ function releaseKey(): string {
 export const RELEASE_NEEDS_MB = 3072
 /** The memory options a release's test processes run with, as every other test run here does. */
 export const TEST_NODE_OPTIONS = "--max-old-space-size=3072 --max-semi-space-size=4"
-/** O60: what the computer needs free before a release's tests start (they crashed with about 2 GB free). */
-export const TEST_NEEDS_FREE_MB = 3072
+/** O60: what the computer needs free before a release's tests start (they crashed with about 2.1 GB free, passed with 2.4). */
+export const TEST_NEEDS_FREE_MB = 2560
 
 /**
  * Waits until the computer has `mb` free, saying so once a minute, for up to 20 minutes; then stops the release with
@@ -391,7 +391,7 @@ if (cmd === "version") {
     let r = tests()
     if (r.status !== 0 && /out of memory|exit code 2147483651|exited unexpectedly/.test(`${r.stdout}${r.stderr}`)) {
       console.log("[release] a test process ran out of memory (the computer was short of it); trying again once there is room")
-      await waitForMemory(TEST_NEEDS_FREE_MB + 1024)
+      await waitForMemory(TEST_NEEDS_FREE_MB + 512)
       r = tests()
     }
     process.stdout.write(`${r.stdout ?? ""}${r.stderr ?? ""}`.split(/\r?\n/).filter((l) => /\[shards\]|FAIL|✗|×/.test(l)).join("\n") + "\n")
