@@ -2333,6 +2333,21 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 
 - **Mac: Deny and Allow once on the notification, locking, sleep, wake and power as they happen, and a folder from the Finder (owner, 25 Nov: "Lets do 2 3 and 4").** Described in `docs/mac.md` ("What it does that a browser tab does not"). No new dependency. **Decided by me, for the owner to confirm:** Allow once is offered on a notification only for a permission below High (risk under 70) that is not default to no, and asks for the Mac to be unlocked; High and Severe, questions and plans open the window. An answer from the notification is recorded on the desktop channel, as the wing beside the notch's is, so the audit keeps its channels and an older copy can still read it after an update is undone. A low battery (on battery at 20% or less) pauses Max approval sessions even with "Pause Max approval sessions on battery" off, and lets the Mac sleep; both come back on mains (stricter). Tests: notify-mac (Host and page), presence-mac, mac-events-mac, broker, power, quick. Break checks: the page allowing High, the Host offering Allow once for a default-to-no request, and the broker telling the phone twice each fail them.
 
+### O58 Prompt-injection flags no longer hold the owner up (feat/o58)
+
+- Owner, 27 Nov. ADR 0022, threat model T173, CLAUDE.md invariant 3.
+- **What happened**: in Max approval (and Extreme approval, the same flag since O45) `tainted-egress` was already answered (`EXTREME_ASKS` holds only failures and the chat hand-off), so the banner's "even in Max approval" was wrong and the code right. In Manual, Plan and Auto every network command after a flag asked.
+- **The banner** (`InjectionFlags.tsx`) now says, with the hold on, "now ask you, except in Max approval, which answers them", and with it off, "Nothing is held for it".
+- **A session's own files** (`hooks.ts`, `ownFile`): a file inside its folder is never scanned or changed. A dependency's folder inside it (node_modules, vendor, third_party) is scanned, and so is any file outside the folder, whatever its name, which is stricter than before. Web fetches, searches and outside MCP servers are scanned as before. D-015 is unchanged.
+- **The setting**: Settings, Safety, "Hold network commands after a prompt-injection flag" (`holdNetworkAfterInjection`, off unless `true`, applied at once). Off, a flag is still taken out of what Claude reads, shown and audited, and holds nothing; on, D-061's hold works in every mode but Max approval. The flag still marks what a session hands back (E-052). B32, D-016 and the floor are unchanged.
+- Tests:
+  - `injection-scan.test.ts`: own files clean; dependencies and outside files flagged; the hold off and on.
+  - `tool-grant.test.ts`: Max approval runs curl and git push from a flagged session without asking, hold on or off; in Manual with the hold off nothing asks.
+  - `injection-flags.test.tsx`: the banner, both ways.
+  - `settings-autosave.test.tsx`: the setting saves.
+- Nine breaks, all caught.
+- Not covered by a test: the one line in `sessions.ts` where a session reads the setting. The Provenance switch it sets is covered.
+
 ### O57 Slow down fast approvals is a setting, off by default (feat/o57)
 
 - Owner, 26 Nov: no more "You approved several requests faster than they could be read..." slow-down, as a setting switched off for him. ADR 0021, threat model T172.

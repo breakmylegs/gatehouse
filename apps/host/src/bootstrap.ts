@@ -1760,6 +1760,8 @@ export function createHost(opts: HostOptions = {}): Host {
       },
       // O57: whether the cards slow fast approvals down (U4's wait); the Host's own check reads the setting itself.
       ...(config.slowFastApprovals === true ? { slowFastApprovals: true } : {}),
+      // O58: whether a prompt-injection flag holds network commands, for its banner.
+      ...(config.holdNetworkAfterInjection === true ? { holdNetworkAfterInjection: true } : {}),
     }
   }
 

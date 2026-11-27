@@ -1815,7 +1815,7 @@ export function registerApi(app: FastifyInstance, ctx: AdminContext): void {
       },
       latencyMs: 0,
     })
-    if (changed.includes("slowFastApprovals")) ctx.healthChanged?.()
+    if (changed.includes("slowFastApprovals") || changed.includes("holdNetworkAfterInjection")) ctx.healthChanged?.()
     const needsRestart = changed.filter((k) => !(LIVE_SETTINGS as readonly string[]).includes(k))
     return {
       ok: true,
@@ -2503,6 +2503,8 @@ const LIVE_SETTINGS = [
   "pauseExtremeOnBattery",
   // O57: read at each approval.
   "slowFastApprovals",
+  // O58: read at each network command after a prompt-injection flag.
+  "holdNetworkAfterInjection",
   // T-134: read each time a credential is needed.
   "onePassword",
   // T-020: read when a session starts.

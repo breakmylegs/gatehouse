@@ -1281,6 +1281,9 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Builds the options and starts the SDK process. Fails if the options are unsafe or the organisation is wrong. */
   async start(): Promise<void> {
     const d = this.#deps
+    // O58 (owner, 27 Nov): a prompt-injection flag holds network commands only with "Hold network commands after a
+    // prompt-injection flag" on (Settings, Safety), read at each call; off unless it is true.
+    this.#provenance.holdsNetwork = () => d.config().holdNetworkAfterInjection === true
     const hookDeps: SessionHookDeps = {
       sessionId: this.id,
       cwd: this.cwd,
@@ -1350,7 +1353,9 @@ export class Session extends EventEmitter<SessionEvents> {
           "injection-scan",
           // D-028: and which call it was, so a change can be traced to it.
           { tool, kinds: [...new Set(findings.map((f) => f.kind))], ...(toolUseId ? { toolUseId } : {}) },
-          `A result from ${tool} held what looks like prompt injection, so it was cleaned before Claude read it and the next network call asks.`,
+          d.config().holdNetworkAfterInjection === true
+            ? `A result from ${tool} held what looks like prompt injection, so it was cleaned before Claude read it and the next network call asks.`
+            : `A result from ${tool} held what looks like prompt injection, so it was cleaned before Claude read it. Network commands are not held for it (the setting is off).`,
           "rules",
         ).catch(() => undefined)
         this.emit("event", { type: "injection_flagged", data: { tool, findings } })

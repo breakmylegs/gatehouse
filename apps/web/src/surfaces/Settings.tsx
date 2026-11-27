@@ -77,6 +77,8 @@ interface Config {
   pauseExtremeOnBattery?: boolean
   /** O57: true slows approvals given faster than they could be read. */
   slowFastApprovals?: boolean
+  /** O58: true makes a prompt-injection flag hold network commands. */
+  holdNetworkAfterInjection?: boolean
   onePassword?: boolean
   /** T-020: false turns off the suggested next prompt. */
   promptSuggestions?: boolean
@@ -207,6 +209,8 @@ interface Values {
   batPause: boolean
   /** O57: Slow down fast approvals. */
   slowFast: boolean
+  /** O58: Hold network commands after a prompt-injection flag. */
+  holdNet: boolean
   onePassword: boolean
   /** T-020: a suggested next prompt after each turn. */
   psOn: boolean
@@ -370,6 +374,7 @@ export function valuesOf(d: SettingsData): Values {
     tlOn: c.timelineSummaries !== false,
     batPause: c.pauseExtremeOnBattery === true,
     slowFast: c.slowFastApprovals === true,
+    holdNet: c.holdNetworkAfterInjection === true,
     onePassword: c.onePassword === true,
     psOn: c.promptSuggestions !== false,
     cmText: modelsText(c.customModels ?? []),
@@ -658,6 +663,9 @@ export function bodyOf(d: SettingsData, v: Values): Record<string, unknown> {
   // O57: off is no setting at all.
   if (v.slowFast) body.slowFastApprovals = true
   else delete body.slowFastApprovals
+  // O58: off is no setting at all.
+  if (v.holdNet) body.holdNetworkAfterInjection = true
+  else delete body.holdNetworkAfterInjection
   // E-094: saved only when a channel waits; all at once is no setting at all.
   if (v.ladPhone === "0" && v.ladPush === "0") delete body.escalationLadder
   else
@@ -762,6 +770,7 @@ export const DEFAULT_VALUES: Values = {
   tlOn: true,
   batPause: false,
   slowFast: false,
+  holdNet: false,
   onePassword: false,
   psOn: true,
   cmText: "",
@@ -1080,6 +1089,7 @@ export function Settings() {
   const tlChanged = differs(v, ["tlOn"])
   const batChanged = differs(v, ["batPause"])
   const slowChanged = differs(v, ["slowFast"])
+  const holdChanged = differs(v, ["holdNet"])
   const psChanged = differs(v, ["psOn"])
   const cmChanged = differs(v, ["cmText"])
   const settleChanged = differs(v, ["settleDays"])
@@ -1108,7 +1118,7 @@ export function Settings() {
     sessions: extremeChanged || checkpointsChanged || instrChanged,
     phone: phoneChanged || digestChanged,
     privacy: privacyChanged,
-    safety: slowChanged,
+    safety: slowChanged || holdChanged,
   }
 
   return (
@@ -1810,6 +1820,21 @@ export function Settings() {
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={v.slowFast} onChange={(e) => change({ slowFast: e.target.checked }, "Slow down fast approvals")} />
                 Slow down fast approvals
+              </label>
+            </Group>
+
+            {/* O58 (owner, 27 Nov): D-061's hold on network commands after a flag, as a choice; off unless switched on. */}
+            <Group section="safety" title="Hold network commands after a prompt-injection flag" gap="gap-2" changed={holdChanged}>
+              <p className="m-0 text-sm text-mut">
+                When something a session reads from outside (a web page, a search, an outside MCP server, a file outside its folder)
+                looks like prompt injection, Claude reads it with those parts taken out, the session shows a banner, and the audit
+                log records it, whatever this says. With this on, the session's network commands (such as curl or a push) then ask
+                you, except in Max approval, which answers them. With it off, nothing is held for a flag. Its own files are never
+                scanned. A command copied word for word from a web page is decided as before, and a floor deny stays a deny.
+              </p>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={v.holdNet} onChange={(e) => change({ holdNet: e.target.checked }, "Hold network commands after a prompt-injection flag")} />
+                Hold network commands after a prompt-injection flag
               </label>
             </Group>
 

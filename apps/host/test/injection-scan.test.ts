@@ -125,7 +125,7 @@ describe("the untrusted content scanner (D-061)", () => {
     expect(withProvenance(allow, "Bash", { command: "npm test" }, provenance, "C:/p")).toBe(allow)
   })
 
-  it("scans a README read in the session, but not the project's own code or a pasted screenshot (13 Nov)", async () => {
+  it("never scans or changes the session's own files; scans a dependency's and anything outside its folder (O58)", async () => {
     const run = async (file: string, response: unknown) => {
       const provenance = new Provenance()
       const hook: HookCallback = createPostToolHook({
@@ -140,7 +140,7 @@ describe("the untrusted content scanner (D-061)", () => {
         log: () => undefined,
         provenance,
       } as never)
-      await hook(
+      const out = (await hook(
         {
           hook_event_name: "PostToolUse",
           tool_name: "Read",
@@ -152,18 +152,39 @@ describe("the untrusted content scanner (D-061)", () => {
         } as never,
         "t1",
         { signal: new AbortController().signal },
-      )
-      return provenance.isRaised()
+      )) as { hookSpecificOutput?: { updatedToolOutput?: unknown } }
+      return { raised: provenance.isRaised(), changed: out.hookSpecificOutput?.updatedToolOutput !== undefined }
     }
-    expect(await run("C:/p/README.md", INJECTED)).toBe(true)
-    // The project's own test of the scanner holds injection on purpose; it is the project's words.
-    expect(await run("C:/p/apps/host/test/injection-scan.test.ts", INJECTED)).toBe(false)
-    // A screenshot the owner pasted: its bytes, even named like a README, are not words.
+    const clean = { raised: false, changed: false }
+    const flagged = { raised: true, changed: true }
+    // Its own files, test fixtures and README included: read as they are, nothing raised (owner, 27 Nov).
+    expect(await run("C:/p/README.md", INJECTED)).toEqual(clean)
+    expect(await run("C:/p/docs/notes.md", INJECTED)).toEqual(clean)
+    expect(await run("C:/p/apps/host/test/injection-scan.test.ts", INJECTED)).toEqual(clean)
+    expect(await run("C:\\p\\apps\\host\\test\\fixtures\\page.html", INJECTED)).toEqual(clean)
+    // Other people's code inside it is still outside content.
+    expect(await run("C:/p/node_modules/left-pad/README.md", INJECTED)).toEqual(flagged)
+    expect(await run("C:/p/vendor/lib/notes.txt", INJECTED)).toEqual(flagged)
+    // A file outside its folder, whatever its name, is scanned too; a folder whose name only starts the same is outside.
+    expect(await run("C:/other/notes.ts", INJECTED)).toEqual(flagged)
+    expect(await run("C:/p2/README.md", INJECTED)).toEqual(flagged)
+    // A screenshot or a file you attached: your own input, never scanned.
     const picture = { type: "image", file: { base64: "QUFB".repeat(5000), type: "image/png" } }
-    expect(await run("C:/p/.codehouse/attachments/readme-shot.png", picture)).toBe(false)
-    // Words you pasted are your own, even a Markdown file with injection in it.
-    expect(await run("C:\\p\\.codehouse\\attachments\\notes.md", INJECTED)).toBe(false)
-    // The same words in a Markdown file from elsewhere still raise it.
-    expect(await run("C:/p/docs/notes.md", INJECTED)).toBe(true)
+    expect(await run("C:/elsewhere/readme-shot.png", picture)).toEqual(clean)
+    expect(await run("C:\\q\\.codehouse\\attachments\\notes.md", INJECTED)).toEqual(clean)
+  })
+
+  it("with Hold network commands after a prompt-injection flag off, a flag holds no network command; on, it does (O58)", () => {
+    const allow: Verdict = { outcome: "allow", ruleId: "network", reason: "ok", risk: 30, decidedBy: "rules", policyHash: "h" }
+    const p = new Provenance()
+    p.raise("a fetched page that held what looks like prompt injection")
+    let hold = false
+    p.holdsNetwork = () => hold
+    for (const command of ["curl https://api.github.test/status", "git push origin main"])
+      expect(withProvenance(allow, "Bash", { command }, p, "C:/p")).toBe(allow)
+    // The flag is still known, for what the session hands back (E-052).
+    expect(p.sessionTaint()).toBe("injection")
+    hold = true
+    expect(withProvenance(allow, "Bash", { command: "git push origin main" }, p, "C:/p")).toMatchObject({ outcome: "escalate", ruleId: EGRESS_RULE })
   })
 })

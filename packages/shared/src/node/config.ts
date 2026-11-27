@@ -148,6 +148,12 @@ function build(loose: boolean) {
      * owner's choice); fast approvals are recorded in the audit log either way.
      */
     slowFastApprovals: z.boolean().optional(),
+    /**
+     * O58 (owner, 27 Nov): "Hold network commands after a prompt-injection flag". On, after a result that looked like
+     * prompt injection a session's network commands ask (D-061, in every mode but Max approval). Off unless true (the
+     * owner's choice): a flag is still shown and recorded, and holds nothing. B32 and the floor are unchanged.
+     */
+    holdNetworkAfterInjection: z.boolean().optional(),
     /** T-134: credential fields may hold 1Password references, read with op when needed. Off unless true. */
     onePassword: z.boolean().optional(),
     escalationLadder: obj({

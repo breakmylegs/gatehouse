@@ -833,6 +833,8 @@ export const Health = z.object({
   pwsh: z.object({ running: z.boolean(), languageMode: z.string().optional() }),
   /** O57: "Slow down fast approvals" is on, so a High card's Allow waits a second (U4). Absent: off. */
   slowFastApprovals: z.boolean().optional(),
+  /** O58: a prompt-injection flag holds network commands (Settings, Safety). Absent: off. */
+  holdNetworkAfterInjection: z.boolean().optional(),
 })
 export type Health = z.infer<typeof Health>
 

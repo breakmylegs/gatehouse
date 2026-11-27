@@ -101,6 +101,12 @@ export class Provenance {
   readonly #subagents = new Map<string, number>()
   /** D-061: why the session's taint was raised (a result that looked like prompt injection), if it was. */
   #raised: string | undefined
+  /**
+   * O58 (owner, 27 Nov): whether a flag holds the session's network commands ("Hold network commands after a
+   * prompt-injection flag", Settings, Safety). On unless a session says otherwise; a session reads the setting, off
+   * unless switched on. Off, a flag is still shown and recorded, and nothing else here changes (B32, D-016).
+   */
+  holdsNetwork: () => boolean = () => true
 
   /** D-061: a result held what looks like prompt injection: from now on every network call asks. */
   raise(why: string): void {
@@ -202,7 +208,7 @@ export class Provenance {
    */
   egress(tool: string, input: Record<string, unknown>, cwd: string | undefined): string | undefined {
     // D-061: after a result that looked like prompt injection, any network call asks, whatever it carries.
-    if (this.#raised && ((SHELL.has(tool) && typeof input.command === "string" && NETWORK.test(input.command)) || tool === "WebFetch"))
+    if (this.#raised && this.holdsNetwork() && ((SHELL.has(tool) && typeof input.command === "string" && NETWORK.test(input.command)) || tool === "WebFetch"))
       return `This is a network call after ${this.#raised}, so it is yours to decide.`
     if (!this.#values.size) return undefined
     let carried = ""

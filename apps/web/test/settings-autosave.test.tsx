@@ -63,6 +63,19 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("settings save as you change them", () => {
+  it("saves Hold network commands after a prompt-injection flag in Safety: off is no setting, on is true (O58)", async () => {
+    render(<Settings />)
+    await openSection("Safety")
+    const box = await screen.findByRole("checkbox", { name: "Hold network commands after a prompt-injection flag" })
+    expect(box).not.toBeChecked()
+    fireEvent.click(box)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ holdNetworkAfterInjection: true })
+    fireEvent.click(box)
+    await waitFor(() => expect(puts).toHaveLength(2))
+    expect(puts[1]).not.toHaveProperty("holdNetworkAfterInjection")
+  })
+
   it("saves Slow down fast approvals in Safety: off is no setting at all, on is true (O57)", async () => {
     render(<Settings />)
     await openSection("Safety")

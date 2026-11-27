@@ -423,6 +423,18 @@ const WRITE_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"])
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|ico|tiff?)$/i
 /** What you pasted or attached in the prompt box: your own input, never scanned as someone else's words. */
 const OWN_ATTACHMENT = /(^|\/)\.codehouse\/attachments\//
+/** O58: the folders inside a project that hold other people's code, read as outside content. */
+const DEPENDENCY_DIR = /\/(node_modules|vendor|third_party)\//
+
+/**
+ * O58: whether a file (forward slashes, lower case) is the session's own: inside its folder and not in a dependency's
+ * folder there. Its own files are never scanned for prompt injection; anything else read is.
+ */
+export function ownFile(where: string, cwd: string): boolean {
+  const root = cwd.replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "")
+  if (!root || !where.startsWith(`${root}/`)) return false
+  return !DEPENDENCY_DIR.test(where.slice(root.length))
+}
 
 export function createPostToolHook(deps: SessionHookDeps): HookCallback {
   // D-075: words for Claude about the call just ended (it is repeating itself), by tool use id, for the hook's answer.
@@ -500,14 +512,15 @@ export function createPostToolHook(deps: SessionHookDeps): HookCallback {
         // prompt injection (this one) or a pasted screenshot (its bytes look like an encoded payload) raised the taint
         // and made every push ask, even in Extreme approval. A picture is never scanned: its bytes are not words.
         const where = typeof file === "string" ? file.replace(/\\/g, "/").toLowerCase() : ""
-        if (
-          typeof file === "string" &&
-          !IMAGE_FILE.test(where) &&
-          !OWN_ATTACHMENT.test(where) &&
-          untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(where)
-        ) {
-          deps.provenance.addUntrustedFile(input.tool_response, file)
-          scan(String(input.tool_use_id), input.tool_name, input.tool_response, `the file ${file}`)
+        if (typeof file === "string" && !IMAGE_FILE.test(where) && !OWN_ATTACHMENT.test(where)) {
+          // D-015, as before: a file whose words are not the project's own is not where a rule is remembered from.
+          if (untrusted(deps.untrustedFiles?.() ?? UNTRUSTED_FILES)(where))
+            deps.provenance.addUntrustedFile(input.tool_response, file)
+          // O58 (owner, 27 Nov): the session's own files are not outside content, so they are never scanned or changed
+          // (this repository's prompt-injection fixtures had a session working on it flagged and reading its own files
+          // cut). What comes from outside still is: a file outside its folder, whatever its name, and a dependency's.
+          if (!ownFile(where, deps.cwd))
+            scan(String(input.tool_use_id), input.tool_name, input.tool_response, `the file ${file}`)
         }
       }
       // D-030: a commit the session made gets a note of its approvals' lineage.
