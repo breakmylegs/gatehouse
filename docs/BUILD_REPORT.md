@@ -2342,6 +2342,7 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - says how much memory the computer has free;
   - runs its tests one file at a time with the memory options every other run uses, each stopped with all it started if it hangs;
   - accepts a full gate recorded complete for exactly its commit in place of those tests.
+- **The crash, measured**: reproduced with the release's own setup and nothing published. It is on a V8 background compile thread, and comes and goes with the computer's free memory (with about 2 GB free, every time), not with the environment. Before its tests the release now waits, saying so, until 3 GB is free (up to 20 minutes, then a clear stop), and gives a test process that ran out of memory one more try once there is room.
 - **Not built**: a request for a higher level through an approval card. A session's tools run outside its job, so it would change nothing a release uses (ADR 0023).
 - **The routes file** is found in this checkout, the main worktree, or beside the release key (`release-routes.ts`, also used by `update-route-e2e.ts`). Nothing is copied in or deleted by hand.
 - **A resumable gate** (`gate.mjs`, `test-shards.mjs`, `gate-record.mjs`):

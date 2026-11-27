@@ -34,6 +34,13 @@ needs me in a terminal again". What stopped releases in the week before, with th
   helped it.
 - What a release does have is the computer's memory, which was about 2 GB free while several sessions ran, and the
   memory options its test processes started with (none, unlike every other run here).
+- **Measured afterwards** with the release's own setup and nothing published (a throwaway npm script under tsx running
+  the same test step): the crash is on a V8 background compile thread, and it comes and goes with the computer's free
+  memory, not with anything in the environment. Dropping all of npm's variables crashed once; dropping each group in
+  turn passed. With about 2 GB free it crashed every time.
+- **So the release waits for memory**: before its tests it waits, saying so, until the computer has 3 GB free (up to
+  20 minutes, then it stops with a clear message), and a test process that ran out of memory gets one more try once
+  there is room again.
 
 ## Decision
 

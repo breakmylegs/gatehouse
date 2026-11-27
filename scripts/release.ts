@@ -131,6 +131,30 @@ function releaseKey(): string {
 export const RELEASE_NEEDS_MB = 3072
 /** The memory options a release's test processes run with, as every other test run here does. */
 export const TEST_NODE_OPTIONS = "--max-old-space-size=3072 --max-semi-space-size=4"
+/** O60: what the computer needs free before a release's tests start (they crashed with about 2 GB free). */
+export const TEST_NEEDS_FREE_MB = 3072
+
+/**
+ * Waits until the computer has `mb` free, saying so once a minute, for up to 20 minutes; then stops the release with
+ * a clear message rather than starting tests that would run out of memory partway.
+ */
+async function waitForMemory(mb: number): Promise<void> {
+  const until = Date.now() + 20 * 60_000
+  let said = 0
+  for (;;) {
+    const free = Math.round(os.freemem() / 1024 ** 2)
+    if (free >= mb) return
+    if (Date.now() > until)
+      throw new Error(
+        `The computer has had only about ${free} MB free for 20 minutes, and a release's tests need ${mb} MB. Close some sessions or other programs, then release again.`,
+      )
+    if (Date.now() - said >= 60_000) {
+      console.log(`[release] waiting for memory: ${free} MB free, the tests need ${mb} MB`)
+      said = Date.now()
+    }
+    await new Promise((r) => setTimeout(r, 10_000))
+  }
+}
 
 const NO_ROUTES =
   "No update routes file (release-channels.local.json here, or channels.json beside the release key). Without it, installs made before the rename cannot update. See scripts/release.ts."
@@ -351,12 +375,27 @@ if (cmd === "version") {
     // releases in a row. O60: always each file in a process of its own, one worker, with the memory options every
     // other run here uses (27 Nov: four releases in a row crashed in invariants.test.ts, "Fatal process out of
     // memory: Zone", run with the defaults), and each process stopped with all it started if it hangs.
-    step(
-      "security invariant tests, one file to a process",
-      node,
-      [path.join(root, "scripts", "test-shards.mjs"), ...invariants],
-      { ...process.env, NODE_OPTIONS: TEST_NODE_OPTIONS, GATEHOUSE_SHARD_TIMEOUT_MIN: "20" },
-    )
+    // O60, measured 27 Nov: invariants.test.ts crashed with V8's "Fatal process out of memory: Zone" on a background
+    // compile thread whenever the computer had about 2 GB free (other sessions running), and passed with more; its
+    // environment made no difference. So it waits, saying so, until there is room, and a crash of that kind gets one
+    // more try once memory is back, rather than failing the release halfway.
+    const tests = () =>
+      spawnSync(node, [path.join(root, "scripts", "test-shards.mjs"), ...invariants], {
+        cwd: root,
+        stdio: ["ignore", "pipe", "pipe"],
+        encoding: "utf8",
+        env: { ...process.env, NODE_OPTIONS: TEST_NODE_OPTIONS, GATEHOUSE_SHARD_TIMEOUT_MIN: "20" },
+      })
+    console.log("[release] security invariant tests, one file to a process")
+    await waitForMemory(TEST_NEEDS_FREE_MB)
+    let r = tests()
+    if (r.status !== 0 && /out of memory|exit code 2147483651|exited unexpectedly/.test(`${r.stdout}${r.stderr}`)) {
+      console.log("[release] a test process ran out of memory (the computer was short of it); trying again once there is room")
+      await waitForMemory(TEST_NEEDS_FREE_MB + 1024)
+      r = tests()
+    }
+    process.stdout.write(`${r.stdout ?? ""}${r.stderr ?? ""}`.split(/\r?\n/).filter((l) => /\[shards\]|FAIL|✗|×/.test(l)).join("\n") + "\n")
+    if (r.status !== 0) throw new Error(`The security invariant tests failed:\n${`${r.stdout}${r.stderr}`.slice(-6000)}`)
   }
   // Even with --skip-tests: a release never ships what the terms or the rules forbid (CH-01).
   step("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")])
