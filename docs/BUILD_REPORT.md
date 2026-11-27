@@ -2354,6 +2354,10 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
   - a gone or six-hour-old lock is taken over.
 - **Leftovers** (`leftovers.mjs`): a test process past its time (30 minutes, 20 in a release) is stopped with everything it started; at the end of a run, our orphaned headless browsers are stopped and unused profiles removed; another run's browser is left alone.
 - **Found while doing this, and fixed**: the break-run tool I use (outside the repository) counted a test run that hit its five-minute limit as caught. The O59 scanner tests take about six and a half minutes here, and the O57 server tests about ten, so those breaks could have been caught by the timeout alone. The tool now reports a timeout as a timeout, allows 20 minutes, stops the whole tree and sweeps up browsers. O59's nine breaks and O57's four Host breaks were run again with only the tests that guard them (results in their entries).
+- **Found by the first full gates**:
+  - Renaming the gate record failed now and then on Windows (EPERM, the file held open a moment) and ended the run. It is now tried again, and a record not written only means a rerun runs that file again.
+  - A batch's first failure is now logged, so a file that passes on its retry can still be understood.
+  - The TypeScript language service's memory cap (C-032) was ignored when the process had `--max-old-space-size` (in NODE_OPTIONS, say), which V8 applies process-wide. `ts-service.ts` now also reads the worker's heap before giving each answer, and a worker past its cap ends with the same reason. `ts-service.test.ts` passes with and without NODE_OPTIONS; breaking the check is caught with them set.
 - Tests: `apps/host/test/release-self.test.ts` (the lock, the gate record, the budget and retries, the sweep, the headroom message, the routes file from a worktree), `test-shards.test.ts`. Ten breaks, all caught.
 - Not covered by a unit test: the release's own use of these (`release.ts`). It is proved by the release that follows, run from the session with no terminal step.
 

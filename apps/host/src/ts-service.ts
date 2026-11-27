@@ -35,13 +35,25 @@ export class TsService {
     const w = new Worker(this.#o.script ?? new URL("./ts-worker.mjs", import.meta.url), {
       resourceLimits: { maxOldGenerationSizeMb: this.#o.memoryMb ?? 768 },
     })
+    const capMb = this.#o.memoryMb ?? 768
     w.on("message", (m: { id: number; ok: boolean; result?: unknown; error?: string }) => {
       const p = this.#waiting.get(m.id)
       if (!p) return
       clearTimeout(p.timer)
       this.#waiting.delete(m.id)
-      if (m.ok) p.resolve(m.result)
-      else p.reject(new Error(m.error ?? "The language service could not answer."))
+      if (!m.ok) return p.reject(new Error(m.error ?? "The language service could not answer."))
+      // 27 Nov: the cap above is ignored when the process was started with --max-old-space-size (in NODE_OPTIONS, say),
+      // which is process-wide in V8; found by the full gate. So the worker's heap is also read before each answer is
+      // given, and a worker past its cap ends there, with the same plain reason, as one stopped by the cap would.
+      void w
+        .getHeapStatistics()
+        .then((h) => {
+          if (h.used_heap_size <= capMb * 1024 * 1024) return p.resolve(m.result)
+          this.#waiting.set(m.id, p)
+          ended("it used more memory than its cap")
+          void w.terminate()
+        })
+        .catch(() => p.resolve(m.result))
     })
     const ended = (why: string) => {
       if (this.#worker !== w) return
