@@ -460,6 +460,8 @@ export interface SessionDeps {
   debugger?: { release(sessionId: string): void }
   /** G26: the outgoing-connection proxy, when on: the variables that point a session at it, with its own token. */
   egress?: { envFor(sessionId: string): Promise<Record<string, string> | undefined>; release(sessionId: string): void }
+  /** O59: what secret-in-commit held in each repository, and findings the owner allowed once. */
+  secretHolds?: import("./secret-holds.js").SecretHolds
   /** Your title, pin and archive for a Claude Code session id. Absent where they are not kept. */
   sessionMeta?: (sdkSessionId: string | undefined) => {
     title?: string
@@ -1300,6 +1302,7 @@ export class Session extends EventEmitter<SessionEvents> {
       ...(d.instructions && this.#opts.kind !== "chat"
         ? { instructions: d.instructions, instructionCalls: this.#instructionCalls }
         : {}),
+      ...(d.secretHolds ? { secretHolds: d.secretHolds } : {}),
       decided: this.#decided,
       onEvent: (type, data) => this.emit("event", { type, data }),
       onDecision: this.#tellDecision,

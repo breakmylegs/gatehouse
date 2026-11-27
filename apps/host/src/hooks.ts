@@ -19,10 +19,12 @@ import {
   makesCommit,
   scanCommit,
   makesPush,
+  repoTop,
   secretReason,
   SECRET_IN_COMMIT_RULE,
   type Found,
 } from "./commit-scan.js"
+import type { SecretHolds } from "./secret-holds.js"
 import type { HookCallback, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk"
 import { evaluateFloor, type Policy, type PwshWorker } from "@gatehouse/policy"
 import type { Verdict } from "@gatehouse/shared"
@@ -171,6 +173,8 @@ export interface SessionHookDeps {
   scanCommits?: boolean
   /** Tests only: stands in for reading the commit. */
   commitScanner?: (cwd: string, command: string) => Promise<Found[]>
+  /** O59: what secret-in-commit held in each repository, and a finding the owner allowed once there. */
+  secretHolds?: SecretHolds
   log: (line: string) => void
 }
 
@@ -238,7 +242,35 @@ export function createFloorHook(deps: SessionHookDeps): HookCallback {
             "Codehouse could not check this commit or push for secrets, so it asks you before it runs.",
           )
         }
+        // O59: a finding the owner allowed once in this repository (Settings, Safety, Held for secrets) is let through
+        // once, recorded; anything else found is refused as before, and kept for that list.
+        const repo = found.length && deps.secretHolds ? await repoTop(cwd) : cwd
+        if (found.length && deps.secretHolds) {
+          const { left, used } = deps.secretHolds.excuse(repo, found)
+          if (used.length) {
+            await deps.audit.record({
+              session: deps.sessionId,
+              event: "secret_allowed_once_used",
+              channel: "host",
+              tool: input.tool_name,
+              toolUseId: input.tool_use_id,
+              cwd,
+              input: { repo, findings: used.map((f) => ({ kind: f.kind, file: f.file, line: f.line, commit: f.commit, branch: f.branch })) },
+              verdict: {
+                outcome: "allow",
+                ruleId: SECRET_IN_COMMIT_RULE,
+                reason: `Let through once, as you allowed: ${secretReason(used).replace(/^This would commit or push what looks like a secret \((.*)\)\..*$/s, "$1")}.`,
+                risk: 100,
+                decidedBy: "human-desktop",
+                policyHash: policy?.hash ?? "none",
+              },
+              latencyMs: 0,
+            })
+          }
+          found = left
+        }
         if (found.length) {
+          deps.secretHolds?.held(repo, found)
           const reason = secretReason(found)
           await deps.audit.record({
             session: deps.sessionId,

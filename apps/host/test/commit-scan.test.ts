@@ -199,7 +199,7 @@ describe("the secret commit block (D-058)", () => {
     fs.writeFileSync(path.join(dir, "keys.ts"), `// keys\n\nexport const k = "${AWS}"\n`)
     git("add", "keys.ts")
     git("commit", "--quiet", "-m", "keys")
-    expect(await scanCommit(dir, "git push origin main")).toEqual([{ file: "keys.ts", kind: "an AWS access key", line: 3, commit: git("rev-parse", "--short", "HEAD") }])
+    expect(await scanCommit(dir, "git push origin main")).toEqual([{ file: "keys.ts", kind: "an AWS access key", line: 3, commit: git("rev-parse", "--short", "HEAD"), branch: "main" }])
     // Once a remote has it, a push sends nothing new.
     const bare = fs.mkdtempSync(path.join(os.tmpdir(), "gh-commit-bare-"))
     try {
@@ -285,11 +285,13 @@ describe("a push is judged on what it sends (24 Nov)", () => {
     expect(await scanCommit(dir, "git push")).toEqual([])
     expect(await scanCommit(dir, "Set-Location C:\\x; git push origin main 2>&1 | Select-Object -Last 3")).toEqual([])
     // Sending that branch, or every branch, is still refused, naming the commit and its line there.
-    const sent = [{ file: "scripts/update.sh", kind: "a password in a web address", line: 4, commit: side }]
+    const sent = [{ file: "scripts/update.sh", kind: "a password in a web address", line: 4, commit: side, branch: "deploy-alignment" }]
     expect(await scanCommit(dir, "git push origin deploy-alignment")).toEqual(sent)
     expect(await scanCommit(dir, "git push origin deploy-alignment:main")).toEqual(sent)
-    expect(await scanCommit(dir, "git push --all origin")).toEqual(sent)
-    expect(secretReason(sent)).toContain(`scripts/update.sh, line 4 of commit ${side}`)
+    // --all sends every branch: the finding is named without one branch.
+    expect(await scanCommit(dir, "git push --all origin")).toEqual([{ file: "scripts/update.sh", kind: "a password in a web address", line: 4, commit: side }])
+    // O59: the refusal names the file, the line in it, the commit that adds it and the branch it is on.
+    expect(secretReason(sent)).toContain(`scripts/update.sh, line 4 of commit ${side} on branch deploy-alignment`)
   })
 
   it("is not refused, nor a commit, for removing a secret or rewording it away", async () => {
@@ -355,4 +357,150 @@ describe("what a push sends (24 Nov)", () => {
     expect(pushTargets(["origin", "refs/heads/*"], "main", up)).toEqual({ remote: "origin", all: true })
     expect(pushes("git -C /c/dev/gh-crash push origin fix/crash-evidence:main 2>&1 | tail -3")).toEqual([{ words: ["origin", "fix/crash-evidence:main"], dir: "/c/dev/gh-crash" }])
   })
+})
+
+// O59 (owner, 27 Nov): the push refused from C:\dev\peter, made sure of in a throwaway repository: a push is judged on
+// what each branch sends, from what the remote has now; placeholders are not passwords; a real-looking one still is.
+describe("a push judged only on what it sends, from the remote as it is now (O59)", () => {
+  let bare: string
+  const PH = HINT("<POSTGRES_PASSWORD>")
+  beforeEach(() => {
+    bare = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "gh-o59-bare-")))
+    execFileSync("git", ["init", "--quiet", "--bare", bare], { windowsHide: true })
+    git("remote", "add", "origin", bare)
+    git("push", "--quiet", "-u", "origin", "main")
+  })
+  afterEach(() => fs.rmSync(bare, { recursive: true, force: true }))
+  const put = (file: string, text: string, msg: string) => {
+    fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true })
+    fs.writeFileSync(path.join(dir, file), text)
+    git("add", file)
+    git("commit", "--quiet", "-m", msg)
+    return git("rev-parse", "--short", "HEAD")
+  }
+  const lines = (n: number) => Array.from({ length: n }, (_, i) => `echo line ${i + 1}`).join("\n")
+
+  it("(a) commits and pushes a placeholder, then rewords it away and pushes again, never refused", async () => {
+    fs.mkdirSync(path.join(dir, "scripts"))
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), `${lines(495)}\n${PH}\n`)
+    git("add", ".")
+    expect(await scanCommit(dir, "git commit -m hint")).toEqual([])
+    git("commit", "--quiet", "-m", "hint")
+    expect(await scanCommit(dir, "git push")).toEqual([])
+    git("push", "--quiet")
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), `${lines(495)}\necho "DATABASE_URL: no address shape here"\n`)
+    expect(await scanCommit(dir, "git commit -am reword && git push origin main")).toEqual([])
+    git("commit", "--quiet", "-am", "reword")
+    expect(await scanCommit(dir, "git push origin main")).toEqual([])
+  }, 180_000)
+
+  it("(b) allows commits that do not touch the file while another unpushed branch holds a real-looking secret", async () => {
+    git("checkout", "--quiet", "-b", "deploy-alignment")
+    put("scripts/update.sh", `${lines(495)}\n${HINT("Xk82jQp4vN")}\n`, "side")
+    git("checkout", "--quiet", "main")
+    put("docs/notes.md", "notes\n", "notes")
+    for (const command of ["git push", "git push origin main", "git push origin HEAD", "git push -u origin main"])
+      expect(await scanCommit(dir, command), command).toEqual([])
+  }, 180_000)
+
+  it("(c) reads the remote as it is now: a missing branch, a stale tracking ref, a remote that cannot be asked", async () => {
+    // Missing: a new branch sends what that remote has nowhere, here only its own commit.
+    git("checkout", "--quiet", "-b", "feature")
+    expect(await scanCommit(dir, "git push -u origin feature")).toEqual([])
+    const real = put("cfg.sh", `${REAL}\n`, "real")
+    expect(await scanCommit(dir, "git push -u origin feature")).toEqual([{ file: "cfg.sh", kind: "a password in a web address", line: 1, commit: real, branch: "feature" }])
+    git("checkout", "--quiet", "main")
+    // Stale: the remote already has a commit (pushed by address, so origin/main did not move); only what is new is read.
+    put("old.sh", `${REAL}\n`, "already there")
+    execFileSync("git", ["push", "--quiet", bare, "main"], { cwd: dir, windowsHide: true })
+    expect(git("rev-parse", "origin/main")).not.toBe(git("rev-parse", "main"))
+    put("docs/new.md", "new\n", "new")
+    expect(await scanCommit(dir, "git push origin main")).toEqual([])
+    // Unknown: a remote that cannot be asked falls back to what that remote has nowhere, so more is read, never less.
+    git("remote", "add", "gone", path.join(os.tmpdir(), "gh-o59-no-such-remote"))
+    git("checkout", "--quiet", "-b", "offline")
+    const off = put("off.sh", `${REAL}\n`, "offline")
+    const unknown = await scanCommit(dir, "git push gone offline")
+    expect(unknown).toContainEqual({ file: "off.sh", kind: "a password in a web address", line: 1, commit: off, branch: "offline" })
+    // Everything that remote is not known to have, so main's commit is read too: more, never less.
+    expect(unknown.map((x) => x.file).sort()).toEqual(["off.sh", "old.sh"])
+    // An empty range sends nothing and is never refused.
+    git("push", "--quiet", "origin", "offline")
+    expect(await scanCommit(dir, "git push origin offline")).toEqual([])
+  }, 180_000)
+
+  it("(d) is never refused for a commit that only removes lines", async () => {
+    put("cfg.sh", `${REAL}\nkeep\n`, "add")
+    execFileSync("git", ["push", "--quiet", bare, "main"], { cwd: dir, windowsHide: true })
+    fs.writeFileSync(path.join(dir, "cfg.sh"), "keep\n")
+    expect(await scanCommit(dir, "git commit -am remove")).toEqual([])
+    git("commit", "--quiet", "-am", "remove")
+    expect(await scanCommit(dir, "git push origin main")).toEqual([])
+  }, 180_000)
+
+  it("(e) still refuses a real-looking password at commit and at push", async () => {
+    fs.writeFileSync(path.join(dir, "db.sh"), `${HINT("Xk82jQp4vN")}\n`)
+    git("add", ".")
+    expect(await scanCommit(dir, "git commit -m db")).toEqual([{ file: "db.sh", kind: "a password in a web address", line: 1 }])
+    git("commit", "--quiet", "-m", "db")
+    const sha = git("rev-parse", "--short", "HEAD")
+    expect(await scanCommit(dir, "git push")).toEqual([{ file: "db.sh", kind: "a password in a web address", line: 1, commit: sha, branch: "main" }])
+  }, 180_000)
+
+  it("(f) reports the line as it is in the file at the commit that adds it", async () => {
+    put("scripts/update.sh", `${lines(10)}\n`, "start")
+    git("push", "--quiet")
+    fs.writeFileSync(path.join(dir, "scripts/update.sh"), `${lines(5)}\n${HINT("Xk82jQp4vN")}\n${lines(10).split("\n").slice(5).join("\n")}\n`)
+    git("commit", "--quiet", "-am", "adds it at 6")
+    const sha = git("rev-parse", "--short", "HEAD")
+    put("other.md", "x\n", "later")
+    const [f] = await scanCommit(dir, "git push")
+    expect(f).toMatchObject({ file: "scripts/update.sh", commit: sha, branch: "main" })
+    const atCommit = git("show", `${sha}:scripts/update.sh`).split("\n")
+    expect(atCommit[f!.line! - 1]).toContain("@db:5432/peter")
+  }, 180_000)
+
+  it("lets one held finding through once when you allow it, recorded, and refuses anything else", async () => {
+    const { SecretHolds } = await import("../src/secret-holds.js")
+    const holds = new SecretHolds()
+    const records: Array<{ event: string; verdict: { outcome: string; decidedBy: string } }> = []
+    const hook = createFloorHook({
+      sessionId: "s",
+      cwd: dir,
+      policy: () => undefined,
+      pwsh: undefined,
+      audit: { record: async (r: never) => (records.push(r), true) } as never,
+      kill: () => false,
+      decided: new Set<string>(),
+      onEvent: () => undefined,
+      log: () => undefined,
+      secretHolds: holds,
+    } as never)
+    const run = async (command: string) =>
+      (await hook(
+        { hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, tool_use_id: `t${Math.random()}`, cwd: dir, session_id: "x" } as never,
+        "t",
+        { signal: new AbortController().signal },
+      )) as { hookSpecificOutput?: { permissionDecision?: string; permissionDecisionReason?: string } }
+    put("db.sh", `${HINT("Xk82jQp4vN")}\n`, "db")
+    expect((await run("git push")).hookSpecificOutput?.permissionDecision).toBe("deny")
+    const [held] = holds.list()
+    expect(held!.findings).toMatchObject([{ file: "db.sh", line: 1, branch: "main", allowedOnce: false }])
+    // A finding not held there is not allowed; the held one is, once.
+    expect(holds.allowOnce(held!.repo, { kind: "a password in a web address", file: "db.sh", line: 2 })).toBe(false)
+    expect(holds.allowOnce(held!.repo, { kind: "a password in a web address", file: "db.sh", line: 1 })).toBe(true)
+    expect((await run("git push")).hookSpecificOutput?.permissionDecision).not.toBe("deny")
+    expect(records.at(-1)).toMatchObject({ event: "secret_allowed_once_used", verdict: { outcome: "allow", decidedBy: "human-desktop" } })
+    // Used up: the same push is refused again.
+    expect((await run("git push")).hookSpecificOutput?.permissionDecision).toBe("deny")
+    // An allowance covers only that finding: with another one in the same push, both are still refused.
+    holds.allowOnce(holds.list()[0]!.repo, { kind: "a password in a web address", file: "db.sh", line: 1 })
+    put("more.sh", `${REAL}\n`, "more")
+    const out = await run("git push")
+    expect(out.hookSpecificOutput?.permissionDecision).toBe("deny")
+    expect(out.hookSpecificOutput?.permissionDecisionReason).toContain("more.sh")
+    // Clear forgets the repository's holds and any allowance.
+    expect(holds.clear(held!.repo)).toBe(true)
+    expect(holds.list()).toEqual([])
+  }, 180_000)
 })

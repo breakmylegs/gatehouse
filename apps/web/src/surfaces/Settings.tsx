@@ -1,4 +1,5 @@
 import { LooseningConfirm, LooseningList, looseningIn, type LooseningAsk } from "../components/LooseningConfirm"
+import { SecretHoldsPanel } from "../components/SecretHoldsPanel"
 import { PriceSheetImport } from "../components/PriceSheetImport"
 import { ClaudeImport } from "../components/ClaudeImport"
 import { ManagedNote } from "../components/ManagedNote"
@@ -1821,6 +1822,16 @@ export function Settings() {
                 <input type="checkbox" checked={v.slowFast} onChange={(e) => change({ slowFast: e.target.checked }, "Slow down fast approvals")} />
                 Slow down fast approvals
               </label>
+            </Group>
+
+            {/* O59 (owner, 27 Nov): what secret-in-commit holds, with Allow once and Clear. */}
+            <Group section="safety" title="Held for secrets" gap="gap-2">
+              <p className="m-0 text-sm text-mut">
+                A commit or push that adds what looks like a secret (a key, a token, a password in a web address) is refused. What the
+                last refusal in each repository found is here, never the value. If one is not a real secret, Allow once lets the
+                next commit or push there that finds exactly it go through; anything else it finds is still refused.
+              </p>
+              <SecretHoldsPanel />
             </Group>
 
             {/* O58 (owner, 27 Nov): D-061's hold on network commands after a flag, as a choice; off unless switched on. */}

@@ -2333,6 +2333,43 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 
 - **Mac: Deny and Allow once on the notification, locking, sleep, wake and power as they happen, and a folder from the Finder (owner, 25 Nov: "Lets do 2 3 and 4").** Described in `docs/mac.md` ("What it does that a browser tab does not"). No new dependency. **Decided by me, for the owner to confirm:** Allow once is offered on a notification only for a permission below High (risk under 70) that is not default to no, and asks for the Mac to be unlocked; High and Severe, questions and plans open the window. An answer from the notification is recorded on the desktop channel, as the wing beside the notch's is, so the audit keeps its channels and an older copy can still read it after an update is undone. A low battery (on battery at 20% or less) pauses Max approval sessions even with "Pause Max approval sessions on battery" off, and lets the Mac sleep; both come back on mains (stricter). Tests: notify-mac (Host and page), presence-mac, mac-events-mac, broker, power, quick. Break checks: the page allowing High, the Host offering Allow once for a default-to-no request, and the broker telling the phone twice each fail them.
 
+### O59 A push judged only on what it sends, and Held for secrets (feat/o59)
+
+- Owner, 27 Nov: the `secret-in-commit` rule "still refuses every git push from the session in C:\dev\peter, saying a password in a web address in scripts/update.sh, line 496".
+- **Root cause, confirmed as the owner read it**: before 24 Nov a push was judged on `git log -p --branches --not --remotes`, every local branch no remote had. `C:\dev\peter` has an unpushed branch, `deploy-alignment` (commit 71a1293, upstream gone), that adds a placeholder database address at `scripts/update.sh` line 496, and `<POSTGRES_PASSWORD>` was taken for a password.
+- **Evidence**:
+  - The audit log has eight refusals from `C:\dev\peter` naming that file and line, between 12:07 and 15:26 on 24 Nov, and none after.
+  - `main` is level with `origin/main`. On `main` that line holds no address.
+  - Today's scanner, run against `C:\dev\peter`, finds nothing for `git push`, `git push origin main`, `git push origin HEAD` or `git -C /c/dev/peter push`, and takes that value for a placeholder.
+  - The 24 Nov fix was already in 2.0.645, which the Host running since 08:49 today was built from (25 Nov 22:59). A session in `C:\dev\peter` reporting the refusal today was most likely repeating one from 24 Nov.
+- **What changed now** (`commit-scan.ts`):
+  - Each branch a push sends is judged from what the remote has now: its branch's commit read freshly (`git ls-remote`), so a stale remote-tracking ref counts nothing the remote already has.
+  - A branch the remote has not got sends what that remote has nowhere.
+  - A remote that cannot be asked falls back to its tracking ref, then to what that remote has nowhere (more is read, never less).
+  - `--all`, `--mirror`, `--tags` and patterns read every branch that remote lacks, as before.
+  - An empty range finds nothing. Removed and reworded lines are never counted.
+  - git never prompts for credentials while it asks.
+  - The refusal names the file, the line in it, the commit that adds it and the branch it is on. The commit check and the push check share one scanner, as before.
+- **Held for secrets** (`secret-holds.ts`, Settings, Safety): what the last refusal found in each repository, kept for this run of Codehouse, never the value. Nothing is cached for the check itself: each commit and push is read from git again.
+  - **Allow once** lets the next commit or push there that finds exactly that finding (its kind, file and line) through.
+  - It is offered on the desktop only, never through Neighbourhood Watch or the phone. It asks you to confirm, and it is recorded in the audit log before it applies (`secret_allowed_once`, and `secret_allowed_once_used` when it is used up).
+  - Anything else found in the same command is still refused. **Clear** forgets a repository's.
+  - The floor still never allows: an excused finding only means it does not deny for that finding.
+- **Chosen**: Allow once is keyed on the finding's kind, file and line, not its commit, so it covers either the commit or the push that finds it. A commit and its push in two commands need two allowances.
+- Tests:
+  - `commit-scan.test.ts`, in a throwaway repository:
+    - (a) a placeholder committed and pushed, then reworded away and pushed again;
+    - (b) a push from main while another unpushed branch holds a real-looking secret;
+    - (c) a missing branch, a stale tracking ref, a remote that cannot be asked, and an empty range;
+    - (d) a removal-only commit;
+    - (e) a real-looking password refused at commit and at push;
+    - (f) the reported line checked against the file at that commit;
+    - Allow once through the floor hook: used once, used up, covering only its own finding, and Clear.
+  - `secret-holds.test.tsx`: the panel, its confirmation, and Clear.
+- Nine breaks, all caught: the remote's commit not read freshly, a remote that cannot be asked reading nothing, the branch left out, the refusal naming no branch, a placeholder taken for a password, an allowance never used up, an allowance covering every finding, the floor ignoring an allowance, and allowing without asking you first.
+- Not covered by a test: the Host's refusal of the three commands through Neighbourhood Watch (`server.ts`, `VIA`), which follows the existing desktop-only pattern for `grant_tool`.
+- **For C:\dev\peter**: nothing needs clearing for this, because nothing was ever cached. `deploy-alignment` still holds that hint at line 496; pushing that branch would be judged on it, and the current rule takes it for a placeholder, so it is not refused. Its upstream is gone; delete the branch when you are done with it.
+
 ### O58 Prompt-injection flags no longer hold the owner up (feat/o58)
 
 - Owner, 27 Nov. ADR 0022, threat model T173, CLAUDE.md invariant 3.

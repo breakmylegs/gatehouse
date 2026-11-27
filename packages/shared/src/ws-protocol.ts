@@ -182,6 +182,19 @@ export const ClientCommand = z.discriminatedUnion("type", [
    * and the ones of it waiting now. The desktop only: never the phone or a push channel (invariant 11).
    */
   z.object({ type: z.literal("grant_tool"), sessionId: Id, tool: z.enum(["WebFetch", "WebSearch"]) }),
+  /**
+   * O59: what secret-in-commit held in each repository (never a value); allowing one held finding once there (the next
+   * commit or push that finds exactly it, audited); and clearing a repository's. The desktop only, as a grant is.
+   */
+  z.object({ type: z.literal("secret_holds") }),
+  z.object({
+    type: z.literal("secret_allow_once"),
+    repo: z.string().min(1).max(1000),
+    kind: z.string().min(1).max(120),
+    file: z.string().max(1000),
+    line: z.number().int().positive().optional(),
+  }),
+  z.object({ type: z.literal("secret_holds_clear"), repo: z.string().min(1).max(1000) }),
   z.object({
     type: z.literal("approve"),
     requestId: Id,

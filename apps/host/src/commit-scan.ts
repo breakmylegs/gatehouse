@@ -20,6 +20,11 @@ import { hasRealCard } from "@gatehouse/policy"
  * on the lines added by the commits it sends (`<remote>/<branch>..<local>`), a push is a git push only when push is the
  * subcommand, and a placeholder in a web address (<PASSWORD>, $VAR, ${VAR}, ***, REPLACE_WITH_..., changeme) is not a
  * password. Removed lines were never read, and nothing is cached: each check reads git again.
+ *
+ * O59 (owner, 27 Nov): each branch a push sends is judged from what the remote has now (its branch read freshly with
+ * git ls-remote), so a stale remote-tracking ref counts nothing the remote already has; a remote that cannot be asked
+ * means more is read, never less; and a finding names the branch that sends it. A finding the owner allowed once in
+ * Settings, Safety, Held for secrets (secret-holds.ts) is let through by the floor once.
  */
 export const SECRET_IN_COMMIT_RULE = "secret-in-commit"
 
@@ -66,6 +71,8 @@ export interface Found {
   line?: number
   /** For a push: the commit that adds it (short id), since the line is that commit's version of the file. */
   commit?: string
+  /** O59: for a push, the branch that sends it. */
+  branch?: string
 }
 
 /** Whether a shell command makes a commit (a git commit anywhere in it, chained or not). */
@@ -201,12 +208,18 @@ export function secretsInFile(file: string, text: string): Found[] {
 
 export type Git = (cwd: string, args: string[]) => Promise<string>
 
+/** O59: the repository a folder is in (its top), or the folder itself when git cannot say. */
+export async function repoTop(cwd: string, run: Git = git): Promise<string> {
+  return run(cwd, ["rev-parse", "--show-toplevel"]).then((s) => s.trim() || cwd, () => cwd)
+}
+
 export const git: Git = (cwd, args) =>
   new Promise((resolve, reject) => {
     execFile(
       "git",
       args,
-      { cwd, windowsHide: true, timeout: 20_000, maxBuffer: 64 * 1024 * 1024 },
+      // Never a credential prompt: asking a remote what it has (ls-remote) fails rather than waits.
+      { cwd, windowsHide: true, timeout: 20_000, maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
       (e, stdout) => (e ? reject(e) : resolve(String(stdout))),
     )
   })
@@ -223,15 +236,21 @@ const MAX_NEW_FILES = 2000
 export async function scanCommit(cwd: string, command: string, run: Git = git): Promise<Found[]> {
   const found = makesCommit("Bash", { command }) ? await scanStaged(cwd, command, run) : []
   // D-058: and what each push in the same command would send: the commits it sends, nothing on other branches.
-  for (const p of pushes(command)) {
-    for (const f of secretsInDiff(await pushedLog(pushDir(cwd, p.dir), p.words, run)))
-      if (!found.some((x) => x.file === f.file && x.kind === f.kind)) found.push(f)
-  }
+  for (const p of pushes(command))
+    for (const part of await pushedLogs(pushDir(cwd, p.dir), p.words, run))
+      for (const f of secretsInDiff(part.log))
+        if (!found.some((x) => x.file === f.file && x.kind === f.kind)) found.push(part.branch ? { ...f, branch: part.branch } : f)
   return found
 }
 
-/** The commits a push sends, as a log of what each adds (-U0), each commit marked with its short id. */
-async function pushedLog(cwd: string, words: string[], run: Git): Promise<string> {
+/**
+ * The commits a push sends, one log for each branch it sends (-U0, each commit marked with its short id), with that
+ * branch. O59 (owner, 27 Nov): judged only on what each branch sends, from what the remote has now: its branch's commit
+ * read freshly (git ls-remote), so a stale remote-tracking ref counts nothing the remote already has. A branch the
+ * remote has not got sends what that remote has nowhere; a remote that cannot be asked falls back to its tracking ref,
+ * then to what that remote has nowhere (more read, never less). An empty range sends nothing and finds nothing.
+ */
+async function pushedLogs(cwd: string, words: string[], run: Git): Promise<Array<{ branch?: string; log: string }>> {
   const quiet = (args: string[]) => run(cwd, args).then((s) => s.trim(), () => undefined)
   const current = await quiet(["symbolic-ref", "--quiet", "--short", "HEAD"])
   const up = await quiet(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
@@ -240,17 +259,48 @@ async function pushedLog(cwd: string, words: string[], run: Git): Promise<string
   const t = pushTargets(words, current, upstream)
   const log = ["-c", "core.quotepath=off", "log", "-p", "--no-color", "--no-ext-diff", "-U0", "--format=%x00commit %h"]
   // A remote name that is a path or an address: no remote-tracking refs, so what no remote has.
-  const remoteRefs = /^[\w.-]+$/.test(t.remote) ? `--remotes=${t.remote}` : "--remotes"
-  if ("all" in t) return run(cwd, [...log, "--branches", "--not", remoteRefs])
-  let out = ""
+  const named = /^[\w.-]+$/.test(t.remote)
+  const remoteRefs = named ? `--remotes=${t.remote}` : "--remotes"
+  if ("all" in t) return [{ log: await run(cwd, [...log, "--branches", "--not", remoteRefs]) }]
+  const out: Array<{ branch?: string; log: string }> = []
   for (const target of t.targets) {
-    const there = `refs/remotes/${target.remote}/${target.branch}`
-    const known = /^[\w.-]+$/.test(target.remote) && (await quiet(["rev-parse", "--verify", "--quiet", there])) !== undefined
-    // A branch new to the remote sends what that remote has nowhere; otherwise what its branch there lacks.
-    out += await run(cwd, known ? [...log, `${there}..${target.local}`, "--"] : [...log, target.local, "--not", remoteRefs, "--"])
-    out += "\n"
+    const base = await remoteHas(cwd, target.remote, target.branch, run)
+    let range: string[]
+    if (base.kind === "commit") range = [`${base.sha}..${target.local}`]
+    else if (base.kind === "none") range = [target.local, "--not", remoteRefs]
+    else {
+      // Not answered: the tracking ref if there is one, otherwise what that remote has nowhere.
+      const there = `refs/remotes/${target.remote}/${target.branch}`
+      const known = named && (await quiet(["rev-parse", "--verify", "--quiet", there])) !== undefined
+      range = known ? [`${there}..${target.local}`] : [target.local, "--not", remoteRefs]
+    }
+    const branch = target.local === "HEAD" || /^[0-9a-f]{7,64}$/.test(target.local) ? current : target.local
+    out.push({ ...(branch ? { branch } : {}), log: await run(cwd, [...log, ...range, "--"]) })
   }
   return out
+}
+
+/**
+ * What a remote's branch is now: its commit, when this repository has that commit too; none when the remote has no
+ * such branch; unknown when the remote cannot be asked, or is ahead with commits not here.
+ */
+async function remoteHas(
+  cwd: string,
+  remote: string,
+  branch: string,
+  run: Git,
+): Promise<{ kind: "commit"; sha: string } | { kind: "none" } | { kind: "unknown" }> {
+  let listed: string
+  try {
+    listed = await run(cwd, ["ls-remote", "--heads", "--", remote, `refs/heads/${branch}`])
+  } catch {
+    return { kind: "unknown" }
+  }
+  const sha = listed.trim().split(/\s+/)[0] ?? ""
+  if (!sha) return { kind: "none" }
+  if (!/^[0-9a-f]{40,64}$/.test(sha)) return { kind: "unknown" }
+  const here = await run(cwd, ["cat-file", "-e", `${sha}^{commit}`]).then(() => true, () => false)
+  return here ? { kind: "commit", sha } : { kind: "unknown" }
 }
 
 /**
@@ -304,7 +354,7 @@ async function scanStaged(cwd: string, command: string, run: Git): Promise<Found
 export function secretReason(found: Found[]): string {
   const list = found
     .slice(0, 5)
-    .map((f) => `${f.kind} in ${f.file || "a staged file"}${f.line ? `, line ${f.line}` : ""}${f.commit ? ` of commit ${f.commit}` : ""}`)
+    .map((f) => `${f.kind} in ${f.file || "a staged file"}${f.line ? `, line ${f.line}` : ""}${f.commit ? ` of commit ${f.commit}` : ""}${f.branch ? ` on branch ${f.branch}` : ""}`)
     .join("; ")
-  return `This would commit or push what looks like a secret (${list}${found.length > 5 ? `; and ${found.length - 5} more` : ""}). Take it out, or keep it in a file git ignores, and commit again. If it is not a real secret, commit it yourself in the Terminal.`
+  return `This would commit or push what looks like a secret (${list}${found.length > 5 ? `; and ${found.length - 5} more` : ""}). Take it out, or keep it in a file git ignores, and commit again. If it is not a real secret, you can allow it once in Codehouse: Settings, Safety, Held for secrets.`
 }

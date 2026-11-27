@@ -1,4 +1,5 @@
 import { portHolder, windowsSnapshot } from "./session-procs.js"
+import { SecretHolds } from "./secret-holds.js"
 import { devDriveCheck, readDevDrive } from "./devdrive.js"
 import { containerCheck, containerFor, findPodman } from "./container-runs.js"
 import { IacPlans } from "./iac-plans.js"
@@ -669,8 +670,11 @@ export function createHost(opts: HostOptions = {}): Host {
         latencyMs: 0,
       }),
   })
+  // O59: what secret-in-commit last held in each repository, and a finding you allowed once (never the value).
+  const secretHolds = new SecretHolds()
   const deps: SessionDeps = {
     egress: egressProxy,
+    secretHolds,
     debugger: debuggerSvc,
     governor,
     defaultResources: () => (power.onBattery ? "low" : undefined),
@@ -1923,6 +1927,7 @@ export function createHost(opts: HostOptions = {}): Host {
     industryPacks: { draftsDir: path.join(rulesDir, "industry"), signedDir: path.join(gatehouseDataDir(env), "industry-packs"), packsDir: path.join(gatehouseDataDir(env), "rule-packs"), checklistDir: path.join(gatehouseDataDir(env), "industry-checklists") },
     // D-094: what each session's processes reached.
     egress,
+    secretHolds,
     dataDir: gatehouseDataDir(env),
     locks,
     evidence,

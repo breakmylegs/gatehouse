@@ -193,6 +193,8 @@ export interface HostApp {
   industryPacks?: { draftsDir: string; signedDir: string; packsDir: string; checklistDir: string }
   /** D-094: what each session's processes reached. */
   egress?: Pick<import("./egress.js").EgressMonitor, "report">
+  /** O59: what secret-in-commit held in each repository, and findings the owner allowed once. */
+  secretHolds?: import("./secret-holds.js").SecretHolds
   /** D-084: each session's breaker run and what it found. */
   adversary?: AdversaryStore
   /** E-012: where a schema diff is kept, as a Mermaid artifact of its session. */
@@ -1285,6 +1287,56 @@ export class HostServer {
           if (v.request.sessionId === s.id && v.request.toolName === cmd.tool && v.request.kind === "permission" && !NEVER_AUTO_APPROVED.has(v.request.verdict.ruleId))
             if (a.broker.resolve(v.request.id, { kind: "decision", decision: "allow" }, "desktop").ok) allowed++
         return { tool: cmd.tool, allowed }
+      }
+      case "secret_holds":
+      case "secret_allow_once":
+      case "secret_holds_clear": {
+        // O59: the desktop only, as a grant is; never through Neighbourhood Watch or the phone (invariant 11).
+        if (VIA.getStore()) throw new CommandError("desktop-only", "Held for secrets is on this computer's Codehouse window only.")
+        const holds = a.secretHolds
+        if (!holds) throw new CommandError("unavailable", "Held for secrets is not available in this Codehouse.")
+        if (cmd.type === "secret_holds") return { repos: holds.list() }
+        if (cmd.type === "secret_holds_clear") {
+          const cleared = holds.clear(cmd.repo)
+          await a.audit
+            .record({
+              session: "desktop",
+              event: "secret_holds_cleared",
+              channel: "desktop",
+              tool: "secret-in-commit",
+              cwd: cmd.repo,
+              input: { repo: cmd.repo },
+              verdict: { outcome: "allow", ruleId: "secret-in-commit", reason: "You cleared what was held for secrets in this repository.", risk: 0, decidedBy: "human-desktop", policyHash: "" },
+              latencyMs: 0,
+            })
+            .catch(() => false)
+          return { cleared }
+        }
+        const finding = { kind: cmd.kind, file: cmd.file, ...(cmd.line !== undefined ? { line: cmd.line } : {}) }
+        if (!holds.isHeld(cmd.repo, finding)) throw new CommandError("not-held", "That finding is not held in this repository now.")
+        // Recorded before it applies: an allowance that is not in the audit log is not given (invariant 13).
+        const written = await a.audit
+          .record({
+            session: "desktop",
+            event: "secret_allowed_once",
+            channel: "desktop",
+            tool: "secret-in-commit",
+            cwd: cmd.repo,
+            input: { repo: cmd.repo, ...finding },
+            verdict: {
+              outcome: "allow",
+              ruleId: "secret-in-commit",
+              reason: `You allowed ${cmd.kind} in ${cmd.file || "a staged file"}${cmd.line ? `, line ${cmd.line}` : ""} once, for the next commit or push that finds it.`,
+              risk: 100,
+              decidedBy: "human-desktop",
+              policyHash: "",
+            },
+            latencyMs: 0,
+          })
+          .catch(() => false)
+        if (!written) throw new CommandError("audit", "The allowance could not be recorded in the audit log, so it was not given.")
+        if (!holds.allowOnce(cmd.repo, finding)) throw new CommandError("not-held", "That finding is not held in this repository now.")
+        return { allowed: true }
       }
       case "approve": {
         // D-021: after approvals too fast to have been read, the next High one wants a second, deliberate approval.
