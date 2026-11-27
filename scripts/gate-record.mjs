@@ -23,11 +23,27 @@ function write(commit, change, env = process.env) {
   if (!/^[0-9a-f]{40,64}$/i.test(commit)) return
   const now = gateRecord(commit, env) ?? { commit, passed: [], steps: [], complete: false, started: new Date().toISOString() }
   const next = change(now)
-  fs.mkdirSync(DIR(env), { recursive: true })
   const file = fileFor(commit, env)
   const tmp = `${file}.${process.pid}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify({ ...next, updated: new Date().toISOString() }, null, 1))
-  fs.renameSync(tmp, file)
+  try {
+    fs.mkdirSync(DIR(env), { recursive: true })
+    fs.writeFileSync(tmp, JSON.stringify({ ...next, updated: new Date().toISOString() }, null, 1))
+    // 27 Nov: Windows refused the rename now and then (EPERM, the record held open a moment by something else, the
+    // virus scanner most likely), which stopped the whole test run. Tried again for a while; never fatal.
+    for (let i = 0; ; i++) {
+      try {
+        fs.renameSync(tmp, file)
+        return
+      } catch (e) {
+        if (i >= 20 || !["EPERM", "EBUSY", "EACCES"].includes(e.code)) throw e
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * (i + 1))
+      }
+    }
+  } catch (e) {
+    // A record not written only means a rerun runs that again: the run itself goes on.
+    console.log(`[gate-record] could not note it for ${commit.slice(0, 12)} (${e.code ?? e.message}); a rerun will run it again`)
+    fs.rmSync(tmp, { force: true })
+  }
 }
 
 /** A test file passed for this commit. */

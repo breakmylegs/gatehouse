@@ -144,6 +144,8 @@ export async function runShards(files, o = {}) {
             // The files vitest names as failing; when it names none of them (a crash), all of them.
             const named = batch.filter((f) => new RegExp(`FAIL\\b[^\\n]*${f.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`).test(r.out))
             const suspects = named.length ? named : batch
+            // 27 Nov: what the first run said, so a failure that passes on its retry can still be understood.
+            log(`[shards] ${named.length ? "failed" : "stopped without naming a file"} on its first run: ${batch.join(", ")}\n${r.out.slice(-1500)}`)
             for (const file of suspects) await alone(file)
             // The others in a failed batch passed in it.
             for (const file of batch) if (!suspects.includes(file)) passed(file)
