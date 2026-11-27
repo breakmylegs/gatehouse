@@ -27,6 +27,10 @@
 import { notesFor, parseLog, type Change } from "./platforms.js"
 import { execFileSync, spawnSync } from "node:child_process"
 import { publishRelease } from "./release-upload.js"
+import { gateRecord } from "./gate-record.mjs"
+import { heavyLock } from "./heavy-lock.mjs"
+import { fits, jobHeadroom } from "./job-headroom.mjs"
+import { findRoutesFile } from "./release-routes.js"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -119,16 +123,22 @@ function releaseKey(): string {
   return fs.readFileSync(file, "utf8")
 }
 
+/**
+ * O60: what a release's own run needs free in a session's job: its tests' processes (one at a time, up to
+ * TEST_NODE_OPTIONS' heap), packaging, and the release itself beside them. Medium (4 GB) leaves enough beside a
+ * session's own use; Low (2 GB) does not.
+ */
+export const RELEASE_NEEDS_MB = 3072
+/** The memory options a release's test processes run with, as every other test run here does. */
+export const TEST_NODE_OPTIONS = "--max-old-space-size=3072 --max-semi-space-size=4"
+
 const NO_ROUTES =
   "No update routes file (release-channels.local.json here, or channels.json beside the release key). Without it, installs made before the rename cannot update. See scripts/release.ts."
 
 /** The update routes for installs made before a rename, or undefined when there is no routes file here. */
 function loadRoutes(): LegacyRoute[] | undefined {
-  const files = [
-    path.join(root, "release-channels.local.json"),
-    path.join(process.env.USERPROFILE ?? "", ".codehouse-release", "channels.json"),
-  ]
-  const file = files.find((f) => fs.existsSync(f))
+  // O60: this checkout, the main worktree (a release from a worktree needs nothing copied in), or beside the key.
+  const file = findRoutesFile(root)
   if (!file) return undefined
   const routes = (JSON.parse(fs.readFileSync(file, "utf8")) as { legacy?: LegacyRoute[] }).legacy
   if (!Array.isArray(routes)) throw new Error(`${file} has no "legacy" list of update routes.`)
@@ -282,6 +292,15 @@ if (cmd === "version") {
   } catch (e) {
     if ((e as Error).message.includes("already released")) throw e
   }
+  // O60 (owner, 27 Nov): one heavy run at a time on this computer; a release waits its turn behind the full gate or a
+  // whole-suite run, saying so, instead of both running out of memory partway.
+  await heavyLock(`the release of ${v.version} from ${root}`, { say: (l: string) => console.log(`[release] ${l}`) })
+  // O60: inside a Codehouse session's job object, a release needs room in it; too little stops it here, naming the
+  // level it needs, rather than crashing halfway. Outside one (a terminal, or a session's tools, which run outside
+  // the job), nothing to check. The free memory of the computer is said either way.
+  const room = fits(RELEASE_NEEDS_MB, jobHeadroom())
+  if (!room.ok) throw new Error(room.message)
+  console.log(`[release] memory: ${Math.round(os.freemem() / 1024 ** 2)} MB free on this computer${room.free !== undefined ? `, ${room.free} MB free in this session's job` : ""}`)
   const node = process.execPath
   const tsx = path.join(root, "node_modules", "tsx", "dist", "cli.mjs")
   // C-002: skipping the tests needs the owner's signed override for exactly this version, recorded before going on.
@@ -316,7 +335,12 @@ if (cmd === "version") {
   // regression tests for what it touches), so a release no longer re-runs everything since the last one (that was up
   // to 237 test files, half an hour and more on this laptop). It runs the security invariant tests the gate always
   // runs, then the prohibited patterns and the packaged copy's own check below.
-  if (!process.argv.includes("--skip-tests")) {
+  // O60 (owner, 27 Nov): a full gate recorded as complete for exactly this commit ran these and everything else, so
+  // they are not run again here.
+  const gated = gateRecord(git("rev-parse", "HEAD"))
+  if (!process.argv.includes("--skip-tests") && gated?.complete)
+    console.log(`[release] the full gate passed for this commit (${gated.passed.length} test files, recorded ${gated.updated ?? ""}), so its tests are not run again`)
+  else if (!process.argv.includes("--skip-tests")) {
     const invariants = [
       "apps/host/test/invariants.test.ts",
       "apps/host/test/threat-model.test.ts",
@@ -324,19 +348,15 @@ if (cmd === "version") {
       "apps/host/test/conformance.test.ts",
     ]
     // 16 Nov: with under 4 GB free (Codehouse's own sessions running), two workers at once timed out or crashed, two
-    // releases in a row. The gate's rule then: each file in a process of its own as memory allows.
-    if (os.freemem() < 4 * 1024 ** 3)
-      step("security invariant tests, one file to a process (memory is short)", node, [
-        path.join(root, "scripts", "test-shards.mjs"),
-        ...invariants,
-      ])
-    else
-      step("security invariant tests", node, [
-        path.join(root, "node_modules", "vitest", "vitest.mjs"),
-        "run",
-        "--maxWorkers=2",
-        ...invariants,
-      ])
+    // releases in a row. O60: always each file in a process of its own, one worker, with the memory options every
+    // other run here uses (27 Nov: four releases in a row crashed in invariants.test.ts, "Fatal process out of
+    // memory: Zone", run with the defaults), and each process stopped with all it started if it hangs.
+    step(
+      "security invariant tests, one file to a process",
+      node,
+      [path.join(root, "scripts", "test-shards.mjs"), ...invariants],
+      { ...process.env, NODE_OPTIONS: TEST_NODE_OPTIONS, GATEHOUSE_SHARD_TIMEOUT_MIN: "20" },
+    )
   }
   // Even with --skip-tests: a release never ships what the terms or the rules forbid (CH-01).
   step("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")])

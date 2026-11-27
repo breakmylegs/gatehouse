@@ -21,6 +21,11 @@
 //      which are quick and guard
 //      what must never break.
 // A change to package.json, the lockfile, a tsconfig or the vitest or eslint config runs everything.
+//
+// O60 (owner, 27 Nov): everything takes longer than a background run's two hours, so on a clean tree it records what
+// passed for that exact commit (scripts/gate-record.mjs) and a rerun carries on from there; --budget-minutes <n> stops
+// the tests cleanly after n minutes (exit 3: run it again to carry on). A release of the commit accepts a complete
+// record. Only one such run happens on this computer at a time (scripts/heavy-lock.mjs); a second waits its turn.
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
@@ -28,6 +33,8 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { directTests, relatedTests } from "./related-tests.mjs"
 import { recordDevCheck } from "./dev-checks.mjs"
+import { gateRecord, noteComplete, noteStep, pruneRecords } from "./gate-record.mjs"
+import { heavyLock } from "./heavy-lock.mjs"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const args = process.argv.slice(2)
@@ -58,10 +65,16 @@ function git(...a) {
   return r.stdout.split(/\r?\n/).filter(Boolean)
 }
 
-function run(label, cmd, cmdArgs, { retryFlaky = false } = {}) {
+function run(label, cmd, cmdArgs, { retryFlaky = false, stream = false } = {}) {
   say(label)
   if (dry) return 0
   const started = Date.now()
+  // O60: a long step (all the tests) shows its own progress as it goes, instead of holding it back until the end.
+  if (stream) {
+    const r = spawnSync(cmd, cmdArgs, { cwd: root, stdio: ["ignore", "inherit", "inherit"] })
+    say(`  ${r.status === 0 ? "passed" : r.status === 3 ? "stopped at its time budget" : "FAILED"} in ${Math.round((Date.now() - started) / 1000)}s`)
+    return r.status ?? 1
+  }
   // A retry replaces the worker count instead of adding a second one, which vitest refuses (30 Oct: the retry
   // failed at once with "Expected a single value for option --maxWorkers").
   const once = (extra = []) =>
@@ -192,27 +205,42 @@ const failures = []
 // 0. Always: nothing Anthropic's terms or Codehouse's rules forbid is in the tree (CH-01). It takes a second.
 if (run("prohibited patterns", node, [path.join(root, "scripts", "forbidden.mjs")]) !== 0)
   failures.push("prohibited patterns")
+let incomplete = false
 if (fullReason) {
   say(`running everything (${fullReason})`)
+  // O60 (owner, 27 Nov): one heavy run at a time on this computer; a second waits its turn and says for what.
+  if (!dry) await heavyLock(`the full gate in ${root}`, { say })
+  // O60: on a clean tree, what passes is recorded for this exact commit, and a rerun carries on from there, so a gate
+  // longer than a background run's two hours still finishes; a release of the commit accepts the complete record.
+  const commit = !dry && git("status", "--porcelain").length === 0 ? git("rev-parse", "HEAD")[0] : undefined
+  const record = commit ? gateRecord(commit) : undefined
+  if (commit) say(record ? `carrying on for ${commit.slice(0, 12)}: ${record.steps.length} steps and ${record.passed.length} test files passed already` : `recording for ${commit.slice(0, 12)}`)
+  else if (!dry) say("the tree has changes, so nothing is recorded: a rerun starts again")
+  const step = (name, fn) => {
+    if (record?.steps.includes(name)) return say(`${name}: passed already for this commit`)
+    if (fn() !== 0) failures.push(name)
+    else if (commit) noteStep(commit, name)
+  }
   for (const w of workspaces)
     if (fs.existsSync(path.join(root, w, "tsconfig.json")))
-      if (
-        run(`typecheck: ${w}`, node, [
-          bin("typescript/bin/tsc"),
-          "-p",
-          path.join(w, "tsconfig.json"),
-          "--noEmit",
-        ]) !== 0
-      )
-        failures.push(`typecheck ${w}`)
-  if (run("lint: everything", node, [bin("eslint/bin/eslint.js"), "."]) !== 0) failures.push("lint")
-  // C-001: one file per process, as many at once as free memory allows, each failure retried once and logged.
-  if (
-    run("tests: all, one file at a time by free memory", node, [
-      path.join(root, "scripts", "test-shards.mjs"),
-    ]) !== 0
+      step(`typecheck ${w}`, () => run(`typecheck: ${w}`, node, [bin("typescript/bin/tsc"), "-p", path.join(w, "tsconfig.json"), "--noEmit"]))
+  step("lint", () => run("lint: everything", node, [bin("eslint/bin/eslint.js"), "."]))
+  // C-001: one file per process, as many at once as free memory allows, each failure retried once and logged. O60: its
+  // progress is shown as it goes, and --budget-minutes stops it cleanly before a time limit, to be run again.
+  const budget = valueOf("--budget-minutes")
+  const shards = run(
+    "tests: all, one file at a time by free memory",
+    node,
+    [path.join(root, "scripts", "test-shards.mjs"), ...(commit ? ["--commit", commit] : []), ...(budget ? ["--budget-minutes", budget] : [])],
+    { stream: true },
   )
-    failures.push("tests")
+  if (shards === 3) incomplete = true
+  else if (shards !== 0) failures.push("tests")
+  if (commit && !failures.length && !incomplete) {
+    noteComplete(commit)
+    say(`the full gate is complete for ${commit.slice(0, 12)}; a release of this commit accepts it`)
+  }
+  pruneRecords()
 } else {
   // 1. Typecheck.
   for (const w of [...touched].sort())
@@ -326,8 +354,14 @@ function execList() {
 }
 
 say(
-  failures.length ? `FAILED: ${failures.join(", ")}` : dry ? "dry run: nothing was run" : "passed",
+  failures.length
+    ? `FAILED: ${failures.join(", ")}`
+    : dry
+      ? "dry run: nothing was run"
+      : incomplete
+        ? "not finished: the tests stopped at their time budget; run the gate again to carry on"
+        : "passed",
 )
-// E-099: each gate's result, for the health score (a dry run is not a result).
-if (!dry) recordDevCheck("gates", { ok: failures.length === 0 })
-process.exit(failures.length ? 1 : 0)
+// E-099: each gate's result, for the health score (a dry run, or one not finished, is not a result).
+if (!dry && !incomplete) recordDevCheck("gates", { ok: failures.length === 0 })
+process.exit(failures.length ? 1 : incomplete ? 3 : 0)

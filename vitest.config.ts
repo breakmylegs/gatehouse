@@ -9,6 +9,8 @@ export default defineConfig({
     // Many tests spawn git, pwsh or node. On a machine with real-time scanning they are slow, and
     // running every file at once makes them slower still, so cap the workers and allow generous time.
     setupFiles: ["apps/web/test/setup.ts"],
+    // O60: the whole suite, or a run with the browser checks, waits its turn behind another heavy run on this computer.
+    globalSetup: ["scripts/vitest-heavy-lock.mjs"],
     testTimeout: 60000,
     hookTimeout: 120000,
     maxWorkers: 4,

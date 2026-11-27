@@ -2333,6 +2333,30 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 
 - **Mac: Deny and Allow once on the notification, locking, sleep, wake and power as they happen, and a folder from the Finder (owner, 25 Nov: "Lets do 2 3 and 4").** Described in `docs/mac.md` ("What it does that a browser tab does not"). No new dependency. **Decided by me, for the owner to confirm:** Allow once is offered on a notification only for a permission below High (risk under 70) that is not default to no, and asks for the Mac to be unlocked; High and Severe, questions and plans open the window. An answer from the notification is recorded on the desktop channel, as the wing beside the notch's is, so the audit keeps its channels and an older copy can still read it after an update is undone. A low battery (on battery at 20% or less) pauses Max approval sessions even with "Pause Max approval sessions on battery" off, and lets the Mac sleep; both come back on mains (stricter). Tests: notify-mac (Host and page), presence-mac, mac-events-mac, broker, power, quick. Break checks: the page allowing High, the Host offering Allow once for a default-to-no request, and the broker telling the phone twice each fail them.
 
+### O60 Releasing from a session with no terminal step (feat/o60)
+
+- Owner, 27 Nov. ADR 0023 has the evidence for each blocker and the decisions.
+- **The release's crash, and the job object.** This session's job is Low (2 GB), but a tool's processes run outside it (`IsProcessInJob`), so the cap was not the cause and raising the level would not help a release. A release now:
+  - takes the heavy-run lock;
+  - checks the job it runs in (`job-headroom.mjs`), stopping with less than 3 GB free there and naming the level (Medium or more);
+  - says how much memory the computer has free;
+  - runs its tests one file at a time with the memory options every other run uses, each stopped with all it started if it hangs;
+  - accepts a full gate recorded complete for exactly its commit in place of those tests.
+- **Not built**: a request for a higher level through an approval card. A session's tools run outside its job, so it would change nothing a release uses (ADR 0023).
+- **The routes file** is found in this checkout, the main worktree, or beside the release key (`release-routes.ts`, also used by `update-route-e2e.ts`). Nothing is copied in or deleted by hand.
+- **A resumable gate** (`gate.mjs`, `test-shards.mjs`, `gate-record.mjs`):
+  - on a clean tree, each type-check, the lint and each test file that passes is recorded for that exact commit, and a rerun carries on;
+  - `--budget-minutes <n>` stops the tests cleanly (exit 3);
+  - the tests' progress is shown as it goes, not at the end.
+- **One heavy run at a time** (`heavy-lock.mjs`, and `vitest-heavy-lock.mjs` as vitest's global setup):
+  - the full gate, a release, and any vitest run of the whole suite or with the browser checks take a lock across the computer;
+  - others wait, saying who has it and since when;
+  - a gone or six-hour-old lock is taken over.
+- **Leftovers** (`leftovers.mjs`): a test process past its time (30 minutes, 20 in a release) is stopped with everything it started; at the end of a run, our orphaned headless browsers are stopped and unused profiles removed; another run's browser is left alone.
+- **Found while doing this, and fixed**: the break-run tool I use (outside the repository) counted a test run that hit its five-minute limit as caught. The O59 scanner tests take about six and a half minutes here, and the O57 server tests about ten, so those breaks could have been caught by the timeout alone. The tool now reports a timeout as a timeout, allows 20 minutes, stops the whole tree and sweeps up browsers. O59's nine breaks and O57's four Host breaks were run again with only the tests that guard them (results in their entries).
+- Tests: `apps/host/test/release-self.test.ts` (the lock, the gate record, the budget and retries, the sweep, the headroom message, the routes file from a worktree), `test-shards.test.ts`. Ten breaks, all caught.
+- Not covered by a unit test: the release's own use of these (`release.ts`). It is proved by the release that follows, run from the session with no terminal step.
+
 ### O59 A push judged only on what it sends, and Held for secrets (feat/o59)
 
 - Owner, 27 Nov: the `secret-in-commit` rule "still refuses every git push from the session in C:\dev\peter, saying a password in a web address in scripts/update.sh, line 496".
@@ -2366,6 +2390,7 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
     - (f) the reported line checked against the file at that commit;
     - Allow once through the floor hook: used once, used up, covering only its own finding, and Clear.
   - `secret-holds.test.tsx`: the panel, its confirmation, and Clear.
+- Run again on 27 Nov with the break tool fixed (O60: a timeout had counted as caught) and only these tests ("O59|24 Nov"): all nine caught by a failing test.
 - Nine breaks, all caught: the remote's commit not read freshly, a remote that cannot be asked reading nothing, the branch left out, the refusal naming no branch, a placeholder taken for a password, an allowance never used up, an allowance covering every finding, the floor ignoring an allowance, and allowing without asking you first.
 - Not covered by a test: the Host's refusal of the three commands through Neighbourhood Watch (`server.ts`, `VIA`), which follows the existing desktop-only pattern for `grant_tool`.
 - **For C:\dev\peter**: nothing needs clearing for this, because nothing was ever cached. `deploy-alignment` still holds that hint at line 496; pushing that branch would be judged on it, and the current rule takes it for a placeholder, so it is not refused. Its upstream is gone; delete the branch when you are done with it.
@@ -2393,7 +2418,7 @@ The expansion items in waves E3 to E6 (`docs/plan/expansion-build-prompt.md`), i
 - **Still recorded**: the detector keeps counting; off, each run it finds is written to the audit log as `approval_fast_run` (rule `rubber-stamp`, with the risk, how long the card showed and whether it was opened), and counting starts again.
 - **Unchanged**: Severe still needs allow typed (and from CNW a signed-in session); two key presses to allow High or Severe by keyboard (D-092, a guard against stray keys, not speed); floor denies; Ask about code prompts into a session still ask; Extreme approval and every invariant.
 - **Chosen**: off for every copy that never set it, as the owner asked, rather than on with the owner switching it off (a Host's settings file is not written from outside the app, and only the two owners use Codehouse); U4's hold goes with it, as the owner asked never to be made to wait; D-092's two presses stay.
-- Tests: `apps/host/test/server.test.ts` (on: refused, the deliberate approval after two seconds, Severe typed allow at once; off: seven fast High approvals all through, two runs recorded, no friction); `apps/web/test/approval-card.test.tsx` (the hold on and off; Severe still asks to type allow); `apps/web/test/settings-autosave.test.tsx` (the setting saved on, and off as no setting); `settings-search.test.tsx` (the Safety section). Eight breaks, all caught.
+- Run again on 27 Nov with the break tool fixed (O60) and only the O57 tests: the four Host breaks caught by a failing test, not a timeout. Tests: `apps/host/test/server.test.ts` (on: refused, the deliberate approval after two seconds, Severe typed allow at once; off: seven fast High approvals all through, two runs recorded, no friction); `apps/web/test/approval-card.test.tsx` (the hold on and off; Severe still asks to type allow); `apps/web/test/settings-autosave.test.tsx` (the setting saved on, and off as no setting); `settings-search.test.tsx` (the Safety section). Eight breaks, all caught.
 
 ### O55 A real phone layout (feat/o55)
 

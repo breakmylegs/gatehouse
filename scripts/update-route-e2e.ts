@@ -17,6 +17,7 @@ import type { AddressInfo } from "node:net"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { findRoutesFile } from "./release-routes.js"
 import {
   makeRelease,
   newReleaseKey,
@@ -37,10 +38,8 @@ const UNINSTALL = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall
 if (!process.env.E2E_FROM) throw new Error("Set E2E_FROM to the folder of an old install.")
 if (!fs.existsSync(path.join(dist, "release.json"))) throw new Error("Run npm run package first.")
 const from = path.resolve(process.env.E2E_FROM)
-const routesFile = [
-  path.join(root, "release-channels.local.json"),
-  path.join(process.env.USERPROFILE ?? "", ".codehouse-release", "channels.json"),
-].find((f) => fs.existsSync(f))
+// O60: found as a release finds it: this checkout, the main worktree, or beside the release key.
+const routesFile = findRoutesFile(root)
 if (!routesFile) throw new Error("No update routes file (see scripts/release.ts).")
 const routes = (JSON.parse(fs.readFileSync(routesFile, "utf8")) as { legacy: LegacyRoute[] }).legacy
 const console_ = fs.readdirSync(from).find((f) => /-Console\.exe$/i.test(f))
