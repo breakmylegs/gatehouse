@@ -58,6 +58,16 @@ export function listTestFiles(base = root) {
 /** Files a process runs together (owner, 12 Nov: each file's own start took most of the test period). */
 export const BATCH = 8
 
+/** A run V8 stopped for want of memory (a crash of the process, not a test that failed). */
+export const crashedForMemory = (out) =>
+  /Fatal process out of memory|exit code 2147483651|memory allocation of \d+ bytes failed|panicked at .*out of memory/.test(out)
+
+/** Waits, up to ten minutes, until the computer has 2.5 GB free (or gives up and lets the try go ahead). */
+async function waitForMemory() {
+  const until = Date.now() + 10 * 60_000
+  while (os.freemem() < 2.5 * 1024 ** 3 && Date.now() < until) await new Promise((r) => setTimeout(r, 10_000))
+}
+
 /** How long one process may run before it and everything it started are stopped (O60). */
 export const timeoutMs = (env = process.env) => Math.max(1, Number(env.GATEHOUSE_SHARD_TIMEOUT_MIN) || 30) * 60_000
 
@@ -120,7 +130,15 @@ export async function runShards(files, o = {}) {
   const alone = async (file) => {
     log(`[shards] retry once: ${file}`)
     retried.push(file)
-    const r = await run(file)
+    let r = await run(file)
+    // 28 Nov: a process V8 stopped for want of memory ("Fatal process out of memory", exit 2147483651) has not failed a
+    // test: it crashed while the computer was busy, and passed six times in six with it quiet. Up to two more tries,
+    // each after memory frees up, said as a crash; a test that fails is still a failure after its one retry.
+    for (let more = 0; !r.ok && crashedForMemory(r.out) && more < (o.crashTries ?? 2); more++) {
+      log(`[shards] crashed for want of memory, not a test failure; trying again when memory frees up: ${file}`)
+      await (o.waitForMemory ?? waitForMemory)()
+      r = await run(file)
+    }
     if (!r.ok) {
       failed.push(file)
       log(`[shards] FAILED: ${file}\n${r.out.slice(-3000)}`)

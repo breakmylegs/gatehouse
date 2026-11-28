@@ -51,6 +51,11 @@ describe("one heavy run at a time (O60)", () => {
     release()
   })
 
+  it("never shares the test locks' folder, which the floor guards (28 Nov)", () => {
+    expect(lockFile(env)).not.toMatch(/[\\/]locks[\\/]/)
+    expect(lockFile(env).startsWith(data)).toBe(true)
+  })
+
   it("takes over a lock whose process is gone, or that is hours old", async () => {
     fs.mkdirSync(path.dirname(lockFile(env)), { recursive: true })
     fs.writeFileSync(lockFile(env), JSON.stringify({ pid: 999_999_9, what: "a crashed run", since: new Date().toISOString() }))
@@ -86,6 +91,23 @@ describe("the full gate recorded for its commit (O60)", () => {
     const r = await runShards(["a", "b", "c", "d"], { freemem: () => 1, run, log: () => undefined, budgetMs: 15, now: () => t, onPassed: (f: string) => passed.push(f) })
     expect(r.notStarted).toBe(2)
     expect(passed).toEqual(["a", "b"])
+  })
+
+  it("tries a file that crashed for want of memory twice more, but a failing test only once (28 Nov)", async () => {
+    const tries: Record<string, number> = {}
+    const waits: string[] = []
+    const OOM = "# Fatal process out of memory: Zone"
+    const run = async (f: string | string[]) => {
+      const k = String(f)
+      tries[k] = (tries[k] ?? 0) + 1
+      if (k === "crashy") return { ok: tries[k] >= 3, out: tries[k] >= 3 ? "" : OOM }
+      if (k === "always-crashes") return { ok: false, out: OOM }
+      return { ok: false, out: "AssertionError: expected 1 to be 2" }
+    }
+    const r = await runShards(["crashy", "always-crashes", "broken"], { freemem: () => 1, run, log: () => undefined, waitForMemory: async () => void waits.push("w") })
+    expect(tries).toEqual({ crashy: 3, "always-crashes": 4, broken: 2 })
+    expect(r.failed).toEqual(["always-crashes", "broken"])
+    expect(waits).toHaveLength(3)
   })
 
   it("records a file that passed on its retry, never one that failed twice", async () => {

@@ -6,6 +6,8 @@ export declare function workersFor(freeBytes: number, cpus?: number): number
 export declare function listTestFiles(base?: string): string[]
 /** O60: how long one process may run before it and all it started are stopped. */
 export declare function timeoutMs(env?: NodeJS.ProcessEnv): number
+/** A run V8 stopped for want of memory, not a test failure. */
+export declare function crashedForMemory(out: string): boolean
 export interface ShardResult {
   failed: string[]
   retried: string[]
@@ -26,5 +28,8 @@ export declare function runShards(
     now?: () => number
     /** O60: told of each file that passed, on its first run or its retry. */
     onPassed?: (file: string) => void
+    /** How many more tries a run that crashed for want of memory gets (2), and how to wait for memory first. */
+    crashTries?: number
+    waitForMemory?: () => Promise<void>
   },
 ): Promise<ShardResult>

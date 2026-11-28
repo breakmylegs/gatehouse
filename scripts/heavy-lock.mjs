@@ -17,7 +17,8 @@ export function dataDir(env = process.env, platform = process.platform) {
   return path.join(env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), "Gatehouse")
 }
 
-export const lockFile = (env = process.env) => path.join(dataDir(env), "locks", "heavy-run.json")
+// Its own folder: Gatehouse\locks is where the test locks (D-007) are kept, which the floor rightly guards (28 Nov).
+export const lockFile = (env = process.env) => path.join(dataDir(env), "run-lock", "heavy-run.json")
 
 const alive = (pid) => {
   try {
